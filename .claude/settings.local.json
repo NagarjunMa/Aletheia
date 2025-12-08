@@ -5,7 +5,8 @@
       "Bash(npx create-next-app:*)",
       "Bash(npm install)",
       "Bash(npm install:*)",
-      "Bash(npm run type-check:*)"
+      "Bash(npm run type-check:*)",
+      "Bash(npx:*)"
     ],
     "deny": [],
     "ask": []
