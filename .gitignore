@@ -1,0 +1,253 @@
+# Ascendia - Git Ignore Configuration
+# Created: December 7, 2024
+# Purpose: Exclude sensitive files and build artifacts from version control
+
+# =============================================================================
+# DEPENDENCIES
+# =============================================================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-debug.log*
+
+# =============================================================================
+# ENVIRONMENT VARIABLES & SECRETS
+# =============================================================================
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Supabase secrets
+.env.supabase
+
+.claude/
+# API keys and sensitive configuration
+.anthropic
+.openai
+secrets.json
+
+# =============================================================================
+# NEXT.JS BUILD ARTIFACTS
+# =============================================================================
+.next/
+out/
+.vercel/
+.netlify/
+dist/
+
+# Next.js build info
+.next-env.d.ts
+next-env.d.ts
+
+# TypeScript build cache
+*.tsbuildinfo
+tsconfig.tsbuildinfo
+
+# =============================================================================
+# TESTING & COVERAGE
+# =============================================================================
+coverage/
+.nyc_output/
+test-results/
+playwright-report/
+playwright/.cache/
+.coverage/
+
+# Vitest
+vitest.config.ts.timestamp-*
+
+# =============================================================================
+# DEVELOPMENT TOOLS
+# =============================================================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# =============================================================================
+# LOGS & MONITORING
+# =============================================================================
+logs/
+*.log
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Sentry
+.sentryclirc
+
+# =============================================================================
+# TEMPORARY FILES
+# =============================================================================
+tmp/
+temp/
+*.tmp
+*.temp
+
+# =============================================================================
+# DATABASE & SUPABASE
+# =============================================================================
+# Local Supabase
+.supabase/
+
+# Database dumps
+*.sql.bak
+*.dump
+db_backup_*
+
+# =============================================================================
+# AI & MACHINE LEARNING
+# =============================================================================
+# Model files (if any local models are used)
+models/
+*.model
+*.pkl
+*.joblib
+
+# Training data
+training_data/
+datasets/
+
+# =============================================================================
+# ANALYTICS & MONITORING
+# =============================================================================
+# Bundle analyzer reports
+.next/analyze/
+bundle-analyzer-report.html
+
+# Lighthouse reports
+lighthouse-reports/
+
+# =============================================================================
+# DEPLOYMENT & BUILD
+# =============================================================================
+# Docker
+Dockerfile.prod
+docker-compose.override.yml
+.dockerignore
+
+# Kubernetes
+k8s-secrets.yml
+*.secret.yml
+
+# Terraform (if used)
+*.tfstate
+*.tfstate.*
+.terraform/
+
+# =============================================================================
+# USER UPLOADS & CONTENT
+# =============================================================================
+# User uploaded files (if any)
+uploads/
+user-content/
+
+# Generated content
+generated/
+
+# =============================================================================
+# PERFORMANCE & OPTIMIZATION
+# =============================================================================
+# Performance testing results
+perf-results/
+benchmark-results/
+
+# Static analysis reports
+static-analysis-report/
+
+# =============================================================================
+# DOCUMENTATION BUILDS
+# =============================================================================
+# Generated documentation (keep source docs)
+docs/build/
+docs/.docusaurus/
+
+# =============================================================================
+# PACKAGE MANAGERS
+# =============================================================================
+# Yarn
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
+
+# NPM
+.npm
+
+# =============================================================================
+# MISCELLANEOUS
+# =============================================================================
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Dependency directories
+jspm_packages/
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Optional stylelint cache
+.stylelintcache
+
+# Microbundle cache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# =============================================================================
+# INCLUDE IMPORTANT FOLDERS (OVERRIDE PATTERNS)
+# =============================================================================
+# Ensure .claude/ folder and its contents are included
+!.claude/
+!.claude/**/*
+
+# Include example environment files
+!.env.example
+!.env.local.example
+
+# Include important documentation
+!README.md
+!CLAUDE.md
+!LICENSE
+
+# Include configuration files
+!package.json
+!package-lock.json
+!tsconfig.json
+!tailwind.config.*
+!next.config.*
+!playwright.config.*
+!vitest.config.*
+
+# Include source code
+!app/**/*
+!components/**/*
+!lib/**/*
+!public/**/*
+!tests/**/*
+
+# Include GitHub workflows
+!.github/**/*
