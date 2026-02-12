@@ -1,7 +1,16 @@
+import { Suspense } from 'react'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { ResetPasswordForm } from '@/components/auth/reset-password-form'
-import { Sparkles } from 'lucide-react'
+import { Sparkles, Loader2 } from 'lucide-react'
 import Link from 'next/link'
+
+function ResetPasswordFormFallback() {
+  return (
+    <div className="flex items-center justify-center py-8">
+      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+    </div>
+  )
+}
 
 export default function ResetPasswordPage() {
   return (
@@ -26,7 +35,9 @@ export default function ResetPasswordPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <ResetPasswordForm />
+            <Suspense fallback={<ResetPasswordFormFallback />}>
+              <ResetPasswordForm />
+            </Suspense>
           </CardContent>
         </Card>
 

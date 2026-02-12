@@ -12,7 +12,7 @@ const anthropic = new Anthropic({
 
 // Claude model configuration
 export const CLAUDE_CONFIG = {
-  model: 'claude-3-5-sonnet-20241022',
+  model: 'claude-sonnet-4-20250514',
   maxTokens: 4096,
   temperature: 0.7,
   topP: 0.9,
@@ -245,7 +245,13 @@ export async function processWithClaude(
     // Handle CPL analysis response
     if (processingType === 'cpl_analysis') {
       try {
-        const analysis = JSON.parse(responseText) as CPLAnalysis
+        // Strip markdown code blocks if present (Claude sometimes wraps JSON in ```json...```)
+        let jsonText = responseText.trim()
+        if (jsonText.startsWith('```')) {
+          // Remove opening ```json or ``` and closing ```
+          jsonText = jsonText.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '')
+        }
+        const analysis = JSON.parse(jsonText) as CPLAnalysis
         return {
           success: true,
           analysis,

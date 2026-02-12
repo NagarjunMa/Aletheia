@@ -149,7 +149,7 @@ export async function ensureUserProfile(user: any) {
   return newProfile
 }
 
-// Type-safe table access helpers for server
+// Type-safe table access helpers for server (updated after cleanup)
 export function getServerTables() {
   const supabase = createClient()
 
@@ -158,13 +158,15 @@ export function getServerTables() {
     conversations: () => supabase.from('conversations'),
     user_inputs: () => supabase.from('user_inputs'),
     generated_drafts: () => supabase.from('generated_drafts'),
-    api_usage_logs: () => supabase.from('api_usage_logs'),
-    user_sessions: () => supabase.from('user_sessions'),
     user_feedback: () => supabase.from('user_feedback'),
+    user_preferences: () => supabase.from('user_preferences'),
+    usage_analytics: () => supabase.from('usage_analytics'),
+    production_metrics: () => supabase.from('production_metrics'),
+    messages: () => supabase.from('messages'),
   }
 }
 
-// Service role table access (admin operations)
+// Service role table access (admin operations, updated after cleanup)
 export function getServiceTables() {
   const supabase = createServiceClient()
 
@@ -173,8 +175,10 @@ export function getServiceTables() {
     conversations: () => supabase.from('conversations'),
     user_inputs: () => supabase.from('user_inputs'),
     generated_drafts: () => supabase.from('generated_drafts'),
-    api_usage_logs: () => supabase.from('api_usage_logs'),
-    user_sessions: () => supabase.from('user_sessions'),
     user_feedback: () => supabase.from('user_feedback'),
+    user_preferences: () => supabase.from('user_preferences'),
+    usage_analytics: () => supabase.from('usage_analytics'),
+    production_metrics: () => supabase.from('production_metrics'),
+    messages: () => supabase.from('messages'),
   }
 }

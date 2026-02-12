@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import DOMPurify from 'isomorphic-dompurify'
+import { securityValidator, type SecurityValidationResult } from './enhanced-validation'
 
 // Security validation schemas
 export const userInputSchema = z.object({
@@ -8,11 +9,51 @@ export const userInputSchema = z.object({
     .min(1, 'Content is required')
     .max(5000, 'Content must be less than 5000 characters')
     .refine(
-      (content) => !containsDangerousPatterns(content),
-      'Content contains potentially dangerous patterns'
+      async (content, ctx) => {
+        // Multi-layer security validation
+        const basicCheck = !containsDangerousPatterns(content)
+        if (!basicCheck) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'Content contains basic dangerous patterns'
+          })
+          return false
+        }
+
+        // Enhanced security validation
+        try {
+          const result = await securityValidator.validateContent(content)
+          if (!result.isValid) {
+            const violationSummary = result.violations
+              .map(v => `${v.type}: ${v.description}`)
+              .join('; ')
+
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: `Security validation failed: ${violationSummary}`,
+              params: {
+                violations: result.violations,
+                riskLevel: result.riskLevel,
+                confidence: result.confidence
+              }
+            })
+            return false
+          }
+          return true
+        } catch (error) {
+          // Fail securely - if validation fails, reject content
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'Security validation error - content rejected as precaution'
+          })
+          return false
+        }
+      },
+      'Enhanced security validation failed'
     ),
-  type: z.enum(['email', 'letter', 'proposal', 'general']),
-  category: z.string().optional()
+  type: z.enum(['instagram_post', 'linkedin', 'medium_article', 'email', 'conversational']),
+  category: z.string().optional(),
+  userId: z.string().uuid().optional() // For enhanced security context
 })
 
 export const userProfileSchema = z.object({
@@ -47,7 +88,7 @@ export const conversationSchema = z.object({
     .string()
     .min(1, 'Title is required')
     .max(100, 'Title must be less than 100 characters'),
-  category: z.enum(['email', 'letter', 'proposal', 'general']),
+  category: z.enum(['instagram_post', 'linkedin', 'medium_article', 'email', 'conversational']),
   context: z.record(z.any()).optional()
 })
 
@@ -83,7 +124,7 @@ const dangerousPatterns = [
 
   // Path traversal
   /\.\.\//,
-  /\.\.\\\/,
+  /\.\.\\/,
 
   // XML/XXE patterns
   /<!ENTITY/i,
@@ -352,16 +393,24 @@ export class SecurityHeaders {
   }
 }
 
-// Comprehensive security validator
+// Enhanced comprehensive security validator
 export class SecurityValidator {
-  static validateRequest(request: {
+  static async validateRequest(request: {
     body: any
     headers: Headers
     ip?: string
     method: string
     url: string
-  }): { valid: boolean; errors: string[] } {
+    userId?: string
+  }): Promise<{
+    valid: boolean
+    errors: string[]
+    securityResult?: SecurityValidationResult
+    sanitizedBody?: any
+  }> {
     const errors: string[] = []
+    let securityResult: SecurityValidationResult | undefined
+    let sanitizedBody = request.body
 
     // Validate IP
     if (request.ip && IPSecurity.isBlocked(request.ip)) {
@@ -391,18 +440,99 @@ export class SecurityValidator {
       errors.push('URL contains dangerous patterns')
     }
 
-    // Validate request body if present
+    // Enhanced validation for request body
     if (request.body) {
       if (typeof request.body === 'string') {
+        // Basic pattern check
         if (containsDangerousPatterns(request.body)) {
           errors.push('Request body contains dangerous patterns')
+        }
+
+        // Enhanced security validation
+        try {
+          securityResult = await securityValidator.validateContent(request.body, request.userId)
+
+          if (!securityResult.isValid) {
+            errors.push(`Enhanced security validation failed: ${securityResult.violations.length} violations detected`)
+
+            // Use sanitized content if available
+            if (securityResult.sanitizedContent) {
+              sanitizedBody = securityResult.sanitizedContent
+            }
+
+            // Log security violation for monitoring
+            if (request.ip) {
+              IPSecurity.reportSuspiciousActivity(request.ip)
+            }
+          }
+        } catch (error) {
+          errors.push('Enhanced security validation error')
+          console.error('Security validation error:', error)
+        }
+      } else if (typeof request.body === 'object') {
+        // Validate JSON body recursively
+        try {
+          const bodyString = JSON.stringify(request.body)
+          securityResult = await securityValidator.validateContent(bodyString, request.userId)
+
+          if (!securityResult.isValid) {
+            errors.push('Request body contains security violations')
+
+            if (request.ip) {
+              IPSecurity.reportSuspiciousActivity(request.ip)
+            }
+          }
+        } catch (error) {
+          errors.push('Failed to validate request body')
         }
       }
     }
 
     return {
       valid: errors.length === 0,
-      errors
+      errors,
+      securityResult,
+      sanitizedBody
+    }
+  }
+
+  /**
+   * Quick validation for API routes
+   */
+  static async validateUserInput(content: string, userId?: string): Promise<{
+    isValid: boolean
+    sanitized: string
+    violations: string[]
+    riskLevel: string
+  }> {
+    try {
+      // Basic validation first
+      if (containsDangerousPatterns(content)) {
+        return {
+          isValid: false,
+          sanitized: ContentSanitizer.sanitizePlainText(content),
+          violations: ['Basic dangerous patterns detected'],
+          riskLevel: 'high'
+        }
+      }
+
+      // Enhanced validation
+      const result = await securityValidator.validateContent(content, userId)
+
+      return {
+        isValid: result.isValid,
+        sanitized: result.isValid ? content : (result.sanitizedContent || ContentSanitizer.sanitizePlainText(content)),
+        violations: result.violations.map(v => `${v.type}: ${v.description}`),
+        riskLevel: result.riskLevel
+      }
+    } catch (error) {
+      console.error('Security validation error:', error)
+      return {
+        isValid: false,
+        sanitized: ContentSanitizer.sanitizePlainText(content),
+        violations: ['Security validation failed'],
+        riskLevel: 'critical'
+      }
     }
   }
 }

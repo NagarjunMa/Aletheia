@@ -93,7 +93,7 @@ export const fillForm = async (form: HTMLFormElement, data: Record<string, strin
 
 // Async testing helpers
 export const waitForElementToBeRemoved = async (element: () => HTMLElement | null) => {
-  const { waitForElementToBeRemoved as originalWait } = await import('@testing-library/react')
+  const { waitForElementToBeRemoved: originalWait } = await import('@testing-library/react')
   return originalWait(element, { timeout: 5000 })
 }
 

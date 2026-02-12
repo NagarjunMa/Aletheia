@@ -10,7 +10,7 @@ const streamRequestSchema = z.object({
   content: z.string().min(1, 'Content is required').max(5000, 'Content too long'),
   type: z.enum(['grammar_fix', 'adaptive_polish', 'general_improvement']),
   cplTarget: z.number().min(0).max(100).optional(),
-  category: z.enum(['email', 'letter', 'proposal', 'general', 'creative', 'academic']).optional()
+  category: z.enum(['instagram_post', 'linkedin', 'medium_article', 'email', 'conversational']).optional()
 })
 
 interface StreamChunk {
@@ -44,7 +44,7 @@ export async function streamDraftGeneration(request: {
       throw new Error(`Validation failed: ${validationResult.error.errors[0].message}`)
     }
 
-    const { content, type, cplTarget = 50, category = 'general' } = validationResult.data
+    const { content, type, cplTarget = 50, category = 'conversational' } = validationResult.data
 
     // Security scan
     const securityScan = ContentSanitizer.securityScan(content)
@@ -374,7 +374,7 @@ export async function* streamDraftGenerationGenerator(request: {
       return
     }
 
-    const { content, type, cplTarget = 50, category = 'general' } = validationResult.data
+    const { content, type, cplTarget = 50, category = 'conversational' } = validationResult.data
 
     // Yield initial metadata
     yield {

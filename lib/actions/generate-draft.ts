@@ -5,11 +5,12 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { dualDraftManager } from '@/lib/drafts/dual-draft-manager'
 import { ContentSanitizer } from '@/lib/sanitization/sanitizer'
+import { monitoringSystem } from '@/lib/monitoring'
 
 // Input validation schema
 const generateDraftSchema = z.object({
   content: z.string().min(10, 'Content must be at least 10 characters').max(5000, 'Content must be less than 5000 characters'),
-  type: z.enum(['email', 'letter', 'proposal', 'general', 'creative', 'academic']),
+  type: z.enum(['instagram_post', 'linkedin', 'medium_article', 'email', 'conversational']),
   conversationId: z.string().uuid('Invalid conversation ID').optional(),
   title: z.string().min(1, 'Title is required').max(200, 'Title must be less than 200 characters').optional()
 })
@@ -121,8 +122,25 @@ export async function generateDraftAction(
       }
     }
 
-    // Generate drafts
+    // Generate drafts with monitoring
     console.log(`Generating drafts for user ${user.id}, conversation ${conversation.id}`)
+
+    // Track security framework metrics
+    await monitoringSystem.trackComponentMetrics(
+      'security_framework',
+      'content_validation',
+      {
+        latency: Date.now() - startTime,
+        success: securityScan.safe,
+        customMetrics: {
+          threatCount: securityScan.threats.length,
+          contentLength: content.length,
+          inputType: type
+        }
+      },
+      { userId: user.id }
+    ).catch(error => console.debug('Security metrics tracking failed:', error))
+
     const draftResult = await dualDraftManager.generateDrafts(
       content,
       user.id,
@@ -162,6 +180,27 @@ export async function generateDraftAction(
 
     const processingTime = Date.now() - startTime
 
+    // Track parallel processing metrics
+    await monitoringSystem.trackComponentMetrics(
+      'parallel_processor',
+      'dual_draft_generation',
+      {
+        latency: processingTime,
+        success: true,
+        customMetrics: {
+          grammarLatency: draftResult.metrics?.grammarLatency || processingTime * 0.4,
+          polishLatency: draftResult.metrics?.polishLatency || processingTime * 0.6,
+          improvementPercent: Math.round(
+            ((savedDrafts.adaptivePolish.cplScore - savedDrafts.grammarFix.cplScore) /
+             savedDrafts.grammarFix.cplScore) * 100
+          ),
+          grammarCplScore: savedDrafts.grammarFix.cplScore,
+          polishCplScore: savedDrafts.adaptivePolish.cplScore
+        }
+      },
+      { userId: user.id, sessionId: conversation.id }
+    ).catch(error => console.debug('Parallel processing metrics tracking failed:', error))
+
     return {
       success: true,
       data: {
@@ -189,6 +228,21 @@ export async function generateDraftAction(
     }
   } catch (error) {
     console.error('Draft generation error:', error)
+
+    // Track error metrics
+    monitoringSystem.trackComponentMetrics(
+      'parallel_processor',
+      'draft_generation_error',
+      {
+        latency: Date.now() - startTime,
+        success: false,
+        customMetrics: {
+          errorType: error instanceof Error ? error.constructor.name : 'UnknownError',
+          errorMessage: error instanceof Error ? error.message : 'Unknown error'
+        }
+      }
+    ).catch(err => console.debug('Error metrics tracking failed:', err))
+
     return {
       success: false,
       error: error instanceof Error ? error.message : 'An unexpected error occurred'
@@ -229,7 +283,7 @@ async function getOrCreateConversation(
         .insert({
           user_id: userId,
           title: title || 'New Draft',
-          category: category || 'general'
+          category: category || 'conversational'
         })
         .select()
         .single()

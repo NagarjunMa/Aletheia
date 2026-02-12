@@ -1,7 +1,22 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import { DashboardLayout } from '@/components/layout/dashboard-layout'
-import { ChatInterface } from '@/components/chat/chat-interface'
+import dynamic from 'next/dynamic'
+
+// Dynamically import the core chat interface for better performance
+const ChatInterface = dynamic(
+  () => import('@/components/chat/chat-interface').then(mod => mod.ChatInterface),
+  {
+    loading: () => (
+      <div className="flex h-screen items-center justify-center bg-black">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-[#6da9d2]/30 border-t-[#6da9d2] rounded-full animate-spin mb-4 mx-auto"></div>
+          <p className="text-[#F0EEE9]/50 text-sm uppercase tracking-widest">Initializing Ascendia...</p>
+        </div>
+      </div>
+    ),
+    ssr: false
+  }
+)
 
 export default async function DashboardPage() {
   const supabase = createClient()
@@ -12,20 +27,8 @@ export default async function DashboardPage() {
   }
 
   return (
-    <DashboardLayout>
-      <div className="flex-1 flex flex-col">
-        <div className="border-b bg-background/80 backdrop-blur-sm sticky top-0 z-10">
-          <div className="container mx-auto px-6 py-4">
-            <h1 className="text-2xl font-bold">Chat with Ascendia</h1>
-            <p className="text-muted-foreground">
-              Start writing and let Ascendia adapt to your unique voice
-            </p>
-          </div>
-        </div>
-        <div className="flex-1 container mx-auto px-6 py-6">
-          <ChatInterface />
-        </div>
-      </div>
-    </DashboardLayout>
+    <div className="h-screen bg-black text-white">
+      <ChatInterface />
+    </div>
   )
 }

@@ -40,7 +40,7 @@ CREATE TABLE profiles (
         "language": "en",
         "notifications": true,
         "auto_save": true,
-        "default_category": "general"
+        "default_category": "conversational"
     }',
 
     -- Privacy settings
@@ -59,7 +59,7 @@ CREATE TABLE conversations (
     -- Conversation metadata
     title TEXT NOT NULL CHECK (length(title) >= 1 AND length(title) <= 200),
     description TEXT CHECK (length(description) <= 1000),
-    category TEXT DEFAULT 'general' CHECK (category IN ('email', 'letter', 'proposal', 'memo', 'general', 'creative', 'technical')),
+    category TEXT DEFAULT 'conversational' CHECK (category IN ('instagram_post', 'linkedin', 'medium_article', 'email', 'conversational')),
 
     -- State management
     is_archived BOOLEAN DEFAULT FALSE NOT NULL,
@@ -515,6 +515,38 @@ CREATE POLICY "Users can insert own feedback" ON user_feedback
 
 CREATE POLICY "Users can update own feedback" ON user_feedback
     FOR UPDATE USING (auth.uid() = user_id);
+
+-- Email logs table for tracking email send status
+CREATE TABLE email_logs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    email_type TEXT NOT NULL CHECK (email_type IN ('usage_summary', 'cpl_milestone', 'feature_announcement', 'system_notification')),
+    status TEXT NOT NULL CHECK (status IN ('sent', 'failed', 'pending')),
+    message_id TEXT, -- External email service message ID
+    error_message TEXT, -- Error details if failed
+    metadata JSONB DEFAULT '{}', -- Additional email data
+    sent_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
+);
+
+-- Create indexes for email_logs
+CREATE INDEX idx_email_logs_user_id ON email_logs (user_id);
+CREATE INDEX idx_email_logs_type_status ON email_logs (email_type, status);
+CREATE INDEX idx_email_logs_sent_at ON email_logs (sent_at);
+
+-- Email logs RLS policies
+CREATE POLICY "Users can view own email logs" ON email_logs
+    FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "System can insert email logs" ON email_logs
+    FOR INSERT WITH CHECK (true); -- Allow system to log emails
+
+-- Add trigger to update updated_at timestamp
+CREATE TRIGGER update_email_logs_updated_at
+    BEFORE UPDATE ON email_logs
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
 
 -- =============================================================================
 -- INITIAL DATA AND CONSTRAINTS

@@ -83,7 +83,29 @@ export {
   getUserCPLStatistics,
   getCPLLeaderboard,
   setUserCPLTarget,
+  findSimilarCPLContentAction,
+  getCPLImprovementTrajectoryAction,
+  getContextualCPLSuggestionsAction,
 } from './cpl'
+
+// Voice learning system actions
+export {
+  analyzeWritingSampleAction,
+  buildVoiceProfileAction,
+  getVoiceAwareSuggestionsAction,
+  findSimilarVoiceExamplesAction,
+  getVoiceLearningAnalyticsAction,
+  refreshVoiceProfileAction,
+} from './voice-learning'
+
+// Dual draft generation with streaming
+export {
+  generateDualDraftsAction,
+  createDualDraftStreamAction,
+  getDualDraftAnalyticsAction,
+  getActiveStreamCountAction,
+  cancelUserStreamsAction,
+} from './dual-drafts'
 
 // Type exports for use in components
 export type {

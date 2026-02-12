@@ -8,7 +8,10 @@ import {
   compareToBenchmarks,
   getCPLImprovementSuggestions,
   updateUserCPLBaseline,
-  getCPLDistribution
+  getCPLDistribution,
+  findSimilarCPLContent,
+  getCPLImprovementTrajectory,
+  getContextualCPLSuggestions
 } from '@/lib/cpl/scoring'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
@@ -546,4 +549,105 @@ function generateCPLInsights(distribution: any) {
   }
 
   return insights
+}
+
+// NEW: Find similar content in user's CPL history
+export async function findSimilarCPLContentAction(formData: FormData) {
+  try {
+    const user = await getUser()
+    if (!user) {
+      return {
+        success: false,
+        error: 'Authentication required',
+      }
+    }
+
+    const text = formData.get('text') as string
+    const minScore = parseInt(formData.get('minScore') as string) || 0
+    const maxScore = parseInt(formData.get('maxScore') as string) || 100
+    const minSimilarity = parseFloat(formData.get('minSimilarity') as string) || 0.7
+    const limit = parseInt(formData.get('limit') as string) || 5
+
+    if (!text || text.length < 10) {
+      return {
+        success: false,
+        error: 'Text must be at least 10 characters long',
+      }
+    }
+
+    const result = await findSimilarCPLContent(user.id, text, {
+      scoreRange: [minScore, maxScore],
+      minSimilarity,
+      limit
+    })
+
+    return result
+  } catch (error) {
+    console.error('Find similar CPL content error:', error)
+    return {
+      success: false,
+      error: 'An unexpected error occurred',
+    }
+  }
+}
+
+// NEW: Get user's CPL improvement trajectory
+export async function getCPLImprovementTrajectoryAction() {
+  try {
+    const user = await getUser()
+    if (!user) {
+      return {
+        success: false,
+        error: 'Authentication required',
+      }
+    }
+
+    const result = await getCPLImprovementTrajectory(user.id)
+    return result
+  } catch (error) {
+    console.error('Get CPL improvement trajectory error:', error)
+    return {
+      success: false,
+      error: 'An unexpected error occurred',
+    }
+  }
+}
+
+// NEW: Get contextual CPL suggestions
+export async function getContextualCPLSuggestionsAction(formData: FormData) {
+  try {
+    const user = await getUser()
+    if (!user) {
+      return {
+        success: false,
+        error: 'Authentication required',
+      }
+    }
+
+    const text = formData.get('text') as string
+    const currentScore = parseFloat(formData.get('currentScore') as string)
+
+    if (!text || text.length < 10) {
+      return {
+        success: false,
+        error: 'Text must be at least 10 characters long',
+      }
+    }
+
+    if (isNaN(currentScore) || currentScore < 1 || currentScore > 100) {
+      return {
+        success: false,
+        error: 'Current CPL score must be between 1 and 100',
+      }
+    }
+
+    const result = await getContextualCPLSuggestions(user.id, text, currentScore)
+    return result
+  } catch (error) {
+    console.error('Get contextual CPL suggestions error:', error)
+    return {
+      success: false,
+      error: 'An unexpected error occurred',
+    }
+  }
 }

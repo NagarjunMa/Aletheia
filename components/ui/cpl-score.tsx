@@ -32,7 +32,7 @@ const cplScoreVariants = cva(
 
 export interface CPLScoreProps
   extends React.HTMLAttributes<HTMLDivElement>,
-    VariantProps<typeof cplScoreVariants> {
+  VariantProps<typeof cplScoreVariants> {
   score: number
   showProgress?: boolean
   showBadge?: boolean
@@ -55,30 +55,31 @@ const CPLScore = React.forwardRef<HTMLDivElement, CPLScoreProps>(
     const [displayScore, setDisplayScore] = React.useState(animated ? 0 : score)
 
     React.useEffect(() => {
-      if (animated && score !== displayScore) {
+      if (animated) {
+        // Start animation from current displayScore to new score
+        const startScore = displayScore
         const duration = 1000 // 1 second
         const steps = 60 // 60 FPS
-        const increment = (score - displayScore) / steps
+        const increment = (score - startScore) / steps
         const stepDuration = duration / steps
 
         let currentStep = 0
         const interval = setInterval(() => {
           currentStep++
-          setDisplayScore(prev => {
-            const newScore = prev + increment
-            if (currentStep >= steps) {
-              clearInterval(interval)
-              return score
-            }
-            return Math.min(Math.max(newScore, 0), 100)
-          })
+          if (currentStep >= steps) {
+            clearInterval(interval)
+            setDisplayScore(score)
+          } else {
+            setDisplayScore(startScore + increment * currentStep)
+          }
         }, stepDuration)
 
         return () => clearInterval(interval)
       } else {
         setDisplayScore(score)
       }
-    }, [score, animated, displayScore])
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [score, animated])
 
     const scoreColor = getCPLScoreColor(score)
     const scoreLabel = getCPLScoreLabel(score)

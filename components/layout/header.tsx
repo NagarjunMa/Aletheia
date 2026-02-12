@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import Link from 'next/link'
-import { User, Settings, LogOut, Menu, Sparkles } from 'lucide-react'
+import { User, Settings, LogOut, Menu } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
@@ -13,10 +13,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
-import { layout } from '@/lib/design-system'
+import { Logo } from '@/components/ui/logo'
 
 interface HeaderProps {
   user?: {
@@ -39,126 +38,138 @@ export function Header({ user, onSignOut, onMenuToggle, className }: HeaderProps
   return (
     <header
       className={cn(
-        'sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60',
+        'sticky top-0 z-50 w-full bg-ascendia-black text-white',
         className
       )}
-      style={{ height: layout.header.height }}
     >
-      <div className="container flex h-full items-center justify-between px-4">
+      <div className="container mx-auto flex h-16 items-center justify-between px-6">
         {/* Left section */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-8">
           {/* Mobile menu toggle */}
           <Button
             variant="ghost"
             size="icon"
             onClick={onMenuToggle}
-            className="md:hidden"
+            className="md:hidden text-white hover:bg-ascendia-gray"
           >
             <Menu className="h-5 w-5" />
             <span className="sr-only">Toggle menu</span>
           </Button>
 
-          {/* Logo */}
-          <Link href="/dashboard" className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <Sparkles className="h-5 w-5" />
-            </div>
-            <span className="hidden font-bold sm:inline-block">
-              Ascendia
-            </span>
+          {/* Logo - Ascendia */}
+          <Link href="/" className="flex items-center text-white hover:text-ascendia-accent transition-colors">
+            <Logo size="md" className="text-white" />
           </Link>
 
-          {/* Navigation links (desktop) */}
-          <nav className="hidden md:flex items-center gap-6 text-sm font-medium">
-            <Link
-              href="/dashboard"
-              className="text-foreground/60 transition-colors hover:text-foreground"
+          {/* Navigation links (desktop) - section navigation */}
+          <nav className="hidden md:flex items-center gap-8 text-sm font-medium">
+            <a
+              href="#home"
+              className="text-white hover:text-ascendia-accent transition-colors cursor-pointer"
+              onClick={(e) => {
+                e.preventDefault()
+                document.getElementById('home')?.scrollIntoView({ behavior: 'smooth' })
+              }}
             >
-              Dashboard
-            </Link>
-            <Link
-              href="/conversations"
-              className="text-foreground/60 transition-colors hover:text-foreground"
+              Home
+            </a>
+            <a
+              href="#how-it-works"
+              className="text-white hover:text-ascendia-accent transition-colors cursor-pointer"
+              onClick={(e) => {
+                e.preventDefault()
+                document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' })
+              }}
             >
-              Conversations
-            </Link>
-            <Link
-              href="/analytics"
-              className="text-foreground/60 transition-colors hover:text-foreground"
+              How It Works
+            </a>
+            <a
+              href="#testimonials"
+              className="text-white hover:text-ascendia-accent transition-colors cursor-pointer"
+              onClick={(e) => {
+                e.preventDefault()
+                document.getElementById('testimonials')?.scrollIntoView({ behavior: 'smooth' })
+              }}
             >
-              Analytics
-            </Link>
+              Testimonials
+            </a>
+            <a
+              href="#feedback"
+              className="text-white hover:text-ascendia-accent transition-colors cursor-pointer"
+              onClick={(e) => {
+                e.preventDefault()
+                document.getElementById('feedback')?.scrollIntoView({ behavior: 'smooth' })
+              }}
+            >
+              Feedback
+            </a>
           </nav>
         </div>
 
         {/* Right section */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-4">
           {/* CPL Score (if user is logged in) */}
           {user && user.cpl_score && (
-            <Badge variant="outline" className="hidden sm:flex">
+            <Badge variant="outline" className="hidden sm:flex border-ascendia-accent text-ascendia-accent">
               CPL {user.cpl_score}
             </Badge>
           )}
 
-          {/* Theme toggle */}
-          <ThemeToggle />
-
-          {/* User menu */}
+          {/* User menu or Login button */}
           {user ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+                <Button variant="ghost" className="relative h-8 w-8 rounded-full hover:bg-ascendia-gray">
                   <Avatar className="h-8 w-8">
                     <AvatarImage src={user.avatar_url} alt={user.name || user.email} />
-                    <AvatarFallback>{userInitials}</AvatarFallback>
+                    <AvatarFallback className="bg-ascendia-gray text-white">{userInitials}</AvatarFallback>
                   </Avatar>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56" align="end" forceMount>
+              <DropdownMenuContent className="w-56 bg-ascendia-gray border-ascendia-gray-light" align="end" forceMount>
                 <DropdownMenuLabel className="font-normal">
                   <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none">
+                    <p className="text-sm font-medium leading-none text-white">
                       {user.name || 'User'}
                     </p>
-                    <p className="text-xs leading-none text-muted-foreground">
+                    <p className="text-xs leading-none text-gray-300">
                       {user.email}
                     </p>
                     {user.cpl_score && (
-                      <p className="text-xs leading-none text-muted-foreground">
+                      <p className="text-xs leading-none text-gray-300">
                         CPL Score: {user.cpl_score}/100
                       </p>
                     )}
                   </div>
                 </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
+                <DropdownMenuSeparator className="bg-ascendia-gray-light" />
+                <DropdownMenuItem asChild className="text-white hover:bg-ascendia-gray-light">
                   <Link href="/profile">
                     <User className="mr-2 h-4 w-4" />
                     <span>Profile</span>
                   </Link>
                 </DropdownMenuItem>
-                <DropdownMenuItem asChild>
+                <DropdownMenuItem asChild className="text-white hover:bg-ascendia-gray-light">
                   <Link href="/settings">
                     <Settings className="mr-2 h-4 w-4" />
                     <span>Settings</span>
                   </Link>
                 </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={onSignOut}>
+                <DropdownMenuSeparator className="bg-ascendia-gray-light" />
+                <DropdownMenuItem onClick={onSignOut} className="text-white hover:bg-ascendia-gray-light">
                   <LogOut className="mr-2 h-4 w-4" />
                   <span>Sign out</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" asChild>
-                <Link href="/auth/signin">Sign in</Link>
-              </Button>
-              <Button size="sm" asChild>
-                <Link href="/auth/signup">Sign up</Link>
-              </Button>
-            </div>
+            <Button
+              className="bg-ascendia-black border border-white text-white hover:bg-ascendia-gray transition-colors px-6"
+              variant="outline"
+              asChild
+            >
+              <Link href="/auth/login">Login</Link>
+            </Button>
           )}
         </div>
       </div>

@@ -12,7 +12,7 @@ export default defineConfig({
     css: true,
     coverage: {
       provider: 'v8',
-      reporter: ['text', 'json', 'html'],
+      reporter: ['text', 'json', 'html', 'lcov'],
       exclude: [
         'node_modules/',
         'tests/',
@@ -21,14 +21,37 @@ export default defineConfig({
         '**/*.config.*',
         '**/*.d.ts',
         'lib/types/**',
-        'components/ui/**' // shadcn/ui components
+        'components/ui/**', // shadcn/ui components
+        '**/*.stories.tsx',
+        '**/test-utils.tsx',
+        'app/globals.css',
+        'middleware.ts'
       ],
       thresholds: {
         global: {
+          branches: 85,
+          functions: 85,
+          lines: 85,
+          statements: 85
+        },
+        // Per-file thresholds for critical modules
+        'lib/stores/': {
+          branches: 90,
+          functions: 90,
+          lines: 90,
+          statements: 90
+        },
+        'app/api/': {
           branches: 80,
           functions: 80,
           lines: 80,
           statements: 80
+        },
+        'components/features/': {
+          branches: 85,
+          functions: 85,
+          lines: 85,
+          statements: 85
         }
       }
     },
@@ -41,9 +64,19 @@ export default defineConfig({
       NEXTAUTH_SECRET: 'test-secret',
       NEXTAUTH_URL: 'http://localhost:3000'
     },
-    // Test timeout for async operations
-    testTimeout: 10000,
+    // Performance settings
+    testTimeout: 15000,
     hookTimeout: 10000,
+
+    // Parallel execution optimization
+    maxConcurrency: 4,
+    pool: 'threads',
+    poolOptions: {
+      threads: {
+        singleThread: false,
+        useAtomics: true
+      }
+    },
     // Exclude patterns
     exclude: [
       '**/node_modules/**',

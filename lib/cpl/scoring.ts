@@ -5,6 +5,8 @@
 import { processWithClaude, type CPLAnalysis } from '@/lib/ai/claude'
 import { createClient } from '@/lib/supabase/server'
 import { analyzeTextComplexity } from '@/lib/ai/utils'
+import { vectorService } from '@/lib/vectors/vector-service'
+import type { EmbeddingVector } from '@/lib/database/types'
 
 export interface CPLScore {
   overall: number
@@ -115,9 +117,54 @@ export async function calculateCPLScore(
       }
     }
 
-    // Cache results if requested and user provided
+    // Store in vector database for similarity matching and history tracking
     if (options.cacheResults && userId) {
-      await cacheCPLResult(userId, text, cplScore)
+      try {
+        // Generate embedding for the text
+        const result = await vectorService.generateEmbeddingSmart(
+          text,
+          userId,
+          {
+            urgent: false, // CPL analysis can use batch processing for cost savings
+            priority: 'medium',
+            metadata: {
+              cpl_score: cplScore.overall,
+              breakdown: cplScore.breakdown,
+              content_type: 'cpl_analysis',
+              analysis_timestamp: cplScore.timestamp.toISOString()
+            }
+          }
+        )
+
+        // Store the CPL result with embedding
+        if (result.embedding) {
+          await vectorService.storeEmbedding(
+            userId,
+            text,
+            result.embedding,
+            'cpl_analysis',
+            'score_tracking',
+            {
+              cpl_score: cplScore.overall,
+              breakdown: cplScore.breakdown,
+              text_metrics: cplScore.textMetrics,
+              analysis_summary: aiResult.analysis.suggestions?.slice(0, 3) || [],
+              complexity_level: textMetrics.complexityLevel,
+              reading_time: textMetrics.estimatedReadingTimeMinutes
+            }
+          )
+        } else if (result.requestId) {
+          // If queued for batch processing, we'll store it when the batch completes
+          console.log(`CPL analysis queued for batch processing: ${result.requestId}`)
+        }
+
+        // Cache in traditional database too
+        await cacheCPLResult(userId, text, cplScore)
+      } catch (error) {
+        console.error('Failed to store CPL analysis in vector database:', error)
+        // Still cache in traditional database as fallback
+        await cacheCPLResult(userId, text, cplScore)
+      }
     }
 
     return {
@@ -617,6 +664,360 @@ export async function getCPLDistribution(): Promise<{
     return {
       success: false,
       error: 'An unexpected error occurred'
+    }
+  }
+}
+
+// NEW: Find similar content in user's history based on CPL score and patterns
+export async function findSimilarCPLContent(
+  userId: string,
+  text: string,
+  options: {
+    scoreRange?: [number, number] // [min, max] CPL score range
+    minSimilarity?: number
+    limit?: number
+  } = {}
+): Promise<{
+  success: boolean
+  data?: Array<{
+    content_snippet: string
+    cpl_score: number
+    similarity: number
+    created_at: string
+    improvement_suggestions: string[]
+  }>
+  error?: string
+}> {
+  try {
+    const {
+      scoreRange = [0, 100],
+      minSimilarity = 0.7,
+      limit = 5
+    } = options
+
+    // Generate embedding for the input text
+    const textEmbedding = await vectorService.generateEmbedding(text)
+
+    // Find similar content in user's CPL history
+    const similarContent = await vectorService.findSimilarContent(
+      textEmbedding,
+      {
+        contentType: 'cpl_analysis',
+        userId,
+        threshold: minSimilarity,
+        limit
+      }
+    )
+
+    // Filter by CPL score range if provided
+    const filteredResults = similarContent
+      .filter(item => {
+        const cplScore = item.metadata?.cpl_score
+        return cplScore && cplScore >= scoreRange[0] && cplScore <= scoreRange[1]
+      })
+      .map(item => ({
+        content_snippet: item.content_snippet,
+        cpl_score: item.metadata.cpl_score,
+        similarity: item.similarity,
+        created_at: item.created_at,
+        improvement_suggestions: item.metadata.analysis_summary || []
+      }))
+
+    return {
+      success: true,
+      data: filteredResults
+    }
+  } catch (error) {
+    console.error('Find similar CPL content error:', error)
+    return {
+      success: false,
+      error: 'Failed to find similar content'
+    }
+  }
+}
+
+// NEW: Get user's CPL improvement trajectory using vector analysis
+export async function getCPLImprovementTrajectory(
+  userId: string
+): Promise<{
+  success: boolean
+  data?: {
+    overallTrend: 'improving' | 'declining' | 'stable'
+    trendStrength: number // 0-1, how strong the trend is
+    focusAreas: Array<{
+      area: string
+      currentScore: number
+      trendDirection: 'up' | 'down' | 'stable'
+      improvement: number
+    }>
+    personalizedSuggestions: string[]
+    confidenceLevel: number
+  }
+  error?: string
+}> {
+  try {
+    const supabase = createClient()
+
+    // Get user's CPL analysis history from vector database
+    const { data: cplHistory, error } = await supabase
+      .from('user_embeddings')
+      .select('metadata, created_at')
+      .eq('user_id', userId)
+      .eq('content_type', 'cpl_analysis')
+      .order('created_at', { ascending: true })
+      .limit(50) // Last 50 analyses for trend analysis
+
+    if (error || !cplHistory || cplHistory.length < 3) {
+      return {
+        success: false,
+        error: 'Insufficient data for trajectory analysis (minimum 3 analyses required)'
+      }
+    }
+
+    // Analyze overall score trends
+    const scores = cplHistory.map(item => ({
+      score: item.metadata.cpl_score,
+      breakdown: item.metadata.breakdown,
+      date: new Date(item.created_at)
+    }))
+
+    // Calculate overall trend using linear regression
+    const n = scores.length
+    const xMean = (n - 1) / 2 // Time points from 0 to n-1
+    const yMean = scores.reduce((sum, s) => sum + s.score, 0) / n
+
+    let numerator = 0
+    let denominator = 0
+
+    scores.forEach((score, index) => {
+      numerator += (index - xMean) * (score.score - yMean)
+      denominator += (index - xMean) ** 2
+    })
+
+    const slope = denominator !== 0 ? numerator / denominator : 0
+    const trendStrength = Math.min(Math.abs(slope) / 10, 1) // Normalize to 0-1
+
+    const overallTrend = slope > 2 ? 'improving' :
+                        slope < -2 ? 'declining' : 'stable'
+
+    // Analyze individual focus areas
+    const areas = ['grammar', 'clarity', 'style', 'engagement', 'vocabulary']
+    const focusAreas = areas.map(area => {
+      const areaScores = scores.map(s => s.breakdown[area]).filter(Boolean)
+
+      if (areaScores.length < 2) {
+        return {
+          area,
+          currentScore: 0,
+          trendDirection: 'stable' as const,
+          improvement: 0
+        }
+      }
+
+      const firstScore = areaScores[0]
+      const lastScore = areaScores[areaScores.length - 1]
+      const improvement = lastScore - firstScore
+
+      return {
+        area,
+        currentScore: lastScore,
+        trendDirection: improvement > 2 ? 'up' as const :
+                       improvement < -2 ? 'down' as const : 'stable' as const,
+        improvement
+      }
+    })
+
+    // Generate personalized suggestions based on patterns
+    const weakestAreas = focusAreas
+      .filter(area => area.trendDirection === 'down' || area.currentScore < 60)
+      .sort((a, b) => a.currentScore - b.currentScore)
+      .slice(0, 3)
+
+    const personalizedSuggestions = [
+      overallTrend === 'improving'
+        ? 'Great progress! Keep maintaining your current writing habits.'
+        : 'Focus on consistent practice to build momentum.',
+
+      ...weakestAreas.map(area =>
+        `Work on ${area.area} - current score: ${area.currentScore}. ${
+          area.trendDirection === 'down' ? 'This area needs immediate attention.' :
+          'Small improvements here can significantly boost your overall score.'
+        }`
+      ),
+
+      scores.length > 20
+        ? 'You have substantial writing history. Consider reviewing your best pieces for patterns.'
+        : 'Continue building your writing portfolio for better insights.'
+    ]
+
+    // Confidence based on data quantity and consistency
+    const confidenceLevel = Math.min(
+      (scores.length / 20) * 0.7 + // Data quantity factor
+      (1 - (Math.abs(slope) > 10 ? 0.3 : 0)) * 0.3, // Consistency factor
+      1
+    )
+
+    return {
+      success: true,
+      data: {
+        overallTrend,
+        trendStrength,
+        focusAreas,
+        personalizedSuggestions,
+        confidenceLevel
+      }
+    }
+  } catch (error) {
+    console.error('Get CPL improvement trajectory error:', error)
+    return {
+      success: false,
+      error: 'Failed to analyze improvement trajectory'
+    }
+  }
+}
+
+// NEW: Get contextual CPL suggestions based on similar user patterns
+export async function getContextualCPLSuggestions(
+  userId: string,
+  currentText: string,
+  currentCPLScore: number
+): Promise<{
+  success: boolean
+  data?: {
+    suggestions: Array<{
+      suggestion: string
+      confidence: number
+      basedOn: 'user_history' | 'similar_users' | 'general'
+      expectedImprovement: number
+    }>
+    similarSuccessfulPatterns: Array<{
+      pattern: string
+      improvementAchieved: number
+      exampleText: string
+    }>
+  }
+  error?: string
+}> {
+  try {
+    // Generate embedding for current text
+    const textEmbedding = await vectorService.generateEmbedding(currentText)
+
+    // Find user's similar content that had better scores
+    const userHistory = await vectorService.findSimilarContent(
+      textEmbedding,
+      {
+        contentType: 'cpl_analysis',
+        userId,
+        threshold: 0.6,
+        limit: 10
+      }
+    )
+
+    const betterExamples = userHistory
+      .filter(item => item.metadata.cpl_score > currentCPLScore + 5)
+      .sort((a, b) => b.metadata.cpl_score - a.metadata.cpl_score)
+      .slice(0, 3)
+
+    // Find patterns from users with similar writing styles but better scores
+    const userStyleVector = await vectorService.generateUserStyleVector(userId)
+
+    let similarUserPatterns: any[] = []
+    if (userStyleVector) {
+      const similarUsers = await vectorService.findSimilarWritingStyles(
+        userStyleVector,
+        0.7,
+        5
+      )
+
+      // Get successful patterns from similar users
+      for (const similarUser of similarUsers) {
+        const patterns = await vectorService.findSimilarContent(
+          textEmbedding,
+          {
+            contentType: 'cpl_analysis',
+            userId: similarUser.user_id,
+            threshold: 0.5,
+            limit: 3
+          }
+        )
+
+        similarUserPatterns.push(...patterns.filter(p => p.metadata.cpl_score > currentCPLScore + 10))
+      }
+    }
+
+    // Generate suggestions based on patterns found
+    const suggestions = []
+
+    // From user's own history
+    if (betterExamples.length > 0) {
+      const avgImprovement = betterExamples.reduce(
+        (sum, ex) => sum + (ex.metadata.cpl_score - currentCPLScore), 0
+      ) / betterExamples.length
+
+      suggestions.push({
+        suggestion: `Review your previous work with similar topics - you've achieved ${Math.round(avgImprovement)} points higher on similar content`,
+        confidence: 0.9,
+        basedOn: 'user_history' as const,
+        expectedImprovement: Math.round(avgImprovement * 0.7)
+      })
+    }
+
+    // From similar users
+    if (similarUserPatterns.length > 0) {
+      const topPattern = similarUserPatterns
+        .sort((a, b) => b.metadata.cpl_score - a.metadata.cpl_score)[0]
+
+      suggestions.push({
+        suggestion: `Users with similar writing styles improved by focusing on ${topPattern.metadata.analysis_summary?.[0] || 'structure and clarity'}`,
+        confidence: 0.7,
+        basedOn: 'similar_users' as const,
+        expectedImprovement: Math.round((topPattern.metadata.cpl_score - currentCPLScore) * 0.3)
+      })
+    }
+
+    // General suggestions based on score range
+    if (currentCPLScore < 50) {
+      suggestions.push({
+        suggestion: 'Focus on basic grammar and sentence structure as your foundation',
+        confidence: 0.8,
+        basedOn: 'general' as const,
+        expectedImprovement: 8
+      })
+    } else if (currentCPLScore < 70) {
+      suggestions.push({
+        suggestion: 'Improve clarity by using shorter sentences and better transitions',
+        confidence: 0.75,
+        basedOn: 'general' as const,
+        expectedImprovement: 6
+      })
+    } else {
+      suggestions.push({
+        suggestion: 'Enhance engagement through varied sentence structure and stronger vocabulary',
+        confidence: 0.7,
+        basedOn: 'general' as const,
+        expectedImprovement: 4
+      })
+    }
+
+    // Extract successful patterns
+    const successfulPatterns = betterExamples.map(ex => ({
+      pattern: `${ex.metadata.complexity_level} complexity with ${ex.metadata.reading_time}min read time`,
+      improvementAchieved: ex.metadata.cpl_score - currentCPLScore,
+      exampleText: ex.content_snippet
+    }))
+
+    return {
+      success: true,
+      data: {
+        suggestions: suggestions.sort((a, b) => b.confidence - a.confidence),
+        similarSuccessfulPatterns: successfulPatterns
+      }
+    }
+  } catch (error) {
+    console.error('Get contextual CPL suggestions error:', error)
+    return {
+      success: false,
+      error: 'Failed to generate contextual suggestions'
     }
   }
 }

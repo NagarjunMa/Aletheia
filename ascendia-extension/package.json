@@ -1,0 +1,46 @@
+{
+  "name": "ascendia-extension",
+  "version": "1.1.0",
+  "description": "Enhanced Ascendia Chrome Extension with enterprise-grade security and performance",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "build:production": "tsc --sourceMap false",
+    "lint": "eslint . --ext .ts,.tsx",
+    "lint:fix": "eslint . --ext .ts,.tsx --fix",
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "prebuild": "npm run clean",
+    "security:audit": "npm audit --audit-level moderate",
+    "test": "echo 'Tests will be implemented' && exit 0"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.260",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.57.0",
+    "typescript": "^5.3.3"
+  },
+  "keywords": [
+    "chrome-extension",
+    "linkedin",
+    "ai",
+    "typescript",
+    "security",
+    "performance"
+  ],
+  "author": "Ascendia Team",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "browserslist": [
+    "last 2 Chrome versions"
+  ],
+  "security": {
+    "audit": {
+      "level": "moderate"
+    }
+  }
+}

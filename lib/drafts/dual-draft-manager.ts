@@ -19,7 +19,7 @@ interface UserPreferences {
 interface Draft {
   id?: string
   content: string
-  type: 'grammar_fix' | 'adaptive_polish'
+  draft_type: 'grammar_fix' | 'adaptive_polish'
   cplScore: number
   metadata: {
     originalLength: number
@@ -168,7 +168,7 @@ Preserve the writer's natural voice and personality completely.`
 
       const draft: Draft = {
         content: sanitizedContent,
-        type: 'grammar_fix',
+        draft_type: 'grammar_fix',
         cplScore: CPLCalculator.calculate(input), // Should stay same as original
         metadata: {
           originalLength: input.length,
@@ -223,7 +223,7 @@ Please create an adaptive polish version that maintains the writer's voice while
 
       const draft: Draft = {
         content: sanitizedContent,
-        type: 'adaptive_polish',
+        draft_type: 'adaptive_polish',
         cplScore: actualCPL,
         metadata: {
           originalLength: input.length,
