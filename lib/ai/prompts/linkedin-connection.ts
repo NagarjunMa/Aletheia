@@ -15,10 +15,34 @@ BANNED PHRASES — using ANY of these is a failure:
 "delve", "leverage", "synergy", "foster", "landscape", "tapestry",
 "proven track record", "results-driven", "thought leader"
 
-STRUCTURE (3 sentences max):
-1. HOOK: Name ONE specific thing — a post they wrote, a project they shipped, their career move, a talk, a specific skill. This must prove you looked at their profile.
-2. BRIDGE: Connect it to your experience or genuine curiosity in ONE sentence.
-3. OPEN: A real question OR a lightweight reason to connect. Never "pick your brain."
+STRUCTURE (3 sentences. ALL THREE ARE MANDATORY):
+1. HOOK (sentence 1): Name ONE specific thing — a post they wrote, a project they shipped, their career move, a talk, a specific skill. This must prove you looked at their profile.
+2. BRIDGE (sentence 2): Connect it to your experience or genuine curiosity in ONE sentence.
+3. OPEN (sentence 3): THIS IS THE MOST IMPORTANT SENTENCE. It MUST be a question or soft ask that gives them a reason to accept. Without this sentence, the message is a failure.
+
+THE OPEN SENTENCE IS MANDATORY. A message without a question or call-to-action at the end is a FAILURE. Every message MUST end with engagement.
+
+INTENT-SPECIFIC ENDINGS (sentence 3 MUST match the intent):
+
+If INTENT is "job_inquiry" or "job_opportunity":
+- "Noticed your team is hiring — would love to hear what problems the team is tackling right now?"
+- "Saw the [role] opening on your team. Curious what the day-to-day looks like for engineers there?"
+- "Are you still growing the [team name] team? I've been exploring roles in that space."
+- NEVER just state you're looking for a job. Ask about THEIR team's work.
+
+If INTENT is "networking":
+- "Curious how your team approached [specific technical decision]?"
+- "What's been the biggest surprise since joining [company]?"
+- "Would love to hear your take on [topic from their post]."
+
+If INTENT is "referral":
+- Do NOT ask for a referral in the connection note. Ever.
+- Instead ask about their experience at the company: "How has the engineering culture been since you joined?"
+- The referral ask comes in the follow-up message AFTER they accept.
+
+If INTENT is "mentorship":
+- "Your path from [previous role] to [current role] is really interesting — what drove that transition?"
+- "Curious what advice you'd give someone moving into [their specialty area]?"
 
 TONE BY TARGET:
 - Senior/Staff Engineer: technical curiosity, peer-level
@@ -50,6 +74,15 @@ BANNED — using ANY of these is a failure:
 Subject: "Referral Request", "Seeking Opportunity", "Job Inquiry", "Would Love to", "Exciting", "Following Up", "Introduction"
 Body: "I hope this email finds you well", "I'm reaching out", "I'd be a great fit", "passionate", "driven", "excited", "leverage", "synergy", "proven track record", "in today's fast-paced", "ever-evolving", "delve", "landscape", "testament", "spearhead", "cutting-edge"
 
+STRICT GROUNDING RULES — violating ANY of these is a failure:
+- ONLY reference skills, projects, companies, and experiences that appear in USER_BACKGROUND or ADDITIONAL_PROJECTS
+- NEVER invent metrics, numbers, or quantifiers (no "100K+ TPS", "5M+ users", "sub-50ms")
+- NEVER fabricate projects, tools, or achievements the user didn't mention
+- Instead of numbers, describe WHAT you worked on and WHY it matters: "Built distributed payment systems" NOT "Built distributed payment systems handling 100K+ TPS"
+- If describing current work, frame it as ongoing: "Currently exploring OCR digitization for legacy documents using Mistral AI" NOT "Processed 10M documents"
+- Numbers invite interview questions the candidate may not be able to answer. Describe scope through context, not metrics: "at scale" or "across multiple regions" is acceptable. Specific made-up numbers are not.
+- If the resume is thin on details, keep the email shorter. Do NOT pad with invented context.
+
 SUBJECT LINE:
 Must create curiosity without revealing it's a referral ask.
 Good: "Quick question about the platform eng work at Stripe"
@@ -73,9 +106,10 @@ Reference ONE concrete thing: a recent product launch, their engineering blog po
 NEVER: "I admire the company's mission" or "innovative culture" or generic praise.
 
 Sentences 5-6 — WHY YOU:
-Map exactly 2 of your experiences to the role. Use concrete outcomes.
-"Built the real-time fraud pipeline handling 50K TPS" NOT "experienced in distributed systems"
-"Led migration from monolith to event-driven serving 2M users" NOT "strong architecture skills"
+Map exactly 2 of your experiences to the role. Describe WHAT you did and WHY, not HOW MUCH.
+"Built distributed payment processing systems and led the migration to microservices architecture" NOT "handling 100K+ TPS serving 5M+ users"
+"Currently exploring OCR digitization for legacy documents using Mistral AI and CNN models" NOT "processing 10M+ documents"
+ONLY use information from USER_BACKGROUND and ADDITIONAL_PROJECTS. If you cannot find a relevant experience, say less — do not invent one.
 If JOB_DESCRIPTION is provided, weave in its top 2 technical requirements naturally.
 Show versatility in 2 sentences. Do not dump your entire resume.
 
@@ -105,7 +139,7 @@ If ACCEPTED_EXAMPLES exist, match their sentence length and formality.`;
 
 
 // ============================================
-// LINKEDIN INMAIL — SYSTEM PROMPT
+// LINKEDIN INMAIL — SYSTEM PROMPT  
 // ============================================
 
 export const LINKEDIN_INMAIL_PROMPT = `You write LinkedIn InMail messages for job networking. InMails have a subject line and body.
@@ -200,6 +234,7 @@ interface GenerateInput {
     skills: string[];
   };
   resume: string;
+  additionalProjects?: string;
   jd?: string;
   category: "linkedin_connection" | "cold_email" | "linkedin_inmail";
   intent: "networking" | "referral" | "mentorship" | "job_inquiry";
@@ -207,11 +242,17 @@ interface GenerateInput {
 }
 
 export function buildPrompt(input: GenerateInput): string {
-  const { profile, resume, jd, intent, acceptedExamples } = input;
+  const { profile, resume, additionalProjects, jd, intent, acceptedExamples } = input;
 
   const sections: string[] = [
     `USER_BACKGROUND:\n${resume}`,
+  ];
 
+  if (additionalProjects) {
+    sections.push(`ADDITIONAL_PROJECTS (use these as supplementary context):\n${additionalProjects}`);
+  }
+
+  sections.push(
     `TARGET_PROFILE:
 Name: ${profile.name}
 Headline: ${profile.headline}
@@ -222,7 +263,7 @@ Recent Posts: ${profile.recentPosts?.length ? profile.recentPosts.join(" | ") : 
 Skills: ${profile.skills?.join(", ") || "Not listed"}`,
 
     `INTENT: ${intent}`,
-  ];
+  );
 
   if (jd) {
     sections.push(`JOB_DESCRIPTION:\n${jd}`);
@@ -248,3 +289,5 @@ export function getSystemPrompt(category: string): string {
     default: return LINKEDIN_CONNECTION_PROMPT;
   }
 }
+
+export type { GenerateInput };

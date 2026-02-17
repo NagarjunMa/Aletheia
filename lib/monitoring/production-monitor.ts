@@ -671,8 +671,8 @@ interface OptimizationAction {
 
 // Export singleton instance
 export const productionMonitor = new ProductionMonitor({
-  enabled: true,
-  realTimeUpdates: true,
+  enabled: false,
+  realTimeUpdates: false,
   alertThresholds: {
     securityViolations: { rate: 10, severity: 'high' },
     performance: { latencyP99: 3000, errorRate: 5, resourceUsage: 80 },

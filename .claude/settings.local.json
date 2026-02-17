@@ -16,7 +16,9 @@
       "mcp__supabase__apply_migration",
       "mcp__supabase__execute_sql",
       "Bash(npm cache clean:*)",
-      "mcp__supabase__get_advisors"
+      "mcp__supabase__get_advisors",
+      "Bash(find:*)",
+      "Bash(/bashes)"
     ],
     "deny": [],
     "ask": []

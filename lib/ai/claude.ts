@@ -5,9 +5,11 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { aiProcessingSchema, cplAnalysisSchema, type AIProcessing } from '@/lib/validations/schemas'
 
-// Initialize Anthropic client
+// Initialize Anthropic client with timeout configuration
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
+  timeout: 30_000, // 30 seconds timeout
+  maxRetries: 2,   // Retry failed requests twice
 })
 
 // Claude model configuration
@@ -16,7 +18,24 @@ export const CLAUDE_CONFIG = {
   maxTokens: 4096,
   temperature: 0.7,
   topP: 0.9,
+  timeout: 30_000, // 30 seconds
 } as const
+
+/**
+ * Timeout wrapper for API calls - provides extra protection beyond SDK timeout
+ */
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    const timeoutId = setTimeout(() => {
+      reject(new Error(`Operation timeout: exceeded ${timeoutMs}ms`))
+    }, timeoutMs)
+
+    // Clear timeout if promise resolves first
+    promise.finally(() => clearTimeout(timeoutId))
+  })
+
+  return Promise.race([promise, timeoutPromise])
+}
 
 // AI processing types
 export type ProcessingType = 'grammar_fix' | 'adaptive_polish' | 'cpl_analysis'
@@ -215,19 +234,22 @@ export async function processWithClaude(
       }
     }
 
-    // Make API call to Claude
-    const response = await anthropic.messages.create({
-      model: CLAUDE_CONFIG.model,
-      max_tokens: CLAUDE_CONFIG.maxTokens,
-      temperature: processingType === 'cpl_analysis' ? 0.3 : CLAUDE_CONFIG.temperature,
-      system: systemPrompt,
-      messages: [
-        {
-          role: 'user',
-          content: userPrompt,
-        },
-      ],
-    })
+    // Make API call to Claude with additional timeout protection
+    const response = await withTimeout(
+      anthropic.messages.create({
+        model: CLAUDE_CONFIG.model,
+        max_tokens: CLAUDE_CONFIG.maxTokens,
+        temperature: processingType === 'cpl_analysis' ? 0.3 : CLAUDE_CONFIG.temperature,
+        system: systemPrompt,
+        messages: [
+          {
+            role: 'user',
+            content: userPrompt,
+          },
+        ],
+      }),
+      30_000 // 30 second timeout as fallback
+    )
 
     const processingTime = Date.now() - startTime
 
@@ -287,6 +309,15 @@ export async function processWithClaude(
     const processingTime = Date.now() - startTime
 
     console.error('Claude API error:', error)
+
+    // Handle timeout errors
+    if (error.message?.includes('timeout') || error.message?.includes('Operation timeout')) {
+      return {
+        success: false,
+        error: 'Request timeout. Please try again with shorter content.',
+        processingTime,
+      }
+    }
 
     // Handle specific API errors
     if (error.status === 400) {

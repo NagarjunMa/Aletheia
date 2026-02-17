@@ -223,13 +223,22 @@ ascendia/
 │   ├── validations/              # Zod validation schemas
 │   └── query/                    # React Query hooks (9 files)
 │
-├── ascendia-extension/           # Browser extension scaffold
-│   ├── manifest.json             #   Chrome extension manifest
-│   ├── background/               #   Service worker
-│   ├── content/                  #   Content scripts
-│   ├── popup/                    #   Extension popup
-│   ├── settings/                 #   Extension settings
-│   └── icons/                    #   Extension icons
+├── ascendia-extension/           # Production Chrome Extension (Side Panel API)
+│   ├── manifest.json             #   Chrome MV3 manifest with sidePanel permission
+│   ├── background/               #   Service worker with side panel integration
+│   │   └── service-worker.js     #     API communication, rate limiting, usage tracking
+│   ├── content/                  #   LinkedIn integration content scripts
+│   │   ├── linkedin-reader.js    #     Profile data extraction
+│   │   └── auto-filler.js        #     Auto-fill generated messages
+│   ├── popup/                    #   Side Panel UI (converted from popup)
+│   │   ├── popup.html            #     Main interface with glass morphism design
+│   │   ├── popup.css             #     Premium UI with responsive side panel layout
+│   │   └── popup.js              #     Core functionality with persistence & copy features
+│   ├── settings/                 #   Extension configuration
+│   │   ├── settings.html         #     API key, resume upload, preferences
+│   │   ├── settings.css          #     Professional settings UI
+│   │   └── settings.js           #     Settings management logic
+│   └── icons/                    #   Extension branding icons (16, 48, 128px)
 │
 ├── tests/                        # Test suite
 │   ├── e2e/                      #   Playwright E2E (5 tests)
@@ -357,6 +366,38 @@ export async function myAction(formData: FormData) {
 - 15 core tables + 3 thread system tables
 - 20+ strategic performance indexes
 
+### Chrome Extension (Production Ready)
+
+**Architecture**: Chrome Side Panel API (Apollo-style persistent sidebar)
+- **Manifest V3** with `sidePanel` permission
+- **Persistent UI**: Stays open while browsing, page layout adjusts
+- **LinkedIn Integration**: Profile reading + auto-fill capabilities
+- **Premium Design**: Glass morphism with professional SVG icons
+
+**Key Features**:
+```typescript
+// Service worker with side panel integration
+chrome.action.onClicked.addListener(async (tab) => {
+  await chrome.sidePanel.open({ tabId: tab.id });
+});
+
+// Message persistence across sessions (4-hour retention)
+await storeGeneration(output);  // Auto-saves to chrome.storage.local
+await restoreLastGeneration();  // Restores on popup open
+
+// Enhanced copy with fallback support
+await copyToClipboardWithFeedback(text, button, 'Copied!');
+// - Modern Clipboard API with document.execCommand fallback
+// - Visual feedback with 1.5s delay prevents popup closure
+// - Platform-specific character limits with smart truncation
+```
+
+**UI Optimizations for Side Panel**:
+- Responsive layout (320px-450px width range)
+- Character count displays with platform limits (LinkedIn: 300, Email: 2000)
+- JSON parsing for cold email/InMail responses
+- Professional status indicators and validation feedback
+
 ---
 
 ## Environment Variables
@@ -367,6 +408,9 @@ NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 ANTHROPIC_API_KEY=
+
+# Chrome Extension
+EXTENSION_API_KEY=              # API key for extension authentication
 
 # Optional
 OPENAI_API_KEY=

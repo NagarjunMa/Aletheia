@@ -339,17 +339,35 @@ async function processResumeFile(file) {
   }
 }
 
-function readFileContent(file) {
-  return new Promise((resolve, reject) => {
+async function readFileContent(file) {
+  return new Promise(async (resolve, reject) => {
     const reader = new FileReader()
 
-    reader.onload = (e) => {
-      if (file.type === 'text/plain') {
-        resolve(e.target.result)
-      } else {
-        // For PDF and DOC files, we'll extract text content
-        // In a real implementation, you might want to use a PDF.js or similar library
-        resolve('Resume content extracted from ' + file.name + '\n\nPlease ensure your resume content is properly formatted for best results.')
+    reader.onload = async (e) => {
+      try {
+        if (file.type === 'text/plain') {
+          resolve(e.target.result)
+        } else if (file.type === 'application/pdf') {
+          // Extract text from PDF using PDF.js
+          const extractedText = await extractPDFText(e.target.result)
+          resolve(extractedText)
+        } else {
+          // For DOC/DOCX files, we need a different approach
+          // For now, prompt user to use PDF or TXT
+          resolve(`❌ CRITICAL: PDF extraction failed for ${file.name}
+
+⚠️ IMPORTANT: Please convert your resume to PDF format or plain text.
+
+Current file type (${file.type}) cannot be processed, which may cause the AI to generate content with incorrect experience.
+
+To prevent hallucination:
+1. Save your resume as PDF
+2. Or copy/paste your resume text directly in the text area below
+
+Without proper resume content, generated messages may contain false professional experience.`)
+        }
+      } catch (error) {
+        reject(new Error(`Failed to extract content from ${file.name}: ${error.message}`))
       }
     }
 
@@ -360,6 +378,59 @@ function readFileContent(file) {
     } else {
       reader.readAsArrayBuffer(file)
     }
+  })
+}
+
+// Extract text from PDF using PDF.js (loaded from CDN)
+async function extractPDFText(arrayBuffer) {
+  try {
+    // Load PDF.js from CDN if not already loaded
+    if (typeof pdfjsLib === 'undefined') {
+      await loadPDFJS()
+    }
+
+    const uint8Array = new Uint8Array(arrayBuffer)
+    const pdf = await pdfjsLib.getDocument({ data: uint8Array }).promise
+
+    let fullText = ''
+
+    // Extract text from all pages
+    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+      const page = await pdf.getPage(pageNum)
+      const textContent = await page.getTextContent()
+      const pageText = textContent.items.map(item => item.str).join(' ')
+      fullText += pageText + '\n'
+    }
+
+    if (fullText.trim().length === 0) {
+      throw new Error('No text content found in PDF. The PDF might be image-based.')
+    }
+
+    return fullText.trim()
+
+  } catch (error) {
+    console.error('PDF extraction error:', error)
+    throw new Error(`PDF text extraction failed: ${error.message}. Please try converting to text format.`)
+  }
+}
+
+// Load PDF.js library from local files
+function loadPDFJS() {
+  return new Promise((resolve, reject) => {
+    if (typeof pdfjsLib !== 'undefined') {
+      resolve()
+      return
+    }
+
+    const script = document.createElement('script')
+    script.src = chrome.runtime.getURL('lib/pdf.min.js')
+    script.onload = () => {
+      // Configure PDF.js worker with local file
+      pdfjsLib.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('lib/pdf.worker.min.js')
+      resolve()
+    }
+    script.onerror = () => reject(new Error('Failed to load local PDF.js library'))
+    document.head.appendChild(script)
   })
 }
 

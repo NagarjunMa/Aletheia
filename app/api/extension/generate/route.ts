@@ -6,6 +6,7 @@ import {
   sanitize,
   type GenerateInput
 } from '@/lib/ai/prompts/linkedin-connection'
+import { sanitizeForLinkedIn } from '@/lib/ai/sanitizer'
 import { createClient } from '@/lib/supabase/server'
 import { z } from 'zod'
 
@@ -75,8 +76,8 @@ export async function POST(request: NextRequest) {
   try {
     // Rate limiting check
     const ip = request.headers.get('x-forwarded-for') ||
-              request.headers.get('x-real-ip') ||
-              'unknown'
+      request.headers.get('x-real-ip') ||
+      'unknown'
 
     const rateCheck = checkRateLimit(ip)
     if (!rateCheck.allowed) {
@@ -109,9 +110,17 @@ export async function POST(request: NextRequest) {
     // Use new prompt system
     const systemPrompt = getSystemPrompt(category)
     const userPrompt = buildPrompt({
-      profile,
+      profile: {
+        name: profile.name,
+        headline: profile.headline || '',
+        location: profile.location || '',
+        about: profile.about || '',
+        experiences: (profile.experiences || []).map(e => ({ title: e.title, company: e.company || '' })),
+        recentPosts: profile.recentPosts || [],
+        skills: profile.skills || []
+      },
       resume: resume || '',
-      jd: jd || undefined,
+      jd: jd || '',
       category,
       intent: intent || 'networking',
       acceptedExamples: acceptedExamples || []
@@ -137,7 +146,20 @@ export async function POST(request: NextRequest) {
     }
 
     // Sanitize output with negative lexicon
-    const sanitizedContent = sanitize(rawContent)
+    // Enhanced sanitization with AI fingerprint detection for LinkedIn
+    const basicSanitization = sanitize(rawContent)
+    const enhancedSanitization = await sanitizeForLinkedIn(basicSanitization)
+    const sanitizedContent = enhancedSanitization.success ? enhancedSanitization.sanitizedContent : basicSanitization
+
+    // Log AI detection results for monitoring
+    if (enhancedSanitization.isAIGenerated) {
+      console.warn('AI fingerprints detected in Chrome extension generation:', {
+        confidence: enhancedSanitization.aiFingerprints?.confidence,
+        patterns: enhancedSanitization.aiFingerprints?.detectedPatterns,
+        authenticityScore: enhancedSanitization.authenticityScore,
+        category: validatedData.category
+      })
+    }
 
     // Log usage for monitoring
     const tokenUsage = response.usage
@@ -218,31 +240,54 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // For LinkedIn connections - apply smart character limit with sentence-aware trimming
+    // For LinkedIn connections - apply smart character limit preserving the OPEN sentence
     let finalContent = sanitizedContent
     let wasTruncated = false
     const originalLength = sanitizedContent.length
 
-    // Hard limit at 290 chars to leave buffer for LinkedIn's 300 char limit
-    if (finalContent.length > 290) {
-      console.warn(`LinkedIn connection exceeds character limit: ${finalContent.length} > 290`)
+    // LinkedIn's actual limit is 300 chars
+    if (finalContent.length > 300) {
+      console.warn(`LinkedIn connection exceeds character limit: ${finalContent.length} > 300`)
 
-      // Smart trimming: try to cut at last complete sentence
-      let trimmedContent = finalContent.substring(0, 290)
-      const lastPeriod = trimmedContent.lastIndexOf('.')
-      const lastQuestion = trimmedContent.lastIndexOf('?')
-      const lastExclamation = trimmedContent.lastIndexOf('!')
-      const cutoff = Math.max(lastPeriod, lastQuestion, lastExclamation)
+      // Smart trimming: PRESERVE the last sentence (the OPEN/question) — it's the most important
+      // Strategy: split into sentences, try removing/shortening earlier sentences first
+      const sentences = finalContent.match(/[^.!?]+[.!?]+/g) || [finalContent]
 
-      // Only cut at sentence end if we have a reasonable sentence (>150 chars)
-      if (cutoff > 150) {
-        finalContent = trimmedContent.substring(0, cutoff + 1)
+      if (sentences.length >= 3) {
+        // Try dropping sentence 1 (HOOK) and keeping BRIDGE + OPEN
+        const withoutHook = sentences.slice(1).join(' ').trim()
+        if (withoutHook.length <= 300) {
+          finalContent = withoutHook
+          wasTruncated = true
+        } else {
+          // Even without HOOK it's too long — keep just the last sentence (OPEN)
+          const lastSentence = sentences[sentences.length - 1]?.trim() ?? ''
+          if (lastSentence.length > 0 && lastSentence.length <= 300) {
+            finalContent = lastSentence
+            wasTruncated = true
+          } else {
+            // Last resort: hard cut at 297 + ellipsis
+            finalContent = finalContent.substring(0, 297) + '...'
+            wasTruncated = true
+          }
+        }
+      } else if (sentences.length === 2) {
+        // Only 2 sentences — try trimming the first one
+        const secondSentence = sentences[1]?.trim() ?? ''
+        const firstTrimmed = (sentences[0] ?? '').substring(0, 300 - secondSentence.length - 2).trim()
+        const combined = firstTrimmed + '. ' + secondSentence
+        if (combined.length <= 300) {
+          finalContent = combined
+          wasTruncated = true
+        } else {
+          finalContent = finalContent.substring(0, 297) + '...'
+          wasTruncated = true
+        }
       } else {
-        // Fallback: hard cut with ellipsis
-        finalContent = trimmedContent.substring(0, 287) + '...'
+        // Single run-on sentence — hard cut
+        finalContent = finalContent.substring(0, 297) + '...'
+        wasTruncated = true
       }
-
-      wasTruncated = true
     }
 
     return NextResponse.json({
@@ -263,25 +308,6 @@ export async function POST(request: NextRequest) {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, x-api-key',
-        'X-RateLimit-Limit': '30',
-        'X-RateLimit-Remaining': rateCheck.remainingRequests?.toString() || '0',
-        'X-RateLimit-Reset': rateCheck.resetTime?.toString() || ''
-      }
-    })
-
-    return NextResponse.json({
-      success: true,
-      body: sanitizedContent,
-      category,
-      character_count: charCount,
-      validation: {
-        character_limit_passed: true,
-        sanitization_applied: rawContent !== sanitizedContent
-      },
-      usage: tokenUsage,
-      processingTime
-    }, {
-      headers: {
         'X-RateLimit-Limit': '30',
         'X-RateLimit-Remaining': rateCheck.remainingRequests?.toString() || '0',
         'X-RateLimit-Reset': rateCheck.resetTime?.toString() || ''
@@ -361,8 +387,8 @@ export async function GET(request: NextRequest) {
   try {
     // Rate limiting check (same as POST)
     const ip = request.headers.get('x-forwarded-for') ||
-              request.headers.get('x-real-ip') ||
-              'unknown'
+      request.headers.get('x-real-ip') ||
+      'unknown'
 
     const rateCheck = checkRateLimit(ip)
     if (!rateCheck.allowed) {

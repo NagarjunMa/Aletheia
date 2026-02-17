@@ -188,9 +188,18 @@ function displayOutput(output) {
   if ((output.category === 'cold_email' || output.category === 'linkedin_inmail') &&
       typeof output.body === 'string') {
     try {
+      let jsonString = output.body.trim();
+
+      // Remove markdown JSON formatting if present
+      if (jsonString.startsWith('```json')) {
+        jsonString = jsonString.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+      } else if (jsonString.startsWith('```')) {
+        jsonString = jsonString.replace(/^```\s*/, '').replace(/\s*```$/, '');
+      }
+
       // Check if body is actually a JSON string
-      if (output.body.trim().startsWith('{') || output.body.trim().startsWith('"')) {
-        const parsed = JSON.parse(output.body);
+      if (jsonString.startsWith('{') || jsonString.startsWith('"')) {
+        const parsed = JSON.parse(jsonString);
 
         // If parsed successfully and contains the expected structure
         if (parsed.subject_line || parsed.body) {
@@ -200,7 +209,9 @@ function displayOutput(output) {
         }
       }
     } catch (e) {
-      console.warn('Failed to parse JSON response, using as-is:', e);
+      console.warn('Failed to parse JSON response:', e);
+      console.warn('Original body content:', output.body);
+      console.warn('Cleaned JSON string was:', jsonString);
       // Continue with original output if parsing fails
     }
   }

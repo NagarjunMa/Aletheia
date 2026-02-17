@@ -1,32 +1,54 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import Anthropic from '@anthropic-ai/sdk'
-import { z } from 'zod'
+import { withAuth, getRequestMetadata } from '@/lib/auth/verify-auth'
+import { secureInput, INPUT_LIMITS } from '@/lib/security/input-sanitizer'
+import { draftGenerationSchema } from '@/lib/validation/schemas'
 import { calculateCPLScore, updateUserCPLBaseline } from '@/lib/cpl/scoring'
+import { createClient } from '@/lib/supabase/server'
+import { sanitizeAIOutput } from '@/lib/ai/sanitizer'
+import Anthropic from '@anthropic-ai/sdk'
 
 const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
+  apiKey: process.env.ANTHROPIC_API_KEY!,
+  timeout: 30_000,
+  maxRetries: 2,
 })
 
-const generateRequestSchema = z.object({
-  prompt: z.string().min(1, 'Prompt is required'),
-  category: z.enum(['instagram_post', 'linkedin', 'medium_article', 'email', 'conversational']),
-  conversation_id: z.string().optional(),
-})
-
-export async function POST(request: NextRequest) {
+export const POST = withAuth(async (request: NextRequest, user: any) => {
   try {
     const supabase = createClient()
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    // Parse and validate request body
+    const body = await request.json()
+    const validatedData = draftGenerationSchema.safeParse(body)
 
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!validatedData.success) {
+      return NextResponse.json({
+        error: 'Invalid request data',
+        details: validatedData.error.issues[0]?.message
+      }, { status: 400 })
     }
 
-    const body = await request.json()
-    const validatedData = generateRequestSchema.parse(body)
-    const { prompt, category, conversation_id } = validatedData
+    const { prompt, category, conversation_id } = validatedData.data
+
+    // Secure input - sanitize and check for injection with logging
+    const secureResult = await secureInput(
+      prompt,
+      INPUT_LIMITS.USER_INPUT,
+      'Prompt',
+      true, // Enable prompt injection detection
+      {
+        userId: user.id,
+        request
+      }
+    )
+
+    if (!secureResult.valid) {
+      return NextResponse.json({
+        error: secureResult.error
+      }, { status: 400 })
+    }
+
+    const sanitizedPrompt = secureResult.sanitized!
 
     let conversationId = conversation_id
 
@@ -35,7 +57,8 @@ export async function POST(request: NextRequest) {
         .from('conversations')
         .insert({
           user_id: user.id,
-          title: prompt.slice(0, 50) + (prompt.length > 50 ? '...' : ''),
+          title: sanitizedPrompt.slice(0, 50) + (sanitizedPrompt.length > 50 ? '...' : ''),
+          category,
         })
         .select('id')
         .single()
@@ -53,7 +76,8 @@ export async function POST(request: NextRequest) {
       .insert({
         conversation_id: conversationId,
         user_id: user.id,
-        raw_text: prompt,
+        raw_text: sanitizedPrompt,
+        content: sanitizedPrompt, // Add content field for new schema
       })
       .select('id')
       .single()
@@ -65,13 +89,13 @@ export async function POST(request: NextRequest) {
 
     const grammarFixPrompt = `You are an expert editor. Please fix any grammar, spelling, and punctuation errors in the following text while preserving the original meaning and tone. Only make necessary corrections - do not rewrite or change the style.
 
-Text: "${prompt}"
+Text: "${sanitizedPrompt}"
 
 Return only the corrected text without any explanations.`
 
     const adaptivePolishPrompt = `You are an expert writer. Please improve the following ${category} by enhancing clarity, professionalism, and impact while maintaining the original intent and voice. Adapt the tone and style to be appropriate for a ${category}.
 
-Content: "${prompt}"
+Content: "${sanitizedPrompt}"
 
 Return only the improved text without any explanations.`
 
@@ -98,8 +122,47 @@ Return only the improved text without any explanations.`
       }),
     ])
 
-    const grammarContent = grammarResponse.content[0]?.type === 'text' ? grammarResponse.content[0].text.trim() : ''
-    const polishContent = polishResponse.content[0]?.type === 'text' ? polishResponse.content[0].text.trim() : ''
+    const rawGrammarContent = grammarResponse.content[0]?.type === 'text' ? grammarResponse.content[0].text.trim() : ''
+    const rawPolishContent = polishResponse.content[0]?.type === 'text' ? polishResponse.content[0].text.trim() : ''
+
+    // Sanitize AI-generated content to remove AI fingerprints
+    const [grammarSanitization, polishSanitization] = await Promise.all([
+      sanitizeAIOutput(rawGrammarContent, {
+        platform: category === 'linkedin' ? 'linkedin' : 'general',
+        detectAIFingerprints: true,
+        humanize: true,
+        maxLength: 2000,
+        preserveFormatting: true
+      }),
+      sanitizeAIOutput(rawPolishContent, {
+        platform: category === 'linkedin' ? 'linkedin' : 'general',
+        detectAIFingerprints: true,
+        humanize: true,
+        maxLength: 2000,
+        preserveFormatting: true
+      })
+    ])
+
+    const grammarContent = grammarSanitization.success ? grammarSanitization.sanitizedContent : rawGrammarContent
+    const polishContent = polishSanitization.success ? polishSanitization.sanitizedContent : rawPolishContent
+
+    // Log AI fingerprint detection results for monitoring
+    if (grammarSanitization.isAIGenerated || polishSanitization.isAIGenerated) {
+      console.warn('AI fingerprints detected in generated content:', {
+        grammarFingerprints: grammarSanitization.isAIGenerated ? {
+          confidence: grammarSanitization.aiFingerprints?.confidence,
+          patterns: grammarSanitization.aiFingerprints?.detectedPatterns,
+          authenticityScore: grammarSanitization.authenticityScore
+        } : null,
+        polishFingerprints: polishSanitization.isAIGenerated ? {
+          confidence: polishSanitization.aiFingerprints?.confidence,
+          patterns: polishSanitization.aiFingerprints?.detectedPatterns,
+          authenticityScore: polishSanitization.authenticityScore
+        } : null,
+        userId: user.id,
+        category
+      })
+    }
 
     // Calculate CPL scores for both drafts
     const [grammarCPL, polishCPL] = await Promise.all([
@@ -179,6 +242,9 @@ Return only the improved text without any explanations.`
       )
     }
 
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({
+      error: 'An error occurred while generating drafts',
+      message: 'Please try again or contact support if the problem persists'
+    }, { status: 500 })
   }
-}
+})

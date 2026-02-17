@@ -28,11 +28,17 @@ System learns from feedback → Better future outputs
 
 ## Content Categories
 
-- **Email** — Professional correspondence (greeting/body/closing structure)
+### Web Application
+- **Email** — Professional correspondence
 - **Letter** — Personal or formal letters
 - **Proposal** — Business proposals, technical documentation
-- **Memo** — Internal communications, brevity focus
+- **Memo** — Internal communications
 - **General** — Conversational, social media, other
+
+### Chrome Extension
+- **LinkedIn Connection** — Connection request messages (300 char limit)
+- **Cold Email** — Apollo-style cold emails (100-150 words)
+- **LinkedIn InMail** — InMail messages (80-120 words)
 
 ## Tech Stack Summary
 
