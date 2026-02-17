@@ -151,6 +151,48 @@ export const AI_FINGERPRINT_PATTERNS: AIFingerprintPattern[] = [
     name: 'ai_transition_mind',
     severity: 'medium',
     description: 'AI transition with context'
+  },
+
+  // Corporate AI buzzwords (high-frequency in AI text)
+  {
+    pattern: /\b(showcasing|aligns with|aims to)\b/gi,
+    replacement: (match) => {
+      const word = match.toLowerCase();
+      if (word.includes('showcasing')) return 'showing';
+      if (word.includes('aligns with')) return 'matches';
+      if (word.includes('aims to')) return 'wants to';
+      return match;
+    },
+    name: 'corporate_buzzwords',
+    severity: 'high',
+    description: 'Corporate AI buzzwords (20x+ more frequent in AI text)'
+  },
+  {
+    pattern: /really resonates with/gi,
+    replacement: 'really interests',
+    name: 'ai_resonance',
+    severity: 'high',
+    description: 'AI resonance pattern'
+  },
+  {
+    pattern: /AI-first approach/gi,
+    replacement: 'AI approach',
+    name: 'ai_first_approach',
+    severity: 'high',
+    description: 'AI-first terminology pattern'
+  },
+  {
+    pattern: /\b(game-changer|industry leader|world-class)\b/gi,
+    replacement: (match) => {
+      const word = match.toLowerCase();
+      if (word.includes('game-changer')) return 'impactful';
+      if (word.includes('industry leader')) return 'top company';
+      if (word.includes('world-class')) return 'excellent';
+      return match;
+    },
+    name: 'superlative_buzzwords',
+    severity: 'medium',
+    description: 'AI superlative buzzwords'
   }
 ]
 
