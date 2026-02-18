@@ -61,6 +61,16 @@ export async function middleware(request: NextRequest) {
   // Refresh session if expired - required for Server Components
   const { data: { user }, error } = await supabase.auth.getUser()
 
+  // Handle stale refresh token (caused by concurrent requests racing to refresh)
+  // Sign out to clear the dead cookies so the user gets a clean login redirect
+  if (error?.code === 'refresh_token_already_used') {
+    await supabase.auth.signOut()
+    const loginUrl = request.nextUrl.clone()
+    loginUrl.pathname = '/auth/login'
+    loginUrl.searchParams.set('redirectTo', request.nextUrl.pathname)
+    return NextResponse.redirect(loginUrl)
+  }
+
   // Protected routes - redirect to login if not authenticated
   const isProtectedRoute =
     request.nextUrl.pathname.startsWith('/dashboard') ||
@@ -112,21 +122,6 @@ export async function middleware(request: NextRequest) {
   ].join('; ')
 
   response.headers.set('Content-Security-Policy', cspHeader)
-
-  // Rate limiting headers (basic implementation)
-  const userAgent = request.headers.get('user-agent') || ''
-  const isBot = /bot|crawler|spider|scraper/i.test(userAgent)
-
-  if (isBot) {
-    // Limit bots more aggressively
-    response.headers.set('X-RateLimit-Limit', '10')
-    response.headers.set('X-RateLimit-Remaining', '10')
-  } else {
-    response.headers.set('X-RateLimit-Limit', '100')
-    response.headers.set('X-RateLimit-Remaining', '100')
-  }
-
-  response.headers.set('X-RateLimit-Reset', String(Math.floor(Date.now() / 1000) + 3600))
 
   return response
 }

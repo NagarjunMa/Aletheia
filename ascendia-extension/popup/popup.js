@@ -9,17 +9,27 @@ document.addEventListener('DOMContentLoaded', async () => {
   await initializePopup();
   setupEventListeners();
   await checkLinkedInProfile();
+
+  // Re-check profile when active tab URL changes or user switches tabs
+  chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+    if (changeInfo.status === 'complete') checkLinkedInProfile();
+  });
+  chrome.tabs.onActivated.addListener(() => checkLinkedInProfile());
 });
 
 async function initializePopup() {
-  // Load user settings
-  const { apiKey, resume } = await chrome.storage.local.get(['apiKey', 'resume']);
+  // Check auth status instead of API key
+  const authStatus = await new Promise((resolve) => {
+    chrome.runtime.sendMessage({ action: 'getAuthStatus' }, resolve);
+  });
 
-  // Check if user needs to set up API key
-  if (!apiKey) {
-    showSetupRequired();
+  if (!authStatus || !authStatus.authenticated) {
+    showAuthRequired(authStatus);
     return;
   }
+
+  // Show connected user badge
+  showUserBadge(authStatus.user);
 
   // Load usage stats
   await updateUsageStats();
@@ -36,7 +46,7 @@ function setupEventListeners() {
   document.getElementById('settingsBtn').addEventListener('click', openSettings);
 
   // Generate button
-  document.getElementById('generateBtn').addEventListener('click', generateMessage);
+  document.getElementById('generateBtn')?.addEventListener('click', generateMessage);
 
   // Copy buttons
   document.addEventListener('click', handleCopyClick);
@@ -49,15 +59,93 @@ function setupEventListeners() {
   document.getElementById('rejectBtn')?.addEventListener('click', () => handleFeedback('reject'));
 
   // Category change handler
-  document.getElementById('category').addEventListener('change', updateUIForCategory);
+  document.getElementById('category')?.addEventListener('change', updateUIForCategory);
 
   // JD input change handler
-  document.getElementById('jdInput').addEventListener('input', updateCharacterCount);
+  document.getElementById('jdInput')?.addEventListener('input', updateCharacterCount);
+}
+
+function showUserBadge(user) {
+  const footer = document.querySelector('.footer');
+  if (!footer) return;
+
+  // Add user badge before usage stats
+  const existingBadge = document.getElementById('userBadge');
+  if (existingBadge) existingBadge.remove();
+
+  const badge = document.createElement('div');
+  badge.id = 'userBadge';
+  badge.className = 'user-badge';
+  badge.innerHTML = `
+    <span class="user-email">${user?.email || user?.full_name || 'Connected'}</span>
+    <button id="disconnectBtn" class="disconnect-btn" title="Disconnect">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+        <polyline points="16,17 21,12 16,7"/>
+        <line x1="21" y1="12" x2="9" y2="12"/>
+      </svg>
+    </button>
+  `;
+
+  footer.insertBefore(badge, footer.firstChild);
+
+  document.getElementById('disconnectBtn').addEventListener('click', async () => {
+    const result = await new Promise((resolve) => {
+      chrome.runtime.sendMessage({ action: 'logout' }, resolve);
+    });
+    if (result?.success) {
+      window.location.reload();
+    }
+  });
+}
+
+function showAuthRequired(authStatus) {
+  // Show auth prompt instead of main content
+  document.getElementById('mainContent').innerHTML = `
+    <div class="setup-required">
+      <h3>Connect to Ascendia</h3>
+      <p>Log in to the Ascendia web app, then click the button below to connect this extension to your account.</p>
+      <button id="connectBtn" class="action-btn primary">Connect to Ascendia</button>
+      <button id="openSettingsBtn" class="action-btn secondary" style="margin-top: 8px;">Open Settings</button>
+      <div id="authError" class="error-message hidden" style="margin-top: 8px;">
+        <span id="authErrorText"></span>
+      </div>
+    </div>
+  `;
+  document.getElementById('mainContent').classList.remove('hidden');
+
+  document.getElementById('connectBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('connectBtn');
+    btn.textContent = 'Connecting...';
+    btn.disabled = true;
+
+    try {
+      const result = await new Promise((resolve) => {
+        chrome.runtime.sendMessage({ action: 'authenticate' }, resolve);
+      });
+
+      if (result?.success) {
+        window.location.reload();
+      } else {
+        btn.textContent = 'Connect to Ascendia';
+        btn.disabled = false;
+        const errorMsg = result?.error?.includes('Session expired')
+          ? result.error
+          : 'Please log in to the Ascendia web app first, then click "Connect to Ascendia" again.';
+        showError(errorMsg);
+      }
+    } catch (error) {
+      btn.textContent = 'Connect to Ascendia';
+      btn.disabled = false;
+      showError('Please log in to the Ascendia web app first, then click "Connect to Ascendia" again.');
+    }
+  });
+
+  document.getElementById('openSettingsBtn').addEventListener('click', openSettings);
 }
 
 async function checkLinkedInProfile() {
   try {
-    // Get current active tab
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
     if (!tab.url?.includes('linkedin.com/in/')) {
@@ -65,7 +153,6 @@ async function checkLinkedInProfile() {
       return;
     }
 
-    // Request profile data from content script
     const response = await chrome.tabs.sendMessage(tab.id, { action: 'getProfile' });
 
     if (response?.success && response.profile?.name) {
@@ -104,19 +191,6 @@ function enableMainContent() {
   document.getElementById('generateBtn').disabled = false;
 }
 
-function showSetupRequired() {
-  // Show setup message instead of main content
-  document.getElementById('mainContent').innerHTML = `
-    <div class="setup-required">
-      <h3>Setup Required</h3>
-      <p>Please configure your API key and resume in settings to start generating messages.</p>
-      <button id="openSettingsBtn" class="action-btn primary">Open Settings</button>
-    </div>
-  `;
-
-  document.getElementById('openSettingsBtn').addEventListener('click', openSettings);
-}
-
 async function generateMessage() {
   if (!currentProfile) {
     showError('No LinkedIn profile detected. Please navigate to a LinkedIn profile first.');
@@ -126,26 +200,17 @@ async function generateMessage() {
   try {
     setGeneratingState(true);
 
-    // Get user inputs
     const jd = document.getElementById('jdInput').value.trim();
     const category = document.getElementById('category').value;
     const intent = document.getElementById('intent').value;
 
-    // Get user data
-    const { apiKey, resume, accepted = [] } = await chrome.storage.local.get(['apiKey', 'resume', 'accepted']);
+    const { resume, accepted = [] } = await chrome.storage.local.get(['resume', 'accepted']);
 
-    if (!apiKey) {
-      showError('API key not configured. Please check settings.');
-      return;
-    }
-
-    // Filter relevant accepted examples
     const relevantExamples = accepted
       .filter(item => item.category === category)
       .map(item => item.body)
-      .slice(-3); // Last 3 examples
+      .slice(-3);
 
-    // Send generation request to background script
     const response = await chrome.runtime.sendMessage({
       action: 'generate',
       payload: {
@@ -180,9 +245,7 @@ function displayOutput(output) {
   const messageText = document.getElementById('messageText');
   const subjectLine = document.getElementById('subjectLine');
   const subjectText = document.getElementById('subjectText');
-  const messageCharCount = document.getElementById('messageCharCount');
 
-  // Parse JSON response if needed for cold_email and linkedin_inmail
   let processedOutput = { ...output };
 
   if ((output.category === 'cold_email' || output.category === 'linkedin_inmail') &&
@@ -190,40 +253,29 @@ function displayOutput(output) {
     try {
       let jsonString = output.body.trim();
 
-      // Remove markdown JSON formatting if present
       if (jsonString.startsWith('```json')) {
         jsonString = jsonString.replace(/^```json\s*/, '').replace(/\s*```$/, '');
       } else if (jsonString.startsWith('```')) {
         jsonString = jsonString.replace(/^```\s*/, '').replace(/\s*```$/, '');
       }
 
-      // Check if body is actually a JSON string
       if (jsonString.startsWith('{') || jsonString.startsWith('"')) {
         const parsed = JSON.parse(jsonString);
-
-        // If parsed successfully and contains the expected structure
         if (parsed.subject_line || parsed.body) {
           processedOutput.subject_line = parsed.subject_line || output.subject_line;
           processedOutput.body = parsed.body || output.body;
-          console.log('Successfully parsed JSON response:', parsed);
         }
       }
     } catch (e) {
       console.warn('Failed to parse JSON response:', e);
-      console.warn('Original body content:', output.body);
-      console.warn('Cleaned JSON string was:', jsonString);
-      // Continue with original output if parsing fails
     }
   }
 
-  // Display message body
   const messageBody = processedOutput.body || processedOutput.message || '';
   messageText.textContent = messageBody;
 
-  // Display character count with appropriate styling
   updateCharacterCountDisplay(messageBody, processedOutput.category);
 
-  // Display subject line if it exists (for emails)
   if (processedOutput.subject_line) {
     subjectText.textContent = processedOutput.subject_line;
     subjectLine.classList.remove('hidden');
@@ -231,37 +283,30 @@ function displayOutput(output) {
     subjectLine.classList.add('hidden');
   }
 
-  // Display validation feedback
   displayValidationFeedback(processedOutput);
 
-  // Show output section
   outputSection.classList.remove('hidden');
   hideError();
 }
 
-// Update character count display with platform-specific limits
 function updateCharacterCountDisplay(text, category) {
   const charCount = text.length;
   const messageCharCount = document.getElementById('messageCharCount');
 
   if (!messageCharCount) return;
 
-  let limit, isOverLimit, displayText;
+  let isOverLimit, displayText;
 
-  // Platform-specific limits
   switch (category) {
     case 'linkedin_connection':
-      limit = 300; // LinkedIn connection request limit
-      isOverLimit = charCount > 280; // Warning threshold
+      isOverLimit = charCount > 280;
       displayText = `${charCount}/300`;
       break;
     case 'linkedin_inmail':
-      limit = 2000; // LinkedIn InMail limit (approximate)
       isOverLimit = charCount > 1800;
       displayText = `${charCount} chars`;
       break;
     case 'cold_email':
-      limit = 2000; // Email limit (flexible)
       isOverLimit = charCount > 1500;
       displayText = `${charCount} chars`;
       break;
@@ -270,10 +315,8 @@ function updateCharacterCountDisplay(text, category) {
       isOverLimit = false;
   }
 
-  // Update display
   messageCharCount.textContent = displayText;
 
-  // Style based on limits
   messageCharCount.className = 'char-count-display';
   if (isOverLimit) {
     messageCharCount.classList.add('over-limit');
@@ -337,19 +380,16 @@ document.getElementById('copyAllBtn')?.addEventListener('click', () => {
   copyToClipboardWithFeedback(textToCopy, document.getElementById('copyAllBtn'), 'All Copied!');
 });
 
-// Enhanced clipboard function with fallback and proper feedback
 async function copyToClipboardWithFeedback(text, buttonElement, successMessage) {
   if (!text) return;
 
   try {
-    // Primary method: modern Clipboard API
     if (navigator.clipboard && navigator.clipboard.writeText) {
       await navigator.clipboard.writeText(text);
       showCopySuccess(buttonElement, successMessage);
       return;
     }
 
-    // Fallback method: legacy document.execCommand
     const textArea = document.createElement('textarea');
     textArea.value = text;
     textArea.style.cssText = `
@@ -384,33 +424,28 @@ async function copyToClipboardWithFeedback(text, buttonElement, successMessage) 
   }
 }
 
-// Show copy success feedback with auto-close protection
 function showCopySuccess(buttonElement, message) {
   const originalText = buttonElement.textContent || buttonElement.innerHTML;
   const originalIcon = buttonElement.querySelector('.copy-icon');
 
-  // Update button appearance
   buttonElement.classList.add('copy-success');
   if (originalIcon) {
     originalIcon.style.display = 'none';
   }
 
-  // Show success message
   const successIcon = document.createElement('span');
   successIcon.innerHTML = '✓';
   successIcon.style.color = 'var(--success-400)';
   buttonElement.appendChild(successIcon);
 
   const textElement = buttonElement.querySelector('.btn-icon') || buttonElement.firstChild;
-  if (textElement && textElement.nodeType === 3) { // Text node
+  if (textElement && textElement.nodeType === 3) {
     textElement.textContent = message;
   } else {
     buttonElement.setAttribute('title', message);
   }
 
-  // Prevent popup from closing immediately
   setTimeout(() => {
-    // Restore original state
     buttonElement.classList.remove('copy-success');
     if (originalIcon) {
       originalIcon.style.display = '';
@@ -419,16 +454,14 @@ function showCopySuccess(buttonElement, message) {
       successIcon.remove();
     }
 
-    // Restore original text/content
     if (textElement && textElement.nodeType === 3) {
       textElement.textContent = originalText;
     } else {
       buttonElement.innerHTML = originalText;
     }
-  }, 1500); // Visible for 1.5 seconds
+  }, 1500);
 }
 
-// Show copy error feedback
 function showCopyError(buttonElement, message) {
   const originalText = buttonElement.textContent;
 
@@ -466,7 +499,6 @@ async function handleFeedback(type) {
     await saveAcceptedMessage();
     showTemporaryFeedback(document.getElementById('acceptBtn'), 'Saved!');
   } else if (type === 'reject') {
-    // Regenerate with different parameters
     await generateMessage();
   }
 }
@@ -484,7 +516,6 @@ async function saveAcceptedMessage() {
 
   accepted.push(feedbackData);
 
-  // Keep only last 20 accepted messages to avoid storage bloat
   const recentAccepted = accepted.slice(-20);
 
   await chrome.storage.local.set({ accepted: recentAccepted });
@@ -492,9 +523,7 @@ async function saveAcceptedMessage() {
 
 function updateUIForCategory() {
   const category = document.getElementById('category').value;
-  const generateBtn = document.getElementById('generateBtn');
 
-  // Update button text based on category
   const buttonText = {
     'linkedin_connection': 'Generate Connection Request',
     'cold_email': 'Generate Cold Email',
@@ -533,7 +562,6 @@ async function incrementUsageCount() {
 
   dailyUsage[today] = (dailyUsage[today] || 0) + 1;
 
-  // Clean up old usage data (keep last 30 days)
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
@@ -555,15 +583,28 @@ function showError(message) {
   const errorEl = document.getElementById('errorMessage');
   const errorText = document.getElementById('errorText');
 
+  if (!errorEl || !errorText) {
+    // Elements don't exist (e.g. auth screen is showing) — try inline auth error
+    const authErrorEl = document.getElementById('authError');
+    const authErrorText = document.getElementById('authErrorText');
+    if (authErrorEl && authErrorText) {
+      authErrorText.textContent = message;
+      authErrorEl.classList.remove('hidden');
+      setTimeout(() => authErrorEl.classList.add('hidden'), 5000);
+    } else {
+      console.warn('showError: error elements not in DOM:', message);
+    }
+    return;
+  }
+
   errorText.textContent = message;
   errorEl.classList.remove('hidden');
 
-  // Auto-hide after 5 seconds
   setTimeout(hideError, 5000);
 }
 
 function hideError() {
-  document.getElementById('errorMessage').classList.add('hidden');
+  document.getElementById('errorMessage')?.classList.add('hidden');
 }
 
 function showTemporaryFeedback(element, text) {
@@ -576,13 +617,9 @@ function showTemporaryFeedback(element, text) {
 }
 
 function displayValidationFeedback(output) {
-  // Remove any existing validation feedback
   const existingFeedback = document.querySelector('.validation-feedback');
-  if (existingFeedback) {
-    existingFeedback.remove();
-  }
+  if (existingFeedback) existingFeedback.remove();
 
-  // Create validation feedback container
   const feedbackContainer = document.createElement('div');
   feedbackContainer.className = 'validation-feedback';
 
@@ -590,7 +627,6 @@ function displayValidationFeedback(output) {
   const category = output.category;
   let feedbackItems = [];
 
-  // Character/Word count feedback
   if (category === 'linkedin_connection') {
     const charCount = output.character_count || 0;
     const isWithinLimit = charCount <= 280;
@@ -635,7 +671,6 @@ function displayValidationFeedback(output) {
     }
   }
 
-  // Sanitization feedback
   if (validation.sanitization_applied) {
     feedbackItems.push({
       icon: '🛡️',
@@ -645,7 +680,6 @@ function displayValidationFeedback(output) {
     });
   }
 
-  // Quality indicators
   if (validation.character_limit_passed || validation.word_limit_passed) {
     feedbackItems.push({
       icon: '🎯',
@@ -655,7 +689,6 @@ function displayValidationFeedback(output) {
     });
   }
 
-  // Build feedback HTML
   if (feedbackItems.length > 0) {
     const feedbackHTML = `
       <div class="validation-header">
@@ -675,7 +708,6 @@ function displayValidationFeedback(output) {
 
     feedbackContainer.innerHTML = feedbackHTML;
 
-    // Insert after the message body
     const messageBody = document.getElementById('messageBody');
     messageBody.insertAdjacentElement('afterend', feedbackContainer);
   }
@@ -698,7 +730,6 @@ function toggleValidationDetails() {
   toggleBtn.textContent = isHidden ? 'Hide' : 'Details';
 }
 
-// Store generated message for persistence
 async function storeGeneration(output) {
   try {
     const generationData = {
@@ -718,39 +749,32 @@ async function storeGeneration(output) {
   }
 }
 
-// Restore last generation when popup opens
 async function restoreLastGeneration() {
   try {
     const { lastGeneration } = await chrome.storage.local.get('lastGeneration');
 
     if (!lastGeneration) return;
 
-    // Check if generation is recent (within last 4 hours)
     const fourHoursAgo = Date.now() - (4 * 60 * 60 * 1000);
     if (lastGeneration.timestamp < fourHoursAgo) {
-      // Clean up old generation
       await chrome.storage.local.remove('lastGeneration');
       return;
     }
 
-    // Restore inputs
     if (lastGeneration.inputs) {
       document.getElementById('jdInput').value = lastGeneration.inputs.jd || '';
       document.getElementById('category').value = lastGeneration.inputs.category || 'linkedin_connection';
       document.getElementById('intent').value = lastGeneration.inputs.intent || 'networking';
 
-      // Update character count
       updateCharacterCount();
       updateUIForCategory();
     }
 
-    // Restore output if available
     if (lastGeneration.output) {
       currentOutput = lastGeneration.output;
       displayOutput(lastGeneration.output);
     }
 
-    // Show restoration indicator
     showTemporaryMessage('Previous session restored', 'info');
 
   } catch (error) {
@@ -758,7 +782,6 @@ async function restoreLastGeneration() {
   }
 }
 
-// Show temporary message to user
 function showTemporaryMessage(message, type = 'info') {
   const messageEl = document.createElement('div');
   messageEl.className = `temp-message ${type}`;
