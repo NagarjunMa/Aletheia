@@ -7,7 +7,10 @@
     "storage",
     "activeTab",
     "contextMenus",
-    "sidePanel"
+    "sidePanel",
+    "alarms",
+    "scripting",
+    "cookies"
   ],
   "host_permissions": [
     "https://www.linkedin.com/*",

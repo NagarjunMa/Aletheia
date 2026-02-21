@@ -1,5 +1,5 @@
 // Ascendia Extension Settings JavaScript
-// Manages extension configuration, API keys, resume storage, and preferences
+// Manages extension configuration, resume storage, and preferences
 
 // Initialize when DOM loads
 document.addEventListener('DOMContentLoaded', async () => {
@@ -11,7 +11,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // Global state
 let currentSettings = {
-  apiKey: '',
   apiUrl: 'http://localhost:3000',
   resume: '',
   resumeFile: null,
@@ -22,29 +21,28 @@ let currentSettings = {
 }
 
 async function initializeSettings() {
-  // Load existing settings from storage
   const stored = await chrome.storage.local.get([
-    'apiKey', 'apiUrl', 'resume', 'resumeFile', 'personalInfo',
+    'apiUrl', 'resume', 'resumeFile', 'personalInfo',
     'settings'
   ])
 
-  // Merge with defaults
   currentSettings = {
     ...currentSettings,
     ...stored,
     ...stored.settings
   }
 
-  // Update status indicators
   updateStatusIndicators()
 }
 
 function setupEventListeners() {
-  // API Configuration
-  document.getElementById('apiKeyInput').addEventListener('input', handleApiKeyChange)
+  // API URL
   document.getElementById('apiUrlInput').addEventListener('input', handleApiUrlChange)
-  document.getElementById('toggleApiKey').addEventListener('click', toggleApiKeyVisibility)
   document.getElementById('testConnectionBtn').addEventListener('click', testConnection)
+
+  // Auth actions
+  document.getElementById('connectBtn')?.addEventListener('click', handleConnect)
+  document.getElementById('disconnectBtn')?.addEventListener('click', handleDisconnect)
 
   // Resume Upload
   const uploadArea = document.getElementById('uploadArea')
@@ -85,8 +83,6 @@ function setupEventListeners() {
 }
 
 async function loadUserSettings() {
-  // Populate form fields
-  document.getElementById('apiKeyInput').value = currentSettings.apiKey || ''
   document.getElementById('apiUrlInput').value = currentSettings.apiUrl || 'https://your-app.vercel.app'
   document.getElementById('personalInfo').value = currentSettings.personalInfo || ''
 
@@ -105,25 +101,36 @@ async function loadUserSettings() {
     showResumePreview(currentSettings.resumeFile, currentSettings.resume)
   }
 
-  // Character counter
   updatePersonalInfoCharCount()
 }
 
-function updateStatusIndicators() {
-  // API Key Status
-  const apiKeyStatus = document.getElementById('apiKeyStatus')
-  const apiKeyStatusText = document.getElementById('apiKeyStatusText')
+async function updateStatusIndicators() {
+  // Auth Status
+  const authStatus = await new Promise((resolve) => {
+    chrome.runtime.sendMessage({ action: 'getAuthStatus' }, resolve)
+  })
 
-  if (currentSettings.apiKey) {
-    apiKeyStatus.classList.add('success')
-    apiKeyStatus.classList.remove('error')
-    apiKeyStatusText.textContent = 'Configured'
-    apiKeyStatusText.classList.add('success')
+  const authStatusCard = document.getElementById('authStatus')
+  const authStatusText = document.getElementById('authStatusText')
+  const connectBtn = document.getElementById('connectBtn')
+  const disconnectBtn = document.getElementById('disconnectBtn')
+
+  if (authStatus && authStatus.authenticated) {
+    authStatusCard.classList.add('success')
+    authStatusCard.classList.remove('error')
+    authStatusText.textContent = authStatus.user?.email || 'Connected'
+    authStatusText.classList.add('success')
+    authStatusText.classList.remove('error')
+    if (connectBtn) connectBtn.classList.add('hidden')
+    if (disconnectBtn) disconnectBtn.classList.remove('hidden')
   } else {
-    apiKeyStatus.classList.add('error')
-    apiKeyStatus.classList.remove('success')
-    apiKeyStatusText.textContent = 'Not configured'
-    apiKeyStatusText.classList.add('error')
+    authStatusCard.classList.add('error')
+    authStatusCard.classList.remove('success')
+    authStatusText.textContent = 'Not connected'
+    authStatusText.classList.add('error')
+    authStatusText.classList.remove('success')
+    if (connectBtn) connectBtn.classList.remove('hidden')
+    if (disconnectBtn) disconnectBtn.classList.add('hidden')
   }
 
   // Resume Status
@@ -147,9 +154,14 @@ async function checkConnectionStatus() {
   const connectionStatus = document.getElementById('connectionStatus')
   const connectionStatusText = document.getElementById('connectionStatusText')
 
-  if (!currentSettings.apiKey) {
+  // Check auth first
+  const authStatus = await new Promise((resolve) => {
+    chrome.runtime.sendMessage({ action: 'getAuthStatus' }, resolve)
+  })
+
+  if (!authStatus || !authStatus.authenticated) {
     connectionStatus.classList.add('error')
-    connectionStatusText.textContent = 'No API key'
+    connectionStatusText.textContent = 'Not connected'
     connectionStatusText.classList.add('error')
     return
   }
@@ -157,44 +169,18 @@ async function checkConnectionStatus() {
   try {
     connectionStatusText.textContent = 'Testing...'
 
-    // Test connection to backend
-    const response = await fetch(`${currentSettings.apiUrl}/api/extension/generate`, {
-      method: 'GET',
-      headers: {
-        'x-api-key': currentSettings.apiKey,
-        'Content-Type': 'application/json'
-      }
+    const result = await new Promise((resolve) => {
+      chrome.runtime.sendMessage({ action: 'healthCheck' }, resolve)
     })
 
-    console.log('Connection test response:', response.status, response.statusText)
-
-    if (response.ok) {
-      const data = await response.json()
-      console.log('API Response:', data)
-
-      if (data.authenticated) {
-        connectionStatus.classList.add('success')
-        connectionStatus.classList.remove('error', 'warning')
-        connectionStatusText.textContent = 'Connected'
-        connectionStatusText.classList.add('success')
-        connectionStatusText.classList.remove('error', 'warning')
-      } else {
-        throw new Error('Authentication failed')
-      }
+    if (result && result.success) {
+      connectionStatus.classList.add('success')
+      connectionStatus.classList.remove('error', 'warning')
+      connectionStatusText.textContent = 'Connected'
+      connectionStatusText.classList.add('success')
+      connectionStatusText.classList.remove('error', 'warning')
     } else {
-      const errorData = await response.json().catch(() => ({}))
-      console.log('API Error:', errorData)
-
-      let errorMessage = 'Connection failed'
-      if (response.status === 401) {
-        errorMessage = 'Invalid API key'
-      } else if (response.status === 429) {
-        errorMessage = 'Rate limit exceeded'
-      } else if (errorData.message) {
-        errorMessage = errorData.message
-      }
-
-      throw new Error(errorMessage)
+      throw new Error(result?.error || 'Connection failed')
     }
 
   } catch (error) {
@@ -204,53 +190,72 @@ async function checkConnectionStatus() {
     connectionStatus.classList.remove('success', 'warning')
     connectionStatusText.classList.add('error')
     connectionStatusText.classList.remove('success', 'warning')
+    connectionStatusText.textContent = error.message || 'Connection failed'
+  }
+}
 
-    // Display specific error message
-    let displayMessage = 'Connection failed'
-    if (error.message.includes('NetworkError') || error.name === 'TypeError') {
-      displayMessage = 'Network error'
-    } else if (error.message.includes('Invalid API key') || error.message.includes('Unauthorized')) {
-      displayMessage = 'Invalid API key'
-    } else if (error.message.includes('Rate limit')) {
-      displayMessage = 'Rate limit exceeded'
-    } else if (error.message && error.message !== 'Failed to fetch') {
-      displayMessage = error.message
+async function handleConnect() {
+  const btn = document.getElementById('connectBtn')
+  const originalText = btn.textContent
+  btn.textContent = 'Connecting...'
+  btn.disabled = true
+  console.log('[SETTINGS] Connect clicked, sending authenticate message...')
+
+  try {
+    const result = await new Promise((resolve) => {
+      chrome.runtime.sendMessage({ action: 'authenticate' }, (response) => {
+        console.log('[SETTINGS] authenticate response:', JSON.stringify(response))
+        resolve(response)
+      })
+    })
+
+    if (result && result.success) {
+      console.log('[SETTINGS] ✓ Connected:', result.user?.email)
+      showStatusMessage('Connected to Ascendia!', 'success')
+      await updateStatusIndicators()
+      await checkConnectionStatus()
+    } else {
+      console.error('[SETTINGS] ✗ Failed:', result?.error)
+      showStatusMessage(result?.error || 'Connection failed. Make sure you are logged in to the Ascendia web app.', 'error')
     }
+  } catch (error) {
+    console.error('[SETTINGS] ✗ authenticate threw:', error)
+    showStatusMessage('Connection failed: ' + error.message, 'error')
+  } finally {
+    btn.textContent = originalText
+    btn.disabled = false
+  }
+}
 
-    connectionStatusText.textContent = displayMessage
+async function handleDisconnect() {
+  const confirmed = confirm('Disconnect from Ascendia? You will need to reconnect to use the extension.')
+  if (!confirmed) return
+
+  try {
+    const result = await new Promise((resolve) => {
+      chrome.runtime.sendMessage({ action: 'logout' }, resolve)
+    })
+
+    if (result && result.success) {
+      showStatusMessage('Disconnected from Ascendia', 'success')
+      await updateStatusIndicators()
+      await checkConnectionStatus()
+    }
+  } catch (error) {
+    showStatusMessage('Disconnect failed: ' + error.message, 'error')
   }
 }
 
 // Event Handlers
-function handleApiKeyChange(e) {
-  currentSettings.apiKey = e.target.value.trim()
-  updateStatusIndicators()
-}
-
 function handleApiUrlChange(e) {
   currentSettings.apiUrl = e.target.value.trim()
-}
-
-function toggleApiKeyVisibility() {
-  const input = document.getElementById('apiKeyInput')
-  const button = document.getElementById('toggleApiKey')
-
-  if (input.type === 'password') {
-    input.type = 'text'
-    button.textContent = '🙈'
-    button.title = 'Hide'
-  } else {
-    input.type = 'password'
-    button.textContent = '👁️'
-    button.title = 'Show'
-  }
 }
 
 async function testConnection() {
   const button = document.getElementById('testConnectionBtn')
   const originalText = button.textContent
 
-  button.textContent = '🔄 Testing...'
+  button.textContent = 'Testing...'
   button.disabled = true
 
   try {
@@ -295,11 +300,10 @@ function handleFileSelect(e) {
 }
 
 async function processResumeFile(file) {
-  // Validate file
   const allowedTypes = ['application/pdf', 'application/msword',
                        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
                        'text/plain']
-  const maxSize = 5 * 1024 * 1024 // 5MB
+  const maxSize = 5 * 1024 * 1024
 
   if (!allowedTypes.includes(file.type)) {
     showStatusMessage('Please upload a PDF, DOC, DOCX, or TXT file', 'error')
@@ -314,10 +318,8 @@ async function processResumeFile(file) {
   try {
     showLoadingOverlay('Processing resume...')
 
-    // Read file content
     const content = await readFileContent(file)
 
-    // Store file info and content
     currentSettings.resumeFile = {
       name: file.name,
       size: file.size,
@@ -326,7 +328,6 @@ async function processResumeFile(file) {
     }
     currentSettings.resume = content
 
-    // Show preview
     showResumePreview(currentSettings.resumeFile, content)
     updateStatusIndicators()
 
@@ -348,23 +349,16 @@ async function readFileContent(file) {
         if (file.type === 'text/plain') {
           resolve(e.target.result)
         } else if (file.type === 'application/pdf') {
-          // Extract text from PDF using PDF.js
           const extractedText = await extractPDFText(e.target.result)
           resolve(extractedText)
         } else {
-          // For DOC/DOCX files, we need a different approach
-          // For now, prompt user to use PDF or TXT
-          resolve(`❌ CRITICAL: PDF extraction failed for ${file.name}
+          resolve(`Please convert your resume to PDF format or plain text.
 
-⚠️ IMPORTANT: Please convert your resume to PDF format or plain text.
+Current file type (${file.type}) cannot be processed.
 
-Current file type (${file.type}) cannot be processed, which may cause the AI to generate content with incorrect experience.
-
-To prevent hallucination:
+To use your resume:
 1. Save your resume as PDF
-2. Or copy/paste your resume text directly in the text area below
-
-Without proper resume content, generated messages may contain false professional experience.`)
+2. Or copy/paste your resume text directly in the text area below`)
         }
       } catch (error) {
         reject(new Error(`Failed to extract content from ${file.name}: ${error.message}`))
@@ -381,10 +375,8 @@ Without proper resume content, generated messages may contain false professional
   })
 }
 
-// Extract text from PDF using PDF.js (loaded from CDN)
 async function extractPDFText(arrayBuffer) {
   try {
-    // Load PDF.js from CDN if not already loaded
     if (typeof pdfjsLib === 'undefined') {
       await loadPDFJS()
     }
@@ -394,7 +386,6 @@ async function extractPDFText(arrayBuffer) {
 
     let fullText = ''
 
-    // Extract text from all pages
     for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
       const page = await pdf.getPage(pageNum)
       const textContent = await page.getTextContent()
@@ -414,7 +405,6 @@ async function extractPDFText(arrayBuffer) {
   }
 }
 
-// Load PDF.js library from local files
 function loadPDFJS() {
   return new Promise((resolve, reject) => {
     if (typeof pdfjsLib !== 'undefined') {
@@ -425,7 +415,6 @@ function loadPDFJS() {
     const script = document.createElement('script')
     script.src = chrome.runtime.getURL('lib/pdf.min.js')
     script.onload = () => {
-      // Configure PDF.js worker with local file
       pdfjsLib.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('lib/pdf.worker.min.js')
       resolve()
     }
@@ -500,7 +489,7 @@ function handleDailyUsageChange(e) {
 
 async function clearAllData() {
   const confirmed = confirm(
-    'This will permanently delete all your settings, API keys, resume, and usage history. This action cannot be undone.\n\nAre you sure?'
+    'This will permanently delete all your settings, resume, and usage history. This action cannot be undone.\n\nAre you sure?'
   )
 
   if (!confirmed) return
@@ -508,12 +497,9 @@ async function clearAllData() {
   try {
     showLoadingOverlay('Clearing all data...')
 
-    // Clear all storage
     await chrome.storage.local.clear()
 
-    // Reset current settings
     currentSettings = {
-      apiKey: '',
       apiUrl: 'http://localhost:3000',
       resume: '',
       resumeFile: null,
@@ -523,7 +509,6 @@ async function clearAllData() {
       maxDailyUsage: 50
     }
 
-    // Reload the page to reset UI
     window.location.reload()
 
   } catch (error) {
@@ -537,15 +522,13 @@ async function exportUsageData() {
   try {
     showLoadingOverlay('Exporting usage data...')
 
-    // Get usage data from storage
     const data = await chrome.storage.local.get([
       'dailyUsage', 'categoryUsage', 'accepted'
     ])
 
-    // Create export object
     const exportData = {
       exportedAt: new Date().toISOString(),
-      version: '1.0.0',
+      version: '2.0.0',
       dailyUsage: data.dailyUsage || {},
       categoryUsage: data.categoryUsage || {},
       acceptedMessages: data.accepted || [],
@@ -556,7 +539,6 @@ async function exportUsageData() {
       }
     }
 
-    // Create and download file
     const blob = new Blob([JSON.stringify(exportData, null, 2)], {
       type: 'application/json'
     })
@@ -583,18 +565,11 @@ async function saveAllSettings() {
   try {
     showLoadingOverlay('Saving settings...')
 
-    // Validate required fields
-    if (!currentSettings.apiKey) {
-      throw new Error('API key is required')
-    }
-
     if (!currentSettings.apiUrl) {
       throw new Error('API URL is required')
     }
 
-    // Save to storage
     await chrome.storage.local.set({
-      apiKey: currentSettings.apiKey,
       apiUrl: currentSettings.apiUrl,
       resume: currentSettings.resume,
       resumeFile: currentSettings.resumeFile,
@@ -606,7 +581,6 @@ async function saveAllSettings() {
       }
     })
 
-    // Test connection after saving
     await checkConnectionStatus()
 
     showStatusMessage('Settings saved successfully!', 'success')
@@ -623,8 +597,6 @@ async function resetToDefaults() {
   if (!confirmed) return
 
   try {
-    // Reset form fields
-    document.getElementById('apiKeyInput').value = ''
     document.getElementById('apiUrlInput').value = 'https://your-app.vercel.app'
     document.getElementById('personalInfo').value = ''
     document.getElementById('autoFillEnabled').checked = true
@@ -632,10 +604,9 @@ async function resetToDefaults() {
     document.getElementById('maxDailyUsage').value = 50
     document.getElementById('dailyUsageValue').textContent = '50'
 
-    // Reset current settings (but keep API key and resume)
-    const { apiKey, resume, resumeFile } = currentSettings
+    const { resume, resumeFile } = currentSettings
     currentSettings = {
-      apiKey, resume, resumeFile, // Keep these
+      resume, resumeFile,
       apiUrl: 'http://localhost:3000',
       personalInfo: '',
       autoFillEnabled: true,
@@ -660,7 +631,6 @@ function showStatusMessage(message, type = 'success') {
   statusEl.className = `status-message ${type}`
   statusEl.classList.remove('hidden')
 
-  // Auto-hide after 5 seconds
   setTimeout(() => {
     hideStatusMessage()
   }, 5000)
@@ -689,7 +659,6 @@ function autoSave() {
   saveTimeout = setTimeout(async () => {
     try {
       await chrome.storage.local.set({
-        apiKey: currentSettings.apiKey,
         apiUrl: currentSettings.apiUrl,
         resume: currentSettings.resume,
         resumeFile: currentSettings.resumeFile,
@@ -706,7 +675,6 @@ function autoSave() {
   }, 2000)
 }
 
-// Add auto-save to input handlers
 document.addEventListener('input', autoSave)
 document.addEventListener('change', autoSave)
 

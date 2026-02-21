@@ -15,15 +15,40 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (changeInfo.status === 'complete') checkLinkedInProfile();
   });
   chrome.tabs.onActivated.addListener(() => checkLinkedInProfile());
+
+  // React to auth state changes (e.g., auth-bridge stores session while popup is open)
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes.ascendia_auth) {
+      console.log('[POPUP] Auth state changed, reinitializing...');
+      initializePopup().then(() => checkLinkedInProfile());
+    }
+  });
 });
 
 async function initializePopup() {
-  // Check auth status instead of API key
-  const authStatus = await new Promise((resolve) => {
+  console.log('[POPUP] initializePopup: checking auth status...');
+  // Check auth status from storage first
+  let authStatus = await new Promise((resolve) => {
     chrome.runtime.sendMessage({ action: 'getAuthStatus' }, resolve);
   });
+  console.log('[POPUP] authStatus:', JSON.stringify(authStatus));
+
+  // If not authenticated in storage, silently try to detect an existing web app session
+  // (handles: logged in via web app, logged in from another window, etc.)
+  if (!authStatus || !authStatus.authenticated) {
+    console.log('[POPUP] No stored auth, silently checking for existing web session...');
+    const silentResult = await new Promise((resolve) => {
+      chrome.runtime.sendMessage({ action: 'silentAuthCheck' }, resolve);
+    });
+    console.log('[POPUP] silentAuthCheck result:', JSON.stringify(silentResult));
+
+    if (silentResult && silentResult.authenticated) {
+      authStatus = silentResult;
+    }
+  }
 
   if (!authStatus || !authStatus.authenticated) {
+    console.log('[POPUP] Not authenticated, showing auth required UI');
     showAuthRequired(authStatus);
     return;
   }
@@ -118,26 +143,70 @@ function showAuthRequired(authStatus) {
     const btn = document.getElementById('connectBtn');
     btn.textContent = 'Connecting...';
     btn.disabled = true;
+    console.log('[POPUP] Connect button clicked, sending authenticate message...');
+
+    // Poll auth status as fallback (in case sendResponse is lost due to SW restart)
+    let authResolved = false;
+    const authPollInterval = setInterval(async () => {
+      try {
+        const status = await new Promise(resolve => {
+          chrome.runtime.sendMessage({ action: 'getAuthStatus' }, resolve);
+        });
+        if (status?.authenticated) {
+          clearInterval(authPollInterval);
+          if (!authResolved) {
+            authResolved = true;
+            console.log('[POPUP] Auth detected via polling');
+            btn.textContent = 'Connected!';
+            setTimeout(() => window.location.reload(), 500);
+          }
+        }
+      } catch (e) {
+        // Service worker may be restarting, ignore
+      }
+    }, 2000);
 
     try {
+      // The authenticate action may wait for the user to log in on the web app.
+      // Show a "Waiting for login..." state after a brief delay.
+      const waitingTimeout = setTimeout(() => {
+        btn.textContent = 'Waiting for login...';
+      }, 2000);
+
       const result = await new Promise((resolve) => {
-        chrome.runtime.sendMessage({ action: 'authenticate' }, resolve);
+        chrome.runtime.sendMessage({ action: 'authenticate' }, (response) => {
+          console.log('[POPUP] authenticate response:', JSON.stringify(response));
+          resolve(response);
+        });
       });
 
+      clearTimeout(waitingTimeout);
+      clearInterval(authPollInterval);
+
+      if (authResolved) return; // Already handled by polling
+      authResolved = true;
+
       if (result?.success) {
-        window.location.reload();
+        console.log('[POPUP] Authentication successful:', result.user?.email);
+        btn.textContent = 'Connected!';
+        // Brief delay so user sees success before reload
+        setTimeout(() => window.location.reload(), 500);
       } else {
+        console.error('[POPUP] Authentication failed:', result?.error);
         btn.textContent = 'Connect to Ascendia';
         btn.disabled = false;
-        const errorMsg = result?.error?.includes('Session expired')
+        const errorMsg = result?.error?.includes('timed out')
           ? result.error
-          : 'Please log in to the Ascendia web app first, then click "Connect to Ascendia" again.';
+          : result?.error || 'Connection failed. Please try again.';
         showError(errorMsg);
       }
     } catch (error) {
+      clearInterval(authPollInterval);
+      if (authResolved) return;
+      console.error('[POPUP] authenticate threw:', error);
       btn.textContent = 'Connect to Ascendia';
       btn.disabled = false;
-      showError('Please log in to the Ascendia web app first, then click "Connect to Ascendia" again.');
+      showError('Connection failed. Please try again.');
     }
   });
 
@@ -153,7 +222,24 @@ async function checkLinkedInProfile() {
       return;
     }
 
-    const response = await chrome.tabs.sendMessage(tab.id, { action: 'getProfile' });
+    // Fix 6B: Content script retry — try sending, inject if not ready
+    let response;
+    try {
+      response = await chrome.tabs.sendMessage(tab.id, { action: 'getProfile' });
+    } catch (err) {
+      // Content script not injected — try injecting it, then retry once
+      console.log('[POPUP] Content script not ready, injecting...');
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: ['content/linkedin-reader.js']
+        });
+        await new Promise(r => setTimeout(r, 1500));
+        response = await chrome.tabs.sendMessage(tab.id, { action: 'getProfile' });
+      } catch (injectErr) {
+        console.warn('[POPUP] Content script injection failed:', injectErr.message);
+      }
+    }
 
     if (response?.success && response.profile?.name) {
       currentProfile = response.profile;
@@ -183,12 +269,15 @@ function showProfileDetected(profile) {
 function showNoProfile() {
   document.getElementById('noProfile').classList.remove('hidden');
   document.getElementById('profileBanner').classList.add('hidden');
-  document.getElementById('mainContent').classList.add('hidden');
+  // Fix 5: Don't hide mainContent — just disable the generate button
+  const btn = document.getElementById('generateBtn');
+  if (btn) btn.disabled = true;
 }
 
 function enableMainContent() {
-  document.getElementById('mainContent').classList.remove('hidden');
-  document.getElementById('generateBtn').disabled = false;
+  document.getElementById('mainContent')?.classList.remove('hidden');
+  const btn = document.getElementById('generateBtn');
+  if (btn) btn.disabled = false;
 }
 
 async function generateMessage() {

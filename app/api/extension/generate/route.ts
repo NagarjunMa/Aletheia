@@ -7,7 +7,7 @@ import {
   type GenerateInput
 } from '@/lib/ai/prompts/linkedin-connection'
 import { sanitizeForLinkedIn } from '@/lib/ai/sanitizer'
-import { createClient } from '@/lib/supabase/server'
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { z } from 'zod'
 
 // Initialize Anthropic client
@@ -15,40 +15,145 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY!,
 })
 
-// Rate limiting: 30 requests per day per IP
-const rateLimits = new Map<string, { count: number; reset: number }>()
+// Supabase service client for rate limiting (no cookie dependency)
+const supabaseService = createSupabaseClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
-function checkRateLimit(ip: string): { allowed: boolean; remainingRequests?: number; resetTime?: number } {
-  const now = Date.now()
-  const limit = rateLimits.get(ip)
-  const dailyLimit = 30
+// Supabase client for token validation (anon key)
+const supabaseAuth = createSupabaseClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
 
-  if (limit && limit.reset > now && limit.count >= dailyLimit) {
-    return {
-      allowed: false,
-      remainingRequests: 0,
-      resetTime: limit.reset
-    }
+const DAILY_LIMIT = 30
+
+// ─── Auth helper ───
+
+async function authenticateRequest(request: NextRequest): Promise<{ userId: string; email: string } | null> {
+  const authHeader = request.headers.get('authorization')
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    console.log('[EXT-GENERATE] ✗ No Bearer token in Authorization header')
+    return null
   }
 
-  if (!limit || limit.reset <= now) {
-    rateLimits.set(ip, { count: 1, reset: now + 86400000 }) // 24 hours
-    return {
-      allowed: true,
-      remainingRequests: dailyLimit - 1,
-      resetTime: now + 86400000
+  const accessToken = authHeader.slice(7)
+  console.log('[EXT-GENERATE] Validating token (first 20 chars):', accessToken.substring(0, 20) + '...')
+  const { data: { user }, error } = await supabaseAuth.auth.getUser(accessToken)
+
+  if (error || !user) {
+    console.log('[EXT-GENERATE] ✗ Token validation failed:', error?.message || 'no user')
+    return null
+  }
+
+  console.log('[EXT-GENERATE] ✓ Authenticated:', user.email)
+  return { userId: user.id, email: user.email || '' }
+}
+
+// ─── Persistent rate limiting via Supabase ───
+
+async function checkRateLimit(userId: string): Promise<{ allowed: boolean; remainingRequests: number; resetTime: number }> {
+  const now = new Date()
+  const windowStartCutoff = new Date(now.getTime() - 86400000) // 24 hours ago
+
+  // Get current usage count within the 24h window
+  const { data, error } = await supabaseService
+    .from('extension_rate_limits')
+    .select('request_count, window_start')
+    .eq('user_id', userId)
+    .single()
+
+  if (error && error.code !== 'PGRST116') {
+    // PGRST116 = no rows returned (first request)
+    console.error('Rate limit check error:', error)
+    // Fail open — allow request but log error
+    return { allowed: true, remainingRequests: DAILY_LIMIT - 1, resetTime: now.getTime() + 86400000 }
+  }
+
+  if (!data) {
+    // First request ever — create row
+    const { error: insertError } = await supabaseService
+      .from('extension_rate_limits')
+      .insert({
+        user_id: userId,
+        request_count: 1,
+        window_start: now.toISOString()
+      })
+
+    if (insertError) {
+      console.error('Rate limit insert error:', insertError)
     }
-  } else {
-    limit.count++
-    return {
-      allowed: true,
-      remainingRequests: Math.max(0, dailyLimit - limit.count),
-      resetTime: limit.reset
+
+    return { allowed: true, remainingRequests: DAILY_LIMIT - 1, resetTime: now.getTime() + 86400000 }
+  }
+
+  const windowStart = new Date(data.window_start)
+
+  if (windowStart < windowStartCutoff) {
+    // Window expired — reset
+    const { error: updateError } = await supabaseService
+      .from('extension_rate_limits')
+      .update({
+        request_count: 1,
+        window_start: now.toISOString()
+      })
+      .eq('user_id', userId)
+
+    if (updateError) {
+      console.error('Rate limit reset error:', updateError)
     }
+
+    return { allowed: true, remainingRequests: DAILY_LIMIT - 1, resetTime: now.getTime() + 86400000 }
+  }
+
+  if (data.request_count >= DAILY_LIMIT) {
+    const resetTime = windowStart.getTime() + 86400000
+    return { allowed: false, remainingRequests: 0, resetTime }
+  }
+
+  // Increment
+  const { error: updateError } = await supabaseService
+    .from('extension_rate_limits')
+    .update({
+      request_count: data.request_count + 1
+    })
+    .eq('user_id', userId)
+
+  if (updateError) {
+    console.error('Rate limit increment error:', updateError)
+  }
+
+  const resetTime = windowStart.getTime() + 86400000
+  return {
+    allowed: true,
+    remainingRequests: Math.max(0, DAILY_LIMIT - data.request_count - 1),
+    resetTime
   }
 }
 
-// Request validation schema - Updated to handle null values from Chrome extension
+// ─── CORS helpers ───
+
+function getCorsHeaders(request: NextRequest) {
+  const origin = request.headers.get('origin')
+  const allowedPatterns = [
+    /^chrome-extension:\/\//,
+    /^https?:\/\/localhost(:\d+)?$/,
+    /^https:\/\/.*\.vercel\.app$/,
+  ]
+
+  const isAllowed = origin && allowedPatterns.some(p => p.test(origin))
+
+  return {
+    'Access-Control-Allow-Origin': isAllowed && origin ? origin : '',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Credentials': 'true',
+    'Vary': 'Origin',
+  }
+}
+
+// Request validation schema
 const generateRequestSchema = z.object({
   profile: z.object({
     name: z.string(),
@@ -64,7 +169,7 @@ const generateRequestSchema = z.object({
     profileUrl: z.string().url()
   }),
   resume: z.string().nullish().default(''),
-  jd: z.string().nullish().default(''), // Job description
+  jd: z.string().nullish().default(''),
   category: z.enum(['linkedin_connection', 'cold_email', 'linkedin_inmail']),
   intent: z.enum(['networking', 'referral', 'mentorship', 'job_inquiry']).nullish().default('networking'),
   acceptedExamples: z.array(z.string()).nullish().default([])
@@ -73,13 +178,20 @@ const generateRequestSchema = z.object({
 type GenerateRequest = z.infer<typeof generateRequestSchema>
 
 export async function POST(request: NextRequest) {
-  try {
-    // Rate limiting check
-    const ip = request.headers.get('x-forwarded-for') ||
-      request.headers.get('x-real-ip') ||
-      'unknown'
+  const corsHeaders = getCorsHeaders(request)
 
-    const rateCheck = checkRateLimit(ip)
+  try {
+    // 1. Auth check FIRST (before rate limiting)
+    const authResult = await authenticateRequest(request)
+    if (!authResult) {
+      return NextResponse.json(
+        { error: 'Unauthorized', message: 'Valid Bearer token required' },
+        { status: 401, headers: corsHeaders }
+      )
+    }
+
+    // 2. Rate limiting (per user, persistent)
+    const rateCheck = await checkRateLimit(authResult.userId)
     if (!rateCheck.allowed) {
       return NextResponse.json({
         error: 'Daily limit reached',
@@ -88,20 +200,15 @@ export async function POST(request: NextRequest) {
       }, {
         status: 429,
         headers: {
-          'X-RateLimit-Limit': '30',
+          ...corsHeaders,
+          'X-RateLimit-Limit': String(DAILY_LIMIT),
           'X-RateLimit-Remaining': '0',
-          'X-RateLimit-Reset': rateCheck.resetTime?.toString() || ''
+          'X-RateLimit-Reset': String(rateCheck.resetTime)
         }
       })
     }
 
-    // Simple API key authentication for extension
-    const authHeader = request.headers.get('x-api-key')
-    if (!authHeader || authHeader !== process.env.EXTENSION_API_KEY) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    // Parse and validate request
+    // 3. Parse and validate request
     const body = await request.json()
     const validatedData = generateRequestSchema.parse(body)
 
@@ -130,8 +237,8 @@ export async function POST(request: NextRequest) {
     const startTime = Date.now()
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 600, // Enough for LinkedIn message or email
-      temperature: 0.8, // Slightly creative for personalization
+      max_tokens: 600,
+      temperature: 0.8,
       system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
     })
@@ -147,28 +254,29 @@ export async function POST(request: NextRequest) {
 
     // Log usage for monitoring
     const tokenUsage = response.usage
-    console.log(`Extension generation: ${tokenUsage.input_tokens + tokenUsage.output_tokens} tokens, ${processingTime}ms`)
+    console.log(`Extension generation [${authResult.email}]: ${tokenUsage.input_tokens + tokenUsage.output_tokens} tokens, ${processingTime}ms`)
+
+    const rateLimitHeaders = {
+      'X-RateLimit-Limit': String(DAILY_LIMIT),
+      'X-RateLimit-Remaining': String(rateCheck.remainingRequests),
+      'X-RateLimit-Reset': String(rateCheck.resetTime)
+    }
 
     // Parse response based on category with validation
     if (category === 'cold_email' || category === 'linkedin_inmail') {
       try {
-        // Parse JSON response FIRST (before sanitization to avoid corrupting JSON structure)
         const parsed = JSON.parse(rawContent)
 
-        // Validate structure and limits
         if (parsed.subject_line && parsed.body) {
-          // Apply AI fingerprint detection and sanitization to individual fields
           const basicSubjectSanitization = sanitize(parsed.subject_line)
           const basicBodySanitization = sanitize(parsed.body)
 
-          // Enhanced sanitization with AI fingerprint detection for LinkedIn
           const enhancedSubjectSanitization = await sanitizeForLinkedIn(basicSubjectSanitization)
           const enhancedBodySanitization = await sanitizeForLinkedIn(basicBodySanitization)
 
           const sanitizedSubject = enhancedSubjectSanitization.success ? enhancedSubjectSanitization.sanitizedContent : basicSubjectSanitization
           const sanitizedBody = enhancedBodySanitization.success ? enhancedBodySanitization.sanitizedContent : basicBodySanitization
 
-          // Log AI detection results for monitoring (check both fields)
           const subjectHasAI = enhancedSubjectSanitization.isAIGenerated
           const bodyHasAI = enhancedBodySanitization.isAIGenerated
 
@@ -190,14 +298,11 @@ export async function POST(request: NextRequest) {
 
           const wordCount = parsed.word_count || countWords(sanitizedBody)
 
-          // Check limits based on category
           const maxWords = category === 'cold_email' ? 150 : 120
-          const minWords = category === 'cold_email' ? 100 : 80
 
           let finalBody = sanitizedBody
           if (wordCount > maxWords) {
             console.warn(`${category} exceeds word limit: ${wordCount} > ${maxWords}`)
-            // Truncate body to fit limits
             finalBody = truncateToWordLimit(sanitizedBody, maxWords)
           }
 
@@ -217,22 +322,16 @@ export async function POST(request: NextRequest) {
             usage: tokenUsage,
             processingTime
           }, {
-            headers: {
-              'X-RateLimit-Limit': '30',
-              'X-RateLimit-Remaining': rateCheck.remainingRequests?.toString() || '0',
-              'X-RateLimit-Reset': rateCheck.resetTime?.toString() || ''
-            }
+            headers: { ...corsHeaders, ...rateLimitHeaders }
           })
         }
       } catch (parseError) {
         console.warn('Failed to parse JSON response, attempting fallback sanitization and parsing:', parseError)
 
-        // Fallback: Apply basic sanitization to raw content first, then try text extraction
         const basicSanitization = sanitize(rawContent)
         const enhancedSanitization = await sanitizeForLinkedIn(basicSanitization)
         const sanitizedContent = enhancedSanitization.success ? enhancedSanitization.sanitizedContent : basicSanitization
 
-        // Log AI detection results for monitoring
         if (enhancedSanitization.isAIGenerated) {
           console.warn('AI fingerprints detected in fallback processing:', {
             confidence: enhancedSanitization.aiFingerprints?.confidence,
@@ -253,7 +352,7 @@ export async function POST(request: NextRequest) {
           word_count: countWords(body),
           character_count: body.length,
           validation: {
-            word_limit_passed: false, // Unknown format doesn't guarantee limits
+            word_limit_passed: false,
             sanitization_applied: rawContent !== sanitizedContent,
             ai_patterns_detected: enhancedSanitization.isAIGenerated,
             json_parsing_successful: false,
@@ -262,14 +361,7 @@ export async function POST(request: NextRequest) {
           usage: tokenUsage,
           processingTime
         }, {
-          headers: {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, x-api-key',
-            'X-RateLimit-Limit': '30',
-            'X-RateLimit-Remaining': rateCheck.remainingRequests?.toString() || '0',
-            'X-RateLimit-Reset': rateCheck.resetTime?.toString() || ''
-          }
+          headers: { ...corsHeaders, ...rateLimitHeaders }
         })
       }
     }
@@ -279,7 +371,6 @@ export async function POST(request: NextRequest) {
     const enhancedSanitization = await sanitizeForLinkedIn(basicSanitization)
     const sanitizedContent = enhancedSanitization.success ? enhancedSanitization.sanitizedContent : basicSanitization
 
-    // Log AI detection results for monitoring
     if (enhancedSanitization.isAIGenerated) {
       console.warn('AI fingerprints detected in LinkedIn connection generation:', {
         confidence: enhancedSanitization.aiFingerprints?.confidence,
@@ -294,34 +385,27 @@ export async function POST(request: NextRequest) {
     let wasTruncated = false
     const originalLength = sanitizedContent.length
 
-    // LinkedIn's actual limit is 300 chars
     if (finalContent.length > 300) {
       console.warn(`LinkedIn connection exceeds character limit: ${finalContent.length} > 300`)
 
-      // Smart trimming: PRESERVE the last sentence (the OPEN/question) — it's the most important
-      // Strategy: split into sentences, try removing/shortening earlier sentences first
       const sentences = finalContent.match(/[^.!?]+[.!?]+/g) || [finalContent]
 
       if (sentences.length >= 3) {
-        // Try dropping sentence 1 (HOOK) and keeping BRIDGE + OPEN
         const withoutHook = sentences.slice(1).join(' ').trim()
         if (withoutHook.length <= 300) {
           finalContent = withoutHook
           wasTruncated = true
         } else {
-          // Even without HOOK it's too long — keep just the last sentence (OPEN)
           const lastSentence = sentences[sentences.length - 1]?.trim() ?? ''
           if (lastSentence.length > 0 && lastSentence.length <= 300) {
             finalContent = lastSentence
             wasTruncated = true
           } else {
-            // Last resort: hard cut at 297 + ellipsis
             finalContent = finalContent.substring(0, 297) + '...'
             wasTruncated = true
           }
         }
       } else if (sentences.length === 2) {
-        // Only 2 sentences — try trimming the first one
         const secondSentence = sentences[1]?.trim() ?? ''
         const firstTrimmed = (sentences[0] ?? '').substring(0, 300 - secondSentence.length - 2).trim()
         const combined = firstTrimmed + '. ' + secondSentence
@@ -333,7 +417,6 @@ export async function POST(request: NextRequest) {
           wasTruncated = true
         }
       } else {
-        // Single run-on sentence — hard cut
         finalContent = finalContent.substring(0, 297) + '...'
         wasTruncated = true
       }
@@ -353,26 +436,18 @@ export async function POST(request: NextRequest) {
       usage: tokenUsage,
       processingTime
     }, {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, x-api-key',
-        'X-RateLimit-Limit': '30',
-        'X-RateLimit-Remaining': rateCheck.remainingRequests?.toString() || '0',
-        'X-RateLimit-Reset': rateCheck.resetTime?.toString() || ''
-      }
+      headers: { ...corsHeaders, ...rateLimitHeaders }
     })
 
   } catch (error) {
     console.error('Extension generation error:', error)
 
-    // Handle specific errors
     if (error instanceof z.ZodError) {
       return NextResponse.json({
         success: false,
         error: 'Invalid request data',
         details: error.errors[0]?.message
-      }, { status: 400 })
+      }, { status: 400, headers: getCorsHeaders(request) })
     }
 
     if (error instanceof Anthropic.APIError) {
@@ -380,147 +455,90 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({
           success: false,
           error: 'Anthropic API authentication failed'
-        }, { status: 500 })
+        }, { status: 500, headers: getCorsHeaders(request) })
       }
 
       if (error.status === 429) {
         return NextResponse.json({
           success: false,
           error: 'Rate limit exceeded, please try again later'
-        }, { status: 429 })
+        }, { status: 429, headers: getCorsHeaders(request) })
       }
     }
 
     return NextResponse.json({
       success: false,
       error: 'Failed to generate content'
-    }, { status: 500 })
+    }, { status: 500, headers: getCorsHeaders(request) })
   }
 }
 
-// Utility functions for validation
+// Utility functions
 function countWords(text: string): number {
   return text.trim().split(/\s+/).filter(word => word.length > 0).length
 }
 
 function truncateToWordLimit(text: string, maxWords: number): string {
   const words = text.trim().split(/\s+/)
-  if (words.length <= maxWords) {
-    return text
-  }
+  if (words.length <= maxWords) return text
   return words.slice(0, maxWords).join(' ')
 }
 
 function extractSubjectFromText(content: string): string {
-  // Look for "Subject:" pattern or use first line
   const subjectMatch = content.match(/(?:Subject|SUBJECT):\s*(.+)/i)
-  if (subjectMatch) {
-    return subjectMatch[1].trim()
-  }
-
-  // Use first line if no subject pattern found
+  if (subjectMatch?.[1]) return subjectMatch[1].trim()
   const firstLine = content.split('\n')[0]?.trim()
   return firstLine || 'Quick connect'
 }
 
 function extractBodyFromText(content: string): string {
-  // Remove subject line if present
   let body = content.replace(/(?:Subject|SUBJECT):\s*(.+)\n?/i, '')
-
-  // Clean up and return body
   return body.trim()
 }
 
-// GET endpoint for testing with API key validation
+// GET endpoint for health check with Bearer token validation
 export async function GET(request: NextRequest) {
+  const corsHeaders = getCorsHeaders(request)
+
   try {
-    // Rate limiting check (same as POST)
-    const ip = request.headers.get('x-forwarded-for') ||
-      request.headers.get('x-real-ip') ||
-      'unknown'
-
-    const rateCheck = checkRateLimit(ip)
-    if (!rateCheck.allowed) {
-      return NextResponse.json({
-        error: 'Daily limit reached',
-        message: 'You have exceeded the 30 requests per day limit. Please try again tomorrow.',
-        resetTime: rateCheck.resetTime
-      }, {
-        status: 429,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, x-api-key',
-          'X-RateLimit-Limit': '30',
-          'X-RateLimit-Remaining': '0',
-          'X-RateLimit-Reset': rateCheck.resetTime?.toString() || ''
-        }
-      })
+    // Auth check
+    const authResult = await authenticateRequest(request)
+    if (!authResult) {
+      return NextResponse.json(
+        { error: 'Unauthorized', message: 'Valid Bearer token required' },
+        { status: 401, headers: corsHeaders }
+      )
     }
 
-    // API key authentication (same as POST)
-    const authHeader = request.headers.get('x-api-key')
-    console.log('GET Request - Received API key:', authHeader?.substring(0, 10) + '...')
-    console.log('GET Request - Expected API key:', process.env.EXTENSION_API_KEY?.substring(0, 10) + '...')
-
-    if (!authHeader || authHeader !== process.env.EXTENSION_API_KEY) {
-      return NextResponse.json({
-        error: 'Unauthorized',
-        message: 'Valid API key required for access'
-      }, {
-        status: 401,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, x-api-key'
-        }
-      })
-    }
-
-    // Success response with API key validated
     return NextResponse.json({
       service: 'Ascendia Extension API',
-      version: '1.0.0',
+      version: '2.0.0',
       endpoints: {
         generate: 'POST /api/extension/generate'
       },
       status: 'healthy',
-      authenticated: true
+      authenticated: true,
+      user: authResult.email
     }, {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, x-api-key',
-        'X-RateLimit-Limit': '30',
-        'X-RateLimit-Remaining': rateCheck.remainingRequests?.toString() || '0',
-        'X-RateLimit-Reset': rateCheck.resetTime?.toString() || ''
-      }
+      headers: corsHeaders
     })
 
   } catch (error) {
     console.error('GET endpoint error:', error)
-    return NextResponse.json({
-      error: 'Internal server error'
-    }, {
-      status: 500,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, x-api-key'
-      }
-    })
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500, headers: corsHeaders }
+    )
   }
 }
 
 // OPTIONS handler for CORS preflight
-export async function OPTIONS() {
+export async function OPTIONS(request: NextRequest) {
   return new Response(null, {
     status: 200,
     headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, x-api-key',
-      'Access-Control-Max-Age': '86400', // 24 hours
+      ...getCorsHeaders(request),
+      'Access-Control-Max-Age': '86400',
     },
   })
 }

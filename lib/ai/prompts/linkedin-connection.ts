@@ -16,7 +16,11 @@ BANNED PHRASES — using ANY of these is a failure:
 "proven track record", "results-driven", "thought leader"
 
 STRUCTURE (3 sentences. ALL THREE ARE MANDATORY):
-1. HOOK (sentence 1): Name ONE specific thing — a post they wrote, a project they shipped, their career move, a talk, a specific skill. This must prove you looked at their profile.
+1. HOOK (sentence 1): Reference ONE specific detail from TARGET_PROFILE to prove you looked at their profile. Use this priority order:
+   - BEST: A recent post from TARGET_PROFILE.recentPosts (shows you read their content)
+   - GOOD: Their current role or company from TARGET_PROFILE.headline or experiences
+   - OK: A notable skill or career move visible in their experience history
+   Do NOT write a generic hook. If TARGET_PROFILE has data, USE it.
 2. BRIDGE (sentence 2): Connect it to your experience or genuine curiosity in ONE sentence.
 3. OPEN (sentence 3): THIS IS THE MOST IMPORTANT SENTENCE. It MUST be a question or soft ask that gives them a reason to accept. Without this sentence, the message is a failure.
 
@@ -55,6 +59,13 @@ STYLE:
 - Contractions are fine. "You're" not "You are."
 - No semicolons. No em-dashes. No exclamation marks.
 - If ACCEPTED_EXAMPLES exist, match their exact rhythm and formality level
+
+GROUNDING RULES (violating ANY is a failure):
+- Sentence 2 (BRIDGE): ONLY reference skills, roles, or experiences that appear in USER_BACKGROUND
+- If USER_BACKGROUND is empty or says "not provided", do NOT mention the user's experience at all — make the BRIDGE about genuine curiosity or a question about THEIR work instead
+- NEVER invent companies, job titles, years of experience, projects, or achievements for the user
+- NEVER fabricate metrics, numbers, or technical systems the user didn't mention
+- When in doubt about any user detail, omit it and focus on the TARGET's profile instead
 
 OUTPUT: The connection note only. No quotes. No explanation. No alternatives.`;
 
@@ -112,6 +123,7 @@ One sentence. Not groveling.
 
 Sentences 3-4 — WHY THIS COMPANY:
 Reference ONE concrete thing: a recent product launch, their engineering blog post, open-source project, acquisition, technical challenge.
+Use TARGET_PROFILE to personalize — reference their current role (Headline), company (Experience), or a recent post. Generic company praise is a failure.
 NEVER: "I admire the company's mission" or "innovative culture" or generic praise.
 
 Sentences 5-6 — WHY YOU:
@@ -174,6 +186,17 @@ Subject: Curiosity-driven, references their work or company.
 Body: Same structure as cold email but compressed. 5-6 sentences max.
 
 The key difference from email: InMail feels more casual. Write like a LinkedIn message, not a formal letter. No "Dear" or "Best regards." End with first name only.
+
+PERSONALIZATION (mandatory):
+- Subject line MUST reference something from TARGET_PROFILE: their role, company, a recent post topic, or a specific skill.
+- Body opening MUST mention their current role (from Headline) or company (from Experience). Generic openers are a failure.
+- If TARGET_PROFILE.recentPosts has content, reference at least one post in the body.
+
+GROUNDING RULES (same as cold email):
+- ONLY reference skills, projects, companies, and experiences that appear in USER_BACKGROUND
+- If USER_BACKGROUND is empty, do NOT reference the user's experience — focus on genuine interest in the target's work
+- NEVER invent metrics, numbers, companies, or achievements
+- If the resume is thin, write a shorter message rather than padding with fabricated details
 
 OUTPUT FORMAT — JSON only:
 {"subject_line": "...", "body": "...", "word_count": <number>}`;
@@ -262,9 +285,12 @@ interface GenerateInput {
 export function buildPrompt(input: GenerateInput): string {
   const { profile, resume, additionalProjects, jd, intent, acceptedExamples } = input;
 
-  const sections: string[] = [
-    `USER_BACKGROUND:\n${resume}`,
-  ];
+  const sections: string[] = [];
+  if (resume && resume.trim()) {
+    sections.push(`USER_BACKGROUND:\n${resume}`);
+  } else {
+    sections.push(`USER_BACKGROUND:\n(No resume provided. Do NOT invent any background details for the user. Focus entirely on the target's profile and ask curiosity-driven questions instead.)`);
+  }
 
   if (additionalProjects) {
     sections.push(`ADDITIONAL_PROJECTS (use these as supplementary context):\n${additionalProjects}`);

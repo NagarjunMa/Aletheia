@@ -1,6 +1,40 @@
 // Ascendia Extension Background Service Worker
 // Handles API communication with the Ascendia backend
 
+// Import auth module
+importScripts('auth.js');
+
+// In-flight guard: prevents duplicate authenticate calls from opening multiple tabs
+let authenticatePromise = null;
+
+// Recover from service worker restart during login
+(async function recoverPendingLogin() {
+  const { _loginPending } = await chrome.storage.local.get('_loginPending');
+  if (!_loginPending) return;
+
+  const { apiUrl, tabId, timeoutAt } = _loginPending;
+  if (Date.now() > timeoutAt) {
+    console.log('[SW] Pending login expired, cleaning up');
+    await chrome.storage.local.remove('_loginPending');
+    return;
+  }
+
+  console.log('[SW] Recovering pending login for', apiUrl);
+  // Try to fetch the session immediately (user may have already logged in)
+  try {
+    const sessionData = await fetchSessionFromWebApp(apiUrl);
+    await storeAuth(sessionData);
+    await chrome.storage.local.remove('_loginPending');
+    try { chrome.tabs.remove(tabId); } catch (e) {}
+    chrome.alarms.clear('ascendia-login-keepalive');
+    console.log('[SW] Recovered session for', sessionData.user?.email);
+  } catch (e) {
+    console.log('[SW] Recovery: no session yet, will keep checking via alarms');
+    // Keep the keepalive alarm running; next alarm cycle will retry
+    chrome.alarms.create('ascendia-login-keepalive', { periodInMinutes: 25 / 60 });
+  }
+})();
+
 // Extension configuration
 const CONFIG = {
   DEFAULT_API_URL: 'http://localhost:3000', // Default for development
@@ -9,25 +43,97 @@ const CONFIG = {
     health: '/api/extension/generate'
   },
   TIMEOUT: 30000, // 30 seconds
-  MAX_RETRIES: 3
+  MAX_RETRIES: 3,
+  TOKEN_REFRESH_ALARM: 'ascendia-token-refresh',
+  TOKEN_REFRESH_INTERVAL_MIN: 45 // Refresh every 45 minutes
 };
 
 // Installation and startup
 chrome.runtime.onInstalled.addListener(async (details) => {
   console.log('Ascendia extension installed:', details);
 
-  // Set default settings on first install
   if (details.reason === 'install') {
     await initializeDefaultSettings();
   }
+
+  // Inject content scripts into already-open LinkedIn tabs
+  // (Chrome does NOT auto-inject on install/update)
+  try {
+    const tabs = await chrome.tabs.query({ url: 'https://www.linkedin.com/*' });
+    for (const tab of tabs) {
+      if (tab.id) {
+        chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: ['content/linkedin-reader.js']
+        }).catch(err => console.warn('Could not inject into tab', tab.id, err));
+      }
+    }
+  } catch (err) {
+    console.warn('Content script injection failed:', err);
+  }
+
+  // Set up proactive token refresh alarm
+  chrome.alarms.create(CONFIG.TOKEN_REFRESH_ALARM, {
+    periodInMinutes: CONFIG.TOKEN_REFRESH_INTERVAL_MIN
+  });
+
+  // Context menu setup (guard against duplicate IDs on update/reinstall)
+  chrome.contextMenus.removeAll(() => {
+    chrome.contextMenus.create({
+      id: 'generateMessage',
+      title: 'Generate message with Ascendia',
+      contexts: ['selection'],
+      documentUrlPatterns: ['https://www.linkedin.com/*']
+    });
+  });
 });
 
 chrome.runtime.onStartup.addListener(() => {
   console.log('Ascendia extension started');
+
+  // Ensure token refresh alarm exists
+  chrome.alarms.create(CONFIG.TOKEN_REFRESH_ALARM, {
+    periodInMinutes: CONFIG.TOKEN_REFRESH_INTERVAL_MIN
+  });
+});
+
+// Alarm handler for proactive token refresh + login recovery
+chrome.alarms.onAlarm.addListener(async (alarm) => {
+  if (alarm.name === CONFIG.TOKEN_REFRESH_ALARM) {
+    console.log('[SW] Token refresh alarm fired');
+    const { apiUrl } = await chrome.storage.local.get('apiUrl');
+    await proactiveRefresh(apiUrl || CONFIG.DEFAULT_API_URL);
+  }
+
+  if (alarm.name === 'ascendia-login-keepalive') {
+    console.log('[SW] Login keepalive — checking for session...');
+    const { _loginPending } = await chrome.storage.local.get('_loginPending');
+    if (!_loginPending) return;
+
+    if (Date.now() > _loginPending.timeoutAt) {
+      console.log('[SW] Login timed out during recovery');
+      await chrome.storage.local.remove('_loginPending');
+      chrome.alarms.clear('ascendia-login-keepalive');
+      return;
+    }
+
+    try {
+      const sessionData = await fetchSessionFromWebApp(_loginPending.apiUrl);
+      await storeAuth(sessionData);
+      await chrome.storage.local.remove('_loginPending');
+      try { chrome.tabs.remove(_loginPending.tabId); } catch (e) {}
+      chrome.alarms.clear('ascendia-login-keepalive');
+      console.log('[SW] Session recovered via keepalive alarm');
+    } catch (e) {
+      console.log('[SW] Keepalive check: no session yet');
+    }
+  }
 });
 
 // Message handler
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  console.log('[SW] Message received:', message.action, 'from:', sender.url?.substring(0, 60) || sender.id);
+
   if (message.action === 'generate') {
     handleGenerateRequest(message.payload)
       .then(result => sendResponse(result))
@@ -35,8 +141,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         success: false,
         error: error.message || 'Generation failed'
       }));
-
-    return true; // Keep message channel open for async response
+    return true;
   }
 
   if (message.action === 'healthCheck') {
@@ -46,17 +151,85 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         success: false,
         error: error.message || 'Health check failed'
       }));
-
     return true;
   }
 
-  // Handle other message types
+  if (message.action === 'authenticate') {
+    console.log('[SW] authenticate: authenticatePromise is', authenticatePromise ? 'IN-FLIGHT (reusing)' : 'null (starting new)');
+    if (!authenticatePromise) {
+      authenticatePromise = handleAuthenticate()
+        .then(result => {
+          console.log('[SW] authenticate: ✓ completed successfully');
+          authenticatePromise = null;
+          return result;
+        })
+        .catch(error => {
+          console.error('[SW] authenticate: ✗ failed:', error.message);
+          authenticatePromise = null;
+          throw error;
+        });
+    }
+    authenticatePromise
+      .then(result => sendResponse(result))
+      .catch(error => sendResponse({
+        success: false,
+        error: error.message || 'Authentication failed'
+      }));
+    return true;
+  }
+
+  if (message.action === 'logout') {
+    handleLogout()
+      .then(result => sendResponse(result))
+      .catch(error => sendResponse({
+        success: false,
+        error: error.message || 'Logout failed'
+      }));
+    return true;
+  }
+
+  if (message.action === 'getAuthStatus') {
+    getAuthStatus()
+      .then(result => sendResponse(result))
+      .catch(error => sendResponse({
+        authenticated: false,
+        error: error.message
+      }));
+    return true;
+  }
+
+  // Silent auth check: try to detect an existing web session without opening any tabs.
+  // Used by popup on initialization to auto-detect if user is already logged in.
+  if (message.action === 'silentAuthCheck') {
+    (async () => {
+      try {
+        const { apiUrl } = await chrome.storage.local.get('apiUrl');
+        const url = apiUrl || CONFIG.DEFAULT_API_URL;
+        await getValidAccessToken(url);
+        const status = await getAuthStatus();
+        console.log('[SW] silentAuthCheck: ✓ found session for', status.user?.email);
+        sendResponse(status);
+      } catch (error) {
+        console.log('[SW] silentAuthCheck: no session available:', error.message);
+        sendResponse({ authenticated: false });
+      }
+    })();
+    return true;
+  }
+
+  // Auth bridge: content script on login page found the Supabase session
+  if (message.action === 'authBridgeSession') {
+    console.log('[SW] authBridgeSession received from:', sender.url?.substring(0, 60));
+    handleAuthBridgeSession(message.session);
+    sendResponse({ success: true });
+    return true;
+  }
+
   return false;
 });
 
 async function initializeDefaultSettings() {
   const defaults = {
-    apiKey: '',
     apiUrl: CONFIG.DEFAULT_API_URL,
     resume: '',
     accepted: [],
@@ -72,63 +245,98 @@ async function initializeDefaultSettings() {
   console.log('Default settings initialized with API URL:', CONFIG.DEFAULT_API_URL);
 }
 
+async function handleAuthenticate() {
+  const { apiUrl } = await chrome.storage.local.get('apiUrl');
+  const url = apiUrl || CONFIG.DEFAULT_API_URL;
+  console.log('[SW] handleAuthenticate: using API URL:', url);
+
+  // First try: maybe the user is already logged in (cookies exist)
+  try {
+    console.log('[SW] handleAuthenticate: trying existing session...');
+    const token = await getValidAccessToken(url);
+    const status = await getAuthStatus();
+    console.log('[SW] handleAuthenticate: ✓ already authenticated as', status.user?.email);
+    return {
+      success: true,
+      user: status.user,
+      message: 'Connected to Ascendia'
+    };
+  } catch (error) {
+    console.log('[SW] handleAuthenticate: no existing session:', error.message);
+    // No existing session — open login tab and wait for cookies
+  }
+
+  // Second try: open login page and wait for the user to authenticate
+  try {
+    console.log('[SW] handleAuthenticate: opening login tab and waiting...');
+    const sessionData = await waitForLogin(url);
+    console.log('[SW] handleAuthenticate: ✓ login completed for', sessionData.user?.email);
+    return {
+      success: true,
+      user: sessionData.user,
+      message: 'Connected to Ascendia'
+    };
+  } catch (waitError) {
+    console.error('[SW] handleAuthenticate: ✗ waitForLogin failed:', waitError.message);
+    throw new Error(waitError.message || 'Login failed. Please try again.');
+  }
+}
+
+async function handleLogout() {
+  await clearAuth();
+  return { success: true, message: 'Disconnected from Ascendia' };
+}
+
 async function handleGenerateRequest(payload) {
   try {
-    // Get API key and URL from storage
-    const { apiKey, apiUrl } = await chrome.storage.local.get(['apiKey', 'apiUrl']);
+    const { apiUrl } = await chrome.storage.local.get('apiUrl');
+    const url = apiUrl || CONFIG.DEFAULT_API_URL;
 
-    if (!apiKey) {
-      throw new Error('API key not configured. Please set up your API key in extension settings.');
-    }
+    // Get valid access token (handles refresh automatically)
+    const accessToken = await getValidAccessToken(url);
 
-    console.log('Service Worker: Using API URL:', apiUrl || CONFIG.DEFAULT_API_URL);
+    console.log('Service Worker: Using API URL:', url);
 
-    // Check daily usage limit
+    // Check daily usage limit (client-side advisory only)
     await checkUsageLimit();
 
     // Get accepted examples for style learning
     const { accepted = [] } = await chrome.storage.local.get('accepted');
-
-    // Filter relevant examples by category
     const relevantExamples = accepted
       .filter(item => item.category === payload.category)
       .map(item => item.body || item.message)
-      .slice(-3); // Last 3 examples
+      .slice(-3);
 
-    // Prepare request data
     const requestData = {
       ...payload,
       acceptedExamples: relevantExamples
     };
 
-    // Make API request with retries
+    // Make API request with Bearer token
     const response = await makeAPIRequest('/api/extension/generate', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': apiKey
+        'Authorization': `Bearer ${accessToken}`
       },
       body: JSON.stringify(requestData)
-    }, apiUrl);
+    }, url);
 
     if (!response.success) {
       throw new Error(response.error || 'API request failed');
     }
 
-    // Log successful generation
     await logUsage(payload.category);
-
     return response;
 
   } catch (error) {
     console.error('Generation request error:', error);
 
-    // Handle specific error types
-    if (error.message.includes('401') || error.message.includes('Unauthorized')) {
-      throw new Error('Invalid API key. Please check your settings.');
+    if (error.message.includes('401') || error.message.includes('Unauthorized') || error.message.includes('Not authenticated')) {
+      throw new Error('Not authenticated. Please log in to the Ascendia web app and connect the extension.');
     }
 
-    if (error.message.includes('429') || error.message.includes('Rate limit')) {
+    if (error.message.includes('429') || error.message.includes('Rate limit') || error.message.includes('Daily limit')) {
       throw new Error('Rate limit exceeded. Please try again later.');
     }
 
@@ -171,18 +379,16 @@ async function makeAPIRequest(endpoint, options = {}, baseUrl = null) {
       lastError = error;
       console.warn(`API request attempt ${attempt} failed:`, error.message);
 
-      // Don't retry on certain errors
       if (error.name === 'AbortError') {
         throw new Error('Request timeout. Please try again.');
       }
 
       if (error.message.includes('401') || error.message.includes('403')) {
-        throw error; // Don't retry auth errors
+        throw error;
       }
 
-      // Wait before retry (exponential backoff)
       if (attempt < CONFIG.MAX_RETRIES) {
-        const delay = Math.pow(2, attempt) * 1000; // 2s, 4s, 8s
+        const delay = Math.pow(2, attempt) * 1000;
         await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
@@ -193,21 +399,26 @@ async function makeAPIRequest(endpoint, options = {}, baseUrl = null) {
 
 async function handleHealthCheck() {
   try {
-    const { apiKey, apiUrl } = await chrome.storage.local.get(['apiKey', 'apiUrl']);
+    const { apiUrl } = await chrome.storage.local.get('apiUrl');
+    const url = apiUrl || CONFIG.DEFAULT_API_URL;
 
-    if (!apiKey) {
+    // Check if we have valid auth
+    const status = await getAuthStatus();
+    if (!status.authenticated) {
       return {
         success: false,
-        error: 'API key not configured'
+        error: 'Not connected. Please log in to the web app and connect the extension.'
       };
     }
+
+    const accessToken = await getValidAccessToken(url);
 
     const response = await makeAPIRequest('/api/extension/generate', {
       method: 'GET',
       headers: {
-        'x-api-key': apiKey
+        'Authorization': `Bearer ${accessToken}`
       }
-    }, apiUrl);
+    }, url);
 
     return {
       success: true,
@@ -240,10 +451,8 @@ async function logUsage(category) {
 
     const today = new Date().toISOString().split('T')[0];
 
-    // Update daily usage
     dailyUsage[today] = (dailyUsage[today] || 0) + 1;
 
-    // Update category usage
     if (!categoryUsage[today]) {
       categoryUsage[today] = {};
     }
@@ -255,43 +464,26 @@ async function logUsage(category) {
     const cutoffDate = thirtyDaysAgo.toISOString().split('T')[0];
 
     Object.keys(dailyUsage).forEach(date => {
-      if (date < cutoffDate) {
-        delete dailyUsage[date];
-      }
+      if (date < cutoffDate) delete dailyUsage[date];
     });
 
     Object.keys(categoryUsage).forEach(date => {
-      if (date < cutoffDate) {
-        delete categoryUsage[date];
-      }
+      if (date < cutoffDate) delete categoryUsage[date];
     });
 
     await chrome.storage.local.set({ dailyUsage, categoryUsage });
 
   } catch (error) {
     console.warn('Failed to log usage:', error);
-    // Don't throw - usage logging is non-critical
   }
 }
 
-// Context menu setup (optional feature)
-chrome.runtime.onInstalled.addListener(() => {
-  chrome.contextMenus.create({
-    id: 'generateMessage',
-    title: 'Generate message with Ascendia',
-    contexts: ['selection'],
-    documentUrlPatterns: ['https://www.linkedin.com/*']
-  });
-});
-
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId === 'generateMessage') {
-    // Open extension popup or send message to content script
     try {
       await chrome.action.openPopup();
     } catch (error) {
       console.log('Could not open popup programmatically');
-      // Fallback: could show notification or inject content
     }
   }
 });
