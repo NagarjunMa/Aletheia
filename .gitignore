@@ -1,7 +1,3 @@
-# Ascendia - Git Ignore Configuration
-# Created: December 7, 2024
-# Purpose: Exclude sensitive files and build artifacts from version control
-
 # =============================================================================
 # DEPENDENCIES
 # =============================================================================
@@ -20,15 +16,25 @@ pnpm-debug.log*
 .env.development.local
 .env.test.local
 .env.production.local
-
-# Supabase secrets
 .env.supabase
 
-.claude/
 # API keys and sensitive configuration
 .anthropic
 .openai
 secrets.json
+
+# =============================================================================
+# CLAUDE CODE — track context & settings, ignore sessions & logs
+# =============================================================================
+.claude/sessions/
+.claude/context/implementation-log.md
+
+# =============================================================================
+# AI AGENT TOOLS
+# =============================================================================
+.agents/
+.mcp.json
+.gemini/
 
 # =============================================================================
 # NEXT.JS BUILD ARTIFACTS
@@ -38,10 +44,6 @@ out/
 .vercel/
 .netlify/
 dist/
-
-# Next.js build info
-.next-env.d.ts
-next-env.d.ts
 
 # TypeScript build cache
 *.tsbuildinfo
@@ -56,20 +58,35 @@ test-results/
 playwright-report/
 playwright/.cache/
 .coverage/
-
-# Vitest
 vitest.config.ts.timestamp-*
 
 # =============================================================================
-# DEVELOPMENT TOOLS
+# BUILD LOGS & TEMPORARY FILES
 # =============================================================================
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
+build.log
+build_final.log
+*.log
+logs/
+tmp/
+temp/
+*.tmp
+*.temp
 
-# OS generated files
+# Loose SQL migration scripts (proper migrations are in database/ and supabase/)
+add-*.sql
+
+# Temporary planning/status docs (not project docs)
+CHAT_COMPONENT_CONSOLIDATION_PLAN.md
+CONSOLIDATION_RESULTS.md
+DATABASE_FIXES_COMPLETED.md
+MIGRATION_COMPLETED.md
+
+# Test scripts
+test-streaming.js
+
+# =============================================================================
+# OS & EDITOR FILES
+# =============================================================================
 .DS_Store
 .DS_Store?
 ._*
@@ -77,177 +94,103 @@ vitest.config.ts.timestamp-*
 .Trashes
 ehthumbs.db
 Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 
 # =============================================================================
-# LOGS & MONITORING
+# SENTRY CONFIG FILES (development only)
 # =============================================================================
-logs/
-*.log
-pids
-*.pid
-*.seed
-*.pid.lock
-
-# Sentry
 .sentryclirc
-
-# =============================================================================
-# TEMPORARY FILES
-# =============================================================================
-tmp/
-temp/
-*.tmp
-*.temp
+sentry.client.config.ts
+sentry.edge.config.ts
+sentry.server.config.ts
 
 # =============================================================================
 # DATABASE & SUPABASE
 # =============================================================================
-# Local Supabase
 .supabase/
-
-# Database dumps
 *.sql.bak
 *.dump
 db_backup_*
 
 # =============================================================================
-# AI & MACHINE LEARNING
+# DEPLOYMENT
 # =============================================================================
-# Model files (if any local models are used)
-models/
-*.model
-*.pkl
-*.joblib
-
-# Training data
-training_data/
-datasets/
-
-# =============================================================================
-# ANALYTICS & MONITORING
-# =============================================================================
-# Bundle analyzer reports
-.next/analyze/
-bundle-analyzer-report.html
-
-# Lighthouse reports
-lighthouse-reports/
-
-# =============================================================================
-# DEPLOYMENT & BUILD
-# =============================================================================
-# Docker
+vercel.json
 Dockerfile.prod
 docker-compose.override.yml
 .dockerignore
 
-# Kubernetes
+# Kubernetes & Terraform
 k8s-secrets.yml
 *.secret.yml
-
-# Terraform (if used)
 *.tfstate
 *.tfstate.*
 .terraform/
 
 # =============================================================================
-# USER UPLOADS & CONTENT
+# PERFORMANCE & ANALYSIS
 # =============================================================================
-# User uploaded files (if any)
-uploads/
-user-content/
-
-# Generated content
-generated/
-
-# =============================================================================
-# PERFORMANCE & OPTIMIZATION
-# =============================================================================
-# Performance testing results
+.next/analyze/
+bundle-analyzer-report.html
+lighthouse-reports/
+lighthouserc.js
 perf-results/
 benchmark-results/
-
-# Static analysis reports
 static-analysis-report/
 
 # =============================================================================
-# DOCUMENTATION BUILDS
+# USER CONTENT & GENERATED FILES
 # =============================================================================
-# Generated documentation (keep source docs)
-docs/build/
-docs/.docusaurus/
+uploads/
+user-content/
+generated/
+
+# =============================================================================
+# ML & MODELS
+# =============================================================================
+models/
+*.model
+*.pkl
+*.joblib
+training_data/
+datasets/
 
 # =============================================================================
 # PACKAGE MANAGERS
 # =============================================================================
-# Yarn
 .yarn/cache
 .yarn/unplugged
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
-
-# NPM
 .npm
-
-# =============================================================================
-# MISCELLANEOUS
-# =============================================================================
-# Runtime data
-pids
-*.pid
-*.seed
-*.pid.lock
-
-# Dependency directories
 jspm_packages/
 
-# Optional npm cache directory
-.npm
-
-# Optional eslint cache
+# =============================================================================
+# CACHES
+# =============================================================================
 .eslintcache
-
-# Optional stylelint cache
 .stylelintcache
-
-# Microbundle cache
 .rpt2_cache/
 .rts2_cache_cjs/
 .rts2_cache_es/
 .rts2_cache_umd/
 
 # =============================================================================
-# INCLUDE IMPORTANT FOLDERS (OVERRIDE PATTERNS)
+# MISC RUNTIME
 # =============================================================================
-# Ensure .claude/ folder and its contents are included
-!.claude/
-!.claude/**/*
+pids/
+*.pid
+*.seed
+*.pid.lock
 
-# Include example environment files
-!.env.example
-!.env.local.example
+# Documentation builds
+docs/build/
+docs/.docusaurus/
 
-# Include important documentation
-!README.md
-!CLAUDE.md
-!LICENSE
-
-# Include configuration files
-!package.json
-!package-lock.json
-!tsconfig.json
-!tailwind.config.*
-!next.config.*
-!playwright.config.*
-!vitest.config.*
-
-# Include source code
-!app/**/*
-!components/**/*
-!lib/**/*
-!public/**/*
-!tests/**/*
-
-# Include GitHub workflows
-!.github/**/*
+# Old config files
+.babelrc.js

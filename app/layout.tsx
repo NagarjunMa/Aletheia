@@ -10,16 +10,29 @@ export const metadata: Metadata = {
   description: 'Advanced AI writing assistant that learns and adapts to your unique writing style while ensuring professional clarity and correctness.',
   keywords: ['AI writing', 'personal voice', 'writing assistant', 'grammar correction', 'content polish'],
   authors: [{ name: 'Ascendia Team' }],
+  icons: {
+    icon: '/Aletheia.png',
+    apple: '/Aletheia.png',
+  },
   openGraph: {
     title: 'Ascendia - Personalized Voice Agent',
     description: 'Advanced AI writing assistant that learns and adapts to your unique writing style',
     type: 'website',
     locale: 'en_US',
+    images: [
+      {
+        url: '/Aletheia.png',
+        width: 1200,
+        height: 630,
+        alt: 'Ascendia - Personalized Voice Agent',
+      },
+    ],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'Ascendia - Personalized Voice Agent',
     description: 'Advanced AI writing assistant that learns and adapts to your unique writing style',
+    images: ['/Aletheia.png'],
   },
   robots: {
     index: true,

@@ -1,6 +1,6 @@
 // Ascendia Database Types
-// Generated from schema.sql - December 7, 2024
-// Auto-generated types for type-safe database operations
+// Generated from Supabase schema - January 2025
+// Auto-generated types for type-safe database operations with latest schema updates
 
 export type Json =
   | string
@@ -10,505 +10,987 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
-export interface Database {
+export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "13.0.5"
+  }
   public: {
     Tables: {
-      profiles: {
+      api_usage_logs: {
         Row: {
-          id: string
-          email: string
-          full_name: string | null
-          avatar_url: string | null
           created_at: string
-          updated_at: string
-          last_activity_at: string
-          cpl_score: number
-          writing_style_data: Json
-          learning_preferences: Json
-          subscription_status: 'free' | 'premium' | 'enterprise'
-          monthly_api_usage: number
-          monthly_limit: number
-          preferences: Json
-          data_retention_days: number
-          analytics_enabled: boolean
+          endpoint: string
+          id: string
+          request_data: Json | null
+          response_status: number | null
+          tokens_used: number | null
+          user_id: string
         }
         Insert: {
-          id: string
-          email: string
-          full_name?: string | null
-          avatar_url?: string | null
           created_at?: string
-          updated_at?: string
-          last_activity_at?: string
-          cpl_score?: number
-          writing_style_data?: Json
-          learning_preferences?: Json
-          subscription_status?: 'free' | 'premium' | 'enterprise'
-          monthly_api_usage?: number
-          monthly_limit?: number
-          preferences?: Json
-          data_retention_days?: number
-          analytics_enabled?: boolean
+          endpoint: string
+          id?: string
+          request_data?: Json | null
+          response_status?: number | null
+          tokens_used?: number | null
+          user_id: string
         }
         Update: {
-          id?: string
-          email?: string
-          full_name?: string | null
-          avatar_url?: string | null
           created_at?: string
-          updated_at?: string
-          last_activity_at?: string
-          cpl_score?: number
-          writing_style_data?: Json
-          learning_preferences?: Json
-          subscription_status?: 'free' | 'premium' | 'enterprise'
-          monthly_api_usage?: number
-          monthly_limit?: number
-          preferences?: Json
-          data_retention_days?: number
-          analytics_enabled?: boolean
+          endpoint?: string
+          id?: string
+          request_data?: Json | null
+          response_status?: number | null
+          tokens_used?: number | null
+          user_id?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "api_usage_logs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       conversations: {
         Row: {
-          id: string
-          user_id: string
-          title: string
-          description: string | null
-          category: 'email' | 'letter' | 'proposal' | 'memo' | 'general' | 'creative' | 'technical'
-          is_archived: boolean
-          is_pinned: boolean
+          category: Database["public"]["Enums"]["conversation_category"]
           created_at: string
-          updated_at: string
+          id: string
+          is_migrated: boolean | null
           last_activity_at: string
-          context: Json
-          tags: string[]
-          total_drafts_generated: number
-          average_cpl_score: number | null
-          total_time_spent_minutes: number
-          word_count: number
-        }
-        Insert: {
-          id?: string
-          user_id: string
+          metadata: Json | null
+          thread_id: string | null
           title: string
-          description?: string | null
-          category?: 'email' | 'letter' | 'proposal' | 'memo' | 'general' | 'creative' | 'technical'
-          is_archived?: boolean
-          is_pinned?: boolean
-          created_at?: string
-          updated_at?: string
-          last_activity_at?: string
-          context?: Json
-          tags?: string[]
-          total_drafts_generated?: number
-          average_cpl_score?: number | null
-          total_time_spent_minutes?: number
-          word_count?: number
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          title?: string
-          description?: string | null
-          category?: 'email' | 'letter' | 'proposal' | 'memo' | 'general' | 'creative' | 'technical'
-          is_archived?: boolean
-          is_pinned?: boolean
-          created_at?: string
-          updated_at?: string
-          last_activity_at?: string
-          context?: Json
-          tags?: string[]
-          total_drafts_generated?: number
-          average_cpl_score?: number | null
-          total_time_spent_minutes?: number
-          word_count?: number
-        }
-      }
-      user_inputs: {
-        Row: {
-          id: string
-          conversation_id: string
+          updated_at: string
           user_id: string
-          raw_text: string
-          cleaned_text: string | null
-          input_type: 'text' | 'voice' | 'document' | 'paste'
-          word_count: number
-          character_count: number
-          language_detected: string
-          complexity_score: number | null
-          readability_score: number | null
-          created_at: string
-          content_analysis: Json
-          sensitive_content_detected: boolean
-          auto_delete_at: string | null
         }
         Insert: {
-          id?: string
-          conversation_id: string
-          user_id: string
-          raw_text: string
-          cleaned_text?: string | null
-          input_type?: 'text' | 'voice' | 'document' | 'paste'
-          language_detected?: string
-          complexity_score?: number | null
-          readability_score?: number | null
+          category?: Database["public"]["Enums"]["conversation_category"]
           created_at?: string
-          content_analysis?: Json
-          sensitive_content_detected?: boolean
-          auto_delete_at?: string | null
+          id?: string
+          is_migrated?: boolean | null
+          last_activity_at?: string
+          metadata?: Json | null
+          thread_id?: string | null
+          title: string
+          updated_at?: string
+          user_id: string
         }
         Update: {
-          id?: string
-          conversation_id?: string
-          user_id?: string
-          raw_text?: string
-          cleaned_text?: string | null
-          input_type?: 'text' | 'voice' | 'document' | 'paste'
-          language_detected?: string
-          complexity_score?: number | null
-          readability_score?: number | null
+          category?: Database["public"]["Enums"]["conversation_category"]
           created_at?: string
-          content_analysis?: Json
-          sensitive_content_detected?: boolean
-          auto_delete_at?: string | null
+          id?: string
+          is_migrated?: boolean | null
+          last_activity_at?: string
+          metadata?: Json | null
+          thread_id?: string | null
+          title?: string
+          updated_at?: string
+          user_id?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "conversations_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "threads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversations_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       generated_drafts: {
         Row: {
-          id: string
-          user_input_id: string
-          conversation_id: string
-          user_id: string
           content: string
-          original_content: string | null
-          draft_type: 'grammar_fix' | 'adaptive_polish' | 'creative_enhancement' | 'tone_adjustment'
-          version: number
+          conversation_id: string | null
           cpl_score: number | null
-          target_cpl_score: number | null
-          processing_time_ms: number | null
-          token_usage: number | null
+          created_at: string
+          draft_type: Database["public"]["Enums"]["draft_type"]
+          id: string
           is_accepted: boolean | null
-          user_rating: number | null
-          feedback_text: string | null
-          user_edits: string | null
-          created_at: string
+          metadata: Json | null
+          thread_id: string | null
+          thread_message_id: string | null
           updated_at: string
-          reviewed_at: string | null
-          ai_model_used: string
-          ai_model_version: string | null
-          processing_metadata: Json
-          improvement_metrics: Json
-          quality_score: number | null
-          word_count: number
-          character_count: number
-        }
-        Insert: {
-          id?: string
+          user_edits: string | null
+          user_feedback: string | null
+          user_id: string
           user_input_id: string
-          conversation_id: string
-          user_id: string
+        }
+        Insert: {
           content: string
-          original_content?: string | null
-          draft_type: 'grammar_fix' | 'adaptive_polish' | 'creative_enhancement' | 'tone_adjustment'
-          version?: number
+          conversation_id?: string | null
           cpl_score?: number | null
-          target_cpl_score?: number | null
-          processing_time_ms?: number | null
-          token_usage?: number | null
-          is_accepted?: boolean | null
-          user_rating?: number | null
-          feedback_text?: string | null
-          user_edits?: string | null
           created_at?: string
+          draft_type: Database["public"]["Enums"]["draft_type"]
+          id?: string
+          is_accepted?: boolean | null
+          metadata?: Json | null
+          thread_id?: string | null
+          thread_message_id?: string | null
           updated_at?: string
-          reviewed_at?: string | null
-          ai_model_used?: string
-          ai_model_version?: string | null
-          processing_metadata?: Json
-          improvement_metrics?: Json
-          quality_score?: number | null
+          user_edits?: string | null
+          user_feedback?: string | null
+          user_id: string
+          user_input_id: string
         }
         Update: {
-          id?: string
-          user_input_id?: string
-          conversation_id?: string
-          user_id?: string
           content?: string
-          original_content?: string | null
-          draft_type?: 'grammar_fix' | 'adaptive_polish' | 'creative_enhancement' | 'tone_adjustment'
-          version?: number
+          conversation_id?: string | null
           cpl_score?: number | null
-          target_cpl_score?: number | null
-          processing_time_ms?: number | null
-          token_usage?: number | null
+          created_at?: string
+          draft_type?: Database["public"]["Enums"]["draft_type"]
+          id?: string
           is_accepted?: boolean | null
-          user_rating?: number | null
-          feedback_text?: string | null
-          user_edits?: string | null
-          created_at?: string
+          metadata?: Json | null
+          thread_id?: string | null
+          thread_message_id?: string | null
           updated_at?: string
-          reviewed_at?: string | null
-          ai_model_used?: string
-          ai_model_version?: string | null
-          processing_metadata?: Json
-          improvement_metrics?: Json
-          quality_score?: number | null
+          user_edits?: string | null
+          user_feedback?: string | null
+          user_id?: string
+          user_input_id?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "drafts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "drafts_user_input_id_fkey"
+            columns: ["user_input_id"]
+            isOneToOne: false
+            referencedRelation: "user_inputs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "generated_drafts_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "generated_drafts_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "threads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "generated_drafts_thread_message_id_fkey"
+            columns: ["thread_message_id"]
+            isOneToOne: false
+            referencedRelation: "thread_messages"
+            referencedColumns: ["id"]
+          },
+        ]
       }
-      api_usage_logs: {
+      profiles: {
         Row: {
-          id: string
-          user_id: string
-          endpoint: string
-          method: string
-          status_code: number | null
-          tokens_used: number
-          cost_cents: number
-          response_time_ms: number | null
-          request_size_bytes: number | null
-          response_size_bytes: number | null
-          user_agent: string | null
-          ip_address: string | null
+          avatar_url: string | null
+          cpl_score: number | null
           created_at: string
-          metadata: Json
-          error_details: string | null
+          email: string
+          full_name: string | null
+          id: string
+          preferences: Json | null
+          updated_at: string
+          writing_style: Json | null
         }
         Insert: {
-          id?: string
-          user_id: string
-          endpoint: string
-          method: string
-          status_code?: number | null
-          tokens_used?: number
-          cost_cents?: number
-          response_time_ms?: number | null
-          request_size_bytes?: number | null
-          response_size_bytes?: number | null
-          user_agent?: string | null
-          ip_address?: string | null
+          avatar_url?: string | null
+          cpl_score?: number | null
           created_at?: string
-          metadata?: Json
-          error_details?: string | null
+          email: string
+          full_name?: string | null
+          id: string
+          preferences?: Json | null
+          updated_at?: string
+          writing_style?: Json | null
         }
         Update: {
-          id?: string
-          user_id?: string
-          endpoint?: string
-          method?: string
-          status_code?: number | null
-          tokens_used?: number
-          cost_cents?: number
-          response_time_ms?: number | null
-          request_size_bytes?: number | null
-          response_size_bytes?: number | null
-          user_agent?: string | null
-          ip_address?: string | null
+          avatar_url?: string | null
+          cpl_score?: number | null
           created_at?: string
-          metadata?: Json
-          error_details?: string | null
+          email?: string
+          full_name?: string | null
+          id?: string
+          preferences?: Json | null
+          updated_at?: string
+          writing_style?: Json | null
         }
+        Relationships: []
       }
-      user_sessions: {
+      threads: {
         Row: {
+          archived_at: string | null
+          average_cpl_score: number | null
+          category: string | null
+          context: Json | null
+          created_at: string
+          description: string | null
+          folder_id: string | null
           id: string
-          user_id: string
-          session_token: string
-          device_info: Json
-          ip_address: string | null
-          user_agent: string | null
-          location_data: Json | null
           is_active: boolean
-          last_activity_at: string
-          created_at: string
-          expires_at: string
-          security_flags: Json
+          is_archived: boolean
+          is_pinned: boolean
+          last_message_at: string | null
+          message_count: number | null
+          name: string
+          tags: string[] | null
+          total_drafts_generated: number | null
+          updated_at: string
+          user_id: string
         }
         Insert: {
-          id?: string
-          user_id: string
-          session_token: string
-          device_info?: Json
-          ip_address?: string | null
-          user_agent?: string | null
-          location_data?: Json | null
-          is_active?: boolean
-          last_activity_at?: string
+          archived_at?: string | null
+          average_cpl_score?: number | null
+          category?: string | null
+          context?: Json | null
           created_at?: string
-          expires_at: string
-          security_flags?: Json
+          description?: string | null
+          folder_id?: string | null
+          id?: string
+          is_active?: boolean
+          is_archived?: boolean
+          is_pinned?: boolean
+          last_message_at?: string | null
+          message_count?: number | null
+          name: string
+          tags?: string[] | null
+          total_drafts_generated?: number | null
+          updated_at?: string
+          user_id: string
         }
         Update: {
-          id?: string
-          user_id?: string
-          session_token?: string
-          device_info?: Json
-          ip_address?: string | null
-          user_agent?: string | null
-          location_data?: Json | null
-          is_active?: boolean
-          last_activity_at?: string
+          archived_at?: string | null
+          average_cpl_score?: number | null
+          category?: string | null
+          context?: Json | null
           created_at?: string
-          expires_at?: string
-          security_flags?: Json
+          description?: string | null
+          folder_id?: string | null
+          id?: string
+          is_active?: boolean
+          is_archived?: boolean
+          is_pinned?: boolean
+          last_message_at?: string | null
+          message_count?: number | null
+          name?: string
+          tags?: string[] | null
+          total_drafts_generated?: number | null
+          updated_at?: string
+          user_id?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "threads_folder_id_fkey"
+            columns: ["folder_id"]
+            isOneToOne: false
+            referencedRelation: "thread_folders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "threads_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      thread_folders: {
+        Row: {
+          color: string | null
+          created_at: string
+          description: string | null
+          icon: string | null
+          id: string
+          is_default: boolean
+          is_open: boolean
+          name: string
+          sort_order: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          description?: string | null
+          icon?: string | null
+          id?: string
+          is_default?: boolean
+          is_open?: boolean
+          name: string
+          sort_order?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          description?: string | null
+          icon?: string | null
+          id?: string
+          is_default?: boolean
+          is_open?: boolean
+          name?: string
+          sort_order?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "thread_folders_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      thread_messages: {
+        Row: {
+          content: string
+          created_at: string
+          deleted_at: string | null
+          edit_history: Json | null
+          edited_at: string | null
+          id: string
+          is_deleted: boolean
+          is_draft: boolean
+          is_edited: boolean
+          metadata: Json | null
+          model_used: string | null
+          parent_message_id: string | null
+          position: number
+          processing_time_ms: number | null
+          role: string
+          thread_id: string
+          token_count: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          deleted_at?: string | null
+          edit_history?: Json | null
+          edited_at?: string | null
+          id?: string
+          is_deleted?: boolean
+          is_draft?: boolean
+          is_edited?: boolean
+          metadata?: Json | null
+          model_used?: string | null
+          parent_message_id?: string | null
+          position: number
+          processing_time_ms?: number | null
+          role: string
+          thread_id: string
+          token_count?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          deleted_at?: string | null
+          edit_history?: Json | null
+          edited_at?: string | null
+          id?: string
+          is_deleted?: boolean
+          is_draft?: boolean
+          is_edited?: boolean
+          metadata?: Json | null
+          model_used?: string | null
+          parent_message_id?: string | null
+          position?: number
+          processing_time_ms?: number | null
+          role?: string
+          thread_id?: string
+          token_count?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "thread_messages_parent_message_id_fkey"
+            columns: ["parent_message_id"]
+            isOneToOne: false
+            referencedRelation: "thread_messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "thread_messages_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "threads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "thread_messages_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      usage_analytics: {
+        Row: {
+          conversation_id: string | null
+          created_at: string
+          event_data: Json | null
+          event_type: string
+          id: string
+          session_id: string | null
+          user_id: string
+        }
+        Insert: {
+          conversation_id?: string | null
+          created_at?: string
+          event_data?: Json | null
+          event_type: string
+          id?: string
+          session_id?: string | null
+          user_id: string
+        }
+        Update: {
+          conversation_id?: string | null
+          created_at?: string
+          event_data?: Json | null
+          event_type?: string
+          id?: string
+          session_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "usage_analytics_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "usage_analytics_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_embeddings: {
+        Row: {
+          content: string
+          created_at: string
+          embedding: string | null
+          id: string
+          metadata: Json | null
+          source_id: string
+          source_type: string
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          embedding?: string | null
+          id?: string
+          metadata?: Json | null
+          source_id: string
+          source_type: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          embedding?: string | null
+          id?: string
+          metadata?: Json | null
+          source_id?: string
+          source_type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "embeddings_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_feedback: {
         Row: {
-          id: string
-          user_id: string
-          feedback_type: 'bug_report' | 'feature_request' | 'general' | 'ai_quality'
-          title: string
-          description: string
-          rating: number | null
-          page_url: string | null
-          user_agent: string | null
-          screenshot_url: string | null
-          status: 'new' | 'in_review' | 'resolved' | 'closed'
-          priority: 'low' | 'medium' | 'high' | 'critical'
+          comment: string | null
           created_at: string
-          updated_at: string
-          resolved_at: string | null
-          admin_notes: string | null
-          admin_user_id: string | null
-        }
-        Insert: {
-          id?: string
+          draft_id: string | null
+          feedback_type: string
+          id: string
+          metadata: Json | null
+          rating: number | null
           user_id: string
-          feedback_type: 'bug_report' | 'feature_request' | 'general' | 'ai_quality'
-          title: string
-          description: string
-          rating?: number | null
-          page_url?: string | null
-          user_agent?: string | null
-          screenshot_url?: string | null
-          status?: 'new' | 'in_review' | 'resolved' | 'closed'
-          priority?: 'low' | 'medium' | 'high' | 'critical'
-          created_at?: string
-          updated_at?: string
-          resolved_at?: string | null
-          admin_notes?: string | null
-          admin_user_id?: string | null
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          feedback_type?: 'bug_report' | 'feature_request' | 'general' | 'ai_quality'
-          title?: string
-          description?: string
-          rating?: number | null
-          page_url?: string | null
-          user_agent?: string | null
-          screenshot_url?: string | null
-          status?: 'new' | 'in_review' | 'resolved' | 'closed'
-          priority?: 'low' | 'medium' | 'high' | 'critical'
-          created_at?: string
-          updated_at?: string
-          resolved_at?: string | null
-          admin_notes?: string | null
-          admin_user_id?: string | null
-        }
-      }
-      schema_migrations: {
-        Row: {
-          version: string
-          description: string | null
-          applied_at: string
-          checksum: string | null
         }
         Insert: {
-          version: string
-          description?: string | null
-          applied_at?: string
-          checksum?: string | null
+          comment?: string | null
+          created_at?: string
+          draft_id?: string | null
+          feedback_type: string
+          id?: string
+          metadata?: Json | null
+          rating?: number | null
+          user_id: string
         }
         Update: {
-          version?: string
-          description?: string | null
-          applied_at?: string
-          checksum?: string | null
+          comment?: string | null
+          created_at?: string
+          draft_id?: string | null
+          feedback_type?: string
+          id?: string
+          metadata?: Json | null
+          rating?: number | null
+          user_id?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "feedback_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_feedback_draft_id_fkey"
+            columns: ["draft_id"]
+            isOneToOne: false
+            referencedRelation: "generated_drafts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_inputs: {
+        Row: {
+          content: string | null
+          conversation_id: string
+          created_at: string
+          id: string
+          message_position: number | null
+          metadata: Json | null
+          raw_text: string | null
+          thread_id: string | null
+          thread_message_id: string | null
+          user_id: string
+        }
+        Insert: {
+          content?: string | null
+          conversation_id: string
+          created_at?: string
+          id?: string
+          message_position?: number | null
+          metadata?: Json | null
+          raw_text?: string | null
+          thread_id?: string | null
+          thread_message_id?: string | null
+          user_id: string
+        }
+        Update: {
+          content?: string | null
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          message_position?: number | null
+          metadata?: Json | null
+          raw_text?: string | null
+          thread_id?: string | null
+          thread_message_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_inputs_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_inputs_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "threads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_inputs_thread_message_id_fkey"
+            columns: ["thread_message_id"]
+            isOneToOne: false
+            referencedRelation: "thread_messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_inputs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_sessions: {
+        Row: {
+          created_at: string
+          expires_at: string
+          id: string
+          session_data: Json | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at: string
+          id?: string
+          session_data?: Json | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          session_data?: Json | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_sessions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      messages: {
+        Row: {
+          content: string
+          conversation_id: string
+          cpl_score: number | null
+          created_at: string | null
+          draft_type: string | null
+          id: string
+          is_accepted: boolean | null
+          legacy_draft_id: string | null
+          legacy_user_input_id: string | null
+          message_type: string | null
+          role: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          content: string
+          conversation_id: string
+          cpl_score?: number | null
+          created_at?: string | null
+          draft_type?: string | null
+          id?: string
+          is_accepted?: boolean | null
+          legacy_draft_id?: string | null
+          legacy_user_input_id?: string | null
+          message_type?: string | null
+          role: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          content?: string
+          conversation_id?: string
+          cpl_score?: number | null
+          created_at?: string | null
+          draft_type?: string | null
+          id?: string
+          is_accepted?: boolean | null
+          legacy_draft_id?: string | null
+          legacy_user_input_id?: string | null
+          message_type?: string | null
+          role?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "auth.users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_preferences: {
+        Row: {
+          auto_accept_threshold: number | null
+          avatar_url: string | null
+          content_categories: string[] | null
+          cpl_baseline: number | null
+          created_at: string | null
+          data_retention_days: number | null
+          display_name: string | null
+          enable_streaming: boolean | null
+          feedback_history: Json | null
+          formality_level: string | null
+          id: string
+          preferred_model: string | null
+          response_length: string | null
+          share_analytics: boolean | null
+          show_cpl_scores: boolean | null
+          style_patterns: Json | null
+          theme: string | null
+          timezone: string | null
+          updated_at: string | null
+          user_id: string
+          vocabulary_profile: Json | null
+          writing_style: Json | null
+        }
+        Insert: {
+          auto_accept_threshold?: number | null
+          avatar_url?: string | null
+          content_categories?: string[] | null
+          cpl_baseline?: number | null
+          created_at?: string | null
+          data_retention_days?: number | null
+          display_name?: string | null
+          enable_streaming?: boolean | null
+          feedback_history?: Json | null
+          formality_level?: string | null
+          id?: string
+          preferred_model?: string | null
+          response_length?: string | null
+          share_analytics?: boolean | null
+          show_cpl_scores?: boolean | null
+          style_patterns?: Json | null
+          theme?: string | null
+          timezone?: string | null
+          updated_at?: string | null
+          user_id: string
+          vocabulary_profile?: Json | null
+          writing_style?: Json | null
+        }
+        Update: {
+          auto_accept_threshold?: number | null
+          avatar_url?: string | null
+          content_categories?: string[] | null
+          cpl_baseline?: number | null
+          created_at?: string | null
+          data_retention_days?: number | null
+          display_name?: string | null
+          enable_streaming?: boolean | null
+          feedback_history?: Json | null
+          formality_level?: string | null
+          id?: string
+          preferred_model?: string | null
+          response_length?: string | null
+          share_analytics?: boolean | null
+          show_cpl_scores?: boolean | null
+          style_patterns?: Json | null
+          theme?: string | null
+          timezone?: string | null
+          updated_at?: string | null
+          user_id?: string
+          vocabulary_profile?: Json | null
+          writing_style?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_preferences_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "auth.users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
-      user_dashboard_stats: {
-        Row: {
-          user_id: string
-          full_name: string | null
-          cpl_score: number
-          subscription_status: 'free' | 'premium' | 'enterprise'
-          monthly_api_usage: number
-          monthly_limit: number
-          total_conversations: number | null
-          conversations_this_week: number | null
-          total_drafts: number | null
-          drafts_this_week: number | null
-          accepted_drafts: number | null
-          avg_cpl_score: number | null
-          total_tokens_used: number | null
-        }
-      }
-      conversation_details: {
-        Row: {
-          id: string
-          user_id: string
-          title: string
-          description: string | null
-          category: 'email' | 'letter' | 'proposal' | 'memo' | 'general' | 'creative' | 'technical'
-          is_archived: boolean
-          is_pinned: boolean
-          created_at: string
-          updated_at: string
-          last_activity_at: string
-          context: Json
-          tags: string[]
-          total_drafts_generated: number
-          average_cpl_score: number | null
-          total_time_spent_minutes: number
-          word_count: number
-          input_count: number | null
-          draft_count: number | null
-          accepted_drafts: number | null
-          rejected_drafts: number | null
-          avg_cpl_score: number | null
-          total_tokens: number | null
-          last_draft_at: string | null
-        }
-      }
+      [_ in never]: never
     }
     Functions: {
-      cleanup_old_data: {
-        Args: {}
-        Returns: undefined
-      }
-      update_updated_at_column: {
-        Args: {}
-        Returns: unknown
-      }
-      update_user_activity: {
-        Args: {}
-        Returns: unknown
-      }
-      update_conversation_activity: {
-        Args: {}
-        Returns: unknown
-      }
-      update_conversation_stats: {
-        Args: {}
-        Returns: unknown
-      }
-      update_user_cpl_score: {
-        Args: {}
-        Returns: unknown
-      }
+      [_ in never]: never
     }
     Enums: {
+      conversation_category:
+        | "instagram_post"
+        | "linkedin"
+        | "medium_article"
+        | "email"
+        | "conversational"
+      draft_type: "grammar_fix" | "adaptive_polish"
+    }
+    CompositeTypes: {
       [_ in never]: never
     }
   }
 }
 
-// Additional TypeScript types for application use
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
+
+export type Tables<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      Row: infer R
+    }
+    ? R
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R
+      }
+      ? R
+      : never
+    : never
+
+export type TablesInsert<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Insert: infer I
+    }
+    ? I
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I
+      }
+      ? I
+      : never
+    : never
+
+export type TablesUpdate<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Update: infer U
+    }
+    ? U
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U
+      }
+      ? U
+      : never
+    : never
+
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never = never,
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
+
+export const Constants = {
+  public: {
+    Enums: {
+      conversation_category: [
+        "instagram_post",
+        "linkedin",
+        "medium_article",
+        "email",
+        "conversational",
+      ],
+      draft_type: ["grammar_fix", "adaptive_polish"],
+    },
+  },
+} as const
+
+// =============================================================================
+// CONVENIENCE TYPE ALIASES
+// =============================================================================
+
+// Main table row types
 export type Profile = Database['public']['Tables']['profiles']['Row']
 export type ProfileInsert = Database['public']['Tables']['profiles']['Insert']
 export type ProfileUpdate = Database['public']['Tables']['profiles']['Update']
@@ -525,28 +1007,56 @@ export type GeneratedDraft = Database['public']['Tables']['generated_drafts']['R
 export type GeneratedDraftInsert = Database['public']['Tables']['generated_drafts']['Insert']
 export type GeneratedDraftUpdate = Database['public']['Tables']['generated_drafts']['Update']
 
-export type ApiUsageLog = Database['public']['Tables']['api_usage_logs']['Row']
-export type ApiUsageLogInsert = Database['public']['Tables']['api_usage_logs']['Insert']
-
-export type UserSession = Database['public']['Tables']['user_sessions']['Row']
-export type UserSessionInsert = Database['public']['Tables']['user_sessions']['Insert']
+export type UsageAnalytics = Database['public']['Tables']['usage_analytics']['Row']
+export type UsageAnalyticsInsert = Database['public']['Tables']['usage_analytics']['Insert']
+export type UsageAnalyticsUpdate = Database['public']['Tables']['usage_analytics']['Update']
 
 export type UserFeedback = Database['public']['Tables']['user_feedback']['Row']
 export type UserFeedbackInsert = Database['public']['Tables']['user_feedback']['Insert']
+export type UserFeedbackUpdate = Database['public']['Tables']['user_feedback']['Update']
 
-export type UserDashboardStats = Database['public']['Views']['user_dashboard_stats']['Row']
-export type ConversationDetails = Database['public']['Views']['conversation_details']['Row']
+export type UserEmbedding = Database['public']['Tables']['user_embeddings']['Row']
+export type UserEmbeddingInsert = Database['public']['Tables']['user_embeddings']['Insert']
+export type UserEmbeddingUpdate = Database['public']['Tables']['user_embeddings']['Update']
 
-// Utility types
-export type DraftType = 'grammar_fix' | 'adaptive_polish' | 'creative_enhancement' | 'tone_adjustment'
-export type ConversationCategory = 'email' | 'letter' | 'proposal' | 'memo' | 'general' | 'creative' | 'technical'
-export type SubscriptionStatus = 'free' | 'premium' | 'enterprise'
-export type FeedbackType = 'bug_report' | 'feature_request' | 'general' | 'ai_quality'
-export type FeedbackStatus = 'new' | 'in_review' | 'resolved' | 'closed'
-export type Priority = 'low' | 'medium' | 'high' | 'critical'
-export type InputType = 'text' | 'voice' | 'document' | 'paste'
+export type ApiUsageLog = Database['public']['Tables']['api_usage_logs']['Row']
+export type ApiUsageLogInsert = Database['public']['Tables']['api_usage_logs']['Insert']
+export type ApiUsageLogUpdate = Database['public']['Tables']['api_usage_logs']['Update']
 
-// Common interface for API responses
+export type UserSession = Database['public']['Tables']['user_sessions']['Row']
+export type UserSessionInsert = Database['public']['Tables']['user_sessions']['Insert']
+export type UserSessionUpdate = Database['public']['Tables']['user_sessions']['Update']
+
+// Thread system types
+export type Thread = Database['public']['Tables']['threads']['Row']
+export type ThreadInsert = Database['public']['Tables']['threads']['Insert']
+export type ThreadUpdate = Database['public']['Tables']['threads']['Update']
+
+export type ThreadMessage = Database['public']['Tables']['thread_messages']['Row']
+export type ThreadMessageInsert = Database['public']['Tables']['thread_messages']['Insert']
+export type ThreadMessageUpdate = Database['public']['Tables']['thread_messages']['Update']
+
+export type ThreadFolder = Database['public']['Tables']['thread_folders']['Row']
+export type ThreadFolderInsert = Database['public']['Tables']['thread_folders']['Insert']
+export type ThreadFolderUpdate = Database['public']['Tables']['thread_folders']['Update']
+
+// New consolidated schema types
+export type Message = Database['public']['Tables']['messages']['Row']
+export type MessageInsert = Database['public']['Tables']['messages']['Insert']
+export type MessageUpdate = Database['public']['Tables']['messages']['Update']
+
+export type UserPreferences = Database['public']['Tables']['user_preferences']['Row']
+export type UserPreferencesInsert = Database['public']['Tables']['user_preferences']['Insert']
+export type UserPreferencesUpdate = Database['public']['Tables']['user_preferences']['Update']
+
+// Enum types
+export type ConversationCategory = Database['public']['Enums']['conversation_category']
+export type DraftType = Database['public']['Enums']['draft_type']
+
+// =============================================================================
+// UTILITY TYPES FOR API RESPONSES
+// =============================================================================
+
 export interface ApiResponse<T = any> {
   success: boolean
   data?: T
@@ -554,7 +1064,6 @@ export interface ApiResponse<T = any> {
   message?: string
 }
 
-// CPL-related types
 export interface CPLMetrics {
   lexicalDiversity: number
   sentenceComplexity: number
@@ -570,7 +1079,6 @@ export interface CPLAnalysis extends CPLMetrics {
   }
 }
 
-// Draft generation types
 export interface DraftGenerationRequest {
   content: string
   category: ConversationCategory
@@ -586,7 +1094,6 @@ export interface DraftGenerationResponse {
   cplAlignment: number
 }
 
-// User preferences types
 export interface UserPreferences {
   theme: 'light' | 'dark' | 'system'
   language: string
@@ -600,11 +1107,4 @@ export interface WritingStyleData {
   vocabularyLevel: 'simple' | 'moderate' | 'advanced'
   sentenceStructure: 'simple' | 'mixed' | 'complex'
   formalityPreference: 'casual' | 'semi_formal' | 'formal'
-}
-
-export interface LearningPreferences {
-  adaptationSpeed: 'conservative' | 'moderate' | 'aggressive'
-  feedbackSensitivity: number
-  categoryWeights: Record<ConversationCategory, number>
-  recentFeedbackWindow: number // days
 }

@@ -1,41 +1,32 @@
+import { NextResponse } from 'next/server'
 import { createClient, ensureUserProfile } from '@/lib/supabase/server'
-import { NextRequest, NextResponse } from 'next/server'
 
-export async function GET(request: NextRequest) {
+export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
-  const next = searchParams.get('next') ?? '/dashboard'
+  const redirectTo = searchParams.get('redirectTo') || '/'
+  const source = searchParams.get('source')
 
   if (code) {
     const supabase = createClient()
-    const { data: { user }, error } = await supabase.auth.exchangeCodeForSession(code)
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code)
 
-    if (!error && user) {
+    if (!error && data.user) {
       try {
-        // Ensure user profile exists in our database
-        await ensureUserProfile(user)
-
-        // Log successful authentication
-        console.log(`User ${user.email} authenticated successfully`)
-
-        const forwardedHost = request.headers.get('x-forwarded-host')
-        const isLocalEnv = process.env.NODE_ENV === 'development'
-
-        if (isLocalEnv) {
-          return NextResponse.redirect(`${origin}${next}`)
-        } else if (forwardedHost) {
-          return NextResponse.redirect(`https://${forwardedHost}${next}`)
-        } else {
-          return NextResponse.redirect(`${origin}${next}`)
-        }
-      } catch (profileError) {
-        console.error('Error creating user profile:', profileError)
-        return NextResponse.redirect(`${origin}/auth/auth-code-error?message=profile_creation_failed`)
+        await ensureUserProfile(data.user)
+      } catch (err) {
+        console.error('Failed to ensure user profile:', err)
       }
-    } else {
-      console.error('Authentication callback error:', error?.message)
+
+      // If signup came from extension, redirect to login page so the
+      // auth-bridge content script can detect the session and auto-close the tab
+      if (source === 'extension') {
+        return NextResponse.redirect(`${origin}/auth/login?source=extension`)
+      }
+
+      return NextResponse.redirect(`${origin}${redirectTo}`)
     }
   }
 
-  return NextResponse.redirect(`${origin}/auth/auth-code-error`)
+  return NextResponse.redirect(`${origin}/auth/login?error=Could not verify email`)
 }

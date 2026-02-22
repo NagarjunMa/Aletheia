@@ -6,9 +6,25 @@
       "Bash(npm install)",
       "Bash(npm install:*)",
       "Bash(npm run type-check:*)",
-      "Bash(npx:*)"
+      "Bash(npx:*)",
+      "Bash(npm run test:*)",
+      "Bash(pnpm add:*)",
+      "Bash(npm run dev:*)",
+      "Bash(npm run build:*)",
+      "Bash(curl:*)",
+      "mcp__supabase__list_tables",
+      "mcp__supabase__apply_migration",
+      "mcp__supabase__execute_sql",
+      "Bash(npm cache clean:*)",
+      "mcp__supabase__get_advisors",
+      "Bash(find:*)",
+      "Bash(/bashes)"
     ],
     "deny": [],
     "ask": []
-  }
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "supabase"
+  ]
 }

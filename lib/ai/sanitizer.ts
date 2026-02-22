@@ -1,8 +1,29 @@
 // AI Output Sanitization Layer
 // Created: December 8, 2024
-// Purpose: Clean and validate AI-generated content for safety and appropriateness
+// Enhanced: February 2026
+// Purpose: Clean and validate AI-generated content for safety, appropriateness, and authenticity
 
-import DOMPurify from 'isomorphic-dompurify'
+import { detectAIFingerprints, sanitizeAIFingerprints, type AIFingerprintResult } from './ai-fingerprint-detector'
+
+// Use dynamic import to handle ESM compatibility issues
+let DOMPurify: any = null
+
+async function getDOMPurify() {
+  if (!DOMPurify) {
+    try {
+      // Dynamic import for ESM compatibility
+      const { default: purify } = await import('isomorphic-dompurify')
+      DOMPurify = purify
+    } catch (error) {
+      console.warn('DOMPurify not available, using fallback sanitization')
+      // Fallback sanitization function
+      DOMPurify = {
+        sanitize: (html: string) => html.replace(/<script[^>]*>.*?<\/script>/gi, '').replace(/<[^>]*>/g, '')
+      }
+    }
+  }
+  return DOMPurify
+}
 
 export interface SanitizationOptions {
   allowHtml?: boolean
@@ -10,6 +31,9 @@ export interface SanitizationOptions {
   preserveFormatting?: boolean
   removeProfanity?: boolean
   validateEncoding?: boolean
+  detectAIFingerprints?: boolean
+  platform?: 'linkedin' | 'email' | 'general'
+  humanize?: boolean
 }
 
 export interface SanitizationResult {
@@ -20,6 +44,9 @@ export interface SanitizationResult {
   modificationsApplied: string[]
   warnings: string[]
   error?: string
+  aiFingerprints?: AIFingerprintResult
+  authenticityScore?: number
+  isAIGenerated?: boolean
 }
 
 // Common profanity patterns (basic implementation)
@@ -70,16 +97,19 @@ const BLOCKED_CONTENT_PATTERNS = [
 /**
  * Sanitize AI-generated content for safety and appropriateness
  */
-export function sanitizeAIOutput(
+export async function sanitizeAIOutput(
   content: string,
   options: SanitizationOptions = {}
-): SanitizationResult {
+): Promise<SanitizationResult> {
   const {
     allowHtml = false,
     maxLength = 10000,
     preserveFormatting = true,
     removeProfanity = true,
     validateEncoding = true,
+    detectAIFingerprints: enableAIDetection = true,
+    platform = 'general',
+    humanize = true,
   } = options
 
   const modificationsApplied: string[] = []
@@ -143,7 +173,8 @@ export function sanitizeAIOutput(
     // 5. HTML sanitization
     if (allowHtml) {
       const originalHtml = sanitizedContent
-      sanitizedContent = DOMPurify.sanitize(sanitizedContent, {
+      const purify = await getDOMPurify()
+      sanitizedContent = purify.sanitize(sanitizedContent, {
         ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'u', 'ol', 'ul', 'li'],
         ALLOWED_ATTR: [],
         KEEP_CONTENT: true,
@@ -184,7 +215,31 @@ export function sanitizeAIOutput(
       })
     }
 
-    // 8. Preserve formatting if requested
+    // 8. AI Fingerprint Detection and Humanization
+    let aiFingerprints: AIFingerprintResult | undefined
+    if (enableAIDetection) {
+      aiFingerprints = detectAIFingerprints(sanitizedContent, platform)
+
+      if (aiFingerprints.isAIGenerated) {
+        warnings.push(`Content appears AI-generated (confidence: ${aiFingerprints.confidence}%)`)
+
+        if (humanize) {
+          // Apply AI fingerprint sanitization
+          const previousContent = sanitizedContent
+          sanitizedContent = aiFingerprints.sanitizedContent
+
+          if (previousContent !== sanitizedContent) {
+            modificationsApplied.push('Applied AI fingerprint humanization')
+            modificationsApplied.push(...aiFingerprints.modifications)
+          }
+        }
+
+        // Add specific warnings for detected patterns
+        warnings.push(...aiFingerprints.warnings)
+      }
+    }
+
+    // 9. Preserve formatting if requested
     if (preserveFormatting) {
       // Normalize line breaks
       sanitizedContent = sanitizedContent.replace(/\r\n/g, '\n')
@@ -200,7 +255,7 @@ export function sanitizeAIOutput(
       }
     }
 
-    // 9. Final validation
+    // 10. Final validation
     if (sanitizedContent.length === 0) {
       warnings.push('Content was completely removed during sanitization')
     }
@@ -212,6 +267,9 @@ export function sanitizeAIOutput(
       sanitizedLength: sanitizedContent.length,
       modificationsApplied,
       warnings,
+      aiFingerprints,
+      authenticityScore: aiFingerprints?.authenticityScore,
+      isAIGenerated: aiFingerprints?.isAIGenerated,
     }
   } catch (error) {
     console.error('Sanitization error:', error)
@@ -230,23 +288,57 @@ export function sanitizeAIOutput(
 /**
  * Quick sanitization for display purposes
  */
-export function quickSanitize(content: string): string {
-  const result = sanitizeAIOutput(content, {
+export async function quickSanitize(content: string): Promise<string> {
+  const result = await sanitizeAIOutput(content, {
     allowHtml: false,
     maxLength: 5000,
     preserveFormatting: true,
     removeProfanity: true,
     validateEncoding: true,
+    detectAIFingerprints: true,
+    humanize: true,
   })
 
   return result.success ? result.sanitizedContent : ''
 }
 
 /**
+ * Sanitize AI-generated content for LinkedIn messages
+ */
+export async function sanitizeForLinkedIn(content: string): Promise<SanitizationResult> {
+  return await sanitizeAIOutput(content, {
+    allowHtml: false,
+    maxLength: 2000, // LinkedIn message limits
+    preserveFormatting: true,
+    removeProfanity: true,
+    validateEncoding: true,
+    detectAIFingerprints: true,
+    platform: 'linkedin',
+    humanize: true,
+  })
+}
+
+/**
+ * Sanitize AI-generated content for email messages
+ */
+export async function sanitizeForEmail(content: string): Promise<SanitizationResult> {
+  return await sanitizeAIOutput(content, {
+    allowHtml: false,
+    maxLength: 5000, // Email length limits
+    preserveFormatting: true,
+    removeProfanity: true,
+    validateEncoding: true,
+    detectAIFingerprints: true,
+    platform: 'email',
+    humanize: true,
+  })
+}
+
+/**
  * Sanitize content for email or external sharing
  */
-export function sanitizeForExport(content: string): SanitizationResult {
-  return sanitizeAIOutput(content, {
+export async function sanitizeForExport(content: string): Promise<SanitizationResult> {
+  return await sanitizeAIOutput(content, {
     allowHtml: false,
     maxLength: 10000,
     preserveFormatting: true,
@@ -258,8 +350,8 @@ export function sanitizeForExport(content: string): SanitizationResult {
 /**
  * Validate that content is safe for database storage
  */
-export function validateForStorage(content: string): boolean {
-  const result = sanitizeAIOutput(content, {
+export async function validateForStorage(content: string): Promise<boolean> {
+  const result = await sanitizeAIOutput(content, {
     allowHtml: false,
     maxLength: 10000,
     preserveFormatting: true,
@@ -358,10 +450,10 @@ export function sanitizeResponseMetadata(
 const sanitizationCache = new Map<string, { result: SanitizationResult; timestamp: number }>()
 const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 
-export function sanitizeWithCaching(
+export async function sanitizeWithCaching(
   content: string,
   options: SanitizationOptions = {}
-): SanitizationResult {
+): Promise<SanitizationResult> {
   // Create cache key from content hash and options
   const cacheKey = `${hashContent(content)}_${JSON.stringify(options)}`
   const cached = sanitizationCache.get(cacheKey)
@@ -370,7 +462,7 @@ export function sanitizeWithCaching(
     return cached.result
   }
 
-  const result = sanitizeAIOutput(content, options)
+  const result = await sanitizeAIOutput(content, options)
 
   // Cache successful results only
   if (result.success) {

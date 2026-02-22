@@ -6,6 +6,13 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
+  const pathname = request.nextUrl.pathname
+  const isAuthRelated = pathname.startsWith('/auth') || pathname.startsWith('/api/extension')
+
+  if (isAuthRelated) {
+    console.log(`[MW] ${request.method} ${pathname}${request.nextUrl.search}`)
+  }
+
   let response = NextResponse.next({
     request: {
       headers: request.headers,
@@ -61,6 +68,20 @@ export async function middleware(request: NextRequest) {
   // Refresh session if expired - required for Server Components
   const { data: { user }, error } = await supabase.auth.getUser()
 
+  if (isAuthRelated) {
+    console.log(`[MW] getUser result: user=${user?.email || 'null'}, error=${error?.code || 'none'}`)
+  }
+
+  // Handle stale refresh token (caused by concurrent requests racing to refresh)
+  // Sign out to clear the dead cookies so the user gets a clean login redirect
+  if (error?.code === 'refresh_token_already_used') {
+    await supabase.auth.signOut()
+    const loginUrl = request.nextUrl.clone()
+    loginUrl.pathname = '/auth/login'
+    loginUrl.searchParams.set('redirectTo', request.nextUrl.pathname)
+    return NextResponse.redirect(loginUrl)
+  }
+
   // Protected routes - redirect to login if not authenticated
   const isProtectedRoute =
     request.nextUrl.pathname.startsWith('/dashboard') ||
@@ -75,18 +96,23 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl)
   }
 
-  // Redirect authenticated users away from auth pages
+  // Redirect authenticated users away from login/register pages (but NOT reset-password or forgot-password)
   const isAuthRoute =
     request.nextUrl.pathname.startsWith('/auth/login') ||
-    request.nextUrl.pathname.startsWith('/auth/register') ||
-    request.nextUrl.pathname.startsWith('/auth/reset')
+    request.nextUrl.pathname.startsWith('/auth/register')
 
-  if (isAuthRoute && user) {
+  const isExtensionLogin = request.nextUrl.searchParams.get('source') === 'extension'
+  if (isAuthRoute && user && !isExtensionLogin) {
     const redirectTo = request.nextUrl.searchParams.get('redirectTo')
     const dashboardUrl = request.nextUrl.clone()
-    dashboardUrl.pathname = redirectTo || '/dashboard'
+    dashboardUrl.pathname = redirectTo || '/'
     dashboardUrl.searchParams.delete('redirectTo')
+    console.log(`[MW] Redirecting authenticated user away from auth page → ${dashboardUrl.pathname}`)
     return NextResponse.redirect(dashboardUrl)
+  }
+
+  if (isAuthRoute && isExtensionLogin) {
+    console.log(`[MW] Extension login: allowing auth page (user=${user?.email || 'null'})`)
   }
 
   // Add security headers
@@ -112,21 +138,6 @@ export async function middleware(request: NextRequest) {
   ].join('; ')
 
   response.headers.set('Content-Security-Policy', cspHeader)
-
-  // Rate limiting headers (basic implementation)
-  const userAgent = request.headers.get('user-agent') || ''
-  const isBot = /bot|crawler|spider|scraper/i.test(userAgent)
-
-  if (isBot) {
-    // Limit bots more aggressively
-    response.headers.set('X-RateLimit-Limit', '10')
-    response.headers.set('X-RateLimit-Remaining', '10')
-  } else {
-    response.headers.set('X-RateLimit-Limit', '100')
-    response.headers.set('X-RateLimit-Remaining', '100')
-  }
-
-  response.headers.set('X-RateLimit-Reset', String(Math.floor(Date.now() / 1000) + 3600))
 
   return response
 }
