@@ -18,7 +18,11 @@
       "Bash(npm cache clean:*)",
       "mcp__supabase__get_advisors",
       "Bash(find:*)",
-      "Bash(/bashes)"
+      "Bash(/bashes)",
+      "Bash(npm ls:*)",
+      "Bash(xargs:*)",
+      "Bash(ls:*)",
+      "mcp__plugin_context7_context7__query-docs"
     ],
     "deny": [],
     "ask": []
@@ -26,5 +30,18 @@
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "supabase"
-  ]
+  ],
+  "skills": [
+    "api-documentation-generator",
+    "frontend-design",
+    "nextjs",
+    "nextjs-best-practices",
+    "nextjs-supabase-auth",
+    "ui-ux-pro-max",
+    "vercel-react-best-practices",
+    "web-design-guidelines"
+  ],
+  "enabledPlugins": {
+    "document-skills@anthropic-agent-skills": true
+  }
 }

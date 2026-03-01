@@ -265,7 +265,8 @@ export async function POST(request: NextRequest) {
     // Parse response based on category with validation
     if (category === 'cold_email' || category === 'linkedin_inmail') {
       try {
-        const parsed = JSON.parse(rawContent)
+        const cleanedContent = stripMarkdownCodeFences(rawContent)
+        const parsed = JSON.parse(cleanedContent)
 
         if (parsed.subject_line && parsed.body) {
           const basicSubjectSanitization = sanitize(parsed.subject_line)
@@ -341,6 +342,41 @@ export async function POST(request: NextRequest) {
           })
         }
 
+        // Try JSON parse on sanitized content (fence-stripped) before falling through to regex
+        try {
+          const cleanedSanitized = stripMarkdownCodeFences(sanitizedContent)
+          const parsedFallback = JSON.parse(cleanedSanitized)
+          if (parsedFallback.subject_line && parsedFallback.body) {
+            const maxWords = category === 'cold_email' ? 150 : 120
+            const wordCount = parsedFallback.word_count || countWords(parsedFallback.body)
+            let finalBody = parsedFallback.body
+            if (wordCount > maxWords) {
+              finalBody = truncateToWordLimit(finalBody, maxWords)
+            }
+            return NextResponse.json({
+              success: true,
+              subject_line: parsedFallback.subject_line,
+              body: finalBody,
+              category,
+              word_count: countWords(finalBody),
+              character_count: finalBody.length,
+              validation: {
+                word_limit_passed: countWords(finalBody) <= maxWords,
+                sanitization_applied: true,
+                ai_patterns_detected: enhancedSanitization.isAIGenerated,
+                json_parsing_successful: true,
+                fallback_json_recovery: true
+              },
+              usage: tokenUsage,
+              processingTime
+            }, {
+              headers: { ...corsHeaders, ...rateLimitHeaders }
+            })
+          }
+        } catch {
+          // JSON recovery failed, fall through to regex extraction
+        }
+
         const subject = extractSubjectFromText(sanitizedContent)
         const body = extractBodyFromText(sanitizedContent)
 
@@ -388,38 +424,21 @@ export async function POST(request: NextRequest) {
     if (finalContent.length > 300) {
       console.warn(`LinkedIn connection exceeds character limit: ${finalContent.length} > 300`)
 
-      const sentences = finalContent.match(/[^.!?]+[.!?]+/g) || [finalContent]
+      // Smart truncation: find the last sentence boundary (period) within 300 chars
+      const within300 = finalContent.substring(0, 300)
+      const lastPeriod = within300.lastIndexOf('.')
 
-      if (sentences.length >= 3) {
-        const withoutHook = sentences.slice(1).join(' ').trim()
-        if (withoutHook.length <= 300) {
-          finalContent = withoutHook
-          wasTruncated = true
-        } else {
-          const lastSentence = sentences[sentences.length - 1]?.trim() ?? ''
-          if (lastSentence.length > 0 && lastSentence.length <= 300) {
-            finalContent = lastSentence
-            wasTruncated = true
-          } else {
-            finalContent = finalContent.substring(0, 297) + '...'
-            wasTruncated = true
-          }
-        }
-      } else if (sentences.length === 2) {
-        const secondSentence = sentences[1]?.trim() ?? ''
-        const firstTrimmed = (sentences[0] ?? '').substring(0, 300 - secondSentence.length - 2).trim()
-        const combined = firstTrimmed + '. ' + secondSentence
-        if (combined.length <= 300) {
-          finalContent = combined
-          wasTruncated = true
-        } else {
-          finalContent = finalContent.substring(0, 297) + '...'
-          wasTruncated = true
-        }
+      if (lastPeriod > 150) {
+        // Cut at the last complete sentence
+        finalContent = finalContent.substring(0, lastPeriod + 1).trim()
       } else {
-        finalContent = finalContent.substring(0, 297) + '...'
-        wasTruncated = true
+        // Fallback: cut at last word boundary to avoid chopping mid-word
+        const lastSpace = within300.lastIndexOf(' ')
+        finalContent = finalContent.substring(0, lastSpace > 0 ? lastSpace : 297).trim()
       }
+
+      wasTruncated = true
+      console.log(`LinkedIn message truncated to ${finalContent.length} chars at sentence boundary`)
     }
 
     return NextResponse.json({
@@ -492,8 +511,14 @@ function extractSubjectFromText(content: string): string {
 }
 
 function extractBodyFromText(content: string): string {
-  let body = content.replace(/(?:Subject|SUBJECT):\s*(.+)\n?/i, '')
+  const body = content.replace(/(?:Subject|SUBJECT):\s*(.+)\n?/i, '')
   return body.trim()
+}
+
+function stripMarkdownCodeFences(content: string): string {
+  const trimmed = content.trim()
+  const match = trimmed.match(/^```(?:\w+)?\s*\n?([\s\S]*?)\n?\s*```$/)
+  return match?.[1] ? match[1].trim() : trimmed
 }
 
 // GET endpoint for health check with Bearer token validation
@@ -511,7 +536,7 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({
-      service: 'Ascendia Extension API',
+      service: 'Aletheia Extension API',
       version: '2.0.0',
       endpoints: {
         generate: 'POST /api/extension/generate'

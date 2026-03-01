@@ -2,7 +2,7 @@
 // Created: December 7, 2024
 // Purpose: Handle authentication, session management, and security
 
-import { createServerClient } from '@supabase/ssr'
+import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
@@ -27,7 +27,7 @@ export async function middleware(request: NextRequest) {
         get(name: string) {
           return request.cookies.get(name)?.value
         },
-        set(name: string, value: string, options) {
+        set(name: string, value: string, options: CookieOptions) {
           request.cookies.set({
             name,
             value,
@@ -44,7 +44,7 @@ export async function middleware(request: NextRequest) {
             ...options,
           })
         },
-        remove(name: string, options) {
+        remove(name: string, options: CookieOptions) {
           request.cookies.set({
             name,
             value: '',
@@ -73,9 +73,26 @@ export async function middleware(request: NextRequest) {
   }
 
   // Handle stale refresh token (caused by concurrent requests racing to refresh)
-  // Sign out to clear the dead cookies so the user gets a clean login redirect
+  // Do NOT call signOut() here — a concurrent request may have already refreshed
+  // successfully and set fresh cookies. signOut() would destroy those too.
   if (error?.code === 'refresh_token_already_used') {
-    await supabase.auth.signOut()
+    console.log('[MW] refresh_token_already_used — returning 401 without signOut (concurrent refresh race)')
+
+    // Do not redirect API requests to the HTML login page
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json(
+        { error: 'Session expired. Please log in again.' },
+        { status: 401 }
+      )
+    }
+
+    // Auth pages don't need authentication — let them through
+    // signOut() just clears stale cookies; the refresh token is already invalid
+    if (pathname.startsWith('/auth')) {
+      await supabase.auth.signOut()
+      return response
+    }
+
     const loginUrl = request.nextUrl.clone()
     loginUrl.pathname = '/auth/login'
     loginUrl.searchParams.set('redirectTo', request.nextUrl.pathname)
@@ -102,7 +119,8 @@ export async function middleware(request: NextRequest) {
     request.nextUrl.pathname.startsWith('/auth/register')
 
   const isExtensionLogin = request.nextUrl.searchParams.get('source') === 'extension'
-  if (isAuthRoute && user && !isExtensionLogin) {
+  const isServerAction = request.headers.has('next-action')
+  if (isAuthRoute && user && !isExtensionLogin && !isServerAction) {
     const redirectTo = request.nextUrl.searchParams.get('redirectTo')
     const dashboardUrl = request.nextUrl.clone()
     dashboardUrl.pathname = redirectTo || '/'

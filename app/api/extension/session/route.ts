@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
+import { headers } from 'next/headers'
+
+export const dynamic = 'force-dynamic'
 
 function getCorsHeaders(request: NextRequest) {
   const origin = request.headers.get('origin')
-  const isExtension = request.headers.get('x-extension-source') === 'ascendia-extension'
+  const isExtension = request.headers.get('x-extension-source') === 'aletheia-extension'
 
   const allowedPatterns = [
     /^chrome-extension:\/\//,
@@ -13,8 +16,11 @@ function getCorsHeaders(request: NextRequest) {
 
   const isAllowed = origin && allowedPatterns.some(p => p.test(origin))
 
+  // Allow null origin — comes from service workers, not cross-origin browser pages
+  const allowNullOrigin = !origin
+
   return {
-    'Access-Control-Allow-Origin': isAllowed ? origin : (isExtension ? '*' : ''),
+    'Access-Control-Allow-Origin': isAllowed ? origin : ((isExtension || allowNullOrigin) ? '*' : ''),
     'Access-Control-Allow-Methods': 'GET, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, X-Extension-Source',
     'Access-Control-Allow-Credentials': isAllowed ? 'true' : '',
@@ -30,6 +36,9 @@ export async function OPTIONS(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
+  // Call headers() to forcefully opt out of Next.js static generation caching
+  headers()
+
   console.log('[EXT-SESSION] GET /api/extension/session — origin:', request.headers.get('origin'))
   const corsHeaders = getCorsHeaders(request)
 
@@ -67,7 +76,7 @@ export async function GET(request: NextRequest) {
     if (error || !user) {
       console.log('[EXT-SESSION] → 401 Not authenticated')
       return NextResponse.json(
-        { error: 'Not authenticated. Please log in to the Ascendia web app first.' },
+        { error: 'Not authenticated. Please log in to the Aletheia web app first.' },
         { status: 401, headers: corsHeaders }
       )
     }

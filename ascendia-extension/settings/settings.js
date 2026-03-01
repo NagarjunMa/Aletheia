@@ -1,4 +1,4 @@
-// Ascendia Extension Settings JavaScript
+// Aletheia Extension Settings JavaScript
 // Manages extension configuration, resume storage, and preferences
 
 // Initialize when DOM loads
@@ -9,9 +9,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   await checkConnectionStatus()
 })
 
+// Production default — used when no custom URL has been saved
+const DEFAULT_API_URL = 'https://aletheia.vercel.app'
+
 // Global state
 let currentSettings = {
-  apiUrl: 'http://localhost:3000',
+  apiUrl: DEFAULT_API_URL,
   resume: '',
   resumeFile: null,
   personalInfo: '',
@@ -21,6 +24,9 @@ let currentSettings = {
 }
 
 async function initializeSettings() {
+  // Read the API base URL from chrome.storage.sync (shared across devices)
+  const { apiBaseUrl } = await chrome.storage.sync.get('apiBaseUrl')
+
   const stored = await chrome.storage.local.get([
     'apiUrl', 'resume', 'resumeFile', 'personalInfo',
     'settings'
@@ -29,14 +35,18 @@ async function initializeSettings() {
   currentSettings = {
     ...currentSettings,
     ...stored,
-    ...stored.settings
+    ...stored.settings,
+    // Prefer sync storage, then local, then default
+    apiUrl: apiBaseUrl || stored.apiUrl || DEFAULT_API_URL
   }
 
   updateStatusIndicators()
 }
 
 function setupEventListeners() {
-  // API URL
+  // API URL — select dropdown + custom text input + hidden legacy input
+  document.getElementById('apiUrlSelect').addEventListener('change', handleApiUrlSelectChange)
+  document.getElementById('apiUrlCustom').addEventListener('input', handleApiUrlCustomChange)
   document.getElementById('apiUrlInput').addEventListener('input', handleApiUrlChange)
   document.getElementById('testConnectionBtn').addEventListener('click', testConnection)
 
@@ -83,7 +93,23 @@ function setupEventListeners() {
 }
 
 async function loadUserSettings() {
-  document.getElementById('apiUrlInput').value = currentSettings.apiUrl || 'https://your-app.vercel.app'
+  // Populate the API URL select / custom input
+  const apiSelect = document.getElementById('apiUrlSelect')
+  const apiCustomInput = document.getElementById('apiUrlCustom')
+  const currentUrl = currentSettings.apiUrl || DEFAULT_API_URL
+
+  // Check if the current URL matches one of the preset options
+  const presetValues = Array.from(apiSelect.options).map(o => o.value)
+  if (presetValues.includes(currentUrl)) {
+    apiSelect.value = currentUrl
+    apiCustomInput.classList.add('hidden')
+  } else {
+    apiSelect.value = 'custom'
+    apiCustomInput.value = currentUrl
+    apiCustomInput.classList.remove('hidden')
+  }
+
+  document.getElementById('apiUrlInput').value = currentUrl
   document.getElementById('personalInfo').value = currentSettings.personalInfo || ''
 
   // Checkboxes
@@ -211,12 +237,12 @@ async function handleConnect() {
 
     if (result && result.success) {
       console.log('[SETTINGS] ✓ Connected:', result.user?.email)
-      showStatusMessage('Connected to Ascendia!', 'success')
+      showStatusMessage('Connected to Aletheia!', 'success')
       await updateStatusIndicators()
       await checkConnectionStatus()
     } else {
       console.error('[SETTINGS] ✗ Failed:', result?.error)
-      showStatusMessage(result?.error || 'Connection failed. Make sure you are logged in to the Ascendia web app.', 'error')
+      showStatusMessage(result?.error || 'Connection failed. Make sure you are logged in to the Aletheia web app.', 'error')
     }
   } catch (error) {
     console.error('[SETTINGS] ✗ authenticate threw:', error)
@@ -228,7 +254,7 @@ async function handleConnect() {
 }
 
 async function handleDisconnect() {
-  const confirmed = confirm('Disconnect from Ascendia? You will need to reconnect to use the extension.')
+  const confirmed = confirm('Disconnect from Aletheia? You will need to reconnect to use the extension.')
   if (!confirmed) return
 
   try {
@@ -237,7 +263,7 @@ async function handleDisconnect() {
     })
 
     if (result && result.success) {
-      showStatusMessage('Disconnected from Ascendia', 'success')
+      showStatusMessage('Disconnected from Aletheia', 'success')
       await updateStatusIndicators()
       await checkConnectionStatus()
     }
@@ -247,6 +273,28 @@ async function handleDisconnect() {
 }
 
 // Event Handlers
+function handleApiUrlSelectChange(e) {
+  const value = e.target.value
+  const customInput = document.getElementById('apiUrlCustom')
+
+  if (value === 'custom') {
+    customInput.classList.remove('hidden')
+    customInput.focus()
+    currentSettings.apiUrl = customInput.value.trim() || DEFAULT_API_URL
+  } else {
+    customInput.classList.add('hidden')
+    currentSettings.apiUrl = value
+  }
+
+  // Keep the hidden legacy input in sync
+  document.getElementById('apiUrlInput').value = currentSettings.apiUrl
+}
+
+function handleApiUrlCustomChange(e) {
+  currentSettings.apiUrl = e.target.value.trim()
+  document.getElementById('apiUrlInput').value = currentSettings.apiUrl
+}
+
 function handleApiUrlChange(e) {
   currentSettings.apiUrl = e.target.value.trim()
 }
@@ -498,9 +546,10 @@ async function clearAllData() {
     showLoadingOverlay('Clearing all data...')
 
     await chrome.storage.local.clear()
+    await chrome.storage.sync.remove('apiBaseUrl')
 
     currentSettings = {
-      apiUrl: 'http://localhost:3000',
+      apiUrl: DEFAULT_API_URL,
       resume: '',
       resumeFile: null,
       personalInfo: '',
@@ -546,7 +595,7 @@ async function exportUsageData() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `ascendia-usage-data-${new Date().toISOString().split('T')[0]}.json`
+    a.download = `aletheia-usage-data-${new Date().toISOString().split('T')[0]}.json`
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
@@ -568,6 +617,9 @@ async function saveAllSettings() {
     if (!currentSettings.apiUrl) {
       throw new Error('API URL is required')
     }
+
+    // Persist the API base URL in sync storage (shared across devices)
+    await chrome.storage.sync.set({ apiBaseUrl: currentSettings.apiUrl })
 
     await chrome.storage.local.set({
       apiUrl: currentSettings.apiUrl,
@@ -597,7 +649,9 @@ async function resetToDefaults() {
   if (!confirmed) return
 
   try {
-    document.getElementById('apiUrlInput').value = 'https://your-app.vercel.app'
+    document.getElementById('apiUrlInput').value = DEFAULT_API_URL
+    document.getElementById('apiUrlSelect').value = DEFAULT_API_URL
+    document.getElementById('apiUrlCustom').classList.add('hidden')
     document.getElementById('personalInfo').value = ''
     document.getElementById('autoFillEnabled').checked = true
     document.getElementById('showNotifications').checked = true
@@ -607,7 +661,7 @@ async function resetToDefaults() {
     const { resume, resumeFile } = currentSettings
     currentSettings = {
       resume, resumeFile,
-      apiUrl: 'http://localhost:3000',
+      apiUrl: DEFAULT_API_URL,
       personalInfo: '',
       autoFillEnabled: true,
       showNotifications: true,
@@ -658,6 +712,7 @@ function autoSave() {
   clearTimeout(saveTimeout)
   saveTimeout = setTimeout(async () => {
     try {
+      await chrome.storage.sync.set({ apiBaseUrl: currentSettings.apiUrl })
       await chrome.storage.local.set({
         apiUrl: currentSettings.apiUrl,
         resume: currentSettings.resume,
@@ -678,4 +733,4 @@ function autoSave() {
 document.addEventListener('input', autoSave)
 document.addEventListener('change', autoSave)
 
-console.log('Ascendia Settings page loaded')
+console.log('Aletheia Settings page loaded')

@@ -1,8 +1,8 @@
-# Ascendia - Testing & Deployment Framework
+# Aletheia - Testing & Deployment Framework
 
 ## Overview
 
-This repository contains a comprehensive testing framework and deployment configuration for Ascendia, a Personalized Voice Agent (PVA) that learns and adapts to users' natural writing styles.
+This repository contains a comprehensive testing framework and deployment configuration for Aletheia, a Personalized Voice Agent (PVA) that learns and adapts to users' natural writing styles.
 
 ## 📋 Testing Framework
 
@@ -78,7 +78,7 @@ This repository contains a comprehensive testing framework and deployment config
 ```bash
 # Clone the repository
 git clone <repository-url>
-cd ascendia
+cd aletheia
 
 # Install dependencies
 npm ci

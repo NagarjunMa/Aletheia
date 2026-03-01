@@ -1,5 +1,5 @@
 // Auth Bridge Content Script
-// Injected into the Ascendia login tab to relay the Supabase session to the extension.
+// Injected into the Aletheia login tab to relay the Supabase session to the extension.
 // Supabase's createBrowserClient stores session data in cookies (via document.cookie)
 // but the service worker's chrome.cookies.getAll() may not see them due to cookie
 // partitioning, SameSite, or localhost-specific issues. This script reads the session

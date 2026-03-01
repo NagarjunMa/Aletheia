@@ -1,7 +1,7 @@
 {
-  "name": "ascendia-extension",
+  "name": "aletheia-extension",
   "version": "1.1.0",
-  "description": "Enhanced Ascendia Chrome Extension with enterprise-grade security and performance",
+  "description": "Enhanced Aletheia Chrome Extension with enterprise-grade security and performance",
   "private": true,
   "scripts": {
     "build": "tsc",
@@ -30,7 +30,7 @@
     "security",
     "performance"
   ],
-  "author": "Ascendia Team",
+  "author": "Aletheia Team",
   "license": "MIT",
   "engines": {
     "node": ">=18.0.0"
@@ -42,5 +42,8 @@
     "audit": {
       "level": "moderate"
     }
+  },
+  "dependencies": {
+    "pdfjs-dist": "^3.11.174"
   }
 }

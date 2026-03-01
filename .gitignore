@@ -17,8 +17,13 @@ pnpm-debug.log*
 .env.test.local
 .env.production.local
 .env.supabase
+.env.production
+.env.staging
+.env.sentry-build-plugin
 
-# API keys and sensitive configuration
+# API keys, certificates, and sensitive configuration
+*.pem
+*.key
 .anthropic
 .openai
 secrets.json
@@ -101,12 +106,9 @@ Thumbs.db
 *~
 
 # =============================================================================
-# SENTRY CONFIG FILES (development only)
+# SENTRY CLI CONFIG (contains auth token)
 # =============================================================================
 .sentryclirc
-sentry.client.config.ts
-sentry.edge.config.ts
-sentry.server.config.ts
 
 # =============================================================================
 # DATABASE & SUPABASE
@@ -119,7 +121,6 @@ db_backup_*
 # =============================================================================
 # DEPLOYMENT
 # =============================================================================
-vercel.json
 Dockerfile.prod
 docker-compose.override.yml
 .dockerignore
@@ -173,6 +174,8 @@ jspm_packages/
 # =============================================================================
 # CACHES
 # =============================================================================
+.cache/
+.turbo/
 .eslintcache
 .stylelintcache
 .rpt2_cache/

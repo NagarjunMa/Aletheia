@@ -1,4 +1,4 @@
-// Ascendia Extension Popup JavaScript
+// Aletheia Extension Popup JavaScript
 // Main UI logic and user interaction handlers
 
 let currentProfile = null;
@@ -18,7 +18,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // React to auth state changes (e.g., auth-bridge stores session while popup is open)
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === 'local' && changes.ascendia_auth) {
+    if (area === 'local' && changes.aletheia_auth) {
       console.log('[POPUP] Auth state changed, reinitializing...');
       initializePopup().then(() => checkLinkedInProfile());
     }
@@ -69,6 +69,11 @@ async function initializePopup() {
 function setupEventListeners() {
   // Settings button
   document.getElementById('settingsBtn').addEventListener('click', openSettings);
+
+  // Refresh button
+  document.getElementById('refreshBtn').addEventListener('click', () => {
+    checkLinkedInProfile(true);
+  });
 
   // Generate button
   document.getElementById('generateBtn')?.addEventListener('click', generateMessage);
@@ -128,9 +133,9 @@ function showAuthRequired(authStatus) {
   // Show auth prompt instead of main content
   document.getElementById('mainContent').innerHTML = `
     <div class="setup-required">
-      <h3>Connect to Ascendia</h3>
-      <p>Log in to the Ascendia web app, then click the button below to connect this extension to your account.</p>
-      <button id="connectBtn" class="action-btn primary">Connect to Ascendia</button>
+      <h3>Connect to Aletheia</h3>
+      <p>Log in to the Aletheia web app, then click the button below to connect this extension to your account.</p>
+      <button id="connectBtn" class="action-btn primary">Connect to Aletheia</button>
       <button id="openSettingsBtn" class="action-btn secondary" style="margin-top: 8px;">Open Settings</button>
       <div id="authError" class="error-message hidden" style="margin-top: 8px;">
         <span id="authErrorText"></span>
@@ -193,7 +198,7 @@ function showAuthRequired(authStatus) {
         setTimeout(() => window.location.reload(), 500);
       } else {
         console.error('[POPUP] Authentication failed:', result?.error);
-        btn.textContent = 'Connect to Ascendia';
+        btn.textContent = 'Connect to Aletheia';
         btn.disabled = false;
         const errorMsg = result?.error?.includes('timed out')
           ? result.error
@@ -204,7 +209,7 @@ function showAuthRequired(authStatus) {
       clearInterval(authPollInterval);
       if (authResolved) return;
       console.error('[POPUP] authenticate threw:', error);
-      btn.textContent = 'Connect to Ascendia';
+      btn.textContent = 'Connect to Aletheia';
       btn.disabled = false;
       showError('Connection failed. Please try again.');
     }
@@ -213,19 +218,31 @@ function showAuthRequired(authStatus) {
   document.getElementById('openSettingsBtn').addEventListener('click', openSettings);
 }
 
-async function checkLinkedInProfile() {
+async function checkLinkedInProfile(forceRefresh = false) {
+  const readingBanner = document.getElementById('readingProfile');
+  const refreshIcon = document.querySelector('#refreshBtn .refresh-icon');
+
+  // Reset banner state
+  document.getElementById('profileBanner').classList.add('hidden');
+  document.getElementById('noProfile').classList.add('hidden');
+  readingBanner.style.display = 'flex';
+  refreshIcon?.classList.add('spinning');
+
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
     if (!tab.url?.includes('linkedin.com/in/')) {
+      readingBanner.style.display = 'none';
+      refreshIcon?.classList.remove('spinning');
       showNoProfile();
       return;
     }
 
     // Fix 6B: Content script retry — try sending, inject if not ready
     let response;
+    const messageAction = forceRefresh ? 'reextractProfile' : 'getProfile';
     try {
-      response = await chrome.tabs.sendMessage(tab.id, { action: 'getProfile' });
+      response = await chrome.tabs.sendMessage(tab.id, { action: messageAction });
     } catch (err) {
       // Content script not injected — try injecting it, then retry once
       console.log('[POPUP] Content script not ready, injecting...');
@@ -241,6 +258,9 @@ async function checkLinkedInProfile() {
       }
     }
 
+    readingBanner.style.display = 'none';
+    refreshIcon?.classList.remove('spinning');
+
     if (response?.success && response.profile?.name) {
       currentProfile = response.profile;
       showProfileDetected(response.profile);
@@ -250,6 +270,8 @@ async function checkLinkedInProfile() {
     }
   } catch (error) {
     console.error('Error checking LinkedIn profile:', error);
+    readingBanner.style.display = 'none';
+    refreshIcon?.classList.remove('spinning');
     showNoProfile();
   }
 }
@@ -318,12 +340,22 @@ async function generateMessage() {
       await storeGeneration(response);
       await incrementUsageCount();
     } else {
-      showError(response.error || 'Generation failed. Please try again.');
+      const errMsg = response.error || 'Generation failed. Please try again.';
+      if (isAuthError(errMsg)) {
+        showAuthError(errMsg);
+      } else {
+        showError(errMsg);
+      }
     }
 
   } catch (error) {
     console.error('Generation error:', error);
-    showError('Network error. Please check your connection and try again.');
+    const errMsg = error.message || 'Network error. Please check your connection and try again.';
+    if (isAuthError(errMsg)) {
+      showAuthError(errMsg);
+    } else {
+      showError('Network error. Please check your connection and try again.');
+    }
   } finally {
     setGeneratingState(false);
   }
@@ -694,6 +726,63 @@ function showError(message) {
 
 function hideError() {
   document.getElementById('errorMessage')?.classList.add('hidden');
+}
+
+function isAuthError(message) {
+  if (!message) return false;
+  return message.startsWith('AUTH_FAILED:') ||
+    message.includes('Not authenticated') ||
+    message.includes('Session expired');
+}
+
+function showAuthError(message) {
+  const errorEl = document.getElementById('errorMessage');
+  const errorText = document.getElementById('errorText');
+
+  if (!errorEl || !errorText) {
+    console.warn('showAuthError: error elements not in DOM:', message);
+    return;
+  }
+
+  // Strip the AUTH_FAILED: prefix for display
+  const displayMsg = message.replace(/^AUTH_FAILED:\s*/, '');
+
+  errorText.innerHTML = '';
+  errorText.textContent = displayMsg + ' ';
+
+  const reauthBtn = document.createElement('button');
+  reauthBtn.className = 'reauth-btn';
+  reauthBtn.textContent = 'Re-authenticate';
+  reauthBtn.addEventListener('click', async () => {
+    reauthBtn.textContent = 'Connecting...';
+    reauthBtn.disabled = true;
+    try {
+      // Clear stale auth first so handleAuthenticate() opens login tab
+      await new Promise((resolve) => {
+        chrome.runtime.sendMessage({ action: 'logout' }, resolve);
+      });
+      const result = await new Promise((resolve) => {
+        chrome.runtime.sendMessage({ action: 'authenticate' }, resolve);
+      });
+      if (result?.success) {
+        hideError();
+        await initializePopup();
+        await checkLinkedInProfile();
+      } else {
+        reauthBtn.textContent = 'Re-authenticate';
+        reauthBtn.disabled = false;
+        showError(result?.error || 'Re-authentication failed. Please try again.');
+      }
+    } catch (err) {
+      reauthBtn.textContent = 'Re-authenticate';
+      reauthBtn.disabled = false;
+      showError('Re-authentication failed. Please try again.');
+    }
+  });
+
+  errorText.appendChild(reauthBtn);
+  errorEl.classList.remove('hidden');
+  // Don't auto-hide auth errors — user needs to take action
 }
 
 function showTemporaryFeedback(element, text) {

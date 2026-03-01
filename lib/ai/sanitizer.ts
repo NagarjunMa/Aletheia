@@ -43,10 +43,10 @@ export interface SanitizationResult {
   sanitizedLength: number
   modificationsApplied: string[]
   warnings: string[]
-  error?: string
-  aiFingerprints?: AIFingerprintResult
-  authenticityScore?: number
-  isAIGenerated?: boolean
+  error?: string | undefined
+  aiFingerprints?: AIFingerprintResult | undefined
+  authenticityScore?: number | undefined
+  isAIGenerated?: boolean | undefined
 }
 
 // Common profanity patterns (basic implementation)

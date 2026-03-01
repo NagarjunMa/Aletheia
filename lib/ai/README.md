@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Ascendia AI integration provides sophisticated text processing capabilities using Anthropic's Claude 3.5 Sonnet model. This integration includes grammar correction, adaptive polishing, CPL analysis, and comprehensive error handling with proper cost management.
+The Aletheia AI integration provides sophisticated text processing capabilities using Anthropic's Claude 3.5 Sonnet model. This integration includes grammar correction, adaptive polishing, CPL analysis, and comprehensive error handling with proper cost management.
 
 ## Architecture
 
@@ -441,4 +441,4 @@ describe('Claude API Integration', () => {
 
 **Status**: ✅ Production Ready
 
-The AI integration provides a robust, secure, and scalable foundation for Ascendia's core text processing capabilities, with comprehensive error handling, performance monitoring, and cost management.
+The AI integration provides a robust, secure, and scalable foundation for Aletheia's core text processing capabilities, with comprehensive error handling, performance monitoring, and cost management.

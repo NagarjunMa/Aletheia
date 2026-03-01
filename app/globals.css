@@ -1,5 +1,5 @@
-/* Ascendia Global Styles */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400&family=JetBrains+Mono:wght@300&display=swap');
+/* Aletheia Global Styles */
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Playfair+Display:ital,opsz,wght@0,9..18,400;0,9..18,700;0,9..18,900;1,9..18,400&family=JetBrains+Mono:wght@300&display=swap');
 @import '@fortawesome/fontawesome-free/css/all.min.css';
 
 @tailwind base;
@@ -9,19 +9,26 @@
 @layer base {
   :root {
     /* Dark theme with #2e5797 blue accent */
-    --background: 0 0% 4%; /* Deep black background */
-    --foreground: 0 0% 95%; /* Light text for readability */
-    --card: 0 0% 8%; /* Slightly lighter black for cards */
+    --background: 0 0% 4%;
+    /* Deep black background */
+    --foreground: 0 0% 95%;
+    /* Light text for readability */
+    --card: 0 0% 8%;
+    /* Slightly lighter black for cards */
     --card-foreground: 0 0% 95%;
     --popover: 0 0% 6%;
     --popover-foreground: 0 0% 95%;
-    --primary: 215 53% 38%; /* #2e5797 - Deep blue accent */
+    --primary: 215 53% 38%;
+    /* #2e5797 - Deep blue accent */
     --primary-foreground: 0 0% 100%;
-    --secondary: 0 0% 12%; /* Dark gray for secondary */
+    --secondary: 0 0% 12%;
+    /* Dark gray for secondary */
     --secondary-foreground: 0 0% 95%;
     --muted: 0 0% 15%;
-    --muted-foreground: 0 0% 60%; /* Muted light gray */
-    --accent: 215 53% 38%; /* Same blue for accent */
+    --muted-foreground: 0 0% 60%;
+    /* Muted light gray */
+    --accent: 215 53% 38%;
+    /* Same blue for accent */
     --accent-foreground: 0 0% 100%;
     --destructive: 0 84% 50%;
     --destructive-foreground: 0 0% 95%;
@@ -69,6 +76,7 @@
   * {
     @apply border-border;
   }
+
   body {
     @apply bg-background text-foreground;
     /* Simplified black background with subtle grain texture */
@@ -105,6 +113,7 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
   }
@@ -129,6 +138,7 @@
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -139,6 +149,7 @@
     transform: translateY(10px);
     opacity: 0;
   }
+
   to {
     transform: translateY(0);
     opacity: 1;
@@ -149,16 +160,19 @@
   from {
     width: 0;
   }
+
   to {
     width: 100%;
   }
 }
 
 @keyframes blink-caret {
+
   from,
   to {
     border-color: transparent;
   }
+
   50% {
     border-color: orange;
   }
@@ -202,8 +216,13 @@
 }
 
 @keyframes rotate {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 @keyframes neural-rotate {
@@ -211,9 +230,11 @@
     transform: rotate(0deg) scale(1);
     opacity: 0;
   }
+
   50% {
     opacity: 0.4;
   }
+
   100% {
     transform: rotate(360deg) scale(1);
     opacity: 0;
@@ -221,10 +242,13 @@
 }
 
 @keyframes glow-pulse {
-  0%, 100% {
+
+  0%,
+  100% {
     opacity: 0.3;
     filter: blur(40px);
   }
+
   50% {
     opacity: 0.7;
     filter: blur(60px);
@@ -236,6 +260,7 @@
     width: 0;
     opacity: 0;
   }
+
   to {
     width: 100%;
     opacity: 1;
@@ -247,6 +272,7 @@
     transform: translateX(-100%);
     opacity: 0;
   }
+
   to {
     transform: translateX(0);
     opacity: 1;
@@ -258,10 +284,375 @@
     opacity: 0;
     transform: translateY(20px);
   }
+
   100% {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+/* Landing page — Euveka-inspired light theme — scoped so auth/dashboard stay unaffected */
+.landing {
+  color-scheme: light;
+  background-color: #eef1f8;
+  background-image: none;
+  color: #0f172a;
+  font-family: 'DM Sans', sans-serif;
+
+  --l-bg: #eef1f8;
+  --l-bg-alt: #f4f6fb;
+  --l-surface: #ffffff;
+  --l-navy: #0f172a;
+  --l-navy-mid: #1e3a8a;
+  --l-blue: #2d4ba0;
+  --l-blue-light: #3b5fc0;
+  --l-text: #0f172a;
+  --l-text-muted: #475569;
+  --l-text-dim: #94a3b8;
+  --l-border: #e2e8f0;
+  --l-border-subtle: rgba(15, 23, 42, 0.08);
+
+  /* Single source of truth for border-radius — Euveka = sharp corners everywhere */
+  --l-radius: 0;
+}
+
+.landing::before {
+  display: none;
+}
+
+/* Euveka keyframes */
+@keyframes float {
+
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes slide-up-fade {
+  from {
+    opacity: 0;
+    transform: translateY(32px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in-slow {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes line-extend {
+  from {
+    transform: scaleX(0);
+  }
+
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes word-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Landing utility classes */
+.landing .font-serif {
+  font-family: 'Playfair Display', Georgia, serif;
+}
+
+.landing .section-label {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--l-blue);
+  /* Sharp corners — no rounded pills — consistent with Euveka design language */
+  border-radius: var(--l-radius);
+  border: 1px solid rgba(45, 75, 160, 0.3);
+  padding: 0.3rem 0.75rem;
+  background: rgba(45, 75, 160, 0.05);
+  border-radius: 0 !important;
+}
+
+.landing .btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background: var(--l-blue);
+  color: #ffffff;
+  border-radius: 0 !important;
+  padding: 1rem 2.25rem;
+  font-weight: 700;
+  font-size: 0.7rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  transition: background 0.2s ease;
+  border: 2px solid var(--l-blue);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.landing .btn-primary:hover {
+  background: var(--l-navy);
+  border-color: var(--l-navy);
+}
+
+.landing .btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background: transparent;
+  color: var(--l-navy);
+  border-radius: 0 !important;
+  padding: 1rem 2.25rem;
+  font-weight: 700;
+  font-size: 0.7rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  transition: all 0.2s ease;
+  border: 2px solid var(--l-navy);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.landing .btn-secondary:hover {
+  background: var(--l-navy);
+  color: #ffffff;
+}
+
+.landing .divider {
+  height: 1px;
+  background: var(--l-border);
+  width: 100%;
+}
+
+/* === RADIUS ENFORCEMENT ===
+   Override ALL Tailwind rounded-* utilities inside .landing.
+   This is the single-source fix so no JSX file can accidentally
+   introduce rounded pills into the Euveka sharp-corner design system. */
+.landing .rounded,
+.landing .rounded-sm,
+.landing .rounded-md,
+.landing .rounded-lg,
+.landing .rounded-xl,
+.landing .rounded-2xl,
+.landing .rounded-3xl,
+.landing .rounded-full {
+  border-radius: var(--l-radius) !important;
+}
+
+/* Avatar circles are the intentional exception — keep them soft */
+.landing .rounded-full.avatar-circle {
+  border-radius: 9999px !important;
+}
+
+.landing::before {
+  display: none;
+}
+
+
+/* Landing-specific keyframes */
+@keyframes float {
+
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+
+  50% {
+    transform: translateY(-14px);
+  }
+}
+
+@keyframes aurora-drift {
+
+  0%,
+  100% {
+    transform: translate(0%, 0%) scale(1);
+    opacity: 0.4;
+  }
+
+  33% {
+    transform: translate(2%, -3%) scale(1.05);
+    opacity: 0.6;
+  }
+
+  66% {
+    transform: translate(-2%, 2%) scale(0.97);
+    opacity: 0.35;
+  }
+}
+
+@keyframes glow-pulse-indigo {
+
+  0%,
+  100% {
+    opacity: 0.35;
+    filter: blur(60px);
+  }
+
+  50% {
+    opacity: 0.6;
+    filter: blur(80px);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% center;
+  }
+
+  100% {
+    background-position: 200% center;
+  }
+}
+
+@keyframes slide-up-fade {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scale-in-bounce {
+  0% {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+
+  60% {
+    transform: scale(1.01);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes line-grow {
+  from {
+    height: 0;
+  }
+
+  to {
+    height: 100%;
+  }
+}
+
+@keyframes badge-pulse {
+
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4);
+  }
+
+  50% {
+    box-shadow: 0 0 0 8px rgba(99, 102, 241, 0);
+  }
+}
+
+/* Landing utility classes */
+.landing .font-display {
+  font-family: 'Syne', sans-serif;
+}
+
+.landing .text-gradient {
+  background: linear-gradient(135deg, #818cf8 0%, #06b6d4 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.landing .text-gradient-warm {
+  background: linear-gradient(135deg, #f1f5f9 0%, #818cf8 50%, #06b6d4 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.landing .glass-card {
+  background: rgba(13, 13, 20, 0.8);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(99, 102, 241, 0.15);
+}
+
+.landing .btn-primary {
+  background: linear-gradient(135deg, #6366f1, #4f46e5);
+  color: #ffffff;
+  border-radius: 9999px;
+  padding: 0.75rem 1.75rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
+  box-shadow: 0 0 24px rgba(99, 102, 241, 0.35);
+}
+
+.landing .btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0 36px rgba(99, 102, 241, 0.5);
+}
+
+.landing .btn-secondary {
+  background: rgba(255, 255, 255, 0.06);
+  color: #94a3b8;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 9999px;
+  padding: 0.75rem 1.75rem;
+  font-weight: 500;
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
+}
+
+.landing .btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #f1f5f9;
+}
+
+.landing .section-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--l-indigo-light);
+  background: rgba(99, 102, 241, 0.1);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: 9999px;
+  padding: 0.35rem 1rem;
 }
 
 /* Responsive utilities */
@@ -325,7 +716,8 @@
   }
 
   /* High-resolution displays */
-  @media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  @media (-webkit-min-device-pixel-ratio: 2),
+  (min-resolution: 192dpi) {
     .retina-border {
       border-width: 0.5px;
     }
@@ -404,10 +796,12 @@
 .aletheia-scrollbar::-webkit-scrollbar {
   width: 3px;
 }
+
 .aletheia-scrollbar::-webkit-scrollbar-thumb {
   background: rgba(109, 169, 210, 0.2);
   border-radius: 10px;
 }
+
 .aletheia-scrollbar::-webkit-scrollbar-track {
   background: transparent;
 }

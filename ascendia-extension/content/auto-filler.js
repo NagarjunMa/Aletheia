@@ -50,7 +50,7 @@
     // Set up visual feedback system
     addStylesForFeedback()
 
-    console.log('Ascendia Auto-filler initialized for:', window.location.hostname)
+    console.log('Aletheia Auto-filler initialized for:', window.location.hostname)
   }
 
   function handleAutoFillRequest(message, sender, sendResponse) {
@@ -245,11 +245,11 @@
   function showFillConfirmation(result) {
     // Create temporary notification
     const notification = document.createElement('div')
-    notification.className = 'ascendia-fill-notification'
+    notification.className = 'aletheia-fill-notification'
     notification.innerHTML = `
-      <div class="ascendia-notification-content">
-        <div class="ascendia-icon">✓</div>
-        <div class="ascendia-text">
+      <div class="aletheia-notification-content">
+        <div class="aletheia-icon">✓</div>
+        <div class="aletheia-text">
           <strong>Message Filled!</strong>
           <br>
           <small>${result.filled.length} field(s) completed</small>
@@ -278,7 +278,7 @@
     // Add CSS for visual feedback elements
     const style = document.createElement('style')
     style.textContent = `
-      .ascendia-fill-notification {
+      .aletheia-fill-notification {
         position: fixed;
         top: 20px;
         right: 20px;
@@ -294,23 +294,23 @@
         animation: slideInRight 0.3s ease-out;
       }
 
-      .ascendia-notification-content {
+      .aletheia-notification-content {
         display: flex;
         align-items: center;
         gap: 8px;
       }
 
-      .ascendia-icon {
+      .aletheia-icon {
         font-size: 18px;
         font-weight: bold;
       }
 
-      .ascendia-text strong {
+      .aletheia-text strong {
         display: block;
         margin-bottom: 2px;
       }
 
-      .ascendia-text small {
+      .aletheia-text small {
         opacity: 0.8;
       }
 
@@ -326,7 +326,7 @@
       }
 
       /* Highlight animation for filled fields */
-      @keyframes ascendiaFillPulse {
+      @keyframes aletheiaFillPulse {
         0% { box-shadow: 0 0 0 0 rgba(46, 87, 151, 0.4); }
         70% { box-shadow: 0 0 0 6px rgba(46, 87, 151, 0); }
         100% { box-shadow: 0 0 0 0 rgba(46, 87, 151, 0); }
@@ -428,7 +428,7 @@
 
       // Re-initialize on navigation for SPAs
       setTimeout(() => {
-        console.log('Ascendia Auto-filler: Page changed, re-initializing...')
+        console.log('Aletheia Auto-filler: Page changed, re-initializing...')
       }, 1000)
     }
   }
@@ -436,6 +436,6 @@
   // Watch for navigation changes (important for SPAs like Apollo and LinkedIn)
   setInterval(checkForNavigation, 1000)
 
-  console.log('Ascendia Auto-filler Content Script loaded')
+  console.log('Aletheia Auto-filler Content Script loaded')
 
 })()

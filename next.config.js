@@ -1,3 +1,5 @@
+const { withSentryConfig } = require('@sentry/nextjs')
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // React configuration
@@ -105,7 +107,6 @@ const nextConfig = {
         ...config.optimization,
         removeAvailableModules: false,
         removeEmptyChunks: false,
-        splitChunks: false,
       }
     }
 
@@ -246,7 +247,7 @@ const nextConfig = {
 
   // TypeScript configuration
   typescript: {
-    ignoreBuildErrors: true, // Temporarily ignore TS errors to fix runtime issues first
+    ignoreBuildErrors: false,
     tsconfigPath: './tsconfig.json'
   },
 
@@ -279,4 +280,15 @@ const nextConfig = {
   }
 }
 
-module.exports = nextConfig
+module.exports = withSentryConfig(nextConfig, {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+
+  // Only print logs for uploading source maps in CI
+  silent: !process.env.CI,
+
+  // Disable source map upload when no auth token is present
+  disableServerWebpackPlugin: !process.env.SENTRY_AUTH_TOKEN,
+  disableClientWebpackPlugin: !process.env.SENTRY_AUTH_TOKEN,
+})

@@ -1,7 +1,7 @@
-// Ascendia Extension Auth Module
+// Aletheia Extension Auth Module
 // Manages Supabase session sharing between web app and extension
 
-const AUTH_STORAGE_KEY = 'ascendia_auth';
+const AUTH_STORAGE_KEY = 'aletheia_auth';
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000; // 5 minutes before expiry
 
 // ─── Storage helpers ───
@@ -66,7 +66,7 @@ async function fetchSessionFromWebApp(apiUrl) {
       method: 'GET',
       credentials: 'include',
       headers: {
-        'X-Extension-Source': 'ascendia-extension',
+        'X-Extension-Source': 'aletheia-extension',
       },
     });
 
@@ -189,8 +189,9 @@ async function _doRefreshToken(auth) {
     if (auth && auth.refresh_token && (!auth.supabase_url || !auth.supabase_anon_key)) {
       console.log('[AUTH] Missing Supabase config, fetching...');
       try {
+        const { apiBaseUrl } = await chrome.storage.sync.get('apiBaseUrl');
         const { apiUrl } = await chrome.storage.local.get('apiUrl');
-        const url = apiUrl || 'http://localhost:3000';
+        const url = apiBaseUrl || apiUrl || 'https://aletheia.vercel.app';
         const configResp = await fetch(`${url}/api/extension/config`);
         if (configResp.ok) {
           const config = await configResp.json();
@@ -294,7 +295,7 @@ async function getValidAccessToken(apiUrl) {
     // Clear stale auth
     await clearAuth();
     throw new Error(
-      'Not authenticated. Please log in to the Ascendia web app and click "Connect" in the extension.'
+      'Not authenticated. Please log in to the Aletheia web app and click "Connect" in the extension. (' + fetchError.message + ')'
     );
   }
 }
@@ -321,7 +322,7 @@ async function getAuthStatus() {
 // Keep-alive: MV3 service workers can be terminated. Use alarms to keep alive.
 // Recovery from restarts is handled in service-worker.js.
 
-const LOGIN_KEEPALIVE_ALARM = 'ascendia-login-keepalive';
+const LOGIN_KEEPALIVE_ALARM = 'aletheia-login-keepalive';
 
 // Pending login resolve/reject — allows authBridgeSession messages to settle the promise
 let _loginResolve = null;
@@ -382,8 +383,11 @@ function handleAuthBridgeSession(sessionData) {
   console.log('[AUTH] authBridgeSession received for:', sessionData.user?.email || 'unknown');
 
   // Fetch Supabase config and store
-  chrome.storage.local.get('apiUrl').then(async ({ apiUrl }) => {
-    const url = apiUrl || 'http://localhost:3000';
+  Promise.all([
+    chrome.storage.sync.get('apiBaseUrl'),
+    chrome.storage.local.get('apiUrl'),
+  ]).then(async ([{ apiBaseUrl }, { apiUrl }]) => {
+    const url = apiBaseUrl || apiUrl || 'https://aletheia.vercel.app';
     let supabaseUrl, supabaseAnonKey;
     try {
       const configResp = await fetch(`${url}/api/extension/config`);
@@ -412,6 +416,8 @@ function handleAuthBridgeSession(sessionData) {
 }
 
 // Uses setTimeout loop + content script bridge + cookie/tab listeners
+const POLL_INTERVALS = [3000, 5000, 8000, 13000, 15000];
+
 function pollUntilSession(apiUrl, tabId, timeoutAt) {
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -419,6 +425,7 @@ function pollUntilSession(apiUrl, tabId, timeoutAt) {
     let cookieDebounceTimer = null;
     let timeoutTimer = null;
     let bridgeInjected = false;
+    let pollStep = 0;
 
     // Store resolve/reject so authBridgeSession messages can settle this promise
     _loginResolve = (data) => settle(() => resolve(data));
@@ -446,6 +453,10 @@ function pollUntilSession(apiUrl, tabId, timeoutAt) {
       fn();
     }
 
+    function resetPollStep() {
+      pollStep = 0;
+    }
+
     async function tryFetchSession() {
       try {
         const sessionData = await fetchSessionFromWebApp(apiUrl);
@@ -463,6 +474,7 @@ function pollUntilSession(apiUrl, tabId, timeoutAt) {
       const { cookie } = changeInfo;
       if (cookie.name.startsWith('sb-') && cookie.name.includes('-auth-token')) {
         console.log('[AUTH] cookie detected:', cookie.name);
+        resetPollStep();
         clearTimeout(cookieDebounceTimer);
         cookieDebounceTimer = setTimeout(() => tryFetchSession(), 500);
       }
@@ -473,6 +485,7 @@ function pollUntilSession(apiUrl, tabId, timeoutAt) {
     function tabListener(tid, changeInfo) {
       if (tid === tabId && changeInfo.status === 'complete') {
         console.log('[AUTH] login tab finished loading, injecting auth-bridge...');
+        resetPollStep();
         if (!bridgeInjected) {
           bridgeInjected = true;
           injectAuthBridge(tabId);
@@ -486,13 +499,16 @@ function pollUntilSession(apiUrl, tabId, timeoutAt) {
     }
     chrome.tabs.onUpdated.addListener(tabListener);
 
-    // setTimeout-based polling (not subject to 30s alarm minimum)
+    // setTimeout-based polling with stepped backoff
     function schedulePoll() {
+      const interval = POLL_INTERVALS[Math.min(pollStep, POLL_INTERVALS.length - 1)];
+      console.log(`[AUTH] pollUntilSession: next poll in ${interval}ms (step ${pollStep})`);
       pollTimer = setTimeout(async () => {
         if (settled) return;
         await tryFetchSession();
+        pollStep++;
         if (!settled) schedulePoll();
-      }, 3000);
+      }, interval);
     }
     schedulePoll();
 
@@ -503,6 +519,17 @@ function pollUntilSession(apiUrl, tabId, timeoutAt) {
       settle(() => reject(new Error('Login timed out. Please try again.')));
     }, Math.max(remaining, 0));
   });
+}
+
+// ─── Clear auth and fetch fresh session ───
+
+async function clearAuthAndFetchFresh(apiUrl) {
+  console.log('[AUTH] clearAuthAndFetchFresh: clearing stored auth and fetching fresh session');
+  await clearAuth();
+  const sessionData = await fetchSessionFromWebApp(apiUrl);
+  await storeAuth(sessionData);
+  console.log('[AUTH] clearAuthAndFetchFresh: ✓ fresh session for', sessionData.user?.email);
+  return sessionData;
 }
 
 // ─── Proactive refresh (called by alarm) ───

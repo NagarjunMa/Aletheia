@@ -1,5 +1,5 @@
-// Ascendia Extension Background Service Worker
-// Handles API communication with the Ascendia backend
+// Aletheia Extension Background Service Worker
+// Handles API communication with the Aletheia backend
 
 // Import auth module
 importScripts('auth.js');
@@ -26,31 +26,31 @@ let authenticatePromise = null;
     await storeAuth(sessionData);
     await chrome.storage.local.remove('_loginPending');
     try { chrome.tabs.remove(tabId); } catch (e) {}
-    chrome.alarms.clear('ascendia-login-keepalive');
+    chrome.alarms.clear('aletheia-login-keepalive');
     console.log('[SW] Recovered session for', sessionData.user?.email);
   } catch (e) {
     console.log('[SW] Recovery: no session yet, will keep checking via alarms');
     // Keep the keepalive alarm running; next alarm cycle will retry
-    chrome.alarms.create('ascendia-login-keepalive', { periodInMinutes: 25 / 60 });
+    chrome.alarms.create('aletheia-login-keepalive', { periodInMinutes: 25 / 60 });
   }
 })();
 
 // Extension configuration
 const CONFIG = {
-  DEFAULT_API_URL: 'http://localhost:3000', // Default for development
+  DEFAULT_API_URL: 'https://aletheia.vercel.app', // Production default
   API_ENDPOINTS: {
     generate: '/api/extension/generate',
     health: '/api/extension/generate'
   },
   TIMEOUT: 30000, // 30 seconds
   MAX_RETRIES: 3,
-  TOKEN_REFRESH_ALARM: 'ascendia-token-refresh',
-  TOKEN_REFRESH_INTERVAL_MIN: 45 // Refresh every 45 minutes
+  TOKEN_REFRESH_ALARM: 'aletheia-token-refresh',
+  TOKEN_REFRESH_INTERVAL_MIN: 20 // Refresh every 20 minutes (well before 1hr JWT expiry)
 };
 
 // Installation and startup
 chrome.runtime.onInstalled.addListener(async (details) => {
-  console.log('Ascendia extension installed:', details);
+  console.log('Aletheia extension installed:', details);
 
   if (details.reason === 'install') {
     await initializeDefaultSettings();
@@ -81,7 +81,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   chrome.contextMenus.removeAll(() => {
     chrome.contextMenus.create({
       id: 'generateMessage',
-      title: 'Generate message with Ascendia',
+      title: 'Generate message with Aletheia',
       contexts: ['selection'],
       documentUrlPatterns: ['https://www.linkedin.com/*']
     });
@@ -89,7 +89,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 });
 
 chrome.runtime.onStartup.addListener(() => {
-  console.log('Ascendia extension started');
+  console.log('Aletheia extension started');
 
   // Ensure token refresh alarm exists
   chrome.alarms.create(CONFIG.TOKEN_REFRESH_ALARM, {
@@ -101,11 +101,11 @@ chrome.runtime.onStartup.addListener(() => {
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === CONFIG.TOKEN_REFRESH_ALARM) {
     console.log('[SW] Token refresh alarm fired');
-    const { apiUrl } = await chrome.storage.local.get('apiUrl');
-    await proactiveRefresh(apiUrl || CONFIG.DEFAULT_API_URL);
+    const url = await getEffectiveApiUrl();
+    await proactiveRefresh(url);
   }
 
-  if (alarm.name === 'ascendia-login-keepalive') {
+  if (alarm.name === 'aletheia-login-keepalive') {
     console.log('[SW] Login keepalive — checking for session...');
     const { _loginPending } = await chrome.storage.local.get('_loginPending');
     if (!_loginPending) return;
@@ -113,7 +113,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     if (Date.now() > _loginPending.timeoutAt) {
       console.log('[SW] Login timed out during recovery');
       await chrome.storage.local.remove('_loginPending');
-      chrome.alarms.clear('ascendia-login-keepalive');
+      chrome.alarms.clear('aletheia-login-keepalive');
       return;
     }
 
@@ -122,7 +122,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
       await storeAuth(sessionData);
       await chrome.storage.local.remove('_loginPending');
       try { chrome.tabs.remove(_loginPending.tabId); } catch (e) {}
-      chrome.alarms.clear('ascendia-login-keepalive');
+      chrome.alarms.clear('aletheia-login-keepalive');
       console.log('[SW] Session recovered via keepalive alarm');
     } catch (e) {
       console.log('[SW] Keepalive check: no session yet');
@@ -203,8 +203,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'silentAuthCheck') {
     (async () => {
       try {
-        const { apiUrl } = await chrome.storage.local.get('apiUrl');
-        const url = apiUrl || CONFIG.DEFAULT_API_URL;
+        const url = await getEffectiveApiUrl();
         await getValidAccessToken(url);
         const status = await getAuthStatus();
         console.log('[SW] silentAuthCheck: ✓ found session for', status.user?.email);
@@ -228,9 +227,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return false;
 });
 
+// Helper: resolve the effective API URL from sync > local > default
+async function getEffectiveApiUrl() {
+  const { apiBaseUrl } = await chrome.storage.sync.get('apiBaseUrl');
+  if (apiBaseUrl) return apiBaseUrl;
+  const { apiUrl } = await chrome.storage.local.get('apiUrl');
+  return apiUrl || CONFIG.DEFAULT_API_URL;
+}
+
 async function initializeDefaultSettings() {
+  // Check if user has a saved API URL in sync storage (shared across devices)
+  const { apiBaseUrl } = await chrome.storage.sync.get('apiBaseUrl');
+  const apiUrl = apiBaseUrl || CONFIG.DEFAULT_API_URL;
+
   const defaults = {
-    apiUrl: CONFIG.DEFAULT_API_URL,
+    apiUrl,
     resume: '',
     accepted: [],
     dailyUsage: {},
@@ -242,12 +253,11 @@ async function initializeDefaultSettings() {
   };
 
   await chrome.storage.local.set(defaults);
-  console.log('Default settings initialized with API URL:', CONFIG.DEFAULT_API_URL);
+  console.log('Default settings initialized with API URL:', apiUrl);
 }
 
 async function handleAuthenticate() {
-  const { apiUrl } = await chrome.storage.local.get('apiUrl');
-  const url = apiUrl || CONFIG.DEFAULT_API_URL;
+  const url = await getEffectiveApiUrl();
   console.log('[SW] handleAuthenticate: using API URL:', url);
 
   // First try: maybe the user is already logged in (cookies exist)
@@ -259,7 +269,7 @@ async function handleAuthenticate() {
     return {
       success: true,
       user: status.user,
-      message: 'Connected to Ascendia'
+      message: 'Connected to Aletheia'
     };
   } catch (error) {
     console.log('[SW] handleAuthenticate: no existing session:', error.message);
@@ -274,7 +284,7 @@ async function handleAuthenticate() {
     return {
       success: true,
       user: sessionData.user,
-      message: 'Connected to Ascendia'
+      message: 'Connected to Aletheia'
     };
   } catch (waitError) {
     console.error('[SW] handleAuthenticate: ✗ waitForLogin failed:', waitError.message);
@@ -284,68 +294,107 @@ async function handleAuthenticate() {
 
 async function handleLogout() {
   await clearAuth();
-  return { success: true, message: 'Disconnected from Ascendia' };
+  return { success: true, message: 'Disconnected from Aletheia' };
 }
 
 async function handleGenerateRequest(payload) {
-  try {
-    const { apiUrl } = await chrome.storage.local.get('apiUrl');
-    const url = apiUrl || CONFIG.DEFAULT_API_URL;
+  const url = await getEffectiveApiUrl();
+  const MAX_AUTH_ATTEMPTS = 3;
 
-    // Get valid access token (handles refresh automatically)
-    const accessToken = await getValidAccessToken(url);
+  for (let attempt = 0; attempt < MAX_AUTH_ATTEMPTS; attempt++) {
+    try {
+      // Get valid access token (handles refresh automatically)
+      const accessToken = await getValidAccessToken(url);
 
-    console.log('Service Worker: Using API URL:', url);
+      console.log(`[SW] handleGenerateRequest attempt ${attempt}: using API URL:`, url);
 
-    // Check daily usage limit (client-side advisory only)
-    await checkUsageLimit();
+      // Check daily usage limit (client-side advisory only) — only on first attempt
+      if (attempt === 0) {
+        await checkUsageLimit();
+      }
 
-    // Get accepted examples for style learning
-    const { accepted = [] } = await chrome.storage.local.get('accepted');
-    const relevantExamples = accepted
-      .filter(item => item.category === payload.category)
-      .map(item => item.body || item.message)
-      .slice(-3);
+      // Get accepted examples for style learning
+      const { accepted = [] } = await chrome.storage.local.get('accepted');
+      const relevantExamples = accepted
+        .filter(item => item.category === payload.category)
+        .map(item => item.body || item.message)
+        .slice(-3);
 
-    const requestData = {
-      ...payload,
-      acceptedExamples: relevantExamples
-    };
+      const requestData = {
+        ...payload,
+        acceptedExamples: relevantExamples
+      };
 
-    // Make API request with Bearer token
-    const response = await makeAPIRequest('/api/extension/generate', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${accessToken}`
-      },
-      body: JSON.stringify(requestData)
-    }, url);
+      // Make API request with Bearer token
+      const response = await makeAPIRequest('/api/extension/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`
+        },
+        body: JSON.stringify(requestData)
+      }, url);
 
-    if (!response.success) {
-      throw new Error(response.error || 'API request failed');
+      if (!response.success) {
+        throw new Error(response.error || 'API request failed');
+      }
+
+      await logUsage(payload.category);
+      return response;
+
+    } catch (error) {
+      console.error(`[SW] handleGenerateRequest attempt ${attempt} error:`, error.message);
+
+      const isAuthError = error.message.includes('401') ||
+        error.message.includes('Unauthorized') ||
+        error.message.includes('Not authenticated') ||
+        error.message.includes('Session expired');
+
+      if (!isAuthError) {
+        // Non-auth errors: don't retry, surface immediately
+        if (error.message.includes('429') || error.message.includes('Rate limit') || error.message.includes('Daily limit')) {
+          throw new Error('Rate limit exceeded. Please try again later.');
+        }
+        if (error.message.includes('NetworkError') || error.message.includes('fetch')) {
+          throw new Error('Network error. Please check your internet connection.');
+        }
+        throw error;
+      }
+
+      // Auth error retry logic
+      if (attempt === 0) {
+        // Attempt 1: Silently re-fetch session from web app cookies
+        console.log('[SW] handleGenerateRequest: 401 on attempt 0, silently re-fetching session...');
+        try {
+          await clearAuthAndFetchFresh(url);
+          console.log('[SW] handleGenerateRequest: ✓ fresh session obtained, retrying...');
+          continue; // retry with new token
+        } catch (refreshErr) {
+          console.warn('[SW] handleGenerateRequest: silent re-fetch failed:', refreshErr.message);
+          // Fall through to attempt 1
+        }
+      }
+
+      if (attempt === 1) {
+        // Attempt 2: Open login tab, wait for user to authenticate
+        console.log('[SW] handleGenerateRequest: 401 on attempt 1, clearing auth and triggering interactive login...');
+        await clearAuth();
+        try {
+          await handleAuthenticate();
+          console.log('[SW] handleGenerateRequest: ✓ user re-authenticated, retrying...');
+          continue; // retry with new token
+        } catch (authErr) {
+          console.error('[SW] handleGenerateRequest: interactive login failed:', authErr.message);
+        }
+      }
+
+      // All attempts exhausted
+      throw new Error('AUTH_FAILED: Not authenticated. Please log in to the Aletheia web app and connect the extension.');
     }
-
-    await logUsage(payload.category);
-    return response;
-
-  } catch (error) {
-    console.error('Generation request error:', error);
-
-    if (error.message.includes('401') || error.message.includes('Unauthorized') || error.message.includes('Not authenticated')) {
-      throw new Error('Not authenticated. Please log in to the Ascendia web app and connect the extension.');
-    }
-
-    if (error.message.includes('429') || error.message.includes('Rate limit') || error.message.includes('Daily limit')) {
-      throw new Error('Rate limit exceeded. Please try again later.');
-    }
-
-    if (error.message.includes('NetworkError') || error.message.includes('fetch')) {
-      throw new Error('Network error. Please check your internet connection.');
-    }
-
-    throw error;
   }
+
+  // Should never reach here, but just in case
+  throw new Error('AUTH_FAILED: Authentication failed after multiple attempts.');
 }
 
 async function makeAPIRequest(endpoint, options = {}, baseUrl = null) {
@@ -399,8 +448,7 @@ async function makeAPIRequest(endpoint, options = {}, baseUrl = null) {
 
 async function handleHealthCheck() {
   try {
-    const { apiUrl } = await chrome.storage.local.get('apiUrl');
-    const url = apiUrl || CONFIG.DEFAULT_API_URL;
+    const url = await getEffectiveApiUrl();
 
     // Check if we have valid auth
     const status = await getAuthStatus();
@@ -513,7 +561,7 @@ try {
   console.warn('Side panel configuration failed (Chrome version may not support it):', error);
 }
 
-console.log('Ascendia background service worker loaded');
+console.log('Aletheia background service worker loaded');
 
 // Export for testing (if needed)
 if (typeof module !== 'undefined' && module.exports) {

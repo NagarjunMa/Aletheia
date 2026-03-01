@@ -2,9 +2,10 @@
 // Created: December 7, 2024
 // Purpose: Server-side Supabase client for Server Actions and SSR
 
-import { createServerClient } from '@supabase/ssr'
+import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
-import type { Database } from '@/lib/database/types'
+import type { User } from '@supabase/supabase-js'
+import type { Database, ProfileInsert } from '@/lib/database/types'
 
 export function createClient() {
   const cookieStore = cookies()
@@ -17,19 +18,19 @@ export function createClient() {
         get(name: string) {
           return cookieStore.get(name)?.value
         },
-        set(name: string, value: string, options) {
+        set(name: string, value: string, options: CookieOptions) {
           try {
             cookieStore.set({ name, value, ...options })
-          } catch (error) {
+          } catch {
             // The `set` method was called from a Server Component.
             // This can be ignored if you have middleware refreshing
             // user sessions.
           }
         },
-        remove(name: string, options) {
+        remove(name: string, options: CookieOptions) {
           try {
             cookieStore.set({ name, value: '', ...options })
-          } catch (error) {
+          } catch {
             // The `delete` method was called from a Server Component.
             // This can be ignored if you have middleware refreshing
             // user sessions.
@@ -42,25 +43,27 @@ export function createClient() {
 
 // Service Role client for admin operations (use carefully!)
 export function createServiceClient() {
+  const cookieStore = cookies()
+
   return createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     {
       cookies: {
         get(name: string) {
-          return cookies().get(name)?.value
+          return cookieStore.get(name)?.value
         },
-        set(name: string, value: string, options) {
+        set(name: string, value: string, options: CookieOptions) {
           try {
-            cookies().set({ name, value, ...options })
-          } catch (error) {
+            cookieStore.set({ name, value, ...options })
+          } catch {
             // Handle cookie setting errors
           }
         },
-        remove(name: string, options) {
+        remove(name: string, options: CookieOptions) {
           try {
-            cookies().set({ name, value: '', ...options })
-          } catch (error) {
+            cookieStore.set({ name, value: '', ...options })
+          } catch {
             // Handle cookie removal errors
           }
         },
@@ -108,7 +111,7 @@ export async function getUserProfile(userId?: string) {
 }
 
 // Helper function to check if user exists and create profile if needed
-export async function ensureUserProfile(user: any) {
+export async function ensureUserProfile(user: User) {
   const supabase = createClient()
 
   // Check if profile exists
@@ -123,21 +126,23 @@ export async function ensureUserProfile(user: any) {
   }
 
   // Create profile if it doesn't exist
+  const insert: ProfileInsert = {
+    id: user.id,
+    email: user.email ?? '',
+    full_name: (user.user_metadata?.full_name as string) ?? user.email?.split('@')[0] ?? null,
+    avatar_url: (user.user_metadata?.avatar_url as string) ?? null,
+    preferences: {
+      theme: 'system',
+      language: 'en',
+      notifications: true,
+      auto_save: true,
+      default_category: 'general',
+    },
+  }
+
   const { data: newProfile, error } = await supabase
     .from('profiles')
-    .insert({
-      id: user.id,
-      email: user.email,
-      full_name: user.user_metadata?.full_name || user.email?.split('@')[0],
-      avatar_url: user.user_metadata?.avatar_url || null,
-      preferences: {
-        theme: 'system',
-        language: 'en',
-        notifications: true,
-        auto_save: true,
-        default_category: 'general'
-      }
-    })
+    .insert(insert)
     .select()
     .single()
 
