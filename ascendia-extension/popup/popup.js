@@ -1,4 +1,4 @@
-// Ascendia Extension Popup JavaScript
+// Aletheia Extension Popup JavaScript
 // Main UI logic and user interaction handlers
 
 let currentProfile = null;
@@ -18,7 +18,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // React to auth state changes (e.g., auth-bridge stores session while popup is open)
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === 'local' && changes.ascendia_auth) {
+    if (area === 'local' && changes.aletheia_auth) {
       console.log('[POPUP] Auth state changed, reinitializing...');
       initializePopup().then(() => checkLinkedInProfile());
     }
@@ -69,6 +69,11 @@ async function initializePopup() {
 function setupEventListeners() {
   // Settings button
   document.getElementById('settingsBtn').addEventListener('click', openSettings);
+
+  // Refresh button
+  document.getElementById('refreshBtn').addEventListener('click', () => {
+    checkLinkedInProfile(true);
+  });
 
   // Generate button
   document.getElementById('generateBtn')?.addEventListener('click', generateMessage);
@@ -128,9 +133,9 @@ function showAuthRequired(authStatus) {
   // Show auth prompt instead of main content
   document.getElementById('mainContent').innerHTML = `
     <div class="setup-required">
-      <h3>Connect to Ascendia</h3>
-      <p>Log in to the Ascendia web app, then click the button below to connect this extension to your account.</p>
-      <button id="connectBtn" class="action-btn primary">Connect to Ascendia</button>
+      <h3>Connect to Aletheia</h3>
+      <p>Log in to the Aletheia web app, then click the button below to connect this extension to your account.</p>
+      <button id="connectBtn" class="action-btn primary">Connect to Aletheia</button>
       <button id="openSettingsBtn" class="action-btn secondary" style="margin-top: 8px;">Open Settings</button>
       <div id="authError" class="error-message hidden" style="margin-top: 8px;">
         <span id="authErrorText"></span>
@@ -175,36 +180,56 @@ function showAuthRequired(authStatus) {
 
       const result = await new Promise((resolve) => {
         chrome.runtime.sendMessage({ action: 'authenticate' }, (response) => {
+          void chrome.runtime.lastError; // suppress "port closed" warning when SW dies
           console.log('[POPUP] authenticate response:', JSON.stringify(response));
           resolve(response);
         });
       });
 
       clearTimeout(waitingTimeout);
-      clearInterval(authPollInterval);
 
       if (authResolved) return; // Already handled by polling
-      authResolved = true;
 
-      if (result?.success) {
+      // SW was terminated while waiting (result is undefined/null).
+      // Don't show error — let authPollInterval detect auth after SW recovery.
+      if (!result) {
+        chrome.storage.local.get('_loginPending', ({ _loginPending }) => {
+          if (_loginPending && Date.now() < _loginPending.timeoutAt) {
+            btn.textContent = 'Waiting for login...';
+            // authPollInterval is still running; it will detect auth and reload
+            return;
+          }
+          // No pending login or it has timed out
+          clearInterval(authPollInterval);
+          btn.textContent = 'Connect to Aletheia';
+          btn.disabled = false;
+          showError('Connection failed. Please try again.');
+        });
+        return;
+      }
+
+      authResolved = true;
+      clearInterval(authPollInterval);
+
+      if (result.success) {
         console.log('[POPUP] Authentication successful:', result.user?.email);
         btn.textContent = 'Connected!';
         // Brief delay so user sees success before reload
         setTimeout(() => window.location.reload(), 500);
       } else {
-        console.error('[POPUP] Authentication failed:', result?.error);
-        btn.textContent = 'Connect to Ascendia';
+        console.error('[POPUP] Authentication failed:', result.error);
+        btn.textContent = 'Connect to Aletheia';
         btn.disabled = false;
-        const errorMsg = result?.error?.includes('timed out')
+        const errorMsg = result.error?.includes('timed out')
           ? result.error
-          : result?.error || 'Connection failed. Please try again.';
+          : result.error || 'Connection failed. Please try again.';
         showError(errorMsg);
       }
     } catch (error) {
       clearInterval(authPollInterval);
       if (authResolved) return;
       console.error('[POPUP] authenticate threw:', error);
-      btn.textContent = 'Connect to Ascendia';
+      btn.textContent = 'Connect to Aletheia';
       btn.disabled = false;
       showError('Connection failed. Please try again.');
     }
@@ -213,19 +238,31 @@ function showAuthRequired(authStatus) {
   document.getElementById('openSettingsBtn').addEventListener('click', openSettings);
 }
 
-async function checkLinkedInProfile() {
+async function checkLinkedInProfile(forceRefresh = false) {
+  const readingBanner = document.getElementById('readingProfile');
+  const refreshIcon = document.querySelector('#refreshBtn .refresh-icon');
+
+  // Reset banner state
+  document.getElementById('profileBanner').classList.add('hidden');
+  document.getElementById('noProfile').classList.add('hidden');
+  readingBanner.style.display = 'flex';
+  refreshIcon?.classList.add('spinning');
+
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
     if (!tab.url?.includes('linkedin.com/in/')) {
+      readingBanner.style.display = 'none';
+      refreshIcon?.classList.remove('spinning');
       showNoProfile();
       return;
     }
 
     // Fix 6B: Content script retry — try sending, inject if not ready
     let response;
+    const messageAction = forceRefresh ? 'reextractProfile' : 'getProfile';
     try {
-      response = await chrome.tabs.sendMessage(tab.id, { action: 'getProfile' });
+      response = await chrome.tabs.sendMessage(tab.id, { action: messageAction });
     } catch (err) {
       // Content script not injected — try injecting it, then retry once
       console.log('[POPUP] Content script not ready, injecting...');
@@ -241,6 +278,9 @@ async function checkLinkedInProfile() {
       }
     }
 
+    readingBanner.style.display = 'none';
+    refreshIcon?.classList.remove('spinning');
+
     if (response?.success && response.profile?.name) {
       currentProfile = response.profile;
       showProfileDetected(response.profile);
@@ -250,6 +290,8 @@ async function checkLinkedInProfile() {
     }
   } catch (error) {
     console.error('Error checking LinkedIn profile:', error);
+    readingBanner.style.display = 'none';
+    refreshIcon?.classList.remove('spinning');
     showNoProfile();
   }
 }
@@ -318,12 +360,22 @@ async function generateMessage() {
       await storeGeneration(response);
       await incrementUsageCount();
     } else {
-      showError(response.error || 'Generation failed. Please try again.');
+      const errMsg = response.error || 'Generation failed. Please try again.';
+      if (isAuthError(errMsg)) {
+        showAuthError(errMsg);
+      } else {
+        showError(errMsg);
+      }
     }
 
   } catch (error) {
     console.error('Generation error:', error);
-    showError('Network error. Please check your connection and try again.');
+    const errMsg = error.message || 'Network error. Please check your connection and try again.';
+    if (isAuthError(errMsg)) {
+      showAuthError(errMsg);
+    } else {
+      showError('Network error. Please check your connection and try again.');
+    }
   } finally {
     setGeneratingState(false);
   }
@@ -584,10 +636,32 @@ async function autoFillMessage() {
 async function handleFeedback(type) {
   if (!currentOutput) return;
 
+  const category = document.getElementById('category').value;
+  const messageBody = currentOutput.body || currentOutput.message || '';
+
   if (type === 'accept') {
     await saveAcceptedMessage();
     showTemporaryFeedback(document.getElementById('acceptBtn'), 'Saved!');
+    // Fire-and-forget: persist approval to backend for style learning
+    chrome.runtime.sendMessage({
+      action: 'sendFeedback',
+      payload: {
+        message: messageBody,
+        category,
+        approved: true,
+        subjectLine: currentOutput.subject_line || undefined,
+      }
+    }).catch(() => {}); // swallow errors — non-blocking
   } else if (type === 'reject') {
+    // Fire-and-forget: persist rejection to backend
+    chrome.runtime.sendMessage({
+      action: 'sendFeedback',
+      payload: {
+        message: messageBody,
+        category,
+        approved: false,
+      }
+    }).catch(() => {}); // swallow errors — non-blocking
     await generateMessage();
   }
 }
@@ -696,6 +770,63 @@ function hideError() {
   document.getElementById('errorMessage')?.classList.add('hidden');
 }
 
+function isAuthError(message) {
+  if (!message) return false;
+  return message.startsWith('AUTH_FAILED:') ||
+    message.includes('Not authenticated') ||
+    message.includes('Session expired');
+}
+
+function showAuthError(message) {
+  const errorEl = document.getElementById('errorMessage');
+  const errorText = document.getElementById('errorText');
+
+  if (!errorEl || !errorText) {
+    console.warn('showAuthError: error elements not in DOM:', message);
+    return;
+  }
+
+  // Strip the AUTH_FAILED: prefix for display
+  const displayMsg = message.replace(/^AUTH_FAILED:\s*/, '');
+
+  errorText.innerHTML = '';
+  errorText.textContent = displayMsg + ' ';
+
+  const reauthBtn = document.createElement('button');
+  reauthBtn.className = 'reauth-btn';
+  reauthBtn.textContent = 'Re-authenticate';
+  reauthBtn.addEventListener('click', async () => {
+    reauthBtn.textContent = 'Connecting...';
+    reauthBtn.disabled = true;
+    try {
+      // Clear stale auth first so handleAuthenticate() opens login tab
+      await new Promise((resolve) => {
+        chrome.runtime.sendMessage({ action: 'logout' }, resolve);
+      });
+      const result = await new Promise((resolve) => {
+        chrome.runtime.sendMessage({ action: 'authenticate' }, resolve);
+      });
+      if (result?.success) {
+        hideError();
+        await initializePopup();
+        await checkLinkedInProfile();
+      } else {
+        reauthBtn.textContent = 'Re-authenticate';
+        reauthBtn.disabled = false;
+        showError(result?.error || 'Re-authentication failed. Please try again.');
+      }
+    } catch (err) {
+      reauthBtn.textContent = 'Re-authenticate';
+      reauthBtn.disabled = false;
+      showError('Re-authentication failed. Please try again.');
+    }
+  });
+
+  errorText.appendChild(reauthBtn);
+  errorEl.classList.remove('hidden');
+  // Don't auto-hide auth errors — user needs to take action
+}
+
 function showTemporaryFeedback(element, text) {
   const originalText = element.textContent;
   element.textContent = text;
@@ -779,23 +910,47 @@ function displayValidationFeedback(output) {
   }
 
   if (feedbackItems.length > 0) {
-    const feedbackHTML = `
-      <div class="validation-header">
-        <span class="validation-title">📊 Message Analysis</span>
-        <button class="validation-toggle" onclick="toggleValidationDetails()">Details</button>
-      </div>
-      <div class="validation-items">
-        ${feedbackItems.map(item => `
-          <div class="validation-item ${item.status}">
-            <span class="validation-icon">${item.icon}</span>
-            <span class="validation-text">${item.text}</span>
-            <span class="validation-details hidden">${item.details}</span>
-          </div>
-        `).join('')}
-      </div>
-    `;
+    const header = document.createElement('div');
+    header.className = 'validation-header';
 
-    feedbackContainer.innerHTML = feedbackHTML;
+    const title = document.createElement('span');
+    title.className = 'validation-title';
+    title.textContent = '📊 Message Analysis';
+    header.appendChild(title);
+
+    const toggleBtn = document.createElement('button');
+    toggleBtn.className = 'validation-toggle';
+    toggleBtn.textContent = 'Details';
+    toggleBtn.onclick = toggleValidationDetails;
+    header.appendChild(toggleBtn);
+
+    const itemsContainer = document.createElement('div');
+    itemsContainer.className = 'validation-items';
+
+    for (const item of feedbackItems) {
+      const itemEl = document.createElement('div');
+      itemEl.className = `validation-item ${item.status}`;
+
+      const iconEl = document.createElement('span');
+      iconEl.className = 'validation-icon';
+      iconEl.textContent = item.icon;
+      itemEl.appendChild(iconEl);
+
+      const textEl = document.createElement('span');
+      textEl.className = 'validation-text';
+      textEl.textContent = item.text;
+      itemEl.appendChild(textEl);
+
+      const detailsEl = document.createElement('span');
+      detailsEl.className = 'validation-details hidden';
+      detailsEl.textContent = item.details;
+      itemEl.appendChild(detailsEl);
+
+      itemsContainer.appendChild(itemEl);
+    }
+
+    feedbackContainer.appendChild(header);
+    feedbackContainer.appendChild(itemsContainer);
 
     const messageBody = document.getElementById('messageBody');
     messageBody.insertAdjacentElement('afterend', feedbackContainer);

@@ -106,15 +106,6 @@ const config = {
           info: "#3b82f6", // Blue
         },
 
-        // Legacy colors (to be phased out)
-        ascendia: {
-          black: "#000000",
-          accent: "#2e5797",
-          "accent-dim": "#1a3d6b",
-          gray: "#1a1a1a",
-          "gray-light": "#333333",
-        },
-
         // New landing page colors (Aletheia-inspired)
         ambient: {
           blue: "#6da9d2",

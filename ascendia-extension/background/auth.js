@@ -1,7 +1,7 @@
-// Ascendia Extension Auth Module
+// Aletheia Extension Auth Module
 // Manages Supabase session sharing between web app and extension
 
-const AUTH_STORAGE_KEY = 'ascendia_auth';
+const AUTH_STORAGE_KEY = 'aletheia_auth';
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000; // 5 minutes before expiry
 
 // ─── Storage helpers ───
@@ -12,7 +12,7 @@ async function getStoredAuth() {
 }
 
 async function storeAuth(authData) {
-  console.log('[AUTH] Storing auth for:', authData.user?.email || 'unknown');
+  console.log('[AUTH] Storing auth for:', (authData.user?.email || '').substring(0, 4) + '***');
   await chrome.storage.local.set({
     [AUTH_STORAGE_KEY]: {
       access_token: authData.access_token,
@@ -57,7 +57,19 @@ function needsRefresh(auth) {
 // (createBrowserClient may store sessions in localStorage or set cookies that the chrome.cookies
 // API cannot read due to domain/SameSite/partitioning issues).
 
+let _fetchSessionPromise = null;
+
 async function fetchSessionFromWebApp(apiUrl) {
+  if (_fetchSessionPromise) {
+    console.log('[AUTH] fetchSessionFromWebApp: already in-flight, coalescing...');
+    return _fetchSessionPromise;
+  }
+  _fetchSessionPromise = _doFetchSessionFromWebApp(apiUrl)
+    .finally(() => { _fetchSessionPromise = null; });
+  return _fetchSessionPromise;
+}
+
+async function _doFetchSessionFromWebApp(apiUrl) {
   console.log('[AUTH] fetchSessionFromWebApp: calling', apiUrl + '/api/extension/session');
 
   // Method 1: Server endpoint (reliable — middleware handles cookie validation)
@@ -66,7 +78,7 @@ async function fetchSessionFromWebApp(apiUrl) {
       method: 'GET',
       credentials: 'include',
       headers: {
-        'X-Extension-Source': 'ascendia-extension',
+        'X-Extension-Source': 'aletheia-extension',
       },
     });
 
@@ -74,7 +86,7 @@ async function fetchSessionFromWebApp(apiUrl) {
 
     if (response.ok) {
       const sessionData = await response.json();
-      console.log('[AUTH] ✓ Session from server endpoint: user=' + (sessionData.user?.email || 'unknown'));
+      console.log('[AUTH] ✓ Session from server endpoint: user=' + (sessionData.user?.email || '').substring(0, 4) + '***');
 
       if (!sessionData.access_token) {
         throw new Error('Server returned session without access_token');
@@ -92,7 +104,22 @@ async function fetchSessionFromWebApp(apiUrl) {
 
     const errorBody = await response.json().catch(() => ({}));
     console.log('[AUTH] Session endpoint error:', errorBody.error || response.statusText);
+
+    // Propagate 401 status so callers can apply backoff
+    if (response.status === 401) {
+      const err = new Error(errorBody.error || 'Unauthorized');
+      err.status = 401;
+      err.retryAfter = parseInt(response.headers.get('Retry-After'), 10) || 0;
+      if (errorBody.code === 'refresh_token_already_used') {
+        console.log('[AUTH] refresh_token_already_used — clearing stale stored auth');
+        err.code = 'refresh_token_already_used';
+        await clearAuth();
+      }
+      throw err;
+    }
   } catch (fetchError) {
+    // Re-throw 401 errors so callers can apply backoff (don't fall through to cookie fallback)
+    if (fetchError.status === 401) throw fetchError;
     console.warn('[AUTH] Session endpoint fetch failed:', fetchError.message);
   }
 
@@ -138,7 +165,9 @@ async function fetchSessionFromWebApp(apiUrl) {
   // Fetch Supabase config for token refresh
   let supabaseUrl, supabaseAnonKey;
   try {
-    const configResp = await fetch(`${apiUrl}/api/extension/config`);
+    const configResp = await fetch(`${apiUrl}/api/extension/config`, {
+      headers: { 'X-Extension-Source': 'aletheia-extension' }
+    });
     if (configResp.ok) {
       const config = await configResp.json();
       supabaseUrl = config.supabase_url;
@@ -189,9 +218,12 @@ async function _doRefreshToken(auth) {
     if (auth && auth.refresh_token && (!auth.supabase_url || !auth.supabase_anon_key)) {
       console.log('[AUTH] Missing Supabase config, fetching...');
       try {
+        const { apiBaseUrl } = await chrome.storage.sync.get('apiBaseUrl');
         const { apiUrl } = await chrome.storage.local.get('apiUrl');
-        const url = apiUrl || 'http://localhost:3000';
-        const configResp = await fetch(`${url}/api/extension/config`);
+        const url = apiBaseUrl || apiUrl || 'https://aletheia.vercel.app';
+        const configResp = await fetch(`${url}/api/extension/config`, {
+          headers: { 'X-Extension-Source': 'aletheia-extension' }
+        });
         if (configResp.ok) {
           const config = await configResp.json();
           auth.supabase_url = config.supabase_url;
@@ -260,7 +292,7 @@ async function getValidAccessToken(apiUrl) {
   let auth = await getStoredAuth();
 
   if (auth) {
-    console.log('[AUTH] Found stored auth for:', auth.user?.email || 'unknown');
+    console.log('[AUTH] Found stored auth for:', (auth.user?.email || '').substring(0, 4) + '***');
   } else {
     console.log('[AUTH] No stored auth found');
   }
@@ -294,7 +326,7 @@ async function getValidAccessToken(apiUrl) {
     // Clear stale auth
     await clearAuth();
     throw new Error(
-      'Not authenticated. Please log in to the Ascendia web app and click "Connect" in the extension.'
+      'Not authenticated. Please log in to the Aletheia web app and click "Connect" in the extension. (' + fetchError.message + ')'
     );
   }
 }
@@ -308,7 +340,7 @@ async function getAuthStatus() {
     return { authenticated: false };
   }
   const valid = isTokenValid(auth);
-  console.log('[AUTH] getAuthStatus: authenticated=' + valid + ', user=' + (auth.user?.email || 'unknown'));
+  console.log('[AUTH] getAuthStatus: authenticated=' + valid + ', user=' + (auth.user?.email || '').substring(0, 4) + '***');
   return {
     authenticated: valid,
     user: auth.user || null,
@@ -321,7 +353,7 @@ async function getAuthStatus() {
 // Keep-alive: MV3 service workers can be terminated. Use alarms to keep alive.
 // Recovery from restarts is handled in service-worker.js.
 
-const LOGIN_KEEPALIVE_ALARM = 'ascendia-login-keepalive';
+const LOGIN_KEEPALIVE_ALARM = 'aletheia-login-keepalive';
 
 // Pending login resolve/reject — allows authBridgeSession messages to settle the promise
 let _loginResolve = null;
@@ -356,7 +388,7 @@ async function waitForLogin(apiUrl) {
   });
 
   // Set keepalive alarm to prevent service worker termination during login
-  chrome.alarms.create(LOGIN_KEEPALIVE_ALARM, { periodInMinutes: 25 / 60 });
+  chrome.alarms.create(LOGIN_KEEPALIVE_ALARM, { periodInMinutes: 0.5 }); // 30s — Chrome minimum
 
   // Start polling for session
   return pollUntilSession(apiUrl, tab.id, Date.now() + LOGIN_TIMEOUT_MS);
@@ -379,14 +411,19 @@ async function injectAuthBridge(tabId) {
 function handleAuthBridgeSession(sessionData) {
   if (!sessionData || !sessionData.access_token) return;
 
-  console.log('[AUTH] authBridgeSession received for:', sessionData.user?.email || 'unknown');
+  console.log('[AUTH] authBridgeSession received for:', (sessionData.user?.email || '').substring(0, 4) + '***');
 
   // Fetch Supabase config and store
-  chrome.storage.local.get('apiUrl').then(async ({ apiUrl }) => {
-    const url = apiUrl || 'http://localhost:3000';
+  Promise.all([
+    chrome.storage.sync.get('apiBaseUrl'),
+    chrome.storage.local.get('apiUrl'),
+  ]).then(async ([{ apiBaseUrl }, { apiUrl }]) => {
+    const url = apiBaseUrl || apiUrl || 'https://aletheia.vercel.app';
     let supabaseUrl, supabaseAnonKey;
     try {
-      const configResp = await fetch(`${url}/api/extension/config`);
+      const configResp = await fetch(`${url}/api/extension/config`, {
+        headers: { 'X-Extension-Source': 'aletheia-extension' }
+      });
       if (configResp.ok) {
         const config = await configResp.json();
         supabaseUrl = config.supabase_url;
@@ -412,6 +449,8 @@ function handleAuthBridgeSession(sessionData) {
 }
 
 // Uses setTimeout loop + content script bridge + cookie/tab listeners
+const POLL_INTERVALS = [3000, 5000, 8000, 13000, 15000];
+
 function pollUntilSession(apiUrl, tabId, timeoutAt) {
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -419,13 +458,15 @@ function pollUntilSession(apiUrl, tabId, timeoutAt) {
     let cookieDebounceTimer = null;
     let timeoutTimer = null;
     let bridgeInjected = false;
+    let pollStep = 0;
+    let fetchInFlight = false;
 
     // Store resolve/reject so authBridgeSession messages can settle this promise
-    _loginResolve = (data) => settle(() => resolve(data));
-    _loginReject = (err) => settle(() => reject(err));
+    _loginResolve = (data) => settle(() => resolve(data), true);
+    _loginReject = (err) => settle(() => reject(err), false);
 
-    function cleanup() {
-      console.log('[AUTH] pollUntilSession: cleanup');
+    function cleanup(shouldCloseTab) {
+      console.log('[AUTH] pollUntilSession: cleanup (closeTab=' + shouldCloseTab + ')');
       chrome.cookies.onChanged.removeListener(cookieListener);
       chrome.tabs.onUpdated.removeListener(tabListener);
       chrome.alarms.clear(LOGIN_KEEPALIVE_ALARM);
@@ -435,25 +476,39 @@ function pollUntilSession(apiUrl, tabId, timeoutAt) {
       clearTimeout(timeoutTimer);
       _loginResolve = null;
       _loginReject = null;
-      // Auto-close the login tab
-      try { chrome.tabs.remove(tabId); } catch (e) { /* already closed */ }
+      // Only close the login tab on successful login
+      if (shouldCloseTab) {
+        try { chrome.tabs.remove(tabId); } catch (e) { /* already closed */ }
+      }
     }
 
-    function settle(fn) {
+    function settle(fn, shouldCloseTab = false) {
       if (settled) return;
       settled = true;
-      cleanup();
+      cleanup(shouldCloseTab);
       fn();
     }
 
+    function resetPollStep() {
+      pollStep = 0;
+    }
+
     async function tryFetchSession() {
+      if (fetchInFlight) return;
+      fetchInFlight = true;
       try {
         const sessionData = await fetchSessionFromWebApp(apiUrl);
-        console.log('[AUTH] pollUntilSession: session found for', sessionData.user?.email);
+        console.log('[AUTH] pollUntilSession: session found for', (sessionData.user?.email || '').substring(0, 4) + '***');
         await storeAuth(sessionData);
-        settle(() => resolve(sessionData));
+        settle(() => resolve(sessionData), true);
       } catch (e) {
-        console.log('[AUTH] pollUntilSession: no session yet:', e.message);
+        if (e.status === 401) {
+          console.log('[AUTH] pollUntilSession: 401 (user not logged in yet), will keep polling');
+        } else {
+          console.log('[AUTH] pollUntilSession: no session yet:', e.message);
+        }
+      } finally {
+        fetchInFlight = false;
       }
     }
 
@@ -463,8 +518,11 @@ function pollUntilSession(apiUrl, tabId, timeoutAt) {
       const { cookie } = changeInfo;
       if (cookie.name.startsWith('sb-') && cookie.name.includes('-auth-token')) {
         console.log('[AUTH] cookie detected:', cookie.name);
+        resetPollStep();
         clearTimeout(cookieDebounceTimer);
-        cookieDebounceTimer = setTimeout(() => tryFetchSession(), 500);
+        cookieDebounceTimer = setTimeout(() => {
+          if (!settled) tryFetchSession();
+        }, 500);
       }
     }
     chrome.cookies.onChanged.addListener(cookieListener);
@@ -473,6 +531,7 @@ function pollUntilSession(apiUrl, tabId, timeoutAt) {
     function tabListener(tid, changeInfo) {
       if (tid === tabId && changeInfo.status === 'complete') {
         console.log('[AUTH] login tab finished loading, injecting auth-bridge...');
+        resetPollStep();
         if (!bridgeInjected) {
           bridgeInjected = true;
           injectAuthBridge(tabId);
@@ -481,18 +540,23 @@ function pollUntilSession(apiUrl, tabId, timeoutAt) {
           injectAuthBridge(tabId);
         }
         // Also try server endpoint as fallback
-        setTimeout(() => tryFetchSession(), 1000);
+        setTimeout(() => {
+          if (!settled) tryFetchSession();
+        }, 1000);
       }
     }
     chrome.tabs.onUpdated.addListener(tabListener);
 
-    // setTimeout-based polling (not subject to 30s alarm minimum)
+    // setTimeout-based polling with stepped backoff
     function schedulePoll() {
+      const interval = POLL_INTERVALS[Math.min(pollStep, POLL_INTERVALS.length - 1)];
+      console.log(`[AUTH] pollUntilSession: next poll in ${interval}ms (step ${pollStep})`);
       pollTimer = setTimeout(async () => {
         if (settled) return;
         await tryFetchSession();
+        pollStep++;
         if (!settled) schedulePoll();
-      }, 3000);
+      }, interval);
     }
     schedulePoll();
 
@@ -500,9 +564,20 @@ function pollUntilSession(apiUrl, tabId, timeoutAt) {
     const remaining = timeoutAt - Date.now();
     timeoutTimer = setTimeout(() => {
       console.log('[AUTH] pollUntilSession: timed out');
-      settle(() => reject(new Error('Login timed out. Please try again.')));
+      settle(() => reject(new Error('Login timed out. Please try again.')), false);
     }, Math.max(remaining, 0));
   });
+}
+
+// ─── Clear auth and fetch fresh session ───
+
+async function clearAuthAndFetchFresh(apiUrl) {
+  console.log('[AUTH] clearAuthAndFetchFresh: clearing stored auth and fetching fresh session');
+  await clearAuth();
+  const sessionData = await fetchSessionFromWebApp(apiUrl);
+  await storeAuth(sessionData);
+  console.log('[AUTH] clearAuthAndFetchFresh: ✓ fresh session for', (sessionData.user?.email || '').substring(0, 4) + '***');
+  return sessionData;
 }
 
 // ─── Proactive refresh (called by alarm) ───

@@ -416,6 +416,6 @@
   // Watch for navigation changes
   setInterval(checkForNavigation, 1000);
 
-  console.log('Ascendia LinkedIn Profile Reader initialized');
+  console.log('Aletheia LinkedIn Profile Reader initialized');
 
 })();

@@ -1,38 +1,63 @@
 import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
+import { Inter, DM_Sans, Cormorant_Garamond } from 'next/font/google'
 import './globals.css'
 import { Providers } from './providers'
 
 const inter = Inter({ subsets: ['latin'] })
+const dmSans = DM_Sans({ subsets: ['latin'], variable: '--font-dm-sans' })
+const cormorant = Cormorant_Garamond({
+  subsets: ['latin'],
+  weight: ['300', '400'],
+  style: ['normal', 'italic'],
+  variable: '--font-cormorant',
+})
 
 export const metadata: Metadata = {
-  title: 'Ascendia - Personalized Voice Agent',
-  description: 'Advanced AI writing assistant that learns and adapts to your unique writing style while ensuring professional clarity and correctness.',
-  keywords: ['AI writing', 'personal voice', 'writing assistant', 'grammar correction', 'content polish'],
-  authors: [{ name: 'Ascendia Team' }],
+  title: {
+    default: 'Aletheia — AI LinkedIn Message Generator | Authentic Outreach, Zero Clichés',
+    template: '%s | Aletheia',
+  },
+  description:
+    'Chrome extension that reads LinkedIn profiles and generates authentic connection requests, cold emails, and InMails. 42-word negative lexicon and 21-pattern AI fingerprint detector strip robotic phrasing. Free, 30 messages/day.',
+  keywords: [
+    'LinkedIn outreach',
+    'AI message generator',
+    'Chrome extension',
+    'cold email',
+    'networking',
+    'InMail',
+    'connection request',
+    'authentic LinkedIn messages',
+    'human-sounding AI',
+    'AI fingerprint detection',
+    'profile-grounded messages',
+    'cliché-free outreach',
+  ],
+  authors: [{ name: 'Aletheia Team' }],
   icons: {
-    icon: '/Aletheia.png',
-    apple: '/Aletheia.png',
+    icon: '/Aletheia.svg',
+    apple: '/Aletheia.svg',
   },
   openGraph: {
-    title: 'Ascendia - Personalized Voice Agent',
-    description: 'Advanced AI writing assistant that learns and adapts to your unique writing style',
+    title: 'Aletheia — LinkedIn Messages That Strip AI Clichés Automatically',
+    description:
+      'Chrome extension that reads LinkedIn profiles and writes connection requests, cold emails, and InMails. 42-word negative lexicon. 21 AI fingerprint patterns detected and humanized.',
     type: 'website',
     locale: 'en_US',
     images: [
       {
-        url: '/Aletheia.png',
+        url: '/Aletheia.svg',
         width: 1200,
         height: 630,
-        alt: 'Ascendia - Personalized Voice Agent',
+        alt: 'Aletheia — AI LinkedIn Message Generator',
       },
     ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Ascendia - Personalized Voice Agent',
-    description: 'Advanced AI writing assistant that learns and adapts to your unique writing style',
-    images: ['/Aletheia.png'],
+    title: 'Aletheia — LinkedIn Messages That Strip AI Clichés Automatically',
+    description: 'Chrome extension that reads LinkedIn profiles and writes connection requests, cold emails, and InMails. 42-word negative lexicon. 21 AI fingerprint patterns detected and humanized.',
+    images: ['/Aletheia.svg'],
   },
   robots: {
     index: true,
@@ -47,7 +72,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={inter.className}>
+      <body className={`${inter.className} ${dmSans.variable} ${cormorant.variable} aurora-grain`}>
         <Providers>
           {children}
         </Providers>

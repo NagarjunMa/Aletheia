@@ -1,3 +1,5 @@
+const { withSentryConfig } = require('@sentry/nextjs')
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // React configuration
@@ -105,7 +107,6 @@ const nextConfig = {
         ...config.optimization,
         removeAvailableModules: false,
         removeEmptyChunks: false,
-        splitChunks: false,
       }
     }
 
@@ -114,9 +115,7 @@ const nextConfig = {
 
   // Compiler options (let SWC handle optimizations)
   compiler: {
-    removeConsole: process.env.NODE_ENV === 'production' ? {
-      exclude: ['error', 'warn']
-    } : false
+    removeConsole: process.env.NODE_ENV === 'production'
   },
 
   // Security headers
@@ -192,7 +191,7 @@ const nextConfig = {
         key: 'Content-Security-Policy',
         value: [
           "default-src 'self'",
-          "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://app.posthog.com https://www.googletagmanager.com",
+          "script-src 'self' 'unsafe-inline' https://app.posthog.com https://www.googletagmanager.com",
           "style-src 'self' 'unsafe-inline'",
           "img-src 'self' data: https: blob:",
           "font-src 'self' https:",
@@ -246,7 +245,7 @@ const nextConfig = {
 
   // TypeScript configuration
   typescript: {
-    ignoreBuildErrors: true, // Temporarily ignore TS errors to fix runtime issues first
+    ignoreBuildErrors: false,
     tsconfigPath: './tsconfig.json'
   },
 
@@ -279,4 +278,15 @@ const nextConfig = {
   }
 }
 
-module.exports = nextConfig
+module.exports = withSentryConfig(nextConfig, {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+
+  // Only print logs for uploading source maps in CI
+  silent: !process.env.CI,
+
+  // Disable source map upload when no auth token is present
+  disableServerWebpackPlugin: !process.env.SENTRY_AUTH_TOKEN,
+  disableClientWebpackPlugin: !process.env.SENTRY_AUTH_TOKEN,
+})

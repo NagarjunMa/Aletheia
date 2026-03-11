@@ -18,7 +18,18 @@
       "Bash(npm cache clean:*)",
       "mcp__supabase__get_advisors",
       "Bash(find:*)",
-      "Bash(/bashes)"
+      "Bash(/bashes)",
+      "Bash(npm ls:*)",
+      "Bash(xargs:*)",
+      "Bash(ls:*)",
+      "mcp__plugin_context7_context7__query-docs",
+      "Bash(npm uninstall:*)",
+      "Bash(npm run lint:*)",
+      "Bash(__NEW_LINE_41ad709b245d706f__ echo:*)",
+      "Bash(__NEW_LINE_f7fed57871916c66__ echo:*)",
+      "Bash(npm audit:*)",
+      "Bash(supabase projects:*)",
+      "Bash(git:*)"
     ],
     "deny": [],
     "ask": []
@@ -26,5 +37,18 @@
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "supabase"
+  ],
+  "enabledPlugins": {
+    "document-skills@anthropic-agent-skills": true
+  },
+  "skills": [
+    "api-documentation-generator",
+    "frontend-design",
+    "nextjs",
+    "nextjs-best-practices",
+    "nextjs-supabase-auth",
+    "ui-ux-pro-max",
+    "vercel-react-best-practices",
+    "web-design-guidelines"
   ]
 }
