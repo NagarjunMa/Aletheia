@@ -471,6 +471,7 @@ export type Database = {
       }
       user_preferences: {
         Row: {
+          approved_message_count: number | null
           auto_accept_threshold: number | null
           avatar_url: string | null
           content_categories: string[] | null
@@ -483,6 +484,7 @@ export type Database = {
           formality_level: string | null
           id: string
           preferred_model: string | null
+          rejected_message_count: number | null
           response_length: string | null
           share_analytics: boolean | null
           show_cpl_scores: boolean | null
@@ -495,6 +497,7 @@ export type Database = {
           writing_style: Json | null
         }
         Insert: {
+          approved_message_count?: number | null
           auto_accept_threshold?: number | null
           avatar_url?: string | null
           content_categories?: string[] | null
@@ -507,6 +510,7 @@ export type Database = {
           formality_level?: string | null
           id?: string
           preferred_model?: string | null
+          rejected_message_count?: number | null
           response_length?: string | null
           share_analytics?: boolean | null
           show_cpl_scores?: boolean | null
@@ -519,6 +523,7 @@ export type Database = {
           writing_style?: Json | null
         }
         Update: {
+          approved_message_count?: number | null
           auto_accept_threshold?: number | null
           avatar_url?: string | null
           content_categories?: string[] | null
@@ -531,6 +536,7 @@ export type Database = {
           formality_level?: string | null
           id?: string
           preferred_model?: string | null
+          rejected_message_count?: number | null
           response_length?: string | null
           share_analytics?: boolean | null
           show_cpl_scores?: boolean | null
