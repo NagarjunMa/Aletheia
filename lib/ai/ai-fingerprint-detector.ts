@@ -4,7 +4,7 @@
 
 export interface AIFingerprintPattern {
   pattern: RegExp
-  replacement: string | ((match: string) => string)
+  replacement: string | ((_match: string) => string)
   name: string
   platform?: 'linkedin' | 'email' | 'general'
   severity: 'high' | 'medium' | 'low'

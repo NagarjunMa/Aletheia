@@ -3,7 +3,7 @@
 // Enhanced: February 2026
 // Purpose: Clean and validate AI-generated content for safety, appropriateness, and authenticity
 
-import { detectAIFingerprints, sanitizeAIFingerprints, type AIFingerprintResult } from './ai-fingerprint-detector'
+import { detectAIFingerprints, type AIFingerprintResult } from './ai-fingerprint-detector'
 
 /**
  * Remove unpaired Unicode surrogate characters (U+D800–U+DFFF)

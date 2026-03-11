@@ -4,20 +4,26 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { createLogger } from '@/lib/logger'
 import { getCorsHeaders } from '@/lib/cors'
 
+export const dynamic = 'force-dynamic'
+
 const log = createLogger('auth-me')
 
 const DAILY_LIMIT = 30
 
-// Supabase clients for token-based auth and rate limit queries
-const supabaseAuth = createSupabaseClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+// Lazy factory functions — avoid module-level Supabase instantiation at build time
+function getSupabaseAuth() {
+  return createSupabaseClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
+}
 
-const supabaseService = createSupabaseClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+function getSupabaseService() {
+  return createSupabaseClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+}
 
 // ─── Usage query ───
 
@@ -25,7 +31,7 @@ async function getUsage(userId: string): Promise<{ count: number; limit: number;
   const now = new Date()
   const windowStartCutoff = new Date(now.getTime() - 86400000)
 
-  const { data, error } = await supabaseService
+  const { data, error } = await getSupabaseService()
     .from('extension_rate_limits')
     .select('request_count, window_start')
     .eq('user_id', userId)
@@ -60,7 +66,7 @@ export async function GET(request: NextRequest) {
     const authHeader = request.headers.get('authorization')
     if (authHeader?.startsWith('Bearer ')) {
       const accessToken = authHeader.slice(7)
-      const { data: { user }, error } = await supabaseAuth.auth.getUser(accessToken)
+      const { data: { user }, error } = await getSupabaseAuth().auth.getUser(accessToken)
 
       if (!error && user) {
         userId = user.id

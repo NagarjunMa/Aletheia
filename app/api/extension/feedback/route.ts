@@ -7,16 +7,14 @@ import { getCorsHeaders } from '@/lib/cors'
 
 const log = createLogger('extension-feedback')
 
-// Supabase clients (same pattern as generate/route.ts)
-const supabaseService = createSupabaseClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+// Lazy factory functions — avoid module-level instantiation at build time
+function getSupabaseService() {
+  return createSupabaseClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+}
 
-const supabaseAuth = createSupabaseClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+function getSupabaseAuth() {
+  return createSupabaseClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
+}
 
 // ─── Auth helper (duplicated from generate/route.ts) ───
 
@@ -28,7 +26,7 @@ async function authenticateRequest(request: NextRequest): Promise<{ userId: stri
   }
 
   const accessToken = authHeader.slice(7)
-  const { data: { user }, error } = await supabaseAuth.auth.getUser(accessToken)
+  const { data: { user }, error } = await getSupabaseAuth().auth.getUser(accessToken)
 
   if (error || !user) {
     log.info({ err: error?.message }, 'Token validation failed')
@@ -107,7 +105,7 @@ async function processStyleFeedback(
   subjectLine?: string,
 ) {
   // Fetch existing preferences
-  const { data: prefs, error: fetchErr } = await supabaseService
+  const { data: prefs, error: fetchErr } = await getSupabaseService()
     .from('user_preferences')
     .select('style_patterns, approved_message_count, rejected_message_count')
     .eq('user_id', userId)
@@ -130,7 +128,7 @@ async function processStyleFeedback(
 
     const currentCount = (prefs?.approved_message_count ?? 0) as number
 
-    const { error: upsertErr } = await supabaseService
+    const { error: upsertErr } = await getSupabaseService()
       .from('user_preferences')
       .upsert({
         user_id: userId,
@@ -147,7 +145,7 @@ async function processStyleFeedback(
     // Rejected: just increment counter
     const currentCount = (prefs?.rejected_message_count ?? 0) as number
 
-    const { error: upsertErr } = await supabaseService
+    const { error: upsertErr } = await getSupabaseService()
       .from('user_preferences')
       .upsert({
         user_id: userId,

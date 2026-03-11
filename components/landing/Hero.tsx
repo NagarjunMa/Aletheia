@@ -64,9 +64,6 @@ export default function Hero() {
     return () => window.removeEventListener('scroll', handler)
   }, [])
 
-  // Running word index for stagger delay
-  let wordIndex = 0
-
   return (
     <section
       ref={sectionRef}
@@ -160,7 +157,6 @@ export default function Hero() {
                 {line.words.map((word, wordIdx) => {
                   const isHuman = isAccentLine && word === 'human'
                   const wDelay = lineDelay + wordIdx * 0.07
-                  wordIndex++
 
                   return (
                     <motion.span

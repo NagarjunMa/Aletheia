@@ -15,22 +15,18 @@ import { getCorsHeaders } from '@/lib/cors'
 
 const log = createLogger('extension-generate')
 
-// Initialize Anthropic client
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY!,
-})
+// Lazy factory functions — avoid module-level instantiation at build time
+function getAnthropic() {
+  return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
+}
 
-// Supabase service client for rate limiting (no cookie dependency)
-const supabaseService = createSupabaseClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+function getSupabaseService() {
+  return createSupabaseClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+}
 
-// Supabase client for token validation (anon key)
-const supabaseAuth = createSupabaseClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+function getSupabaseAuth() {
+  return createSupabaseClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
+}
 
 const DAILY_LIMIT = 30
 
@@ -45,7 +41,7 @@ async function authenticateRequest(request: NextRequest): Promise<{ userId: stri
 
   const accessToken = authHeader.slice(7)
   log.debug({ tokenPrefix: accessToken.substring(0, 8) }, 'Validating access token')
-  const { data: { user }, error } = await supabaseAuth.auth.getUser(accessToken)
+  const { data: { user }, error } = await getSupabaseAuth().auth.getUser(accessToken)
 
   if (error || !user) {
     log.info({ err: error?.message }, 'Token validation failed')
@@ -59,7 +55,7 @@ async function authenticateRequest(request: NextRequest): Promise<{ userId: stri
 // ─── Persistent rate limiting via Supabase ───
 
 async function checkRateLimit(userId: string): Promise<{ allowed: boolean; remainingRequests: number; resetTime: number }> {
-  const { data, error } = await supabaseService.rpc('check_and_increment_rate_limit', {
+  const { data, error } = await getSupabaseService().rpc('check_and_increment_rate_limit', {
     p_user_id: userId,
     p_daily_limit: DAILY_LIMIT
   })
@@ -99,8 +95,6 @@ const generateRequestSchema = z.object({
   acceptedExamples: z.array(z.string()).nullish().default([])
 })
 
-type GenerateRequest = z.infer<typeof generateRequestSchema>
-
 export async function POST(request: NextRequest) {
   const corsHeaders = getCorsHeaders(request, { allowCredentials: true, methods: 'GET, POST, OPTIONS' })
 
@@ -117,7 +111,7 @@ export async function POST(request: NextRequest) {
     // 2. Fetch user style profile (non-blocking — failure just skips learned style)
     let styleProfile: StylePatterns | undefined
     try {
-      const { data: prefs } = await supabaseService
+      const { data: prefs } = await getSupabaseService()
         .from('user_preferences')
         .select('style_patterns, approved_message_count')
         .eq('user_id', authResult.userId)
@@ -199,7 +193,7 @@ export async function POST(request: NextRequest) {
 
     // Generate content using Claude
     const startTime = Date.now()
-    const response = await anthropic.messages.create({
+    const response = await getAnthropic().messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 600,
       temperature: 0.8,
