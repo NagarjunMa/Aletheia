@@ -6,6 +6,9 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import type { User } from '@supabase/supabase-js'
 import type { Database, ProfileInsert } from '@/lib/database/types'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('supabase-server')
 
 export function createClient() {
   const cookieStore = cookies()
@@ -78,7 +81,7 @@ export async function getUser() {
   const { data: { user }, error } = await supabase.auth.getUser()
 
   if (error) {
-    console.error('Error getting user:', error.message)
+    log.error({ err: error.message }, 'Error getting user')
     return null
   }
 
@@ -103,7 +106,7 @@ export async function getUserProfile(userId?: string) {
     .single()
 
   if (error) {
-    console.error('Error getting profile:', error.message)
+    log.error({ err: error.message }, 'Error getting profile')
     return null
   }
 
@@ -147,7 +150,7 @@ export async function ensureUserProfile(user: User) {
     .single()
 
   if (error) {
-    console.error('Error creating profile:', error.message)
+    log.error({ err: error.message }, 'Error creating profile')
     throw error
   }
 
