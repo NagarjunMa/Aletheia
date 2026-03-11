@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+
+<html class="scroll-smooth" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Ascendia | AI That Lives in LinkedIn</title>
+<meta content="The LinkedIn message generator extension that saves you hours of manual outreach." name="description"/>
+<!-- Tailwind CSS CDN -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&amp;family=Playfair+Display:ital,wght@0,400;0,700;1,400&amp;display=swap" rel="stylesheet"/>
+<script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            'asc-black': '#000000',
+            'asc-mint': '#DAF1DE',
+            'asc-aurora-teal': '#1E4D4A',
+            'asc-aurora-blue': '#163351',
+            'asc-aurora-purple': '#2D1B4E',
+            'asc-glass': 'rgba(255, 255, 255, 0.03)',
+          },
+          fontFamily: {
+            serif: ['"Playfair Display"', 'serif'],
+            sans: ['Inter', 'sans-serif'],
+          },
+          animation: {
+            'aurora-drift': 'aurora 25s ease-in-out infinite alternate',
+            'float': 'float 8s ease-in-out infinite',
+            'aurora-slow': 'aurora-slow 35s ease-in-out infinite alternate',
+            'aurora-medium': 'aurora-medium 45s ease-in-out infinite alternate',
+            'aurora-fast': 'aurora-fast 30s ease-in-out infinite alternate',
+          },
+          keyframes: {
+            aurora: {
+              '0%': { transform: 'translate(0, 0) scale(1)', opacity: 0.4 },
+              '50%': { transform: 'translate(-5%, 10%) scale(1.2)', opacity: 0.7 },
+              '100%': { transform: 'translate(10%, -5%) scale(1.1)', opacity: 0.5 },
+            },
+            'aurora-slow': {
+              '0%': { transform: 'translate(0, 0) scale(1) rotate(0deg)', opacity: 0.3 },
+              '33%': { transform: 'translate(5%, 10%) scale(1.1) rotate(2deg)', opacity: 0.5 },
+              '66%': { transform: 'translate(-5%, 15%) scale(0.9) rotate(-2deg)', opacity: 0.4 },
+              '100%': { transform: 'translate(10%, -5%) scale(1.2) rotate(3deg)', opacity: 0.3 },
+            },
+            'aurora-medium': {
+              '0%': { transform: 'translate(0, 0) scale(1.2) rotate(0deg)', opacity: 0.2 },
+              '50%': { transform: 'translate(15%, -10%) scale(1) rotate(-3deg)', opacity: 0.4 },
+              '100%': { transform: 'translate(-10%, 5%) scale(1.3) rotate(4deg)', opacity: 0.2 },
+            },
+            'aurora-fast': {
+              '0%': { transform: 'translate(0, 0) scale(1) rotate(0deg)', opacity: 0.4 },
+              '50%': { transform: 'translate(-10%, -15%) scale(1.2) rotate(5deg)', opacity: 0.6 },
+              '100%': { transform: 'translate(5%, 10%) scale(0.9) rotate(-3deg)', opacity: 0.4 },
+            },
+            float: {
+              '0%, 100%': { transform: 'translateY(0)' },
+              '50%': { transform: 'translateY(-20px)' },
+            }
+          }
+        }
+      }
+    }
+  </script>
+<!-- BEGIN: Custom Styles -->
+<style data-purpose="background-effects">
+body {
+    background-color: #000000;
+    color: rgba(255, 255, 255, 0.85);
+    overflow-x: hidden;
+}
+
+/* Professional Sublte Grain Overlay */
+.film-grain {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1000;
+    opacity: 0.04; /* Very subtle low opacity */
+    mix-blend-mode: overlay; /* Soft blend mode for professional texture */
+}
+
+/* Spectral Aurora Background */
+.aurora-master {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -1;
+    overflow: hidden;
+    background: radial-gradient(circle at 50% 50%, #000000 0%, #050505 100%);
+}
+
+.aurora-shard {
+    position: absolute;
+    filter: blur(140px);
+    border-radius: 50%;
+    mix-blend-mode: screen;
+    will-change: transform, opacity;
+}
+
+.shard-1 { 
+    background: radial-gradient(circle at center, #1E4D4A 0%, transparent 70%); 
+    width: 100vw; 
+    height: 100vh; 
+    top: -20%; 
+    left: -10%; 
+    animation: aurora-slow 40s infinite; 
+}
+.shard-2 { 
+    background: radial-gradient(circle at center, #163351 0%, transparent 70%); 
+    width: 90vw; 
+    height: 90vh; 
+    bottom: -20%; 
+    right: -10%; 
+    animation: aurora-medium 50s infinite; 
+}
+.shard-3 { 
+    background: radial-gradient(circle at center, #2D1B4E 0%, transparent 70%); 
+    width: 70vw; 
+    height: 70vh; 
+    top: 20%; 
+    left: 30%; 
+    animation: aurora-fast 35s infinite; 
+    opacity: 0.3; 
+}
+.shard-4 {
+    background: radial-gradient(circle at center, #DAF1DE 0%, transparent 70%);
+    width: 60vw;
+    height: 40vh;
+    top: 10%;
+    right: 10%;
+    animation: aurora-slow 45s infinite reverse;
+    opacity: 0.15;
+    filter: blur(160px);
+}
+
+.glass-card {
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-card:hover {
+    border-color: rgba(218, 241, 222, 0.2);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+h1, h2, h3, .font-serif {
+    color: #FFFFFF;
+}
+
+.highlight-mint {
+    color: #DAF1DE;
+}
+
+.text-glow {
+    text-shadow: 0 0 30px rgba(255, 255, 255, 0.2);
+}
+</style>
+<!-- END: Custom Styles -->
+</head>
+<body class="font-sans antialiased">
+<!-- Atmospheric Overlays -->
+<svg class="film-grain" xmlns="http://www.w3.org/2000/svg">
+<filter id="noiseFilter">
+<feturbulence basefrequency="0.75" numoctaves="3" stitchtiles="stitch" type="fractalNoise"></feturbulence>
+</filter>
+<rect filter="url(#noiseFilter)" height="100%" width="100%"></rect>
+</svg>
+<div class="aurora-master">
+<div class="aurora-shard shard-1"></div>
+<div class="aurora-shard shard-2"></div>
+<div class="aurora-shard shard-3"></div>
+<div class="aurora-shard shard-4"></div>
+</div>
+<!-- BEGIN: Navigation -->
+<nav class="sticky top-0 z-50 w-full border-b border-white/5 glass-card" data-purpose="main-nav">
+<div class="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-7 h-7 rounded-full bg-gradient-to-tr from-[#1E4D4A] to-[#DAF1DE]"></div>
+<span class="font-serif text-2xl font-bold tracking-tight text-glow">Ascendia</span>
+</div>
+<div class="hidden md:flex items-center gap-10 text-xs font-medium uppercase tracking-[0.2em] opacity-60">
+<a class="hover:opacity-100 transition-opacity" href="#comparison">Features</a>
+<a class="hover:opacity-100 transition-opacity" href="#process">Process</a>
+<a class="hover:opacity-100 transition-opacity" href="#feedback">Feedback</a>
+<a class="hover:opacity-100 transition-opacity" href="#faq">FAQ</a>
+</div>
+<div>
+<a class="px-7 py-2.5 rounded-full bg-white text-black font-bold text-sm hover:scale-105 transition-all" href="#">Install Now</a>
+</div>
+</div>
+</nav>
+<!-- END: Navigation -->
+<main>
+<!-- BEGIN: Hero Section -->
+<section class="relative min-h-[95vh] flex items-center justify-center px-6 pt-20 pb-32" data-purpose="hero">
+<div class="max-w-5xl text-center">
+<h1 class="font-serif text-6xl md:text-8xl font-bold mb-10 leading-[1.1] animate-float">
+          AI That Lives in <span class="italic highlight-mint">LinkedIn.</span><br/> Not another chat tab.
+        </h1>
+<p class="text-xl md:text-2xl mb-14 max-w-2xl mx-auto opacity-70 font-light leading-relaxed">
+          High-end outbound automation that actually feels human. Built directly into your browser workflow.
+        </p>
+<div class="flex flex-col sm:flex-row items-center justify-center gap-8">
+<button class="w-full sm:w-auto px-12 py-5 rounded-full bg-asc-mint text-black font-bold text-lg hover:shadow-[0_0_40px_rgba(218,241,222,0.3)] transition-all transform hover:-translate-y-1">
+            Install Chrome Extension
+          </button>
+<button class="w-full sm:w-auto px-12 py-5 rounded-full border border-white/20 text-white font-bold text-lg hover:bg-white/5 transition-all">
+            Watch Cinematic Demo
+          </button>
+</div>
+</div>
+</section>
+<!-- END: Hero Section -->
+<!-- BEGIN: Stats Grid -->
+<section class="py-32 px-6 border-y border-white/5" data-purpose="stats">
+<div class="max-w-7xl mx-auto">
+<div class="grid grid-cols-2 md:grid-cols-4 gap-12">
+<div class="text-center group">
+<div class="font-serif text-5xl md:text-6xl font-bold highlight-mint mb-3 group-hover:scale-110 transition-transform duration-500">2,347</div>
+<div class="text-[10px] uppercase tracking-[0.3em] opacity-40">Messages Generated</div>
+</div>
+<div class="text-center group">
+<div class="font-serif text-5xl md:text-6xl font-bold highlight-mint mb-3 group-hover:scale-110 transition-transform duration-500">91%</div>
+<div class="text-[10px] uppercase tracking-[0.3em] opacity-40">Approval Rate</div>
+</div>
+<div class="text-center group">
+<div class="font-serif text-5xl md:text-6xl font-bold highlight-mint mb-3 group-hover:scale-110 transition-transform duration-500">10 sec</div>
+<div class="text-[10px] uppercase tracking-[0.3em] opacity-40">Draft Time</div>
+</div>
+<div class="text-center group">
+<div class="font-serif text-5xl md:text-6xl font-bold highlight-mint mb-3 group-hover:scale-110 transition-transform duration-500">17.3 hrs</div>
+<div class="text-[10px] uppercase tracking-[0.3em] opacity-40">Saved Weekly</div>
+</div>
+</div>
+</div>
+</section>
+<!-- END: Stats Grid -->
+<!-- BEGIN: Comparison Section -->
+<section class="py-40 px-6" data-purpose="comparison" id="comparison">
+<div class="max-w-7xl mx-auto">
+<div class="text-center mb-28">
+<h2 class="font-serif text-5xl md:text-6xl font-bold mb-8">Not Just Another Chat Wrapper</h2>
+<p class="max-w-2xl mx-auto opacity-60 text-lg">We provide context-aware intelligence that lives where you work.</p>
+</div>
+<div class="grid lg:grid-cols-3 gap-10 mb-28">
+<!-- ChatGPT Card -->
+<div class="glass-card p-10 rounded-[2.5rem] opacity-60">
+<h3 class="font-serif text-2xl font-bold mb-6 opacity-40">ChatGPT</h3>
+<ul class="space-y-5 text-sm font-light">
+<li class="flex items-center gap-4">✕ Manual profile scraping</li>
+<li class="flex items-center gap-4">✕ Generic template output</li>
+<li class="flex items-center gap-4">✕ Workflow interruption</li>
+</ul>
+</div>
+<!-- Manual Card -->
+<div class="glass-card p-10 rounded-[2.5rem] opacity-60">
+<h3 class="font-serif text-2xl font-bold mb-6 opacity-40">Manual</h3>
+<ul class="space-y-5 text-sm font-light">
+<li class="flex items-center gap-4">✕ Research fatigue</li>
+<li class="flex items-center gap-4">✕ Constant writer's block</li>
+<li class="flex items-center gap-4">✕ Non-scalable outreach</li>
+</ul>
+</div>
+<!-- Ascendia Card -->
+<div class="glass-card p-10 rounded-[2.5rem] border-white/20 bg-white/[0.05] relative overflow-hidden group">
+<div class="absolute -top-20 -right-20 w-64 h-64 bg-asc-mint/5 blur-[100px] group-hover:bg-asc-mint/10 transition-all duration-700"></div>
+<h3 class="font-serif text-2xl font-bold mb-6 highlight-mint">Ascendia</h3>
+<ul class="space-y-5 text-sm">
+<li class="flex items-center gap-4 font-medium"><span class="text-asc-mint">✓</span> Native LinkedIn Sidebar</li>
+<li class="flex items-center gap-4 font-medium"><span class="text-asc-mint">✓</span> Instant Profile Analysis</li>
+<li class="flex items-center gap-4 font-medium"><span class="text-asc-mint">✓</span> Verified Human Tone</li>
+</ul>
+</div>
+</div>
+<!-- Comparison Table -->
+<div class="glass-card rounded-[2.5rem] overflow-hidden">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="border-b border-white/10 bg-white/[0.02]">
+<th class="p-10 font-serif text-xl">Core Capabilities</th>
+<th class="p-10 text-xs uppercase tracking-widest opacity-40">Standard AI</th>
+<th class="p-10 text-xs uppercase tracking-widest highlight-mint">Ascendia</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-white/5">
+<tr>
+<td class="p-10 font-medium">Native Integration</td>
+<td class="p-10 opacity-40">External Tabs</td>
+<td class="p-10 font-semibold highlight-mint">Seamless Sidebar</td>
+</tr>
+<tr>
+<td class="p-10 font-medium">Style Syncing</td>
+<td class="p-10 opacity-40">Basic Prompts</td>
+<td class="p-10 font-semibold highlight-mint">Persona Mirroring</td>
+</tr>
+<tr>
+<td class="p-10 font-medium">Lead Synthesis</td>
+<td class="p-10 opacity-40">User-Provided</td>
+<td class="p-10 font-semibold highlight-mint">Real-time Experience Scan</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</section>
+<!-- END: Comparison Section -->
+<!-- BEGIN: Process Timeline Section -->
+<section class="py-40 relative overflow-hidden" data-purpose="process-timeline" id="process">
+<div class="max-w-7xl mx-auto px-6 relative z-10">
+<h2 class="font-serif text-5xl md:text-6xl font-bold text-center mb-32">The 3-Step Success Cycle</h2>
+<div class="space-y-40">
+<!-- Step 1 -->
+<div class="flex flex-col md:flex-row items-center gap-20">
+<div class="md:w-1/2">
+<div class="text-9xl font-serif text-white/5 mb-6">01</div>
+<h3 class="text-4xl font-serif font-bold mb-6">Intelligent Activation</h3>
+<p class="text-lg opacity-60 leading-relaxed font-light">Navigate to any LinkedIn profile. Our extension intuitively emerges, contextualizing the prospect before you even type.</p>
+</div>
+<div class="md:w-1/2 w-full">
+<div class="aspect-video glass-card rounded-[3rem] flex items-center justify-center border border-white/10 group overflow-hidden">
+<div class="text-white/20 italic group-hover:scale-105 transition-transform duration-700">Extension Sidebar Visualization</div>
+<div class="absolute inset-0 bg-gradient-to-tr from-[#1E4D4A]/20 to-transparent"></div>
+</div>
+</div>
+</div>
+<!-- Step 2 -->
+<div class="flex flex-col md:flex-row-reverse items-center gap-20">
+<div class="md:w-1/2">
+<div class="text-9xl font-serif text-white/5 mb-6">02</div>
+<h3 class="text-4xl font-serif font-bold mb-6">Contextual Synthesis</h3>
+<p class="text-lg opacity-60 leading-relaxed font-light">We analyze career trajectories and recent content to draft outreach that mirrors your unique brand voice.</p>
+</div>
+<div class="md:w-1/2 w-full">
+<div class="aspect-video glass-card rounded-[3rem] flex items-center justify-center border border-white/10 group overflow-hidden">
+<div class="text-white/20 italic group-hover:scale-105 transition-transform duration-700">AI Drafting Protocol</div>
+<div class="absolute inset-0 bg-gradient-to-bl from-[#163351]/20 to-transparent"></div>
+</div>
+</div>
+</div>
+<!-- Step 3 -->
+<div class="flex flex-col md:flex-row items-center gap-20">
+<div class="md:w-1/2">
+<div class="text-9xl font-serif text-white/5 mb-6">03</div>
+<h3 class="text-4xl font-serif font-bold mb-6">Human Validation</h3>
+<p class="text-lg opacity-60 leading-relaxed font-light">Refine the draft with a single click. High-impact outreach is now a matter of seconds, not hours.</p>
+</div>
+<div class="md:w-1/2 w-full">
+<div class="aspect-video glass-card rounded-[3rem] flex items-center justify-center border border-white/10 group overflow-hidden">
+<div class="text-white/20 italic group-hover:scale-105 transition-transform duration-700">Final Verification Interface</div>
+<div class="absolute inset-0 bg-gradient-to-br from-[#2D1B4E]/20 to-transparent"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- END: Process Timeline Section -->
+<!-- BEGIN: Testimonials -->
+<section class="py-40 px-6" data-purpose="testimonials">
+<div class="max-w-7xl mx-auto">
+<h2 class="font-serif text-5xl text-center mb-28">Voices from the Field</h2>
+<div class="grid md:grid-cols-3 gap-10">
+<div class="glass-card p-12 rounded-[2.5rem] italic font-light leading-relaxed">
+            "I used to spend my entire Sunday prepping for Monday outreach. With Ascendia, I do it in 20 minutes over coffee."
+            <div class="mt-10 not-italic font-bold highlight-mint text-sm tracking-widest uppercase">— Sarah K., Head of Growth</div>
+</div>
+<div class="glass-card p-12 rounded-[2.5rem] italic font-light leading-relaxed">
+            "The personalization is spooky. It referenced a niche post I wrote 6 months ago. I've never had reply rates this high."
+            <div class="mt-10 not-italic font-bold highlight-mint text-sm tracking-widest uppercase">— David L., Founders Group</div>
+</div>
+<div class="glass-card p-12 rounded-[2.5rem] italic font-light leading-relaxed">
+            "Clean, fast, and stays out of the way until I need it. The only AI tool that actually fits my daily workflow."
+            <div class="mt-10 not-italic font-bold highlight-mint text-sm tracking-widest uppercase">— Elena R., Sales Director</div>
+</div>
+</div>
+</div>
+</section>
+<!-- END: Testimonials -->
+<!-- BEGIN: FAQ -->
+<section class="py-40 px-6 border-t border-white/5" data-purpose="faq" id="faq">
+<div class="max-w-3xl mx-auto">
+<h2 class="font-serif text-5xl text-center mb-20">Frequently Asked</h2>
+<div class="space-y-6">
+<details class="group glass-card rounded-3xl">
+<summary class="p-8 cursor-pointer font-bold list-none flex justify-between items-center text-lg">
+              Is this allowed by LinkedIn?
+              <span class="group-open:rotate-180 transition-transform duration-300 opacity-50">↓</span>
+</summary>
+<div class="p-8 pt-0 opacity-50 font-light leading-relaxed">
+              Ascendia is a Chrome extension that assists you with drafting. We do not automate browser interactions or scrapings in a way that violates TOS. You remain the sender of every message.
+            </div>
+</details>
+<details class="group glass-card rounded-3xl">
+<summary class="p-8 cursor-pointer font-bold list-none flex justify-between items-center text-lg">
+              Does it learn my writing style?
+              <span class="group-open:rotate-180 transition-transform duration-300 opacity-50">↓</span>
+</summary>
+<div class="p-8 pt-0 opacity-50 font-light leading-relaxed">
+              Yes! You can upload previous messages or connect your LinkedIn 'Sent' box so Ascendia mirrors your tone, vocabulary, and sign-offs perfectly.
+            </div>
+</details>
+<details class="group glass-card rounded-3xl">
+<summary class="p-8 cursor-pointer font-bold list-none flex justify-between items-center text-lg">
+              What languages are supported?
+              <span class="group-open:rotate-180 transition-transform duration-300 opacity-50">↓</span>
+</summary>
+<div class="p-8 pt-0 opacity-50 font-light leading-relaxed">
+              We currently support English, Spanish, French, German, and Portuguese with high-fidelity contextual nuances for each.
+            </div>
+</details>
+</div>
+</div>
+</section>
+<!-- END: FAQ -->
+<!-- BEGIN: Feedback Form -->
+<section class="py-40 px-6" data-purpose="feedback" id="feedback">
+<div class="max-w-xl mx-auto glass-card p-12 rounded-[3rem] border-white/10 relative overflow-hidden">
+<div class="absolute inset-0 bg-asc-mint/5 pointer-events-none"></div>
+<h2 class="font-serif text-4xl mb-6 text-center">Help Us Evolve</h2>
+<p class="text-center mb-10 opacity-50 font-light">Tell us what features you'd like to see next in the aurora.</p>
+<form action="#" class="space-y-8" method="POST">
+<div>
+<label class="block text-[10px] uppercase tracking-[0.3em] mb-4 opacity-40">Email Address</label>
+<input class="w-full bg-white/[0.03] border border-white/10 rounded-2xl px-6 py-4 focus:ring-asc-mint focus:border-asc-mint text-white outline-none transition-all" placeholder="you@company.com" type="email"/>
+</div>
+<div>
+<label class="block text-[10px] uppercase tracking-[0.3em] mb-4 opacity-40">Your Feedback</label>
+<textarea class="w-full bg-white/[0.03] border border-white/10 rounded-2xl px-6 py-4 focus:ring-asc-mint focus:border-asc-mint text-white outline-none transition-all" placeholder="What should we build next?" rows="4"></textarea>
+</div>
+<button class="w-full py-5 bg-white text-black font-bold rounded-2xl hover:bg-asc-mint transition-colors shadow-2xl" type="submit">
+            Submit Feedback
+          </button>
+</form>
+</div>
+</section>
+<!-- END: Feedback Form -->
+</main>
+<!-- BEGIN: Footer -->
+<footer class="py-32 px-6 border-t border-white/5" data-purpose="footer">
+<div class="max-w-7xl mx-auto grid md:grid-cols-4 gap-20">
+<div class="col-span-1 md:col-span-2">
+<div class="flex items-center gap-3 mb-10">
+<div class="w-6 h-6 rounded-full bg-asc-mint"></div>
+<span class="font-serif text-2xl font-bold">Ascendia</span>
+</div>
+<p class="max-w-sm opacity-40 leading-relaxed font-light">
+          The next generation of LinkedIn outreach. Respectful, efficient, and deeply personalized AI. Built for the modern professional.
+        </p>
+</div>
+<div>
+<h4 class="text-[10px] uppercase tracking-[0.3em] mb-10 opacity-40 font-bold">Navigation</h4>
+<ul class="space-y-6 text-sm font-light">
+<li><a class="hover:text-asc-mint transition-colors" href="#">Pricing</a></li>
+<li><a class="hover:text-asc-mint transition-colors" href="#">Extension</a></li>
+<li><a class="hover:text-asc-mint transition-colors" href="#">Journal</a></li>
+<li><a class="hover:text-asc-mint transition-colors" href="#">Support</a></li>
+</ul>
+</div>
+<div>
+<h4 class="text-[10px] uppercase tracking-[0.3em] mb-10 opacity-40 font-bold">Legal</h4>
+<ul class="space-y-6 text-sm font-light">
+<li><a class="hover:text-asc-mint transition-colors" href="#">Privacy</a></li>
+<li><a class="hover:text-asc-mint transition-colors" href="#">Terms</a></li>
+<li><a class="hover:text-asc-mint transition-colors" href="#">Security</a></li>
+</ul>
+</div>
+</div>
+<div class="max-w-7xl mx-auto mt-32 pt-10 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-10">
+<div class="text-[10px] uppercase tracking-[0.3em] opacity-30">© 2024 Ascendia Technologies Inc.</div>
+<div class="flex gap-10 opacity-30 hover:opacity-100 transition-opacity">
+<a class="text-lg" href="#">𝕏</a>
+<a class="text-lg" href="#">in</a>
+</div>
+</div>
+</footer>
+<!-- END: Footer -->
+<!-- BEGIN: Interactions Script -->
+<script data-purpose="scroll-animations">
+    const observerOptions = {
+      threshold: 0.1,
+      rootMargin: '0px 0px -50px 0px'
+    };
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.style.opacity = '1';
+          entry.target.style.transform = 'translateY(0)';
+        }
+      });
+    }, observerOptions);
+
+    document.querySelectorAll('section').forEach(section => {
+      section.style.opacity = '0';
+      section.style.transform = 'translateY(40px)';
+      section.style.transition = 'all 1.2s cubic-bezier(0.16, 1, 0.3, 1)';
+      observer.observe(section);
+    });
+  </script>
+<!-- END: Interactions Script -->
+</body></html>
