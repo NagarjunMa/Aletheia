@@ -35,6 +35,15 @@ let authenticatePromise = null;
   }
 })();
 
+// Cold-start alarm guard: re-create token refresh alarm if service worker
+// wakes on a non-startup/non-install event and the alarm is missing.
+chrome.alarms.get('aletheia-token-refresh', (alarm) => {
+  if (!alarm) {
+    console.log('[SW] Token refresh alarm missing after cold start, re-creating');
+    chrome.alarms.create('aletheia-token-refresh', { periodInMinutes: 20 });
+  }
+});
+
 // Extension configuration
 const CONFIG = {
   DEFAULT_API_URL: 'https://aletheia.vercel.app', // Production default
@@ -221,6 +230,29 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     console.log('[SW] authBridgeSession received from:', sender.url?.substring(0, 60));
     handleAuthBridgeSession(message.session);
     sendResponse({ success: true });
+    return true;
+  }
+
+  // Send feedback to backend (fire-and-forget)
+  if (message.action === 'sendFeedback') {
+    sendResponse({ success: true }); // Respond immediately, don't block UI
+    (async () => {
+      try {
+        const url = await getEffectiveApiUrl();
+        const accessToken = await getValidAccessToken(url);
+        await fetch(`${url}/api/extension/feedback`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${accessToken}`
+          },
+          body: JSON.stringify(message.payload)
+        });
+        console.log('[SW] Feedback sent successfully');
+      } catch (err) {
+        console.warn('[SW] Feedback send failed (non-blocking):', err.message);
+      }
+    })();
     return true;
   }
 

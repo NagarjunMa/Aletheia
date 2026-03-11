@@ -12,7 +12,7 @@ async function getStoredAuth() {
 }
 
 async function storeAuth(authData) {
-  console.log('[AUTH] Storing auth for:', authData.user?.email || 'unknown');
+  console.log('[AUTH] Storing auth for:', (authData.user?.email || '').substring(0, 4) + '***');
   await chrome.storage.local.set({
     [AUTH_STORAGE_KEY]: {
       access_token: authData.access_token,
@@ -57,7 +57,19 @@ function needsRefresh(auth) {
 // (createBrowserClient may store sessions in localStorage or set cookies that the chrome.cookies
 // API cannot read due to domain/SameSite/partitioning issues).
 
+let _fetchSessionPromise = null;
+
 async function fetchSessionFromWebApp(apiUrl) {
+  if (_fetchSessionPromise) {
+    console.log('[AUTH] fetchSessionFromWebApp: already in-flight, coalescing...');
+    return _fetchSessionPromise;
+  }
+  _fetchSessionPromise = _doFetchSessionFromWebApp(apiUrl)
+    .finally(() => { _fetchSessionPromise = null; });
+  return _fetchSessionPromise;
+}
+
+async function _doFetchSessionFromWebApp(apiUrl) {
   console.log('[AUTH] fetchSessionFromWebApp: calling', apiUrl + '/api/extension/session');
 
   // Method 1: Server endpoint (reliable — middleware handles cookie validation)
@@ -74,7 +86,7 @@ async function fetchSessionFromWebApp(apiUrl) {
 
     if (response.ok) {
       const sessionData = await response.json();
-      console.log('[AUTH] ✓ Session from server endpoint: user=' + (sessionData.user?.email || 'unknown'));
+      console.log('[AUTH] ✓ Session from server endpoint: user=' + (sessionData.user?.email || '').substring(0, 4) + '***');
 
       if (!sessionData.access_token) {
         throw new Error('Server returned session without access_token');
@@ -92,7 +104,22 @@ async function fetchSessionFromWebApp(apiUrl) {
 
     const errorBody = await response.json().catch(() => ({}));
     console.log('[AUTH] Session endpoint error:', errorBody.error || response.statusText);
+
+    // Propagate 401 status so callers can apply backoff
+    if (response.status === 401) {
+      const err = new Error(errorBody.error || 'Unauthorized');
+      err.status = 401;
+      err.retryAfter = parseInt(response.headers.get('Retry-After'), 10) || 0;
+      if (errorBody.code === 'refresh_token_already_used') {
+        console.log('[AUTH] refresh_token_already_used — clearing stale stored auth');
+        err.code = 'refresh_token_already_used';
+        await clearAuth();
+      }
+      throw err;
+    }
   } catch (fetchError) {
+    // Re-throw 401 errors so callers can apply backoff (don't fall through to cookie fallback)
+    if (fetchError.status === 401) throw fetchError;
     console.warn('[AUTH] Session endpoint fetch failed:', fetchError.message);
   }
 
@@ -138,7 +165,9 @@ async function fetchSessionFromWebApp(apiUrl) {
   // Fetch Supabase config for token refresh
   let supabaseUrl, supabaseAnonKey;
   try {
-    const configResp = await fetch(`${apiUrl}/api/extension/config`);
+    const configResp = await fetch(`${apiUrl}/api/extension/config`, {
+      headers: { 'X-Extension-Source': 'aletheia-extension' }
+    });
     if (configResp.ok) {
       const config = await configResp.json();
       supabaseUrl = config.supabase_url;
@@ -192,7 +221,9 @@ async function _doRefreshToken(auth) {
         const { apiBaseUrl } = await chrome.storage.sync.get('apiBaseUrl');
         const { apiUrl } = await chrome.storage.local.get('apiUrl');
         const url = apiBaseUrl || apiUrl || 'https://aletheia.vercel.app';
-        const configResp = await fetch(`${url}/api/extension/config`);
+        const configResp = await fetch(`${url}/api/extension/config`, {
+          headers: { 'X-Extension-Source': 'aletheia-extension' }
+        });
         if (configResp.ok) {
           const config = await configResp.json();
           auth.supabase_url = config.supabase_url;
@@ -261,7 +292,7 @@ async function getValidAccessToken(apiUrl) {
   let auth = await getStoredAuth();
 
   if (auth) {
-    console.log('[AUTH] Found stored auth for:', auth.user?.email || 'unknown');
+    console.log('[AUTH] Found stored auth for:', (auth.user?.email || '').substring(0, 4) + '***');
   } else {
     console.log('[AUTH] No stored auth found');
   }
@@ -309,7 +340,7 @@ async function getAuthStatus() {
     return { authenticated: false };
   }
   const valid = isTokenValid(auth);
-  console.log('[AUTH] getAuthStatus: authenticated=' + valid + ', user=' + (auth.user?.email || 'unknown'));
+  console.log('[AUTH] getAuthStatus: authenticated=' + valid + ', user=' + (auth.user?.email || '').substring(0, 4) + '***');
   return {
     authenticated: valid,
     user: auth.user || null,
@@ -357,7 +388,7 @@ async function waitForLogin(apiUrl) {
   });
 
   // Set keepalive alarm to prevent service worker termination during login
-  chrome.alarms.create(LOGIN_KEEPALIVE_ALARM, { periodInMinutes: 25 / 60 });
+  chrome.alarms.create(LOGIN_KEEPALIVE_ALARM, { periodInMinutes: 0.5 }); // 30s — Chrome minimum
 
   // Start polling for session
   return pollUntilSession(apiUrl, tab.id, Date.now() + LOGIN_TIMEOUT_MS);
@@ -380,7 +411,7 @@ async function injectAuthBridge(tabId) {
 function handleAuthBridgeSession(sessionData) {
   if (!sessionData || !sessionData.access_token) return;
 
-  console.log('[AUTH] authBridgeSession received for:', sessionData.user?.email || 'unknown');
+  console.log('[AUTH] authBridgeSession received for:', (sessionData.user?.email || '').substring(0, 4) + '***');
 
   // Fetch Supabase config and store
   Promise.all([
@@ -390,7 +421,9 @@ function handleAuthBridgeSession(sessionData) {
     const url = apiBaseUrl || apiUrl || 'https://aletheia.vercel.app';
     let supabaseUrl, supabaseAnonKey;
     try {
-      const configResp = await fetch(`${url}/api/extension/config`);
+      const configResp = await fetch(`${url}/api/extension/config`, {
+        headers: { 'X-Extension-Source': 'aletheia-extension' }
+      });
       if (configResp.ok) {
         const config = await configResp.json();
         supabaseUrl = config.supabase_url;
@@ -426,13 +459,14 @@ function pollUntilSession(apiUrl, tabId, timeoutAt) {
     let timeoutTimer = null;
     let bridgeInjected = false;
     let pollStep = 0;
+    let fetchInFlight = false;
 
     // Store resolve/reject so authBridgeSession messages can settle this promise
-    _loginResolve = (data) => settle(() => resolve(data));
-    _loginReject = (err) => settle(() => reject(err));
+    _loginResolve = (data) => settle(() => resolve(data), true);
+    _loginReject = (err) => settle(() => reject(err), false);
 
-    function cleanup() {
-      console.log('[AUTH] pollUntilSession: cleanup');
+    function cleanup(shouldCloseTab) {
+      console.log('[AUTH] pollUntilSession: cleanup (closeTab=' + shouldCloseTab + ')');
       chrome.cookies.onChanged.removeListener(cookieListener);
       chrome.tabs.onUpdated.removeListener(tabListener);
       chrome.alarms.clear(LOGIN_KEEPALIVE_ALARM);
@@ -442,14 +476,16 @@ function pollUntilSession(apiUrl, tabId, timeoutAt) {
       clearTimeout(timeoutTimer);
       _loginResolve = null;
       _loginReject = null;
-      // Auto-close the login tab
-      try { chrome.tabs.remove(tabId); } catch (e) { /* already closed */ }
+      // Only close the login tab on successful login
+      if (shouldCloseTab) {
+        try { chrome.tabs.remove(tabId); } catch (e) { /* already closed */ }
+      }
     }
 
-    function settle(fn) {
+    function settle(fn, shouldCloseTab = false) {
       if (settled) return;
       settled = true;
-      cleanup();
+      cleanup(shouldCloseTab);
       fn();
     }
 
@@ -458,13 +494,21 @@ function pollUntilSession(apiUrl, tabId, timeoutAt) {
     }
 
     async function tryFetchSession() {
+      if (fetchInFlight) return;
+      fetchInFlight = true;
       try {
         const sessionData = await fetchSessionFromWebApp(apiUrl);
-        console.log('[AUTH] pollUntilSession: session found for', sessionData.user?.email);
+        console.log('[AUTH] pollUntilSession: session found for', (sessionData.user?.email || '').substring(0, 4) + '***');
         await storeAuth(sessionData);
-        settle(() => resolve(sessionData));
+        settle(() => resolve(sessionData), true);
       } catch (e) {
-        console.log('[AUTH] pollUntilSession: no session yet:', e.message);
+        if (e.status === 401) {
+          console.log('[AUTH] pollUntilSession: 401 (user not logged in yet), will keep polling');
+        } else {
+          console.log('[AUTH] pollUntilSession: no session yet:', e.message);
+        }
+      } finally {
+        fetchInFlight = false;
       }
     }
 
@@ -476,7 +520,9 @@ function pollUntilSession(apiUrl, tabId, timeoutAt) {
         console.log('[AUTH] cookie detected:', cookie.name);
         resetPollStep();
         clearTimeout(cookieDebounceTimer);
-        cookieDebounceTimer = setTimeout(() => tryFetchSession(), 500);
+        cookieDebounceTimer = setTimeout(() => {
+          if (!settled) tryFetchSession();
+        }, 500);
       }
     }
     chrome.cookies.onChanged.addListener(cookieListener);
@@ -494,7 +540,9 @@ function pollUntilSession(apiUrl, tabId, timeoutAt) {
           injectAuthBridge(tabId);
         }
         // Also try server endpoint as fallback
-        setTimeout(() => tryFetchSession(), 1000);
+        setTimeout(() => {
+          if (!settled) tryFetchSession();
+        }, 1000);
       }
     }
     chrome.tabs.onUpdated.addListener(tabListener);
@@ -516,7 +564,7 @@ function pollUntilSession(apiUrl, tabId, timeoutAt) {
     const remaining = timeoutAt - Date.now();
     timeoutTimer = setTimeout(() => {
       console.log('[AUTH] pollUntilSession: timed out');
-      settle(() => reject(new Error('Login timed out. Please try again.')));
+      settle(() => reject(new Error('Login timed out. Please try again.')), false);
     }, Math.max(remaining, 0));
   });
 }
@@ -528,7 +576,7 @@ async function clearAuthAndFetchFresh(apiUrl) {
   await clearAuth();
   const sessionData = await fetchSessionFromWebApp(apiUrl);
   await storeAuth(sessionData);
-  console.log('[AUTH] clearAuthAndFetchFresh: ✓ fresh session for', sessionData.user?.email);
+  console.log('[AUTH] clearAuthAndFetchFresh: ✓ fresh session for', (sessionData.user?.email || '').substring(0, 4) + '***');
   return sessionData;
 }
 

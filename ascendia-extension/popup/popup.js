@@ -180,29 +180,49 @@ function showAuthRequired(authStatus) {
 
       const result = await new Promise((resolve) => {
         chrome.runtime.sendMessage({ action: 'authenticate' }, (response) => {
+          void chrome.runtime.lastError; // suppress "port closed" warning when SW dies
           console.log('[POPUP] authenticate response:', JSON.stringify(response));
           resolve(response);
         });
       });
 
       clearTimeout(waitingTimeout);
-      clearInterval(authPollInterval);
 
       if (authResolved) return; // Already handled by polling
-      authResolved = true;
 
-      if (result?.success) {
+      // SW was terminated while waiting (result is undefined/null).
+      // Don't show error — let authPollInterval detect auth after SW recovery.
+      if (!result) {
+        chrome.storage.local.get('_loginPending', ({ _loginPending }) => {
+          if (_loginPending && Date.now() < _loginPending.timeoutAt) {
+            btn.textContent = 'Waiting for login...';
+            // authPollInterval is still running; it will detect auth and reload
+            return;
+          }
+          // No pending login or it has timed out
+          clearInterval(authPollInterval);
+          btn.textContent = 'Connect to Aletheia';
+          btn.disabled = false;
+          showError('Connection failed. Please try again.');
+        });
+        return;
+      }
+
+      authResolved = true;
+      clearInterval(authPollInterval);
+
+      if (result.success) {
         console.log('[POPUP] Authentication successful:', result.user?.email);
         btn.textContent = 'Connected!';
         // Brief delay so user sees success before reload
         setTimeout(() => window.location.reload(), 500);
       } else {
-        console.error('[POPUP] Authentication failed:', result?.error);
+        console.error('[POPUP] Authentication failed:', result.error);
         btn.textContent = 'Connect to Aletheia';
         btn.disabled = false;
-        const errorMsg = result?.error?.includes('timed out')
+        const errorMsg = result.error?.includes('timed out')
           ? result.error
-          : result?.error || 'Connection failed. Please try again.';
+          : result.error || 'Connection failed. Please try again.';
         showError(errorMsg);
       }
     } catch (error) {
@@ -616,10 +636,32 @@ async function autoFillMessage() {
 async function handleFeedback(type) {
   if (!currentOutput) return;
 
+  const category = document.getElementById('category').value;
+  const messageBody = currentOutput.body || currentOutput.message || '';
+
   if (type === 'accept') {
     await saveAcceptedMessage();
     showTemporaryFeedback(document.getElementById('acceptBtn'), 'Saved!');
+    // Fire-and-forget: persist approval to backend for style learning
+    chrome.runtime.sendMessage({
+      action: 'sendFeedback',
+      payload: {
+        message: messageBody,
+        category,
+        approved: true,
+        subjectLine: currentOutput.subject_line || undefined,
+      }
+    }).catch(() => {}); // swallow errors — non-blocking
   } else if (type === 'reject') {
+    // Fire-and-forget: persist rejection to backend
+    chrome.runtime.sendMessage({
+      action: 'sendFeedback',
+      payload: {
+        message: messageBody,
+        category,
+        approved: false,
+      }
+    }).catch(() => {}); // swallow errors — non-blocking
     await generateMessage();
   }
 }
@@ -868,23 +910,47 @@ function displayValidationFeedback(output) {
   }
 
   if (feedbackItems.length > 0) {
-    const feedbackHTML = `
-      <div class="validation-header">
-        <span class="validation-title">📊 Message Analysis</span>
-        <button class="validation-toggle" onclick="toggleValidationDetails()">Details</button>
-      </div>
-      <div class="validation-items">
-        ${feedbackItems.map(item => `
-          <div class="validation-item ${item.status}">
-            <span class="validation-icon">${item.icon}</span>
-            <span class="validation-text">${item.text}</span>
-            <span class="validation-details hidden">${item.details}</span>
-          </div>
-        `).join('')}
-      </div>
-    `;
+    const header = document.createElement('div');
+    header.className = 'validation-header';
 
-    feedbackContainer.innerHTML = feedbackHTML;
+    const title = document.createElement('span');
+    title.className = 'validation-title';
+    title.textContent = '📊 Message Analysis';
+    header.appendChild(title);
+
+    const toggleBtn = document.createElement('button');
+    toggleBtn.className = 'validation-toggle';
+    toggleBtn.textContent = 'Details';
+    toggleBtn.onclick = toggleValidationDetails;
+    header.appendChild(toggleBtn);
+
+    const itemsContainer = document.createElement('div');
+    itemsContainer.className = 'validation-items';
+
+    for (const item of feedbackItems) {
+      const itemEl = document.createElement('div');
+      itemEl.className = `validation-item ${item.status}`;
+
+      const iconEl = document.createElement('span');
+      iconEl.className = 'validation-icon';
+      iconEl.textContent = item.icon;
+      itemEl.appendChild(iconEl);
+
+      const textEl = document.createElement('span');
+      textEl.className = 'validation-text';
+      textEl.textContent = item.text;
+      itemEl.appendChild(textEl);
+
+      const detailsEl = document.createElement('span');
+      detailsEl.className = 'validation-details hidden';
+      detailsEl.textContent = item.details;
+      itemEl.appendChild(detailsEl);
+
+      itemsContainer.appendChild(itemEl);
+    }
+
+    feedbackContainer.appendChild(header);
+    feedbackContainer.appendChild(itemsContainer);
 
     const messageBody = document.getElementById('messageBody');
     messageBody.insertAdjacentElement('afterend', feedbackContainer);
