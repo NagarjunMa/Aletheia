@@ -115,9 +115,7 @@ const nextConfig = {
 
   // Compiler options (let SWC handle optimizations)
   compiler: {
-    removeConsole: process.env.NODE_ENV === 'production' ? {
-      exclude: ['error', 'warn']
-    } : false
+    removeConsole: process.env.NODE_ENV === 'production'
   },
 
   // Security headers
@@ -193,7 +191,7 @@ const nextConfig = {
         key: 'Content-Security-Policy',
         value: [
           "default-src 'self'",
-          "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://app.posthog.com https://www.googletagmanager.com",
+          "script-src 'self' 'unsafe-inline' https://app.posthog.com https://www.googletagmanager.com",
           "style-src 'self' 'unsafe-inline'",
           "img-src 'self' data: https: blob:",
           "font-src 'self' https:",
