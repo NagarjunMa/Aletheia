@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+import { createLogger } from '@/lib/logger'
+import { getCorsHeaders } from '@/lib/cors'
+
+const log = createLogger('auth-me')
 
 const DAILY_LIMIT = 30
 
@@ -14,27 +18,6 @@ const supabaseService = createSupabaseClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
-
-// ─── CORS helpers (same as generate route) ───
-
-function getCorsHeaders(request: NextRequest) {
-  const origin = request.headers.get('origin')
-  const allowedPatterns = [
-    /^chrome-extension:\/\//,
-    /^https?:\/\/localhost(:\d+)?$/,
-    /^https:\/\/.*\.vercel\.app$/,
-  ]
-
-  const isAllowed = origin && allowedPatterns.some(p => p.test(origin))
-
-  return {
-    'Access-Control-Allow-Origin': isAllowed && origin ? origin : '',
-    'Access-Control-Allow-Methods': 'GET, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Allow-Credentials': 'true',
-    'Vary': 'Origin',
-  }
-}
 
 // ─── Usage query ───
 
@@ -66,7 +49,7 @@ async function getUsage(userId: string): Promise<{ count: number; limit: number;
 // ─── GET handler ───
 
 export async function GET(request: NextRequest) {
-  const corsHeaders = getCorsHeaders(request)
+  const corsHeaders = getCorsHeaders(request, { allowCredentials: true, methods: 'GET, OPTIONS' })
 
   try {
     let userId: string | null = null
@@ -118,7 +101,7 @@ export async function GET(request: NextRequest) {
     }, { headers: corsHeaders })
 
   } catch (error) {
-    console.error('/api/auth/me error:', error)
+    log.error({ err: error }, '/api/auth/me error')
     return NextResponse.json(
       { authenticated: false },
       { status: 500, headers: corsHeaders }
@@ -131,7 +114,7 @@ export async function OPTIONS(request: NextRequest) {
   return new Response(null, {
     status: 200,
     headers: {
-      ...getCorsHeaders(request),
+      ...getCorsHeaders(request, { allowCredentials: true, methods: 'GET, OPTIONS' }),
       'Access-Control-Max-Age': '86400',
     },
   })

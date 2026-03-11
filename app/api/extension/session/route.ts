@@ -1,37 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { headers } from 'next/headers'
+import { createLogger } from '@/lib/logger'
+import { getCorsHeaders } from '@/lib/cors'
+
+const log = createLogger('extension-session')
 
 export const dynamic = 'force-dynamic'
-
-function getCorsHeaders(request: NextRequest) {
-  const origin = request.headers.get('origin')
-  const isExtension = request.headers.get('x-extension-source') === 'aletheia-extension'
-
-  const allowedPatterns = [
-    /^chrome-extension:\/\//,
-    /^https?:\/\/localhost(:\d+)?$/,
-    /^https:\/\/.*\.vercel\.app$/,
-  ]
-
-  const isAllowed = origin && allowedPatterns.some(p => p.test(origin))
-
-  // Allow null origin — comes from service workers, not cross-origin browser pages
-  const allowNullOrigin = !origin
-
-  return {
-    'Access-Control-Allow-Origin': isAllowed ? origin : ((isExtension || allowNullOrigin) ? '*' : ''),
-    'Access-Control-Allow-Methods': 'GET, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, X-Extension-Source',
-    'Access-Control-Allow-Credentials': isAllowed ? 'true' : '',
-    'Vary': 'Origin',
-  }
-}
 
 export async function OPTIONS(request: NextRequest) {
   return new Response(null, {
     status: 200,
-    headers: getCorsHeaders(request),
+    headers: getCorsHeaders(request, { methods: 'GET, OPTIONS' }),
   })
 }
 
@@ -39,11 +19,11 @@ export async function GET(request: NextRequest) {
   // Call headers() to forcefully opt out of Next.js static generation caching
   headers()
 
-  console.log('[EXT-SESSION] GET /api/extension/session — origin:', request.headers.get('origin'))
-  const corsHeaders = getCorsHeaders(request)
+  log.info({ origin: request.headers.get('origin') }, 'GET /api/extension/session')
+  const corsHeaders = getCorsHeaders(request, { methods: 'GET, OPTIONS' })
 
   if (!corsHeaders['Access-Control-Allow-Origin']) {
-    console.log('[EXT-SESSION] ✗ Origin not allowed')
+    log.info('Origin not allowed')
     return NextResponse.json(
       { error: 'Origin not allowed' },
       { status: 403, headers: corsHeaders }
@@ -53,7 +33,7 @@ export async function GET(request: NextRequest) {
   try {
     // Log all cookies for debugging (names only, not values)
     const cookieNames = request.cookies.getAll().map(c => c.name)
-    console.log('[EXT-SESSION] Cookies present:', cookieNames.join(', ') || '(none)')
+    log.debug({ cookies: cookieNames }, 'Cookies present')
 
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -69,31 +49,53 @@ export async function GET(request: NextRequest) {
       }
     )
 
-    // Use getUser() instead of getSession() — validates token server-side
-    const { data: { user }, error } = await supabase.auth.getUser()
-    console.log('[EXT-SESSION] getUser:', user ? `✓ ${user.email}` : `✗ ${error?.message || 'no user'}`)
+    // Step 1: One refresh attempt at most
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+    log.info({ expiresAt: session?.expires_at, err: sessionError?.message }, session ? 'getSession success' : 'getSession failed')
 
-    if (error || !user) {
-      console.log('[EXT-SESSION] → 401 Not authenticated')
+    if (sessionError) {
+      if (sessionError.code === 'refresh_token_already_used') {
+        log.info('refresh_token_already_used on getSession, returning 401')
+        return NextResponse.json(
+          { error: 'Session expired. Please log in again.', code: 'refresh_token_already_used' },
+          { status: 401, headers: corsHeaders }
+        )
+      }
+      log.info('getSession error, returning 401')
       return NextResponse.json(
         { error: 'Not authenticated. Please log in to the Aletheia web app first.' },
         { status: 401, headers: corsHeaders }
       )
     }
 
-    // After validating the user, get the session for tokens
-    const { data: { session } } = await supabase.auth.getSession()
-    console.log('[EXT-SESSION] getSession:', session ? `✓ expires_at=${session.expires_at}` : '✗ no session')
-
     if (!session) {
-      console.log('[EXT-SESSION] → 401 Session expired')
+      log.info('No session, returning 401')
       return NextResponse.json(
-        { error: 'Session expired. Please log in again.' },
+        { error: 'Not authenticated. Please log in to the Aletheia web app first.' },
         { status: 401, headers: corsHeaders }
       )
     }
 
-    console.log('[EXT-SESSION] → 200 OK, returning session for', user.email)
+    // Step 2: Validate JWT server-side by passing the token explicitly.
+    // This calls /auth/v1/user with a Bearer header — no cookie read, no second refresh.
+    const { data: { user }, error: userError } = await supabase.auth.getUser(session.access_token)
+    log.info({ userId: user?.id?.substring(0, 8), err: userError?.message }, user ? 'getUser success' : 'getUser failed')
+
+    if (userError || !user) {
+      if (userError?.code === 'refresh_token_already_used') {
+        return NextResponse.json(
+          { error: 'Session expired. Please log in again.', code: 'refresh_token_already_used' },
+          { status: 401, headers: corsHeaders }
+        )
+      }
+      log.info('Not authenticated, returning 401')
+      return NextResponse.json(
+        { error: 'Not authenticated. Please log in to the Aletheia web app first.' },
+        { status: 401, headers: corsHeaders }
+      )
+    }
+
+    log.info({ userId: user.id.substring(0, 8) }, 'Returning session')
     return NextResponse.json({
       access_token: session.access_token,
       refresh_token: session.refresh_token,
@@ -109,7 +111,7 @@ export async function GET(request: NextRequest) {
       headers: corsHeaders,
     })
   } catch (error) {
-    console.error('[EXT-SESSION] ✗ Internal error:', error)
+    log.error({ err: error }, 'Internal error')
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500, headers: corsHeaders }

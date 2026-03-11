@@ -4,13 +4,16 @@
 
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('middleware')
 
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname
   const isAuthRelated = pathname.startsWith('/auth') || pathname.startsWith('/api/extension')
 
   if (isAuthRelated) {
-    console.log(`[MW] ${request.method} ${pathname}${request.nextUrl.search}`)
+    log.debug({ method: request.method, pathname, search: request.nextUrl.search }, 'Auth-related request')
   }
 
   let response = NextResponse.next({
@@ -65,38 +68,62 @@ export async function middleware(request: NextRequest) {
     }
   )
 
+  // Skip auth for extension session endpoint — it does its own full auth check.
+  // Running getUser() here AND in the endpoint creates a token refresh race condition
+  // where concurrent requests cause "refresh_token_already_used" errors.
+  if (pathname === '/api/extension/session') {
+    // Still apply security headers
+    response.headers.set('X-Frame-Options', 'DENY')
+    response.headers.set('X-Content-Type-Options', 'nosniff')
+    response.headers.set('X-XSS-Protection', '1; mode=block')
+    response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
+    return response
+  }
+
   // Refresh session if expired - required for Server Components
   const { data: { user }, error } = await supabase.auth.getUser()
 
   if (isAuthRelated) {
-    console.log(`[MW] getUser result: user=${user?.email || 'null'}, error=${error?.code || 'none'}`)
+    log.debug({ user: user?.email, errorCode: error?.code }, 'getUser result')
   }
 
   // Handle stale refresh token (caused by concurrent requests racing to refresh)
-  // Do NOT call signOut() here — a concurrent request may have already refreshed
-  // successfully and set fresh cookies. signOut() would destroy those too.
   if (error?.code === 'refresh_token_already_used') {
-    console.log('[MW] refresh_token_already_used — returning 401 without signOut (concurrent refresh race)')
+    log.info({ pathname }, 'refresh_token_already_used — clearing stale cookies')
 
     // Do not redirect API requests to the HTML login page
     if (pathname.startsWith('/api/')) {
-      return NextResponse.json(
-        { error: 'Session expired. Please log in again.' },
+      const res = NextResponse.json(
+        { error: 'Session expired. Please log in again.', code: 'refresh_token_already_used' },
         { status: 401 }
       )
+      res.headers.set('Retry-After', '2')
+      return res
     }
 
-    // Auth pages don't need authentication — let them through
-    // signOut() just clears stale cookies; the refresh token is already invalid
-    if (pathname.startsWith('/auth')) {
-      await supabase.auth.signOut()
-      return response
+    // For auth and non-API pages: clear stale auth cookies via redirect.
+    // We avoid calling signOut() here because the cookie remove() handler
+    // reassigns the `response` object on each cookie, which can cause Next.js
+    // to lose track of the page route and return 404.
+    // Instead, redirect to the same URL — the redirect response clears the
+    // stale cookies, and the fresh request will have no auth state.
+    const cleanUrl = request.nextUrl.clone()
+    if (!pathname.startsWith('/auth')) {
+      cleanUrl.pathname = '/auth/login'
+      cleanUrl.searchParams.set('redirectTo', pathname)
+    }
+    const redirectResponse = NextResponse.redirect(cleanUrl)
+
+    // Clear all Supabase auth cookies from the response so the browser
+    // drops the stale tokens before the redirect lands
+    const cookieNames = request.cookies.getAll().map(c => c.name)
+    for (const name of cookieNames) {
+      if (name.startsWith('sb-') && name.includes('auth-token')) {
+        redirectResponse.cookies.set(name, '', { maxAge: 0, path: '/' })
+      }
     }
 
-    const loginUrl = request.nextUrl.clone()
-    loginUrl.pathname = '/auth/login'
-    loginUrl.searchParams.set('redirectTo', request.nextUrl.pathname)
-    return NextResponse.redirect(loginUrl)
+    return redirectResponse
   }
 
   // Protected routes - redirect to login if not authenticated
@@ -125,12 +152,12 @@ export async function middleware(request: NextRequest) {
     const dashboardUrl = request.nextUrl.clone()
     dashboardUrl.pathname = redirectTo || '/'
     dashboardUrl.searchParams.delete('redirectTo')
-    console.log(`[MW] Redirecting authenticated user away from auth page → ${dashboardUrl.pathname}`)
+    log.info({ redirectTo: dashboardUrl.pathname }, 'Redirecting authenticated user away from auth page')
     return NextResponse.redirect(dashboardUrl)
   }
 
   if (isAuthRoute && isExtensionLogin) {
-    console.log(`[MW] Extension login: allowing auth page (user=${user?.email || 'null'})`)
+    log.debug({ user: user?.email }, 'Extension login: allowing auth page')
   }
 
   // Add security headers
