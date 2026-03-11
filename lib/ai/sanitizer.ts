@@ -5,6 +5,18 @@
 
 import { detectAIFingerprints, sanitizeAIFingerprints, type AIFingerprintResult } from './ai-fingerprint-detector'
 
+/**
+ * Remove unpaired Unicode surrogate characters (U+D800–U+DFFF)
+ * that cause JSON serialization failures with the Anthropic API.
+ */
+export function stripSurrogates(str: string): string {
+  // eslint-disable-next-line no-control-regex
+  return str.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '')
+}
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('sanitizer')
+
 // Use dynamic import to handle ESM compatibility issues
 let DOMPurify: any = null
 
@@ -15,7 +27,7 @@ async function getDOMPurify() {
       const { default: purify } = await import('isomorphic-dompurify')
       DOMPurify = purify
     } catch (error) {
-      console.warn('DOMPurify not available, using fallback sanitization')
+      log.warn('DOMPurify not available, using fallback sanitization')
       // Fallback sanitization function
       DOMPurify = {
         sanitize: (html: string) => html.replace(/<script[^>]*>.*?<\/script>/gi, '').replace(/<[^>]*>/g, '')
@@ -272,7 +284,7 @@ export async function sanitizeAIOutput(
       isAIGenerated: aiFingerprints?.isAIGenerated,
     }
   } catch (error) {
-    console.error('Sanitization error:', error)
+    log.error({ err: error }, 'Sanitization error')
     return {
       success: false,
       sanitizedContent: '',
