@@ -6,9 +6,14 @@ import {
   sanitize,
   type GenerateInput
 } from '@/lib/ai/prompts/linkedin-connection'
-import { sanitizeForLinkedIn } from '@/lib/ai/sanitizer'
+import type { StylePatterns } from '@/lib/ai/style-analyzer'
+import { sanitizeForLinkedIn, stripSurrogates } from '@/lib/ai/sanitizer'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { z } from 'zod'
+import { createLogger } from '@/lib/logger'
+import { getCorsHeaders } from '@/lib/cors'
+
+const log = createLogger('extension-generate')
 
 // Initialize Anthropic client
 const anthropic = new Anthropic({
@@ -34,122 +39,41 @@ const DAILY_LIMIT = 30
 async function authenticateRequest(request: NextRequest): Promise<{ userId: string; email: string } | null> {
   const authHeader = request.headers.get('authorization')
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    console.log('[EXT-GENERATE] ✗ No Bearer token in Authorization header')
+    log.info('No Bearer token in Authorization header')
     return null
   }
 
   const accessToken = authHeader.slice(7)
-  console.log('[EXT-GENERATE] Validating token (first 20 chars):', accessToken.substring(0, 20) + '...')
+  log.debug({ tokenPrefix: accessToken.substring(0, 8) }, 'Validating access token')
   const { data: { user }, error } = await supabaseAuth.auth.getUser(accessToken)
 
   if (error || !user) {
-    console.log('[EXT-GENERATE] ✗ Token validation failed:', error?.message || 'no user')
+    log.info({ err: error?.message }, 'Token validation failed')
     return null
   }
 
-  console.log('[EXT-GENERATE] ✓ Authenticated:', user.email)
-  return { userId: user.id, email: user.email || '' }
+  log.info({ userId: user.id.substring(0, 8) }, 'Authenticated')
+  return { userId: user.id, email: '' }
 }
 
 // ─── Persistent rate limiting via Supabase ───
 
 async function checkRateLimit(userId: string): Promise<{ allowed: boolean; remainingRequests: number; resetTime: number }> {
-  const now = new Date()
-  const windowStartCutoff = new Date(now.getTime() - 86400000) // 24 hours ago
+  const { data, error } = await supabaseService.rpc('check_and_increment_rate_limit', {
+    p_user_id: userId,
+    p_daily_limit: DAILY_LIMIT
+  })
 
-  // Get current usage count within the 24h window
-  const { data, error } = await supabaseService
-    .from('extension_rate_limits')
-    .select('request_count, window_start')
-    .eq('user_id', userId)
-    .single()
-
-  if (error && error.code !== 'PGRST116') {
-    // PGRST116 = no rows returned (first request)
-    console.error('Rate limit check error:', error)
-    // Fail open — allow request but log error
-    return { allowed: true, remainingRequests: DAILY_LIMIT - 1, resetTime: now.getTime() + 86400000 }
+  if (error || !data || data.length === 0) {
+    log.error({ err: error }, 'Rate limit RPC error — failing open')
+    return { allowed: true, remainingRequests: DAILY_LIMIT - 1, resetTime: Date.now() + 86400000 }
   }
 
-  if (!data) {
-    // First request ever — create row
-    const { error: insertError } = await supabaseService
-      .from('extension_rate_limits')
-      .insert({
-        user_id: userId,
-        request_count: 1,
-        window_start: now.toISOString()
-      })
-
-    if (insertError) {
-      console.error('Rate limit insert error:', insertError)
-    }
-
-    return { allowed: true, remainingRequests: DAILY_LIMIT - 1, resetTime: now.getTime() + 86400000 }
-  }
-
-  const windowStart = new Date(data.window_start)
-
-  if (windowStart < windowStartCutoff) {
-    // Window expired — reset
-    const { error: updateError } = await supabaseService
-      .from('extension_rate_limits')
-      .update({
-        request_count: 1,
-        window_start: now.toISOString()
-      })
-      .eq('user_id', userId)
-
-    if (updateError) {
-      console.error('Rate limit reset error:', updateError)
-    }
-
-    return { allowed: true, remainingRequests: DAILY_LIMIT - 1, resetTime: now.getTime() + 86400000 }
-  }
-
-  if (data.request_count >= DAILY_LIMIT) {
-    const resetTime = windowStart.getTime() + 86400000
-    return { allowed: false, remainingRequests: 0, resetTime }
-  }
-
-  // Increment
-  const { error: updateError } = await supabaseService
-    .from('extension_rate_limits')
-    .update({
-      request_count: data.request_count + 1
-    })
-    .eq('user_id', userId)
-
-  if (updateError) {
-    console.error('Rate limit increment error:', updateError)
-  }
-
-  const resetTime = windowStart.getTime() + 86400000
+  const row = data[0]
   return {
-    allowed: true,
-    remainingRequests: Math.max(0, DAILY_LIMIT - data.request_count - 1),
-    resetTime
-  }
-}
-
-// ─── CORS helpers ───
-
-function getCorsHeaders(request: NextRequest) {
-  const origin = request.headers.get('origin')
-  const allowedPatterns = [
-    /^chrome-extension:\/\//,
-    /^https?:\/\/localhost(:\d+)?$/,
-    /^https:\/\/.*\.vercel\.app$/,
-  ]
-
-  const isAllowed = origin && allowedPatterns.some(p => p.test(origin))
-
-  return {
-    'Access-Control-Allow-Origin': isAllowed && origin ? origin : '',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Allow-Credentials': 'true',
-    'Vary': 'Origin',
+    allowed: row.allowed,
+    remainingRequests: row.remaining,
+    resetTime: new Date(row.reset_time).getTime()
   }
 }
 
@@ -178,7 +102,7 @@ const generateRequestSchema = z.object({
 type GenerateRequest = z.infer<typeof generateRequestSchema>
 
 export async function POST(request: NextRequest) {
-  const corsHeaders = getCorsHeaders(request)
+  const corsHeaders = getCorsHeaders(request, { allowCredentials: true, methods: 'GET, POST, OPTIONS' })
 
   try {
     // 1. Auth check FIRST (before rate limiting)
@@ -190,7 +114,24 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 2. Rate limiting (per user, persistent)
+    // 2. Fetch user style profile (non-blocking — failure just skips learned style)
+    let styleProfile: StylePatterns | undefined
+    try {
+      const { data: prefs } = await supabaseService
+        .from('user_preferences')
+        .select('style_patterns, approved_message_count')
+        .eq('user_id', authResult.userId)
+        .maybeSingle()
+
+      if (prefs && (prefs.approved_message_count ?? 0) >= 3 && prefs.style_patterns) {
+        styleProfile = prefs.style_patterns as unknown as StylePatterns
+        log.debug({ approvedCount: prefs.approved_message_count }, 'Using learned style profile')
+      }
+    } catch (err) {
+      log.warn({ err }, 'Failed to fetch style profile, continuing without it')
+    }
+
+    // 3. Rate limiting (per user, persistent)
     const rateCheck = await checkRateLimit(authResult.userId)
     if (!rateCheck.allowed) {
       return NextResponse.json({
@@ -214,29 +155,52 @@ export async function POST(request: NextRequest) {
 
     const { profile, resume, jd, category, intent, acceptedExamples } = validatedData
 
+    // Sanitize all user-provided strings to strip unpaired Unicode surrogates
+    // that cause JSON serialization failures with the Anthropic API
+    const sanitizedProfile = {
+      ...profile,
+      name: stripSurrogates(profile.name),
+      headline: profile.headline ? stripSurrogates(profile.headline) : profile.headline,
+      location: profile.location ? stripSurrogates(profile.location) : profile.location,
+      about: profile.about ? stripSurrogates(profile.about) : profile.about,
+      experiences: profile.experiences?.map(e => ({
+        title: stripSurrogates(e.title),
+        company: e.company ? stripSurrogates(e.company) : e.company,
+      })),
+      recentPosts: profile.recentPosts?.map(p => stripSurrogates(p)),
+      skills: profile.skills?.map(s => stripSurrogates(s)),
+    }
+    const sanitizedResume = resume ? stripSurrogates(resume).slice(0, 8000) : resume
+    const sanitizedJd = jd ? stripSurrogates(jd).slice(0, 4000) : jd
+    const sanitizedExamples = acceptedExamples?.map(e => stripSurrogates(e))
+
     // Use new prompt system
     const systemPrompt = getSystemPrompt(category)
-    const userPrompt = buildPrompt({
+    const promptInput: GenerateInput = {
       profile: {
-        name: profile.name,
-        headline: profile.headline || '',
-        location: profile.location || '',
-        about: profile.about || '',
-        experiences: (profile.experiences || []).map(e => ({ title: e.title, company: e.company || '' })),
-        recentPosts: profile.recentPosts || [],
-        skills: profile.skills || []
+        name: sanitizedProfile.name,
+        headline: sanitizedProfile.headline || '',
+        location: sanitizedProfile.location || '',
+        about: sanitizedProfile.about || '',
+        experiences: (sanitizedProfile.experiences || []).map(e => ({ title: e.title, company: e.company || '' })),
+        recentPosts: sanitizedProfile.recentPosts || [],
+        skills: sanitizedProfile.skills || []
       },
-      resume: resume || '',
-      jd: jd || '',
+      resume: sanitizedResume || '',
+      jd: sanitizedJd || '',
       category,
       intent: intent || 'networking',
-      acceptedExamples: acceptedExamples || []
-    })
+      acceptedExamples: sanitizedExamples || [],
+    }
+    if (styleProfile) {
+      promptInput.styleProfile = styleProfile
+    }
+    const userPrompt = buildPrompt(promptInput)
 
     // Generate content using Claude
     const startTime = Date.now()
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 600,
       temperature: 0.8,
       system: systemPrompt,
@@ -254,7 +218,7 @@ export async function POST(request: NextRequest) {
 
     // Log usage for monitoring
     const tokenUsage = response.usage
-    console.log(`Extension generation [${authResult.email}]: ${tokenUsage.input_tokens + tokenUsage.output_tokens} tokens, ${processingTime}ms`)
+    log.info({ userId: authResult.userId.substring(0, 8), tokens: tokenUsage.input_tokens + tokenUsage.output_tokens, processingTime }, 'Generation completed')
 
     const rateLimitHeaders = {
       'X-RateLimit-Limit': String(DAILY_LIMIT),
@@ -282,7 +246,7 @@ export async function POST(request: NextRequest) {
           const bodyHasAI = enhancedBodySanitization.isAIGenerated
 
           if (subjectHasAI || bodyHasAI) {
-            console.warn('AI fingerprints detected in Chrome extension generation:', {
+            log.warn({
               subject: subjectHasAI ? {
                 confidence: enhancedSubjectSanitization.aiFingerprints?.confidence,
                 patterns: enhancedSubjectSanitization.aiFingerprints?.detectedPatterns,
@@ -294,7 +258,7 @@ export async function POST(request: NextRequest) {
                 authenticityScore: enhancedBodySanitization.authenticityScore
               } : null,
               category: validatedData.category
-            })
+            }, 'AI fingerprints detected in Chrome extension generation')
           }
 
           const wordCount = parsed.word_count || countWords(sanitizedBody)
@@ -303,7 +267,7 @@ export async function POST(request: NextRequest) {
 
           let finalBody = sanitizedBody
           if (wordCount > maxWords) {
-            console.warn(`${category} exceeds word limit: ${wordCount} > ${maxWords}`)
+            log.warn({ category, wordCount, maxWords }, 'Category exceeds word limit')
             finalBody = truncateToWordLimit(sanitizedBody, maxWords)
           }
 
@@ -327,19 +291,19 @@ export async function POST(request: NextRequest) {
           })
         }
       } catch (parseError) {
-        console.warn('Failed to parse JSON response, attempting fallback sanitization and parsing:', parseError)
+        log.warn({ err: parseError }, 'Failed to parse JSON response, attempting fallback')
 
         const basicSanitization = sanitize(rawContent)
         const enhancedSanitization = await sanitizeForLinkedIn(basicSanitization)
         const sanitizedContent = enhancedSanitization.success ? enhancedSanitization.sanitizedContent : basicSanitization
 
         if (enhancedSanitization.isAIGenerated) {
-          console.warn('AI fingerprints detected in fallback processing:', {
+          log.warn({
             confidence: enhancedSanitization.aiFingerprints?.confidence,
             patterns: enhancedSanitization.aiFingerprints?.detectedPatterns,
             authenticityScore: enhancedSanitization.authenticityScore,
             category: validatedData.category
-          })
+          }, 'AI fingerprints detected in fallback processing')
         }
 
         // Try JSON parse on sanitized content (fence-stripped) before falling through to regex
@@ -408,12 +372,12 @@ export async function POST(request: NextRequest) {
     const sanitizedContent = enhancedSanitization.success ? enhancedSanitization.sanitizedContent : basicSanitization
 
     if (enhancedSanitization.isAIGenerated) {
-      console.warn('AI fingerprints detected in LinkedIn connection generation:', {
+      log.warn({
         confidence: enhancedSanitization.aiFingerprints?.confidence,
         patterns: enhancedSanitization.aiFingerprints?.detectedPatterns,
         authenticityScore: enhancedSanitization.authenticityScore,
         category: validatedData.category
-      })
+      }, 'AI fingerprints detected in LinkedIn connection generation')
     }
 
     // Apply smart character limit preserving the OPEN sentence
@@ -422,7 +386,7 @@ export async function POST(request: NextRequest) {
     const originalLength = sanitizedContent.length
 
     if (finalContent.length > 300) {
-      console.warn(`LinkedIn connection exceeds character limit: ${finalContent.length} > 300`)
+      log.warn({ length: finalContent.length, limit: 300 }, 'LinkedIn connection exceeds character limit')
 
       // Smart truncation: find the last sentence boundary (period) within 300 chars
       const within300 = finalContent.substring(0, 300)
@@ -438,7 +402,7 @@ export async function POST(request: NextRequest) {
       }
 
       wasTruncated = true
-      console.log(`LinkedIn message truncated to ${finalContent.length} chars at sentence boundary`)
+      log.info({ truncatedLength: finalContent.length }, 'LinkedIn message truncated at sentence boundary')
     }
 
     return NextResponse.json({
@@ -459,14 +423,13 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Extension generation error:', error)
+    log.error({ err: error }, 'Extension generation error')
 
     if (error instanceof z.ZodError) {
       return NextResponse.json({
         success: false,
-        error: 'Invalid request data',
-        details: error.errors[0]?.message
-      }, { status: 400, headers: getCorsHeaders(request) })
+        error: 'Invalid request'
+      }, { status: 400, headers: getCorsHeaders(request, { allowCredentials: true, methods: 'GET, POST, OPTIONS' }) })
     }
 
     if (error instanceof Anthropic.APIError) {
@@ -474,21 +437,21 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({
           success: false,
           error: 'Anthropic API authentication failed'
-        }, { status: 500, headers: getCorsHeaders(request) })
+        }, { status: 500, headers: getCorsHeaders(request, { allowCredentials: true, methods: 'GET, POST, OPTIONS' }) })
       }
 
       if (error.status === 429) {
         return NextResponse.json({
           success: false,
           error: 'Rate limit exceeded, please try again later'
-        }, { status: 429, headers: getCorsHeaders(request) })
+        }, { status: 429, headers: getCorsHeaders(request, { allowCredentials: true, methods: 'GET, POST, OPTIONS' }) })
       }
     }
 
     return NextResponse.json({
       success: false,
       error: 'Failed to generate content'
-    }, { status: 500, headers: getCorsHeaders(request) })
+    }, { status: 500, headers: getCorsHeaders(request, { allowCredentials: true, methods: 'GET, POST, OPTIONS' }) })
   }
 }
 
@@ -523,7 +486,7 @@ function stripMarkdownCodeFences(content: string): string {
 
 // GET endpoint for health check with Bearer token validation
 export async function GET(request: NextRequest) {
-  const corsHeaders = getCorsHeaders(request)
+  const corsHeaders = getCorsHeaders(request, { allowCredentials: true, methods: 'GET, POST, OPTIONS' })
 
   try {
     // Auth check
@@ -543,13 +506,13 @@ export async function GET(request: NextRequest) {
       },
       status: 'healthy',
       authenticated: true,
-      user: authResult.email
+      user: authResult.userId.substring(0, 8)
     }, {
       headers: corsHeaders
     })
 
   } catch (error) {
-    console.error('GET endpoint error:', error)
+    log.error({ err: error }, 'GET endpoint error')
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500, headers: corsHeaders }
@@ -562,7 +525,7 @@ export async function OPTIONS(request: NextRequest) {
   return new Response(null, {
     status: 200,
     headers: {
-      ...getCorsHeaders(request),
+      ...getCorsHeaders(request, { allowCredentials: true, methods: 'GET, POST, OPTIONS' }),
       'Access-Control-Max-Age': '86400',
     },
   })
