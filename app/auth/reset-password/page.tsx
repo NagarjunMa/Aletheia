@@ -41,12 +41,6 @@ function ResetPasswordForm() {
       }
     })
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        setSessionReady(true)
-      }
-    })
-
     const timeout = setTimeout(() => {
       if (!sessionReady) {
         setSessionError(true)
@@ -68,8 +62,8 @@ function ResetPasswordForm() {
       return
     }
 
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters')
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters')
       return
     }
 
@@ -170,7 +164,7 @@ function ResetPasswordForm() {
       {/* Logo + brand */}
       <div className="flex items-center gap-3 mb-10">
         <Image src="/Aletheia.svg" alt="Aletheia" width={36} height={36} className="rounded-lg" />
-        <span className="text-white font-semibold text-lg">Aletheia</span>
+        <span style={{ fontFamily: 'var(--font-cormorant), Georgia, serif', fontWeight: 300, fontSize: '1.4rem', color: 'white', letterSpacing: '0.04em' }}>Aletheia</span>
       </div>
 
       {/* Heading */}
@@ -195,7 +189,7 @@ function ResetPasswordForm() {
               required
               autoFocus
               placeholder="••••••••"
-              minLength={6}
+              minLength={8}
               className="w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--input))] pl-10 pr-4 py-2.5 text-sm text-white placeholder:text-[hsl(var(--muted-foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] transition-colors"
             />
           </div>
@@ -214,7 +208,7 @@ function ResetPasswordForm() {
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
               placeholder="••••••••"
-              minLength={6}
+              minLength={8}
               className="w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--input))] pl-10 pr-4 py-2.5 text-sm text-white placeholder:text-[hsl(var(--muted-foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] transition-colors"
             />
           </div>

@@ -89,7 +89,7 @@ function ForgotPasswordForm() {
       {/* Logo + brand */}
       <div className="flex items-center gap-3 mb-10">
         <Image src="/Aletheia.svg" alt="Aletheia" width={36} height={36} className="rounded-lg" />
-        <span className="text-white font-semibold text-lg">Aletheia</span>
+        <span style={{ fontFamily: 'var(--font-cormorant), Georgia, serif', fontWeight: 300, fontSize: '1.4rem', color: 'white', letterSpacing: '0.04em' }}>Aletheia</span>
       </div>
 
       {/* Heading */}

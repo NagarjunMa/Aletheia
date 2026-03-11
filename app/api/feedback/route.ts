@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createClient } from '@supabase/supabase-js'
+import { createLogger } from '@/lib/logger'
+
+const log = createLogger('feedback')
 
 const feedbackSchema = z.object({
   name: z.string().min(2).max(100),
   email: z.string().email().max(320),
   message: z.string().min(10).max(5000),
   rating: z.number().int().min(1).max(5).optional(),
-  honeypot: z.string().max(0).optional(),
 })
 
 function getSupabaseAdmin() {
@@ -21,17 +23,17 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
 
+    // Honeypot check before schema validation — bots see silent success
+    if (body?.honeypot) {
+      return NextResponse.json({ success: true })
+    }
+
     const parsed = feedbackSchema.safeParse(body)
     if (!parsed.success) {
       return NextResponse.json(
-        { error: parsed.error.issues[0]?.message || 'Invalid input' },
+        { error: 'Invalid input' },
         { status: 400 }
       )
-    }
-
-    // Honeypot check
-    if (parsed.data.honeypot) {
-      return NextResponse.json({ success: true })
     }
 
     const supabase = getSupabaseAdmin()
@@ -46,7 +48,7 @@ export async function POST(req: NextRequest) {
     })
 
     if (error) {
-      console.error('Feedback insert error:', error)
+      log.error({ err: error }, 'Feedback insert error')
       return NextResponse.json(
         { error: 'Failed to save feedback' },
         { status: 500 }

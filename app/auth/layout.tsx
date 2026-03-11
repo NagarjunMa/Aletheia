@@ -2,107 +2,163 @@
 
 import { motion } from 'framer-motion'
 import Image from 'next/image'
+import AuroraBackground from '@/components/AuroraBackground'
+
+const features = [
+  { symbol: '◈', text: '42-word negative lexicon strips AI phrases' },
+  { symbol: '◉', text: '21-pattern fingerprint detector humanises tone' },
+  { symbol: '◊', text: '0–100 authenticity score before you see the draft' },
+]
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen flex bg-[#0a0a0a]">
-      {/* Left: form area */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center px-6 py-12">
-        {children}
+    <div
+      className="min-h-screen flex"
+      style={{ background: '#000000', fontFamily: "'DM Sans', sans-serif" }}
+    >
+      {/* Aurora shards — shared with landing page */}
+      <AuroraBackground />
+
+      {/* ── Left: form panel ─────────────────────────────── */}
+      <div className="w-full lg:w-1/2 flex items-center justify-center px-6 py-16 relative z-10 overflow-hidden">
+        {/* Micro dot grid texture */}
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute',
+            inset: 0,
+            backgroundImage: 'radial-gradient(rgba(218,241,222,0.05) 1px, transparent 1px)',
+            backgroundSize: '28px 28px',
+            pointerEvents: 'none',
+          }}
+        />
+        {/* Vignette to focus attention on form */}
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background: 'radial-gradient(ellipse 80% 80% at 50% 50%, transparent 30%, rgba(0,0,0,0.70) 100%)',
+            pointerEvents: 'none',
+          }}
+        />
+        <div className="relative z-10 w-full max-w-[420px]">
+          {children}
+        </div>
       </div>
 
-      {/* Right: branding showcase (hidden on mobile) */}
-      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-gradient-to-br from-[#0c1220] via-[#111827] to-[#0f172a] items-center justify-center">
-        {/* Subtle blue glow */}
-        <div className="absolute top-1/4 right-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-[128px]" />
-        <div className="absolute bottom-1/4 left-1/3 w-64 h-64 bg-indigo-500/8 rounded-full blur-[96px]" />
-
-        {/* Diagonal accent lines */}
-        <div className="absolute inset-0 overflow-hidden">
-          <div className="absolute -top-20 -right-20 w-[600px] h-px bg-gradient-to-r from-transparent via-blue-500/20 to-transparent rotate-[35deg]" />
-          <div className="absolute top-1/3 -left-20 w-[500px] h-px bg-gradient-to-r from-transparent via-blue-500/10 to-transparent rotate-[35deg]" />
-          <div className="absolute bottom-1/4 -right-10 w-[400px] h-px bg-gradient-to-r from-transparent via-indigo-500/15 to-transparent rotate-[35deg]" />
-        </div>
-
-        {/* Large "A" watermark */}
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none">
-          <span className="text-[28rem] font-bold text-white/[0.03] leading-none tracking-tighter">
-            A
-          </span>
+      {/* ── Right: branding panel ─────────────────────────── */}
+      <div
+        className="hidden lg:flex lg:w-1/2 relative z-10 overflow-hidden items-center justify-center"
+        style={{ borderLeft: '1px solid rgba(255,255,255,0.05)' }}
+      >
+        {/* Watermark */}
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            pointerEvents: 'none',
+            userSelect: 'none',
+          }}
+        >
+          <span style={{
+            fontFamily: 'Playfair Display, serif',
+            fontSize: '28rem',
+            fontWeight: 900,
+            color: 'rgba(218,241,222,0.025)',
+            lineHeight: 1,
+            fontStyle: 'italic',
+          }}>A</span>
         </div>
 
         {/* Content */}
         <div className="relative z-10 max-w-md px-12">
+          {/* Logo */}
           <motion.div
+            className="flex items-center gap-3 mb-12"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.2 }}
+            transition={{ duration: 0.6, delay: 0.15 }}
           >
-            <div className="flex items-center gap-3 mb-8">
-              <Image
-                src="/Aletheia.svg"
-                alt="Aletheia"
-                width={36}
-                height={36}
-                className="rounded-lg"
-              />
-              <span className="text-white/80 text-sm font-medium tracking-wide uppercase">Aletheia</span>
-            </div>
-          </motion.div>
-
-          <motion.h2
-            className="text-4xl font-bold text-white mb-4 leading-tight"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.3 }}
-          >
-            Welcome to{' '}
-            <span className="bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">
+            <Image src="/Aletheia.svg" alt="Aletheia" width={28} height={28} />
+            <span style={{
+              fontFamily: 'Playfair Display, serif',
+              fontWeight: 400,
+              fontSize: '1.25rem',
+              color: '#DAF1DE',
+              letterSpacing: '0.06em',
+            }}>
               Aletheia
             </span>
+          </motion.div>
+
+          {/* Headline */}
+          <motion.h2
+            style={{
+              fontFamily: 'Playfair Display, serif',
+              fontWeight: 900,
+              fontSize: 'clamp(2rem, 3.5vw, 2.8rem)',
+              lineHeight: 1.08,
+              color: '#ffffff',
+              letterSpacing: '-0.02em',
+              marginBottom: '1.25rem',
+            }}
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, delay: 0.25 }}
+          >
+            LinkedIn outreach that sounds{' '}
+            <em style={{ fontStyle: 'italic', color: '#DAF1DE' }}>human.</em>
           </motion.h2>
 
+          {/* Subtext */}
           <motion.p
-            className="text-[hsl(var(--muted-foreground))] text-base leading-relaxed mb-10"
+            style={{ color: 'rgba(218,241,222,0.5)', fontSize: '0.875rem', lineHeight: 1.7, marginBottom: '2.5rem' }}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.4 }}
+            transition={{ duration: 0.6, delay: 0.35 }}
           >
-            AI-powered networking assistant that helps you craft personalized LinkedIn messages and build meaningful professional connections.
+            Profile-grounded generation, negative lexicon filtering, and authenticity scoring — before you hit send.
           </motion.p>
 
+          {/* Feature bullets */}
           <motion.div
-            className="rounded-xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-sm p-5"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
+            style={{ borderTop: '1px solid rgba(218,241,222,0.08)', paddingTop: '1.75rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
             transition={{ duration: 0.6, delay: 0.5 }}
           >
-            <p className="text-sm text-white/70 mb-4">
-              More than <span className="text-white font-semibold">1,000+</span> professionals joined
+            {features.map((f, i) => (
+              <motion.div
+                key={i}
+                className="flex items-start gap-3"
+                initial={{ opacity: 0, x: -12 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.5, delay: 0.55 + i * 0.1 }}
+              >
+                <span style={{ color: '#DAF1DE', fontSize: '0.7rem', marginTop: '2px', flexShrink: 0 }}>{f.symbol}</span>
+                <span style={{ color: 'rgba(218,241,222,0.50)', fontSize: '0.8rem', lineHeight: 1.6 }}>{f.text}</span>
+              </motion.div>
+            ))}
+          </motion.div>
+
+          {/* Social proof */}
+          <motion.div
+            className="glass-aurora"
+            style={{ marginTop: '2.5rem', padding: '1.25rem' }}
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.75 }}
+          >
+            <p style={{ fontSize: '0.7rem', color: 'rgba(218,241,222,0.30)', letterSpacing: '0.10em', textTransform: 'uppercase', marginBottom: '0.75rem' }}>Beta Access</p>
+            <p style={{ fontSize: '0.85rem', color: 'rgba(218,241,222,0.60)', lineHeight: 1.6, fontStyle: 'italic' }}>
+              &ldquo;This is the first tool where my recipients stopped asking if I used AI.&rdquo;
             </p>
-            <div className="flex items-center">
-              {/* Avatar stack */}
-              <div className="flex -space-x-2.5">
-                {['bg-blue-500', 'bg-emerald-500', 'bg-violet-500', 'bg-amber-500'].map((color, i) => (
-                  <div
-                    key={i}
-                    className={`w-8 h-8 rounded-full ${color} border-2 border-[#111827] flex items-center justify-center text-[10px] font-semibold text-white`}
-                  >
-                    {['J', 'A', 'K', 'M'][i]}
-                  </div>
-                ))}
-                <div className="w-8 h-8 rounded-full bg-white/10 border-2 border-[#111827] flex items-center justify-center text-[10px] font-medium text-white/60">
-                  +9k
-                </div>
-              </div>
-              <div className="ml-4 flex gap-0.5">
-                {[...Array(5)].map((_, i) => (
-                  <svg key={i} className="w-3.5 h-3.5 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                  </svg>
-                ))}
-              </div>
-            </div>
+            <p style={{ fontSize: '0.7rem', color: 'rgba(218,241,222,0.30)', marginTop: '0.5rem', letterSpacing: '0.06em' }}>— Beta Tester · Senior Account Executive</p>
           </motion.div>
         </div>
       </div>
