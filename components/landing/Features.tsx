@@ -6,20 +6,20 @@ import { MessageSquare, User, Zap } from 'lucide-react'
 const features = [
   {
     icon: MessageSquare,
-    title: 'Resume Grounded',
-    body: 'Our AI analyzes the recipient\'s profile — job titles, company tenure, skills, and activity — to pull relevant context into every message. Nothing generic, ever.',
+    title: 'Profile-Grounded Generation',
+    body: 'The extension reads the recipient\'s LinkedIn page — name, headline, job history, recent posts, skills — and passes it to Claude Sonnet 4. The AI only references what exists on their profile and in your resume. If your resume is empty, it focuses on curiosity about their work instead of inventing your background. No hallucinated credentials, no fabricated metrics.',
     tag: '01',
   },
   {
     icon: User,
-    title: 'Cliché-Free AI',
-    body: 'We actively strip "AI-sounding" phrases, hollow openers, and filler words. Every message reads like it was written by a thoughtful human who did their homework.',
+    title: '42-Word Negative Lexicon + 21 AI Fingerprint Patterns',
+    body: 'Every message runs through two sanitization layers. First: a negative lexicon strips phrases like "delve," "leverage," "I came across your profile," and "passionate about." Second: a fingerprint detector catches subtler tells — em-dashes converted to hyphens, "would you be open to" replaced with casual variants, corporate buzzwords swapped for conversational equivalents. Each message gets a 0-100 authenticity score measuring sentence variation, informality, and pronoun patterns.',
     tag: '02',
   },
   {
     icon: Zap,
-    title: 'Intent Detection',
-    body: 'Tell Aletheia your goal — networking, job inquiry, partnership, or custom — and it shapes the entire message around that intent without losing your voice.',
+    title: 'Intent-Driven Structure with Platform Constraints',
+    body: 'Choose from 4 intents — networking, referral, mentorship, or job inquiry — and 3 formats. LinkedIn connections follow a strict Acknowledgment, Intro, CTA structure within 270 characters. Cold emails cap at 150 words across 6-8 sentences. InMails cap at 120 words. Each format enforces its own structural rules so nothing reads like a template.',
     tag: '03',
   },
 ]
@@ -38,32 +38,31 @@ export default function Features() {
             viewport={{ once: true, margin: '-60px' }}
             transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
           >
-            <span className="section-label mb-5 block">Why Aletheia</span>
+            <span className="section-label mb-5 block">The Technical Reality</span>
             <h2
               style={{
                 fontFamily: 'Playfair Display, serif',
                 fontWeight: 900,
                 fontSize: 'clamp(2rem, 4vw, 3rem)',
                 lineHeight: 1.08,
-                color: '#0f172a',
+                color: 'var(--l-text)',
                 letterSpacing: '-0.02em',
               }}
             >
-              Redefining the art of{' '}
-              <em style={{ fontStyle: 'italic' }}>professional connection.</em>
+              What happens between{' '}
+              <em style={{ fontStyle: 'italic' }}>click and clipboard.</em>
             </h2>
           </motion.div>
 
           <motion.p
             className="text-base leading-relaxed"
-            style={{ color: '#64748b' }}
+            style={{ color: 'var(--l-text-muted)' }}
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: '-60px' }}
             transition={{ duration: 0.6, delay: 0.15 }}
           >
-            Most AI tools churn out generic copy. Aletheia is built differently — grounded
-            in the person you&apos;re reaching out to, and tuned to say exactly what you mean.
+            Every AI outreach tool claims to be &quot;personalized.&quot; Here is what Aletheia actually does: it reads the profile, refuses to invent anything not in your resume, strips 42 known AI clich&eacute;s, detects and humanizes 21 fingerprint patterns, and scores the result for authenticity before you see it.
           </motion.p>
         </div>
 
@@ -80,11 +79,12 @@ export default function Features() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, margin: '-60px' }}
                 transition={{ duration: 0.65, delay: i * 0.1, ease: [0.22, 1, 0.36, 1] }}
+                whileHover={{ y: -4 }}
               >
                 {/* Tag number */}
                 <span
                   className="absolute top-8 right-8 text-xs font-bold tracking-widest"
-                  style={{ color: '#e2e8f0' }}
+                  style={{ color: 'rgba(142,182,155,0.15)' }}
                 >
                   {feature.tag}
                 </span>
@@ -92,30 +92,30 @@ export default function Features() {
                 {/* Icon */}
                 <div
                   className="mb-7 flex h-11 w-11 items-center justify-center"
-                  style={{ background: 'rgba(45,75,160,0.08)', border: '1px solid rgba(45,75,160,0.15)' }}
+                  style={{ background: 'rgba(142,182,155,0.08)', border: '1px solid rgba(142,182,155,0.15)' }}
                 >
-                  <Icon size={20} style={{ color: '#2d4ba0' }} />
+                  <Icon size={20} style={{ color: 'var(--l-blue)' }} />
                 </div>
 
                 {/* Title */}
                 <h3
                   className="mb-4 text-xs font-bold tracking-widest uppercase"
-                  style={{ color: '#0f172a' }}
+                  style={{ color: 'var(--l-text)' }}
                 >
                   {feature.title}
                 </h3>
 
                 {/* Body */}
-                <p className="text-sm leading-relaxed" style={{ color: '#64748b' }}>
+                <p className="text-sm leading-relaxed" style={{ color: 'var(--l-text-muted)' }}>
                   {feature.body}
                 </p>
 
                 {/* Learn more */}
                 <button
                   className="mt-auto pt-8 self-start text-xs font-bold tracking-widest uppercase transition-colors duration-150 cursor-pointer"
-                  style={{ color: '#2d4ba0' }}
-                  onMouseEnter={e => (e.currentTarget.style.color = '#0f172a')}
-                  onMouseLeave={e => (e.currentTarget.style.color = '#2d4ba0')}
+                  style={{ color: 'var(--l-blue)' }}
+                  onMouseEnter={e => (e.currentTarget.style.color = 'var(--l-text)')}
+                  onMouseLeave={e => (e.currentTarget.style.color = 'var(--l-blue)')}
                 >
                   Learn More →
                 </button>

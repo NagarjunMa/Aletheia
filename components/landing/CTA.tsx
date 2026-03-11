@@ -1,7 +1,6 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import { Download } from 'lucide-react'
 import { useState } from 'react'
 
 export default function CTA() {
@@ -14,7 +13,7 @@ export default function CTA() {
   }
 
   return (
-    <section className="relative py-32 px-8" style={{ background: 'var(--l-bg)' }}>
+    <section id="cta" className="relative py-32 px-8" style={{ background: 'var(--l-bg)' }}>
       <div className="divider" />
 
       <div className="mx-auto max-w-5xl pt-24">
@@ -26,34 +25,27 @@ export default function CTA() {
           transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
         >
           <div>
-            <span className="section-label mb-6 block">Get Started</span>
+            <span className="section-label mb-6 block">Early Access</span>
             <h2
               style={{
                 fontFamily: 'Playfair Display, serif',
                 fontWeight: 900,
                 fontSize: 'clamp(2rem, 4vw, 3rem)',
                 lineHeight: 1.08,
-                color: '#0f172a',
+                color: 'var(--l-text)',
                 letterSpacing: '-0.02em',
               }}
             >
               Join the{' '}
               <em style={{ fontStyle: 'italic' }}>waitlist.</em>
             </h2>
-            <p className="mt-5 text-sm leading-relaxed" style={{ color: '#64748b', maxWidth: '42ch' }}>
-              The Chrome Web Store version is coming soon. Drop your email to be first
-              in line — or download the extension directly today.
+            <p className="mt-5 text-sm leading-relaxed" style={{ color: 'var(--l-text-muted)', maxWidth: '48ch' }}>
+              Aletheia is coming to Chrome Web Store. Be first to generate profile-grounded LinkedIn messages with full negative lexicon filtering, 21-pattern AI fingerprint detection, and authenticity scoring. Free tier includes 30 messages per day across all 3 formats.
             </p>
 
-            <div className="mt-8">
-              <a href="/ascendia-extension.zip" download className="btn-primary inline-flex items-center gap-2">
-                <Download size={13} />
-                Download Extension Now
-              </a>
-              <p className="mt-3 text-xs" style={{ color: '#94a3b8' }}>
-                Free · 30 messages/day · No account required
-              </p>
-            </div>
+            <p className="mt-6 text-xs" style={{ color: 'var(--l-text-dim)' }}>
+              Free tier at launch · 30 messages/day · Full sanitization pipeline · All 3 formats
+            </p>
           </div>
 
           {/* Email form */}
@@ -68,21 +60,21 @@ export default function CTA() {
               <div className="text-center">
                 <div
                   className="mx-auto mb-5 flex h-12 w-12 items-center justify-center"
-                  style={{ background: 'rgba(45,75,160,0.08)', border: '1px solid rgba(45,75,160,0.2)' }}
+                  style={{ background: 'rgba(142,182,155,0.08)', border: '1px solid rgba(142,182,155,0.2)' }}
                 >
-                  <span style={{ color: '#2d4ba0', fontSize: '1.2rem' }}>✓</span>
+                  <span style={{ color: 'var(--l-blue)', fontSize: '1.2rem' }}>✓</span>
                 </div>
-                <p className="text-sm font-bold tracking-widest uppercase" style={{ color: '#0f172a' }}>
+                <p className="text-sm font-bold tracking-widest uppercase" style={{ color: 'var(--l-text)' }}>
                   You&apos;re on the list
                 </p>
-                <p className="mt-2 text-xs" style={{ color: '#94a3b8' }}>
-                  We&apos;ll email you when the Chrome Web Store version launches.
+                <p className="mt-2 text-xs" style={{ color: 'var(--l-text-dim)' }}>
+                  We&apos;ll notify you as soon as Aletheia is available on Chrome Web Store.
                 </p>
               </div>
             ) : (
               <>
-                <p className="mb-6 text-xs font-bold tracking-widest uppercase" style={{ color: '#0f172a' }}>
-                  Notify me at launch
+                <p className="mb-6 text-xs font-bold tracking-widest uppercase" style={{ color: 'var(--l-text)' }}>
+                  Get early access
                 </p>
                 <form onSubmit={handleSubmit}>
                   <input
@@ -94,7 +86,7 @@ export default function CTA() {
                     className="mb-4 w-full bg-transparent px-4 py-3 text-sm outline-none"
                     style={{
                       border: '1px solid var(--l-border)',
-                      color: '#0f172a',
+                      color: 'var(--l-text)',
                     }}
                   />
                   <button
@@ -104,7 +96,7 @@ export default function CTA() {
                   >
                     Notify Me
                   </button>
-                  <p className="mt-3 text-center text-xs" style={{ color: '#94a3b8' }}>
+                  <p className="mt-3 text-center text-xs" style={{ color: 'var(--l-text-dim)' }}>
                     No spam. Unsubscribe anytime.
                   </p>
                 </form>

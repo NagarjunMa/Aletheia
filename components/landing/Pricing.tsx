@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Download } from 'lucide-react'
 
 const tiers = [
     {
@@ -10,15 +9,16 @@ const tiers = [
         monthlyPrice: 0,
         annualPrice: 0,
         period: '/mo',
-        description: 'For casual networkers who send occasionally.',
-        cta: 'Get Started',
-        ctaHref: '/ascendia-extension.zip',
-        download: true,
+        description: '30 AI-generated messages per day. Profile grounding, negative lexicon filtering, and AI fingerprint detection included.',
+        cta: 'Join Waitlist',
+        ctaHref: '#cta',
+        download: false,
         highlighted: false,
         features: [
-            '30 messages / day',
-            'Basic AI generation',
-            'LinkedIn integration',
+            '30 messages/day across all 3 formats',
+            '42-word negative lexicon sanitization',
+            '21-pattern AI fingerprint detection',
+            'Authenticity scoring (0-100)',
         ],
     },
     {
@@ -26,17 +26,17 @@ const tiers = [
         monthlyPrice: 19,
         annualPrice: 15,
         period: '/mo',
-        description: 'For active professionals who send daily.',
+        description: 'Unlimited messages. Resume grounding weaves your real background into every message. Adaptive learning from accepted messages matches your proven writing style.',
         cta: 'Get Pro',
-        ctaHref: '#',
+        ctaHref: '#cta',
         download: false,
         highlighted: true,
         badge: 'MOST POPULAR',
         features: [
-            'Unlimited messages',
-            'Resume grounding',
+            'Unlimited messages across all 3 formats',
+            'Resume-grounded self-introduction',
+            'Adaptive style learning (3 accepted examples)',
             'Priority support',
-            'Advanced analytics',
         ],
     },
     {
@@ -44,7 +44,7 @@ const tiers = [
         monthlyPrice: null,
         annualPrice: null,
         period: '',
-        description: 'For recruiting teams and agencies at scale.',
+        description: 'Everything in Pro, shared across your team. Centralized usage tracking, custom AI personas per recruiter, and dedicated support with SLA.',
         cta: 'Contact Sales',
         ctaHref: 'mailto:hello@aletheia.ai',
         download: false,
@@ -81,20 +81,21 @@ export default function Pricing() {
                         style={{
                             fontFamily: 'Playfair Display, serif',
                             fontWeight: 900,
-                            fontSize: 'clamp(2rem, 4vw, 3rem)',
+                            fontSize: 'clamp(1.6rem, 3.5vw, 2.5rem)',
                             lineHeight: 1.08,
-                            color: '#0f172a',
+                            color: 'var(--l-text)',
                             letterSpacing: '-0.02em',
                         }}
                     >
-                        Simple Pricing
+                        Every tier gets the full{' '}
+                        <em style={{ fontStyle: 'italic' }}>sanitization pipeline.</em>
                     </h2>
 
-                    {/* P2: Annual/Monthly toggle */}
+                    {/* Annual/Monthly toggle */}
                     <div className="mt-6 flex items-center justify-center gap-4">
                         <span
                             className="text-xs font-bold tracking-widest uppercase"
-                            style={{ color: annual ? '#94a3b8' : '#0f172a' }}
+                            style={{ color: annual ? 'var(--l-text-dim)' : 'var(--l-text)', transition: 'color 0.2s ease' }}
                         >
                             Monthly
                         </span>
@@ -102,16 +103,17 @@ export default function Pricing() {
                             onClick={() => setAnnual(!annual)}
                             role="switch"
                             aria-checked={annual}
-                            className="relative cursor-pointer transition-colors duration-200"
+                            className="relative cursor-pointer"
                             style={{
                                 width: 44,
                                 height: 24,
-                                background: annual ? '#2d4ba0' : '#e2e8f0',
+                                background: annual ? 'var(--l-blue)' : 'var(--l-surface-3)',
                                 borderRadius: 0,
-                                border: '1.5px solid rgba(15,23,42,0.15)',
+                                border: '1.5px solid var(--l-border)',
                                 padding: 0,
                                 display: 'flex',
                                 alignItems: 'center',
+                                transition: 'background 0.25s ease',
                             }}
                         >
                             <motion.span
@@ -121,20 +123,21 @@ export default function Pricing() {
                                     display: 'block',
                                     width: 16,
                                     height: 16,
-                                    background: annual ? '#fff' : '#94a3b8',
+                                    background: annual ? 'var(--l-bg)' : 'var(--l-text-muted)',
                                 }}
                             />
                         </button>
                         <span
                             className="text-xs font-bold tracking-widest uppercase"
-                            style={{ color: annual ? '#0f172a' : '#94a3b8' }}
+                            style={{ color: annual ? 'var(--l-text)' : 'var(--l-text-dim)', transition: 'color 0.2s ease' }}
                         >
                             Annual
                             {annual && (
                                 <span
-                                    className="ml-2 px-2 py-0.5 text-white"
+                                    className="ml-2 px-2 py-0.5"
                                     style={{
-                                        background: '#2d4ba0',
+                                        background: 'var(--l-blue)',
+                                        color: 'var(--l-bg)',
                                         fontSize: '0.6rem',
                                         letterSpacing: '0.1em',
                                     }}
@@ -162,7 +165,7 @@ export default function Pricing() {
                             <motion.div
                                 key={tier.name}
                                 className="relative flex flex-col p-10"
-                                style={{ background: tier.highlighted ? '#0f172a' : 'var(--l-surface)' }}
+                                style={{ background: tier.highlighted ? 'var(--l-surface-2)' : 'var(--l-surface)' }}
                                 initial={{ opacity: 0, y: 24 }}
                                 whileInView={{ opacity: 1, y: 0 }}
                                 viewport={{ once: true, margin: '-60px' }}
@@ -179,8 +182,8 @@ export default function Pricing() {
                                                 fontWeight: 800,
                                                 letterSpacing: '0.18em',
                                                 textTransform: 'uppercase',
-                                                background: '#2d4ba0',
-                                                color: '#fff',
+                                                background: 'var(--l-blue)',
+                                                color: 'var(--l-bg)',
                                             }}
                                         >
                                             {tier.badge}
@@ -196,7 +199,7 @@ export default function Pricing() {
                                         fontWeight: 800,
                                         letterSpacing: '0.2em',
                                         textTransform: 'uppercase',
-                                        color: tier.highlighted ? '#3b5fc0' : '#94a3b8',
+                                        color: tier.highlighted ? 'var(--l-blue)' : 'var(--l-text-dim)',
                                     }}
                                 >
                                     {tier.name}
@@ -214,25 +217,25 @@ export default function Pricing() {
                                             fontSize: '3.2rem',
                                             fontWeight: 900,
                                             lineHeight: 1,
-                                            color: tier.highlighted ? '#ffffff' : '#0f172a',
+                                            color: 'var(--l-text)',
                                             fontStyle: 'italic',
                                         }}
                                     >
                                         {displayPrice}
                                     </motion.span>
                                     {tier.period && tier.monthlyPrice !== 0 && tier.monthlyPrice !== null && (
-                                        <span className="mb-2 text-xs" style={{ color: '#64748b' }}>
+                                        <span className="mb-2 text-xs" style={{ color: 'var(--l-text-dim)' }}>
                                             {tier.period}
                                         </span>
                                     )}
                                     {tier.monthlyPrice === 0 && (
-                                        <span className="mb-2 text-xs" style={{ color: '#64748b' }}>
+                                        <span className="mb-2 text-xs" style={{ color: 'var(--l-text-dim)' }}>
                                             /forever
                                         </span>
                                     )}
                                 </div>
 
-                                <p className="mb-8 text-sm" style={{ color: tier.highlighted ? '#94a3b8' : '#64748b' }}>
+                                <p className="mb-8 text-sm" style={{ color: 'var(--l-text-muted)' }}>
                                     {tier.description}
                                 </p>
 
@@ -242,9 +245,9 @@ export default function Pricing() {
                                         <li
                                             key={f}
                                             className="flex items-center gap-2.5 text-sm"
-                                            style={{ color: tier.highlighted ? '#cbd5e1' : '#475569' }}
+                                            style={{ color: 'var(--l-text-muted)' }}
                                         >
-                                            <span style={{ color: tier.highlighted ? '#3b5fc0' : '#2d4ba0', fontWeight: 900, fontSize: '0.9rem' }}>·</span>
+                                            <span style={{ color: 'var(--l-blue)', fontWeight: 900, fontSize: '0.9rem' }}>·</span>
                                             {f}
                                         </li>
                                     ))}
@@ -253,7 +256,6 @@ export default function Pricing() {
                                 {/* CTA */}
                                 <a
                                     href={tier.ctaHref}
-                                    download={tier.download || undefined}
                                     className="flex items-center justify-center gap-2 py-3.5 transition-all duration-200 cursor-pointer"
                                     style={{
                                         fontSize: '0.68rem',
@@ -261,25 +263,24 @@ export default function Pricing() {
                                         letterSpacing: '0.15em',
                                         textTransform: 'uppercase',
                                         textDecoration: 'none',
-                                        background: tier.highlighted ? '#2d4ba0' : 'transparent',
-                                        color: tier.highlighted ? '#ffffff' : '#0f172a',
-                                        border: tier.highlighted ? '2px solid #2d4ba0' : '2px solid #0f172a',
+                                        background: tier.highlighted ? 'var(--l-blue)' : 'transparent',
+                                        color: tier.highlighted ? 'var(--l-bg)' : 'var(--l-text)',
+                                        border: tier.highlighted ? '2px solid var(--l-blue)' : '2px solid var(--l-text)',
                                         borderRadius: 'var(--l-radius, 0)',
                                     }}
                                     onMouseEnter={e => {
                                         if (!tier.highlighted) {
-                                            e.currentTarget.style.background = '#0f172a'
-                                            e.currentTarget.style.color = '#fff'
+                                            e.currentTarget.style.background = 'var(--l-text)'
+                                            e.currentTarget.style.color = 'var(--l-bg)'
                                         }
                                     }}
                                     onMouseLeave={e => {
                                         if (!tier.highlighted) {
                                             e.currentTarget.style.background = 'transparent'
-                                            e.currentTarget.style.color = '#0f172a'
+                                            e.currentTarget.style.color = 'var(--l-text)'
                                         }
                                     }}
                                 >
-                                    {tier.download && <Download size={12} />}
                                     {tier.cta}
                                 </a>
                             </motion.div>

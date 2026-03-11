@@ -5,18 +5,18 @@ import { motion } from 'framer-motion'
 const steps = [
   {
     num: '01',
-    title: 'Open Profile',
-    body: 'Navigate to any LinkedIn profile in Chrome. Aletheia reads the page context — role, company, tenure, skills — in real time.',
+    title: 'Read the Profile',
+    body: 'Open any LinkedIn profile in Chrome. Aletheia reads the page — name, headline, location, about, experience, recent posts, and skills. This data is sanitized (HTML stripped, injection patterns blocked) before anything reaches the AI.',
   },
   {
     num: '02',
-    title: 'Analyze Intent',
-    body: 'Choose your goal: networking, job inquiry, partnership, or custom. Aletheia finds unique hooks from the profile to make your message stand out.',
+    title: 'Generate with Constraints',
+    body: 'Pick your intent and format. Claude Sonnet 4 generates using category-specific structural rules. Your resume grounds the introduction. Up to 3 previously accepted messages train the AI to match your proven writing style.',
   },
   {
     num: '03',
-    title: 'Refine & Send',
-    body: 'Review the AI-generated message, tweak the tone if needed, copy it, and send with confidence. You are always in control.',
+    title: 'Sanitize and Score',
+    body: 'Before you see the output: the 42-word negative lexicon strips AI vocabulary, the 21-pattern fingerprint detector humanizes subtler tells, and the result gets a 0-100 authenticity score based on sentence variation, informality, and platform-specific rules.',
   },
 ]
 
@@ -25,17 +25,17 @@ const MockupCard = () => (
     style={{
       width: '100%',
       maxWidth: 420,
-      background: 'rgba(255, 255, 255, 0.04)',
-      border: '1px solid rgba(255,255,255,0.12)',
+      background: 'var(--l-surface)',
+      border: '1px solid var(--l-border)',
       borderRadius: '1px',
       padding: '1.75rem',
-      animation: 'float 6s ease-in-out infinite',
+      animation: 'float-card 6s ease-in-out infinite',
     }}
   >
     {/* Chrome bar */}
     <div
       className="mb-5 flex items-center gap-2 px-3 py-2"
-      style={{ background: 'rgba(255,255,255,0.05)', borderRadius: '1px' }}
+      style={{ background: 'var(--l-surface-2)', borderRadius: '1px' }}
     >
       <div className="h-2 w-2 rounded-full" style={{ background: '#ef4444' }} />
       <div className="h-2 w-2 rounded-full" style={{ background: '#f59e0b' }} />
@@ -52,17 +52,17 @@ const MockupCard = () => (
     <div className="mb-5 flex items-center gap-3">
       <div
         className="h-10 w-10 rounded-full flex-shrink-0"
-        style={{ background: 'linear-gradient(135deg, #3b5fc0, #1e3a8a)' }}
+        style={{ background: 'linear-gradient(135deg, #235347, #0B2B26)' }}
       />
       <div>
-        <div style={{ fontSize: '11px', fontWeight: 600, color: '#e2e8f0' }}>Sarah Chen</div>
-        <div style={{ fontSize: '9px', color: '#64748b' }}>ML Engineer · Google DeepMind</div>
+        <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--l-text)' }}>Sarah Chen</div>
+        <div style={{ fontSize: '9px', color: 'var(--l-text-dim)' }}>ML Engineer · Google DeepMind</div>
       </div>
     </div>
 
     {/* Intent selector */}
     <div className="mb-4">
-      <p style={{ fontSize: '8px', fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#3b5fc0', marginBottom: '0.5rem' }}>
+      <p style={{ fontSize: '8px', fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: 'var(--l-blue)', marginBottom: '0.5rem' }}>
         Message Intent
       </p>
       <div className="flex gap-2 flex-wrap">
@@ -73,8 +73,8 @@ const MockupCard = () => (
               fontSize: '9px',
               fontWeight: 600,
               padding: '3px 10px',
-              background: i === 0 ? '#2d4ba0' : 'rgba(255,255,255,0.05)',
-              color: i === 0 ? '#fff' : '#64748b',
+              background: i === 0 ? 'var(--l-blue)' : 'var(--l-surface-2)',
+              color: i === 0 ? '#051F20' : 'var(--l-text-dim)',
               borderRadius: '1px',
             }}
           >
@@ -87,11 +87,12 @@ const MockupCard = () => (
     {/* Generated message */}
     <div
       className="p-3 mb-4"
-      style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '1px' }}
+      style={{ background: 'var(--l-surface-2)', border: '1px solid var(--l-border)', borderRadius: '1px' }}
     >
-      <p style={{ fontSize: '10px', lineHeight: 1.6, color: '#94a3b8' }}>
-        Hi Sarah — I came across your work on transformer efficiency at DeepMind.
-        Your paper on sparse attention was genuinely fascinating...
+      <p style={{ fontSize: '10px', lineHeight: 1.6, color: 'var(--l-text-muted)' }}>
+        Hi Sarah - noticed your sparse attention paper from the DeepMind blog.
+        I work on similar inference problems at a smaller scale. Would love to
+        hear what surprised you most in production.
       </p>
     </div>
 
@@ -104,8 +105,8 @@ const MockupCard = () => (
           fontWeight: 700,
           letterSpacing: '0.12em',
           textTransform: 'uppercase',
-          background: '#2d4ba0',
-          color: '#fff',
+          background: 'var(--l-blue)',
+          color: '#051F20',
           borderRadius: '1px',
           border: 'none',
           cursor: 'pointer',
@@ -118,8 +119,8 @@ const MockupCard = () => (
           padding: '8px 12px',
           fontSize: '11px',
           fontWeight: 700,
-          background: 'rgba(255,255,255,0.05)',
-          color: '#64748b',
+          background: 'var(--l-surface-2)',
+          color: 'var(--l-text-dim)',
           borderRadius: '1px',
           border: 'none',
           cursor: 'pointer',
@@ -136,7 +137,7 @@ export default function HowItWorks() {
     <section
       id="how-it-works"
       className="relative overflow-hidden py-28 px-8"
-      style={{ background: '#0f172a' }}
+      style={{ background: 'var(--l-bg-alt)' }}
     >
       <div className="mx-auto max-w-7xl">
         {/* On desktop: 2-col grid. On mobile: stacked (steps first, mockup below) */}
@@ -152,13 +153,8 @@ export default function HowItWorks() {
             >
               <span
                 className="section-label mb-6 block"
-                style={{
-                  color: '#3b5fc0',
-                  borderColor: 'rgba(59,95,192,0.35)',
-                  background: 'rgba(59,95,192,0.08)',
-                }}
               >
-                The Process
+                Under the Hood
               </span>
               <h2
                 style={{
@@ -166,12 +162,12 @@ export default function HowItWorks() {
                   fontWeight: 900,
                   fontSize: 'clamp(2rem, 4vw, 3rem)',
                   lineHeight: 1.1,
-                  color: '#ffffff',
+                  color: 'var(--l-text)',
                   letterSpacing: '-0.02em',
                 }}
               >
-                The Workflow{' '}
-                <em style={{ fontStyle: 'italic', color: '#93c5fd' }}>Simplified.</em>
+                Three layers between{' '}
+                <em style={{ fontStyle: 'italic', color: 'var(--l-text-muted)' }}>AI and inbox.</em>
               </h2>
             </motion.div>
 
@@ -194,7 +190,7 @@ export default function HowItWorks() {
                         top: 50,
                         bottom: 0,
                         width: '1px',
-                        background: 'rgba(255,255,255,0.08)',
+                        background: 'var(--l-border)',
                       }}
                     />
                   )}
@@ -206,7 +202,7 @@ export default function HowItWorks() {
                         fontFamily: 'Playfair Display, serif',
                         fontSize: '2.8rem',
                         fontWeight: 900,
-                        color: 'rgba(255,255,255,0.1)',
+                        color: 'var(--l-border)',
                         lineHeight: 1,
                         fontStyle: 'italic',
                         display: 'block',
@@ -224,12 +220,12 @@ export default function HowItWorks() {
                         fontWeight: 700,
                         letterSpacing: '0.18em',
                         textTransform: 'uppercase',
-                        color: '#93c5fd',
+                        color: 'var(--l-text-muted)',
                       }}
                     >
                       {step.title}
                     </h3>
-                    <p style={{ fontSize: '0.875rem', lineHeight: 1.7, color: '#94a3b8' }}>
+                    <p style={{ fontSize: '0.875rem', lineHeight: 1.7, color: 'var(--l-text-muted)' }}>
                       {step.body}
                     </p>
                   </div>

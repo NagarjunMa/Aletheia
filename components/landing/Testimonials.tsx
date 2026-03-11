@@ -5,30 +5,30 @@ import { motion } from 'framer-motion'
 const testimonials = [
     {
         quote:
-            'I went from a 12% reply rate to 38% in two weeks. Aletheia writes messages that sound like me — not like a robot trying to sound like me.',
-        name: 'Marcus T.',
+            'I used to manually edit out "I hope this message finds you well" and "I was impressed by your background" from every AI draft. Aletheia strips those before I even see the output. My recipients can spot AI in the first sentence — this is the first tool where they stopped asking if I used one.',
+        name: 'Beta Tester',
         role: 'Senior Account Executive',
-        company: 'Salesforce',
-        initials: 'MT',
-        color: '#2d4ba0',
+        company: 'SaaS',
+        initials: 'BT',
+        color: '#235347',
     },
     {
         quote:
-            'As a recruiter, I send 80+ messages a week. Aletheia cut my writing time by 70% and candidates actually respond now. The profile reading is uncanny.',
-        name: 'Priya K.',
+            'The profile grounding is what sold me. It pulled the candidate\'s actual job title and a recent post about distributed systems into a 270-character connection request that fit naturally. No more "I came across your impressive profile" openers that get ignored.',
+        name: 'Beta Tester',
         role: 'Technical Recruiter',
-        company: 'Stripe',
-        initials: 'PK',
-        color: '#0f172a',
+        company: 'Enterprise Tech',
+        initials: 'BT',
+        color: '#163832',
     },
     {
         quote:
-            "Finally an AI tool that doesn't start every message with 'I came across your profile and was impressed.' Worth every cent.",
-        name: 'James O.',
+            'After I accepted 3 messages, the next batch started matching my writing style — shorter sentences, more direct questions, fewer adjectives. It learned what works for me instead of guessing.',
+        name: 'Beta Tester',
         role: 'Founder',
-        company: 'Stealth Startup',
-        initials: 'JO',
-        color: '#1e3a8a',
+        company: 'Early-Stage Startup',
+        initials: 'BT',
+        color: '#8EB69B',
     },
 ]
 
@@ -46,32 +46,31 @@ export default function Testimonials() {
                         viewport={{ once: true, margin: '-60px' }}
                         transition={{ duration: 0.6 }}
                     >
-                        <span className="section-label mb-5 block">Social Proof</span>
+                        <span className="section-label mb-5 block">Beta Feedback</span>
                         <h2
                             style={{
                                 fontFamily: 'Playfair Display, serif',
                                 fontWeight: 900,
                                 fontSize: 'clamp(1.9rem, 4vw, 2.8rem)',
                                 lineHeight: 1.1,
-                                color: '#0f172a',
+                                color: 'var(--l-text)',
                                 letterSpacing: '-0.02em',
                             }}
                         >
-                            What early users{' '}
-                            <em style={{ fontStyle: 'italic' }}>are saying.</em>
+                            From early testers,{' '}
+                            <em style={{ fontStyle: 'italic' }}>unfiltered.</em>
                         </h2>
                     </motion.div>
 
                     <motion.p
                         className="text-sm leading-relaxed"
-                        style={{ color: '#64748b' }}
+                        style={{ color: 'var(--l-text-muted)' }}
                         initial={{ opacity: 0 }}
                         whileInView={{ opacity: 1 }}
                         viewport={{ once: true }}
                         transition={{ duration: 0.5, delay: 0.15 }}
                     >
-                        Aletheia is in private beta with a growing group of recruiters, founders,
-                        and sales professionals. Here&apos;s what they&apos;re finding.
+                        Aletheia is in beta. These responses reflect the actual capabilities users encounter — profile grounding, negative lexicon filtering, and adaptive learning from accepted messages.
                     </motion.p>
                 </div>
 
@@ -93,19 +92,19 @@ export default function Testimonials() {
                                     fontFamily: 'Playfair Display, serif',
                                     fontSize: '3.5rem',
                                     lineHeight: 1,
-                                    color: 'rgba(45,75,160,0.15)',
+                                    color: 'rgba(142,182,155,0.20)',
                                     display: 'block',
                                     marginBottom: '0.5rem',
                                     fontWeight: 900,
                                 }}
                             >
-                                "
+                                &ldquo;
                             </span>
 
                             {/* Quote */}
                             <p
                                 className="flex-1 text-sm leading-relaxed mb-8"
-                                style={{ color: '#475569', fontStyle: 'italic' }}
+                                style={{ color: 'var(--l-text)', fontStyle: 'italic' }}
                             >
                                 {t.quote}
                             </p>
@@ -127,11 +126,11 @@ export default function Testimonials() {
                                 <div>
                                     <div
                                         className="text-xs font-bold"
-                                        style={{ color: '#0f172a', letterSpacing: '0.04em' }}
+                                        style={{ color: 'var(--l-text)', letterSpacing: '0.04em' }}
                                     >
                                         {t.name}
                                     </div>
-                                    <div className="text-xs" style={{ color: '#94a3b8' }}>
+                                    <div className="text-xs" style={{ color: 'var(--l-text-muted)' }}>
                                         {t.role} · {t.company}
                                     </div>
                                 </div>

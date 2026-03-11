@@ -28,12 +28,12 @@ export default function Footer() {
             <Image src="/Aletheia.svg" alt="Aletheia" width={18} height={18} />
             <span
               style={{
-                fontFamily: 'DM Sans, sans-serif',
-                fontWeight: 800,
-                fontSize: '0.8rem',
-                color: '#0f172a',
-                letterSpacing: '0.18em',
-                textTransform: 'uppercase',
+                fontFamily: 'var(--font-cormorant), Georgia, serif',
+                fontWeight: 300,
+                fontSize: '1.2rem',
+                color: 'var(--l-text)',
+                letterSpacing: '0.04em',
+                transition: 'color 0.4s ease',
               }}
             >
               Aletheia
@@ -47,9 +47,9 @@ export default function Footer() {
                 key={link.href}
                 onClick={() => scrollTo(link.href)}
                 className="cursor-pointer text-[10px] font-bold tracking-widest uppercase transition-colors duration-150"
-                style={{ color: '#94a3b8' }}
-                onMouseEnter={e => (e.currentTarget.style.color = '#0f172a')}
-                onMouseLeave={e => (e.currentTarget.style.color = '#94a3b8')}
+                style={{ color: 'var(--l-text-dim)' }}
+                onMouseEnter={e => (e.currentTarget.style.color = 'var(--l-text)')}
+                onMouseLeave={e => (e.currentTarget.style.color = 'var(--l-text-dim)')}
               >
                 {link.label}
               </button>
@@ -57,7 +57,7 @@ export default function Footer() {
           </nav>
 
           {/* Copyright */}
-          <p className="text-[10px] tracking-widest uppercase" style={{ color: '#cbd5e1' }}>
+          <p className="text-[10px] tracking-widest uppercase" style={{ color: 'var(--l-text-dim)' }}>
             © {new Date().getFullYear()} Aletheia
           </p>
         </div>

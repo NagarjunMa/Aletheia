@@ -1,18 +1,24 @@
 import type { Metadata } from 'next'
-import { Inter, DM_Sans } from 'next/font/google'
+import { Inter, DM_Sans, Cormorant_Garamond } from 'next/font/google'
 import './globals.css'
 import { Providers } from './providers'
 
 const inter = Inter({ subsets: ['latin'] })
 const dmSans = DM_Sans({ subsets: ['latin'], variable: '--font-dm-sans' })
+const cormorant = Cormorant_Garamond({
+  subsets: ['latin'],
+  weight: ['300', '400'],
+  style: ['normal', 'italic'],
+  variable: '--font-cormorant',
+})
 
 export const metadata: Metadata = {
   title: {
-    default: 'Aletheia — AI-Powered LinkedIn Outreach Extension',
+    default: 'Aletheia — AI LinkedIn Message Generator | Authentic Outreach, Zero Clichés',
     template: '%s | Aletheia',
   },
   description:
-    'Generate personalized LinkedIn connection messages, cold emails, and InMails with AI. No clichés, no templates — messages that sound like you.',
+    'Chrome extension that reads LinkedIn profiles and generates authentic connection requests, cold emails, and InMails. 42-word negative lexicon and 21-pattern AI fingerprint detector strip robotic phrasing. Free, 30 messages/day.',
   keywords: [
     'LinkedIn outreach',
     'AI message generator',
@@ -21,6 +27,11 @@ export const metadata: Metadata = {
     'networking',
     'InMail',
     'connection request',
+    'authentic LinkedIn messages',
+    'human-sounding AI',
+    'AI fingerprint detection',
+    'profile-grounded messages',
+    'cliché-free outreach',
   ],
   authors: [{ name: 'Aletheia Team' }],
   icons: {
@@ -28,9 +39,9 @@ export const metadata: Metadata = {
     apple: '/Aletheia.svg',
   },
   openGraph: {
-    title: 'Aletheia — AI LinkedIn Outreach',
+    title: 'Aletheia — LinkedIn Messages That Strip AI Clichés Automatically',
     description:
-      'Personalized LinkedIn messages powered by AI. No clichés, no templates.',
+      'Chrome extension that reads LinkedIn profiles and writes connection requests, cold emails, and InMails. 42-word negative lexicon. 21 AI fingerprint patterns detected and humanized.',
     type: 'website',
     locale: 'en_US',
     images: [
@@ -38,14 +49,14 @@ export const metadata: Metadata = {
         url: '/Aletheia.svg',
         width: 1200,
         height: 630,
-        alt: 'Aletheia — AI-Powered LinkedIn Outreach Extension',
+        alt: 'Aletheia — AI LinkedIn Message Generator',
       },
     ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Aletheia — AI LinkedIn Outreach',
-    description: 'Personalized LinkedIn messages powered by AI',
+    title: 'Aletheia — LinkedIn Messages That Strip AI Clichés Automatically',
+    description: 'Chrome extension that reads LinkedIn profiles and writes connection requests, cold emails, and InMails. 42-word negative lexicon. 21 AI fingerprint patterns detected and humanized.',
     images: ['/Aletheia.svg'],
   },
   robots: {
@@ -61,7 +72,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.className} ${dmSans.variable}`}>
+      <body className={`${inter.className} ${dmSans.variable} ${cormorant.variable} aurora-grain`}>
         <Providers>
           {children}
         </Providers>
