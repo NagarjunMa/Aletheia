@@ -1,44 +1,62 @@
-/* Aletheia Extension Premium Popup Styles */
+/* Aletheia Extension — Aurora Green Theme */
 
-/* Design Tokens */
+/* Design Tokens — Aurora Forest Palette (from Stitch ref #17907855579365939357) */
 :root {
-  /* Colors - AI-Native Premium Palette */
-  --primary-900: #0f172a;
-  --primary-800: #1e293b;
-  --primary-700: #334155;
-  --primary-600: #475569;
-  --primary-500: #64748b;
-  --primary-400: #94a3b8;
-  --primary-300: #cbd5e1;
-  --primary-200: #e2e8f0;
-  --primary-100: #f1f5f9;
-  --primary-50: #f8fafc;
+  /* ── Aurora Forest Scale ──────────────────────────────────────────
+     #000000  pure black base
+     #1E4D4A  deep teal (primary aurora shard)
+     #163351  navy blue (secondary aurora shard)
+     #2D1B4E  deep violet (tertiary aurora shard)
+     #0D3D2E  forest green (quaternary aurora shard)
+     #DAF1DE  mint (accent / primary text highlight)
+  ─────────────────────────────────────────────────────────────────── */
 
-  /* Accent Colors */
-  --accent-600: #2563eb;
-  --accent-500: #3b82f6;
-  --accent-400: #60a5fa;
-  --accent-300: #93c5fd;
+  --green-deepest: #000000;
+  --green-dark:    #0a0a0a;
+  --green-mid:     #111111;
+  --green-border:  #48A89A;
+  --green-muted:   #CBEFEB;
+  --green-lightest: #CBEFEB;
 
-  /* Status Colors */
-  --success-600: #059669;
-  --success-500: #10b981;
-  --success-400: #34d399;
+  /* Semantic colour aliases (replaces old --primary-* slots) */
+  --primary-900: var(--green-deepest);
+  --primary-800: var(--green-dark);
+  --primary-700: var(--green-mid);
+  --primary-600: var(--green-border);
+  --primary-500: #2e6051;
+  /* mid-muted, for placeholder / disabled */
+  --primary-400: var(--green-muted);
+  --primary-300: #aed4b7;
+  /* slightly dimmed text */
+  --primary-200: #c9e8cf;
+  --primary-100: var(--green-lightest);
+  --primary-50: #edf8ef;
 
-  --warning-600: #d97706;
-  --warning-500: #f59e0b;
-  --warning-400: #fbbf24;
+  /* Accent — #48A89A teal as single ambient accent */
+  --accent-600: #1E4D4A;
+  --accent-500: #286860;
+  --accent-400: #48A89A;
+  --accent-300: #7ECFCA;
 
-  --error-600: #dc2626;
-  --error-500: #ef4444;
-  --error-400: #f87171;
+  /* Status Colors — keep familiar semantic meanings */
+  --success-600: #1a5c3a;
+  --success-500: #22794c;
+  --success-400: var(--green-muted);
 
-  /* Glass Morphism */
-  --glass-bg: rgba(255, 255, 255, 0.05);
-  --glass-bg-strong: rgba(255, 255, 255, 0.1);
-  --glass-border: rgba(255, 255, 255, 0.1);
-  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-  --glass-shadow-hover: 0 12px 40px rgba(0, 0, 0, 0.4);
+  --warning-600: #92600a;
+  --warning-500: #b97d10;
+  --warning-400: #d4a43a;
+
+  --error-600: #7b2020;
+  --error-500: #a83232;
+  --error-400: #cc5a5a;
+
+  /* Glassmorphism — teal-ambient glass surfaces */
+  --glass-bg:           rgba(255, 255, 255, 0.03);
+  --glass-bg-strong:    rgba(255, 255, 255, 0.06);
+  --glass-border:       rgba(72, 168, 154, 0.12);
+  --glass-shadow:       0 8px 32px rgba(0, 0, 0, 0.7);
+  --glass-shadow-hover: 0 12px 40px rgba(0, 0, 0, 0.85);
 
   /* Typography */
   --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
@@ -89,8 +107,8 @@ body {
   font-family: var(--font-family);
   font-size: 14px;
   line-height: 1.6;
-  color: var(--primary-100);
-  background: linear-gradient(135deg, var(--primary-900) 0%, #0c1220 50%, var(--primary-900) 100%);
+  color: #CBEFEB;
+  background: #000000;
   overflow-x: hidden;
   position: relative;
   margin: 0;
@@ -107,18 +125,31 @@ body {
   z-index: 1;
 }
 
+/* #48A89A teal ambient — focused radial glow on pure black */
 body::before {
   content: '';
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   background:
-    radial-gradient(circle at 20% 20%, rgba(59, 130, 246, 0.1) 0%, transparent 50%),
-    radial-gradient(circle at 80% 80%, rgba(168, 85, 247, 0.1) 0%, transparent 50%);
+    radial-gradient(ellipse 80% 60% at 15%  10%, rgba(72, 168, 154, 0.28) 0%, transparent 65%),
+    radial-gradient(ellipse 60% 50% at 85%  90%, rgba(72, 168, 154, 0.18) 0%, transparent 65%),
+    radial-gradient(ellipse 40% 35% at 50%  50%, rgba(72, 168, 154, 0.08) 0%, transparent 75%);
   pointer-events: none;
   z-index: 0;
+}
+
+/* Film grain (ibelick technique) — SVG feTurbulence at low opacity */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 600 600'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 200px;
+  background-repeat: repeat;
+  opacity: 0.035;
+  mix-blend-mode: overlay;
 }
 
 /* Header */
@@ -150,14 +181,15 @@ body::before {
 }
 
 .logo-text {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--primary-50);
-  letter-spacing: -0.025em;
-  background: linear-gradient(135deg, var(--primary-50), var(--accent-300));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 1.45rem;
+  font-weight: 300;
+  color: var(--green-lightest);
+  letter-spacing: 0.04em;
+  background: none;
+  -webkit-background-clip: unset;
+  -webkit-text-fill-color: unset;
+  background-clip: unset;
 }
 
 .logo-subtitle {
@@ -217,10 +249,10 @@ body::before {
   gap: var(--space-3);
   padding: var(--space-4) var(--space-5);
   margin: var(--space-2) var(--space-3);
-  background: rgba(59, 130, 246, 0.1);
-  border: 1px solid rgba(59, 130, 246, 0.2);
+  background: rgba(35, 83, 71, 0.3);
+  border: 1px solid rgba(142, 182, 155, 0.25);
   border-radius: var(--radius-lg);
-  color: var(--accent-300);
+  color: var(--green-muted);
   font-size: 13px;
   font-weight: 500;
 }
@@ -228,8 +260,8 @@ body::before {
 .reading-spinner {
   width: 16px;
   height: 16px;
-  border: 2px solid rgba(96, 165, 250, 0.3);
-  border-top-color: var(--accent-400);
+  border: 2px solid rgba(142, 182, 155, 0.3);
+  border-top-color: var(--green-muted);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -295,17 +327,17 @@ body::before {
 }
 
 .banner.success {
-  background: rgba(16, 185, 129, 0.1);
-  border-color: rgba(16, 185, 129, 0.2);
-  color: var(--success-400);
-  box-shadow: 0 4px 16px rgba(16, 185, 129, 0.1);
+  background: rgba(35, 83, 71, 0.3);
+  border-color: rgba(142, 182, 155, 0.3);
+  color: var(--green-lightest);
+  box-shadow: 0 4px 16px rgba(5, 31, 32, 0.3);
 }
 
 .banner.warning {
-  background: rgba(245, 158, 11, 0.1);
-  border-color: rgba(245, 158, 11, 0.2);
-  color: var(--warning-400);
-  box-shadow: 0 4px 16px rgba(245, 158, 11, 0.1);
+  background: rgba(22, 56, 50, 0.8);
+  border-color: rgba(142, 182, 155, 0.3);
+  color: var(--green-muted);
+  box-shadow: none;
 }
 
 .profile-info {
@@ -411,10 +443,10 @@ textarea::placeholder {
 .generate-btn {
   width: 100%;
   padding: var(--space-4) var(--space-6);
-  background: linear-gradient(135deg, var(--accent-600), var(--accent-500));
-  border: 1px solid var(--accent-500);
+  background: linear-gradient(135deg, #286860, #48A89A);
+  border: 1px solid rgba(72, 168, 154, 0.6);
   border-radius: var(--radius-xl);
-  color: var(--primary-50);
+  color: #000a09;
   font-weight: 600;
   font-size: 14px;
   font-family: var(--font-family);
@@ -427,7 +459,7 @@ textarea::placeholder {
   margin-bottom: var(--space-6);
   position: relative;
   overflow: hidden;
-  box-shadow: var(--glass-shadow);
+  box-shadow: 0 4px 24px rgba(72, 168, 154, 0.25);
 }
 
 .generate-btn::before {
@@ -437,14 +469,14 @@ textarea::placeholder {
   left: -100%;
   width: 100%;
   height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.12), transparent);
   transition: left var(--transition-slow);
 }
 
 .generate-btn:hover:not(:disabled) {
-  background: linear-gradient(135deg, var(--accent-500), var(--accent-400));
+  background: linear-gradient(135deg, #48A89A, #7ECFCA);
   transform: translateY(-2px);
-  box-shadow: var(--glass-shadow-hover);
+  box-shadow: 0 8px 32px rgba(72, 168, 154, 0.40);
 }
 
 .generate-btn:hover:not(:disabled)::before {
@@ -504,8 +536,8 @@ textarea::placeholder {
   left: 0;
   right: 0;
   height: 1px;
-  background: linear-gradient(90deg, transparent, var(--accent-400), transparent);
-  opacity: 0.5;
+  background: linear-gradient(90deg, transparent, var(--green-muted), transparent);
+  opacity: 0.6;
 }
 
 .output-item {
@@ -626,13 +658,13 @@ textarea::placeholder {
 }
 
 .action-btn.primary {
-  background: linear-gradient(135deg, var(--accent-600), var(--accent-500));
-  color: var(--primary-50);
-  border-color: var(--accent-500);
+  background: linear-gradient(135deg, var(--green-border), var(--green-muted));
+  color: var(--green-deepest);
+  border-color: var(--green-muted);
 }
 
 .action-btn.primary:hover {
-  background: linear-gradient(135deg, var(--accent-500), var(--accent-400));
+  background: linear-gradient(135deg, var(--green-muted), var(--green-lightest));
   transform: translateY(-1px);
   box-shadow: var(--glass-shadow);
 }
@@ -711,35 +743,35 @@ textarea::placeholder {
 }
 
 .feedback-btn.accept {
-  background: rgba(16, 185, 129, 0.1);
-  color: var(--success-400);
-  border-color: rgba(16, 185, 129, 0.3);
+  background: rgba(35, 83, 71, 0.4);
+  color: var(--green-lightest);
+  border-color: rgba(142, 182, 155, 0.4);
 }
 
 .feedback-btn.accept:hover {
-  background: rgba(16, 185, 129, 0.2);
-  border-color: var(--success-400);
+  background: rgba(142, 182, 155, 0.2);
+  border-color: var(--green-muted);
   transform: translateY(-1px);
 }
 
 .feedback-btn.reject {
-  background: rgba(239, 68, 68, 0.1);
+  background: rgba(123, 32, 32, 0.2);
   color: var(--error-400);
-  border-color: rgba(239, 68, 68, 0.3);
+  border-color: rgba(204, 90, 90, 0.3);
 }
 
 .feedback-btn.reject:hover {
-  background: rgba(239, 68, 68, 0.2);
+  background: rgba(168, 50, 50, 0.25);
   border-color: var(--error-400);
   transform: translateY(-1px);
 }
 
 /* Error Message */
 .error-message {
-  background: rgba(239, 68, 68, 0.1);
+  background: rgba(123, 32, 32, 0.2);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  border: 1px solid rgba(204, 90, 90, 0.3);
   border-radius: var(--radius-lg);
   padding: var(--space-4) var(--space-5);
   color: var(--error-400);
@@ -748,7 +780,7 @@ textarea::placeholder {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  box-shadow: 0 4px 16px rgba(239, 68, 68, 0.1);
+  box-shadow: 0 4px 16px rgba(5, 31, 32, 0.3);
 }
 
 .error-icon {
@@ -762,9 +794,9 @@ textarea::placeholder {
   display: inline-block;
   margin-top: var(--space-2);
   padding: var(--space-2) var(--space-4);
-  background: linear-gradient(135deg, var(--accent-600), var(--accent-500));
-  color: var(--primary-50);
-  border: 1px solid var(--accent-500);
+  background: linear-gradient(135deg, var(--green-border), var(--green-muted));
+  color: var(--green-deepest);
+  border: 1px solid var(--green-muted);
   border-radius: var(--radius-md);
   font-size: 12px;
   font-weight: 600;
@@ -774,7 +806,7 @@ textarea::placeholder {
 }
 
 .reauth-btn:hover:not(:disabled) {
-  background: linear-gradient(135deg, var(--accent-500), var(--accent-400));
+  background: linear-gradient(135deg, var(--green-muted), var(--green-lightest));
   transform: translateY(-1px);
   box-shadow: var(--glass-shadow);
 }
@@ -941,9 +973,9 @@ textarea:focus-visible {
 
 /* Copy success state */
 .copy-success {
-  background: rgba(16, 185, 129, 0.2) !important;
-  border-color: var(--success-400) !important;
-  color: var(--success-400) !important;
+  background: rgba(35, 83, 71, 0.5) !important;
+  border-color: var(--green-muted) !important;
+  color: var(--green-lightest) !important;
   transform: scale(1.05);
   transition: all var(--transition-normal);
 }
