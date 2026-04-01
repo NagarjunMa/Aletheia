@@ -157,6 +157,21 @@
           </button>
         </div>
 
+        <!-- Authenticity Score -->
+        <div id="score-section" class="score-section hidden">
+          <div class="score-header">
+            <span class="score-label">Voice authenticity</span>
+            <span id="score-value" class="score-value">—</span>
+          </div>
+          <div class="score-bar-track">
+            <div id="score-fill" class="score-bar-fill" style="width:0%"></div>
+          </div>
+          <div id="patterns-toggle" class="patterns-toggle hidden">
+            <button id="patternsBtn" class="patterns-btn">Show removed patterns ▾</button>
+            <ul id="patternsList" class="patterns-list hidden"></ul>
+          </div>
+        </div>
+
         <!-- Feedback Buttons -->
         <div class="feedback-section">
           <p class="feedback-label">How's this message?</p>
@@ -176,6 +191,15 @@
               </svg>
               Regenerate
             </button>
+          </div>
+          <div id="reject-reason" class="reject-reason hidden">
+            <p class="reject-reason-label">What wasn't right?</p>
+            <div class="reason-buttons">
+              <button class="reason-btn" data-reason="too_formal">Too formal</button>
+              <button class="reason-btn" data-reason="too_generic">Too generic</button>
+              <button class="reason-btn" data-reason="wrong_tone">Wrong tone</button>
+              <button class="reason-btn" data-reason="skip">Skip</button>
+            </div>
           </div>
         </div>
       </div>

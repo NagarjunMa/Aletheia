@@ -191,11 +191,11 @@ const nextConfig = {
         key: 'Content-Security-Policy',
         value: [
           "default-src 'self'",
-          "script-src 'self' 'unsafe-inline' https://app.posthog.com https://www.googletagmanager.com",
+          "script-src 'self' 'unsafe-inline' https://app.posthog.com",
           "style-src 'self' 'unsafe-inline'",
           "img-src 'self' data: https: blob:",
           "font-src 'self' https:",
-          "connect-src 'self' https://api.anthropic.com https://*.supabase.co https://app.posthog.com https://www.google-analytics.com https://*.sentry.io",
+          "connect-src 'self' https://api.anthropic.com https://*.supabase.co https://app.posthog.com https://*.sentry.io",
           "media-src 'self' blob:",
           "object-src 'none'",
           "base-uri 'self'",

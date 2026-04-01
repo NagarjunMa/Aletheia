@@ -5,7 +5,7 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import type { User } from '@supabase/supabase-js'
-import type { Database, ProfileInsert } from '@/lib/database/types'
+import type { Database, TablesInsert } from '@/lib/database/types'
 import { createLogger } from '@/lib/logger'
 
 const log = createLogger('supabase-server')
@@ -129,7 +129,7 @@ export async function ensureUserProfile(user: User) {
   }
 
   // Create profile if it doesn't exist
-  const insert: ProfileInsert = {
+  const insert: TablesInsert<'profiles'> = {
     id: user.id,
     email: user.email ?? '',
     full_name: (user.user_metadata?.full_name as string) ?? user.email?.split('@')[0] ?? null,
@@ -157,36 +157,28 @@ export async function ensureUserProfile(user: User) {
   return newProfile
 }
 
-// Type-safe table access helpers for server (updated after cleanup)
+// Type-safe table access helpers for server
 export function getServerTables() {
   const supabase = createClient()
 
   return {
     profiles: () => supabase.from('profiles'),
-    conversations: () => supabase.from('conversations'),
-    user_inputs: () => supabase.from('user_inputs'),
     generated_drafts: () => supabase.from('generated_drafts'),
     user_feedback: () => supabase.from('user_feedback'),
     user_preferences: () => supabase.from('user_preferences'),
-    usage_analytics: () => supabase.from('usage_analytics'),
-    production_metrics: () => supabase.from('production_metrics'),
-    messages: () => supabase.from('messages'),
+    extension_rate_limits: () => supabase.from('extension_rate_limits'),
   }
 }
 
-// Service role table access (admin operations, updated after cleanup)
+// Service role table access (admin operations only)
 export function getServiceTables() {
   const supabase = createServiceClient()
 
   return {
     profiles: () => supabase.from('profiles'),
-    conversations: () => supabase.from('conversations'),
-    user_inputs: () => supabase.from('user_inputs'),
     generated_drafts: () => supabase.from('generated_drafts'),
     user_feedback: () => supabase.from('user_feedback'),
     user_preferences: () => supabase.from('user_preferences'),
-    usage_analytics: () => supabase.from('usage_analytics'),
-    production_metrics: () => supabase.from('production_metrics'),
-    messages: () => supabase.from('messages'),
+    extension_rate_limits: () => supabase.from('extension_rate_limits'),
   }
 }

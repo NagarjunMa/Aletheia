@@ -86,7 +86,15 @@ function setupEventListeners() {
 
   // Feedback buttons
   document.getElementById('acceptBtn')?.addEventListener('click', () => handleFeedback('accept'));
-  document.getElementById('rejectBtn')?.addEventListener('click', () => handleFeedback('reject'));
+  document.getElementById('rejectBtn')?.addEventListener('click', showRejectReasonPicker);
+
+  // Rejection reason buttons (delegated)
+  document.getElementById('reject-reason')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('.reason-btn');
+    if (!btn) return;
+    const reason = btn.getAttribute('data-reason');
+    handleFeedback('reject', reason === 'skip' ? undefined : reason);
+  });
 
   // Category change handler
   document.getElementById('category')?.addEventListener('change', updateUIForCategory);
@@ -425,9 +433,67 @@ function displayOutput(output) {
   }
 
   displayValidationFeedback(processedOutput);
+  renderScoreMeter(processedOutput);
 
   outputSection.classList.remove('hidden');
   hideError();
+}
+
+function renderScoreMeter(output) {
+  const section = document.getElementById('score-section');
+  const scoreValue = document.getElementById('score-value');
+  const scoreFill = document.getElementById('score-fill');
+  const patternsToggle = document.getElementById('patterns-toggle');
+  const patternsList = document.getElementById('patternsList');
+  const patternsBtn = document.getElementById('patternsBtn');
+
+  const score = typeof output.authenticityScore === 'number' ? output.authenticityScore : null;
+  const patterns = Array.isArray(output.modificationsApplied) ? output.modificationsApplied : [];
+
+  if (score === null) {
+    section.classList.add('hidden');
+    return;
+  }
+
+  scoreValue.textContent = `${Math.round(score)}/100`;
+
+  // Color the bar
+  scoreFill.className = 'score-bar-fill';
+  if (score >= 70) scoreFill.classList.add('score-high');
+  else if (score >= 40) scoreFill.classList.add('score-mid');
+  else scoreFill.classList.add('score-low');
+
+  // Animate width after a brief delay so the transition fires
+  scoreFill.style.width = '0%';
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      scoreFill.style.width = `${Math.round(score)}%`;
+    });
+  });
+
+  if (patterns.length > 0) {
+    patternsList.innerHTML = '';
+    patterns.forEach(p => {
+      const li = document.createElement('li');
+      li.textContent = p;
+      patternsList.appendChild(li);
+    });
+    patternsToggle.classList.remove('hidden');
+
+    // Reset toggle state
+    patternsList.classList.add('hidden');
+    patternsBtn.textContent = 'Show removed patterns ▾';
+
+    patternsBtn.onclick = () => {
+      const isHidden = patternsList.classList.contains('hidden');
+      patternsList.classList.toggle('hidden', !isHidden);
+      patternsBtn.textContent = isHidden ? 'Hide removed patterns ▴' : 'Show removed patterns ▾';
+    };
+  } else {
+    patternsToggle.classList.add('hidden');
+  }
+
+  section.classList.remove('hidden');
 }
 
 function updateCharacterCountDisplay(text, category) {
@@ -633,8 +699,16 @@ async function autoFillMessage() {
   }
 }
 
-async function handleFeedback(type) {
+function showRejectReasonPicker() {
+  const rejectReason = document.getElementById('reject-reason');
+  if (rejectReason) rejectReason.classList.remove('hidden');
+}
+
+async function handleFeedback(type, rejectionReason) {
   if (!currentOutput) return;
+
+  // Hide reason picker if visible
+  document.getElementById('reject-reason')?.classList.add('hidden');
 
   const category = document.getElementById('category').value;
   const messageBody = currentOutput.body || currentOutput.message || '';
@@ -653,13 +727,14 @@ async function handleFeedback(type) {
       }
     }).catch(() => {}); // swallow errors — non-blocking
   } else if (type === 'reject') {
-    // Fire-and-forget: persist rejection to backend
+    // Fire-and-forget: persist rejection + optional reason to backend
     chrome.runtime.sendMessage({
       action: 'sendFeedback',
       payload: {
         message: messageBody,
         category,
         approved: false,
+        ...(rejectionReason ? { rejectionReason } : {}),
       }
     }).catch(() => {}); // swallow errors — non-blocking
     await generateMessage();

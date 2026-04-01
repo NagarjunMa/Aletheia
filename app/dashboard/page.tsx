@@ -17,20 +17,28 @@ export default async function DashboardPage() {
     .eq('id', user.id)
     .single()
 
-  // Fetch counts in parallel
-  const [conversationsResult, draftsResult] = await Promise.all([
+  // Fetch counts + recent messages in parallel
+  const [rateLimitResult, draftsResult, recentResult] = await Promise.all([
     supabase
-      .from('conversations')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', user.id),
+      .from('extension_rate_limits')
+      .select('request_count')
+      .eq('user_id', user.id)
+      .single(),
     supabase
       .from('generated_drafts')
       .select('id', { count: 'exact', head: true })
       .eq('user_id', user.id),
+    supabase
+      .from('generated_drafts')
+      .select('id, content, cpl_score, draft_type, is_accepted, created_at')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(5),
   ])
 
-  const totalConversations = conversationsResult.count ?? 0
+  const todayUsage = rateLimitResult.data?.request_count ?? 0
   const totalDrafts = draftsResult.count ?? 0
+  const recentDrafts = recentResult.data ?? []
   const cplScore = profile?.cpl_score ?? 0
 
   const displayName = profile?.full_name || user.email?.split('@')[0] || 'User'
@@ -58,10 +66,10 @@ export default async function DashboardPage() {
                 </svg>
               </div>
               <p className="text-xs font-medium uppercase tracking-wider text-[hsl(var(--muted-foreground))]">
-                Conversations
+                Today&apos;s Usage
               </p>
             </div>
-            <p className="text-3xl font-bold text-white">{totalConversations}</p>
+            <p className="text-3xl font-bold text-white">{todayUsage} <span className="text-base font-normal text-[hsl(var(--muted-foreground))]">/ 30</span></p>
           </div>
 
           <div className="glass rounded-2xl p-6">
@@ -92,6 +100,43 @@ export default async function DashboardPage() {
             <p className="text-3xl font-bold text-white">{cplScore.toFixed(1)}</p>
           </div>
         </div>
+
+        {/* Recent Messages */}
+        {recentDrafts.length > 0 && (
+          <div className="glass rounded-2xl p-6 mb-6">
+            <h2 className="text-lg font-semibold text-white mb-4">Recent Messages</h2>
+            <div className="space-y-3">
+              {recentDrafts.map((draft) => (
+                <div
+                  key={draft.id}
+                  className="flex items-start gap-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] px-4 py-3"
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-white truncate">
+                      {draft.content?.slice(0, 90)}{(draft.content?.length ?? 0) > 90 ? '…' : ''}
+                    </p>
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <span className="text-xs text-[hsl(var(--muted-foreground))] capitalize">
+                        {(draft.draft_type ?? 'message').replace(/_/g, ' ')}
+                      </span>
+                      {draft.is_accepted && (
+                        <span className="text-xs text-emerald-400">✓ Approved</span>
+                      )}
+                    </div>
+                  </div>
+                  {draft.cpl_score != null && (
+                    <span className={`shrink-0 text-sm font-semibold ${
+                      draft.cpl_score >= 70 ? 'text-emerald-400' :
+                      draft.cpl_score >= 40 ? 'text-amber-400' : 'text-red-400'
+                    }`}>
+                      {Math.round(draft.cpl_score)}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Quick Actions */}
         <div className="glass rounded-2xl p-6">
