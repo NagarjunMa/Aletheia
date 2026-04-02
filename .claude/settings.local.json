@@ -30,7 +30,21 @@
       "Bash(npm audit:*)",
       "Bash(supabase projects:*)",
       "Bash(git:*)",
-      "Bash(lsof:*)"
+      "Bash(lsof:*)",
+      "Bash(find /Users/nagarjunmallesh/Desktop/projects/ascendia -path */node_modules -prune -o -type d \\\\\\(-name __tests__ -o -name test -o -name tests \\\\\\) -print)",
+      "Bash(find /Users/nagarjunmallesh/Desktop/projects/ascendia/ascendia-extension -type f \\\\\\(-name *.ts -o -name *.js \\\\\\) -not -path */node_modules/*)",
+      "Bash(npm run:*)",
+      "Bash(make ci:*)",
+      "Bash(make lint:*)",
+      "Bash(make type-check:*)",
+      "Bash(make test:*)",
+      "Bash(jq .[\"\"lib/ai/sanitizer.ts\"\"] /Users/nagarjunmallesh/Desktop/projects/ascendia/coverage/coverage-final.json)",
+      "Bash(jq \".\"\"/Users/nagarjunmallesh/Desktop/projects/ascendia/lib/ai/sanitizer.ts\"\" | {path, statementMap, statements, lineMap, lines}\" /Users/nagarjunmallesh/Desktop/projects/ascendia/coverage/coverage-final.json)",
+      "Bash(jq \".\"\"/Users/nagarjunmallesh/Desktop/projects/ascendia/lib/ai/sanitizer.ts\"\" | .lines | to_entries[] | select\\(.value == 0\\) | .key\" /Users/nagarjunmallesh/Desktop/projects/ascendia/coverage/coverage-final.json)",
+      "Bash(python3:*)",
+      "Bash(find /Users/nagarjunmallesh/Desktop/projects/ascendia/ascendia-extension -type f \\\\\\(-name *.js -o -name *.ts -o -name *.tsx \\\\\\))",
+      "Bash(find /Users/nagarjunmallesh/Desktop/projects/ascendia/ascendia-extension/popup -type f \\\\\\(-name *.js -o -name *.ts -o -name *.tsx \\\\\\) ! -path */node_modules/*)",
+      "Bash(find /Users/nagarjunmallesh/Desktop/projects/ascendia/ascendia-extension/settings -type f \\\\\\(-name *.js -o -name *.ts -o -name *.tsx \\\\\\) ! -path */node_modules/*)"
     ],
     "deny": [],
     "ask": []

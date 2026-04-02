@@ -282,7 +282,7 @@ function SelectField({
   label: string
   value: string
   options: { value: string; label: string }[]
-  onChange: (v: string) => void
+  onChange: (_v: string) => void
 }) {
   return (
     <div className="flex items-center justify-between rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] px-4 py-3">

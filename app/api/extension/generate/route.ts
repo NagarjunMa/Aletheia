@@ -12,6 +12,7 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { z } from 'zod'
 import { createLogger } from '@/lib/logger'
 import { getCorsHeaders } from '@/lib/cors'
+import { generateRequestSchema } from './schema'
 
 const log = createLogger('extension-generate')
 
@@ -74,26 +75,6 @@ async function checkRateLimit(userId: string): Promise<{ allowed: boolean; remai
 }
 
 // Request validation schema
-const generateRequestSchema = z.object({
-  profile: z.object({
-    name: z.string(),
-    headline: z.string().nullish(),
-    location: z.string().nullish(),
-    about: z.string().nullish(),
-    experiences: z.array(z.object({
-      title: z.string(),
-      company: z.string().nullish()
-    })).nullish(),
-    recentPosts: z.array(z.string()).nullish(),
-    skills: z.array(z.string()).nullish(),
-    profileUrl: z.string().url()
-  }),
-  resume: z.string().nullish().default(''),
-  jd: z.string().nullish().default(''),
-  category: z.enum(['linkedin_connection', 'cold_email', 'linkedin_inmail']),
-  intent: z.enum(['networking', 'referral', 'mentorship', 'job_inquiry']).nullish().default('networking'),
-  acceptedExamples: z.array(z.string()).nullish().default([])
-})
 
 export async function POST(request: NextRequest) {
   const corsHeaders = getCorsHeaders(request, { allowCredentials: true, methods: 'GET, POST, OPTIONS' })

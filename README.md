@@ -1,268 +1,341 @@
 # Aletheia — AI-Powered LinkedIn Outreach Platform
 
-## Overview
+Generate authentic, human-sounding LinkedIn connection requests, cold emails, and InMails. Aletheia reads a target's LinkedIn profile, combines it with the user's resume and intent, then runs the output through a multi-stage sanitization and AI-fingerprint-removal pipeline.
 
-Aletheia is a personalized voice agent (PVA) that generates authentic LinkedIn connection requests, cold emails, and InMails. It reads a target's LinkedIn profile, combines it with the user's resume and intent, then produces a sanitized, human-sounding message — complete with AI fingerprint detection and removal.
-
-**Key value props:**
-- One-click outreach message generation from any LinkedIn profile
-- AI fingerprint detection and removal (21 patterns, authenticity scoring)
-- Learning mechanism: accepted messages improve future output
-- Chrome Extension with seamless web-app session bridging
-- Per-user rate limiting (30/day) with persistent tracking
+**CI:** lint → test → build, all on push/PR to `main`
+**License:** MIT
 
 ---
 
-## Tech Stack
+## Quick Start
 
-| Layer | Technology | Version | Rationale |
-|-------|-----------|---------|-----------|
-| Framework | Next.js (App Router) | 14.x | SSR, API routes, middleware, edge support |
-| UI | React, Tailwind CSS, Radix UI, shadcn/ui | 18.x | Component primitives, responsive design |
-| State | Zustand, TanStack Query | 4.x / 5.x | Client state + server state caching |
-| Database | Supabase (PostgreSQL) | — | Auth, RLS, realtime, RPC functions |
-| AI | Anthropic Claude (claude-sonnet-4-20250514) | — | Message generation with prompt engineering |
-| Auth | Supabase Auth | — | Email/password, Google OAuth, GitHub OAuth |
-| Extension | Chrome Manifest V3 | — | Service worker, content scripts, popup |
-| Logging | pino + pino-pretty | 8.x | Structured JSON logging (prod), pretty-printed (dev) |
-| Validation | Zod | 3.x | Runtime schema validation for API inputs |
-| Analytics | PostHog (optional) | — | Product analytics, feature-gated |
-| Error Tracking | Sentry (optional) | — | Client, server, edge error reporting |
-| 3D Graphics | Three.js, React Three Fiber | — | Landing page visuals |
-| Animations | Framer Motion, Lottie | — | Page transitions, micro-interactions |
+```bash
+git clone <repository-url>
+cd aletheia
+npm ci
+cp .env.local.example .env.local   # fill in required values (see below)
+npm run dev                         # or: make dev
+```
+
+Open [http://localhost:3000](http://localhost:3000). The app is running when you see the dashboard login.
 
 ---
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         USER'S BROWSER                              │
-│                                                                     │
-│  ┌──────────────────────┐        ┌──────────────────────────────┐  │
-│  │  Chrome Extension    │        │  Next.js Web App (Client)    │  │
-│  │  (MV3 Service Worker │        │  - Auth pages (login/reg)    │  │
-│  │   + Popup + Content  │        │  - Dashboard, Settings       │  │
-│  │   Scripts)           │        │  - Profile management        │  │
-│  └──────────┬───────────┘        └──────────────┬───────────────┘  │
-│             │ Bearer token auth                 │ Cookie-based auth │
-└─────────────┼───────────────────────────────────┼──────────────────┘
-              │                                   │
-              ▼                                   ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                NEXT.JS SERVER (Vercel Edge + Node.js)               │
-│                                                                     │
-│  ┌───────────┐  ┌────────────────┐  ┌────────────────────────┐    │
-│  │ Middleware │  │ API Routes     │  │ Server Actions         │    │
-│  │ - Auth    │  │ /api/health    │  │ ensureProfileAction()  │    │
-│  │ - CSP     │  │ /api/extension │  │                        │    │
-│  │ - CORS    │  │ /api/auth/me   │  │                        │    │
-│  └───────────┘  │ /api/feedback  │  └────────────────────────┘    │
-│                 │ /api/docs      │                                  │
-│                 └───────┬────────┘                                  │
-└─────────────────────────┼──────────────────────────────────────────┘
-                          │
-          ┌───────────────┼───────────────┐
-          ▼               ▼               ▼
-┌──────────────┐  ┌──────────────┐  ┌──────────────┐
-│   Supabase   │  │  Anthropic   │  │  PostHog /   │
-│  (DB + Auth) │  │  Claude API  │  │  Sentry      │
-└──────────────┘  └──────────────┘  └──────────────┘
+Chrome Extension (MV3)                  Next.js Web App
+  background/service-worker.js            app/auth/        ← login, register, OAuth
+  content/linkedin-reader.js              app/dashboard/   ← usage stats, recent drafts
+  content/auto-filler.js                  app/settings/    ← preferences, voice profile
+  popup/popup.html + popup.js             app/profile/
+  settings/settings.html
+         │ Bearer token                          │ Cookie auth
+         ▼                                       ▼
+         Next.js Server (Vercel)
+           middleware.ts         ← auth refresh, security headers, CSP
+           app/api/extension/
+             generate/           ← POST  core generation endpoint
+             feedback/           ← POST  approval/rejection + style learning
+             config/             ← GET   user config for extension
+             session/            ← GET   cookie → token bridge
+           app/api/auth/me/      ← GET   user info + usage
+           app/api/feedback/     ← POST  general feedback
+           app/api/health/       ← GET   health check (/healthz alias)
+                 │
+        ┌────────┼────────┐
+        ▼        ▼        ▼
+   Supabase  Anthropic  PostHog / Sentry
+   (DB+Auth) (Claude)   (analytics / errors)
 ```
 
 ---
 
-## Core Workflow
+## Project Structure
 
-1. User navigates to a LinkedIn profile in Chrome
-2. Content script reads the target's profile data (name, headline, experience, posts, skills)
-3. User clicks "Generate" in the extension popup
-4. Extension sends profile data + user's resume/JD + intent to `POST /api/extension/generate`
-5. Server authenticates via Bearer token, checks rate limit (30/day)
-6. Prompt is built from system template + user context using `buildPrompt()`
-7. Anthropic Claude generates the message (claude-sonnet-4-20250514, temp 0.8, max 600 tokens)
-8. Output passes through 3-stage sanitization: basic lexicon → platform-specific → AI fingerprint detection
-9. Sanitized message is returned to the extension and auto-filled into LinkedIn's message field
+```
+aletheia/
+├── app/
+│   ├── api/
+│   │   ├── extension/{generate,feedback,config,session}/
+│   │   │   ├── route.ts        ← HTTP handler
+│   │   │   ├── schema.ts       ← Zod schema (imported by route + tests)
+│   │   │   └── route.test.ts   ← schema validation tests
+│   │   ├── {auth/me,feedback,health}/
+│   │   └── settings/
+│   ├── auth/{login,register,callback,forgot-password,reset-password}/
+│   ├── {dashboard,settings,profile}/
+│   └── layout.tsx, page.tsx, providers.tsx
+│
+├── ascendia-extension/          ← Chrome MV3 extension (separate from web app)
+│   ├── background/service-worker.js
+│   ├── content/{linkedin-reader.js,auto-filler.js}
+│   ├── popup/{popup.html,popup.js,popup.css}
+│   ├── settings/{settings.html,settings.js,settings.css}
+│   └── manifest.json
+│
+├── components/landing/          ← Landing page components (Hero, Navbar, Features, Footer)
+│
+├── lib/
+│   ├── ai/
+│   │   ├── prompts/             ← Category-specific system prompt builders
+│   │   ├── sanitizer.ts         ← sanitizeAIOutput() — HTML/PII/injection filtering
+│   │   ├── ai-fingerprint-detector.ts  ← detectAIFingerprints() — 21 patterns, 0–100 score
+│   │   └── style-analyzer.ts    ← analyzeStyle() + mergeStylePatterns()
+│   ├── supabase/
+│   │   ├── client.ts            ← createClient() — browser only
+│   │   └── server.ts            ← createClient() + createServiceClient() — server only
+│   ├── database/types.ts        ← generated Supabase types (do not hand-edit)
+│   ├── logger.ts                ← Pino structured logger
+│   └── cors.ts                  ← CORS policy helper
+│
+├── supabase/migrations/         ← SQL migration files (YYYYMMDD_NNN_description.sql)
+├── middleware.ts                 ← Auth session refresh + security headers
+├── next.config.js
+├── vitest.config.ts              ← Unit test config
+├── vitest.guardrails.config.ts   ← Guardrail test config (separate run)
+├── playwright.config.ts          ← E2E test config
+├── Makefile                      ← Developer command shortcuts
+└── CLAUDE.md                     ← Full code conventions reference
+```
+
+---
+
+## Environment Variables
+
+Copy `.env.local.example` to `.env.local` and fill in the required values.
+
+### Required
+
+| Variable | Where to find it |
+|----------|-----------------|
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project → Settings → API |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase project → Settings → API |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase project → Settings → API (keep server-only) |
+| `ANTHROPIC_API_KEY` | [console.anthropic.com](https://console.anthropic.com) |
+
+### Optional
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `LOG_LEVEL` | `debug` (dev) / `info` (prod) | Pino log level |
+| `NEXT_PUBLIC_POSTHOG_KEY` | — | Enables PostHog analytics |
+| `NEXT_PUBLIC_POSTHOG_HOST` | `https://app.posthog.com` | PostHog endpoint |
+| `NEXT_PUBLIC_SENTRY_DSN` | — | Enables Sentry (client) |
+| `SENTRY_DSN` | — | Enables Sentry (server/edge) |
+| `NEXT_TELEMETRY_DISABLED` | — | Set `1` to opt out of Next.js telemetry |
+
+---
+
+## Development Commands
+
+Use `make` (preferred) or `npm run` equivalents.
+
+```bash
+make help          # list all targets
+make dev           # start dev server on :3000
+make build         # production build
+make lint          # ESLint
+make type-check    # tsc --noEmit
+make format        # Prettier write
+make test          # unit tests, single run
+make guardrails    # guardrail tests (mandatory before lib/ai/ PRs)
+make e2e           # Playwright E2E
+make ci            # full pipeline: lint → type-check → test → guardrails → build
+make clean         # rm -rf .next coverage node_modules/.cache
+```
+
+All targets map 1:1 to `npm run` scripts in `package.json`. See `Makefile` for the full list.
 
 ---
 
 ## AI Pipeline
 
-**Prompt engineering:** Category-specific system prompts for linkedin_connection (270 char limit), cold_email (150 word limit), and linkedin_inmail (120 word limit). Each prompt includes banned phrase lists, grounding rules, and tone guidelines.
+Every message generated by `POST /api/extension/generate` passes through three stages:
 
-**Model config:** `claude-sonnet-4-20250514`, temperature 0.8, max_tokens 600
+### Stage 1 — Negative lexicon (prompt-level)
+`sanitize()` in `lib/ai/prompts/linkedin-connection.ts`
+Strips 22 known AI vocabulary fingerprints from the raw Claude output before further processing (e.g., "I'm reaching out", "leverage", "delve into").
+
+### Stage 2 — Content sanitization
+`sanitizeAIOutput()` in `lib/ai/sanitizer.ts`
+- HTML tag stripping (DOMPurify via `isomorphic-dompurify`)
+- Profanity filtering
+- PII pattern redaction: SSN (`\d{3}-\d{2}-\d{4}`), credit cards (`\d{16}`), email addresses
+- Injection blocking: `<script>`, `javascript:`, `UNION SELECT`, `DROP TABLE`, `| rm -rf`
+- Hate speech / violence / illegal activity detection → returns `success: false`
+
+### Stage 3 — AI fingerprint detection
+`detectAIFingerprints()` in `lib/ai/ai-fingerprint-detector.ts`
+Runs 21 named regex patterns (em-dash usage, "hope this finds you well", corporate buzzwords, etc.) against the sanitized content. Each pattern match reduces the **authenticity score** (0–100). Detected patterns are replaced with human equivalents and returned in `modificationsApplied`.
+
+**Model:** `claude-sonnet-4-6` | **Temperature:** 0.8 | **Max tokens:** 600
 
 **Category constraints:**
 
-| Category | Format | Limit | Structure |
-|----------|--------|-------|-----------|
-| linkedin_connection | Plain text | 270 chars | Acknowledgment → Intro → CTA |
-| cold_email | JSON (subject + body) | 150 words | WHO → WHY COMPANY → WHY YOU → ASK |
-| linkedin_inmail | JSON (subject + body) | 120 words | Compressed cold email format |
+| Category | Format | Limit |
+|----------|--------|-------|
+| `linkedin_connection` | Plain text | 270 chars |
+| `cold_email` | JSON `{ subject, body }` | 150 words |
+| `linkedin_inmail` | JSON `{ subject, body }` | 120 words |
 
 ---
 
-## Sanitization Layer
+## Database
 
-3-stage pipeline applied to all AI output:
+**Active tables:**
 
-1. **Basic sanitization** (`sanitize()` in `lib/ai/prompts/linkedin-connection.ts`): Removes AI vocabulary fingerprints from a negative lexicon (22 words/phrases like "delve", "leverage", "I'm reaching out")
+| Table | Purpose |
+|-------|---------|
+| `profiles` | User profile data, synced from Supabase Auth |
+| `generated_drafts` | All generated messages with authenticity scores |
+| `user_feedback` | Explicit thumbs-up/down feedback on drafts |
+| `user_preferences` | Per-user settings: formality, theme, style patterns |
+| `extension_rate_limits` | 30 req/day rolling window per user |
 
-2. **Platform-specific sanitization** (`sanitizeForLinkedIn()` in `lib/ai/sanitizer.ts`): HTML stripping, DOMPurify sanitization, profanity filtering, harmful pattern redaction (SSN, credit cards, injection attempts), blocked content detection (hate speech, violence)
+**Migrations:**
+Files live in `supabase/migrations/` with the naming convention `YYYYMMDD_NNN_description.sql`.
+Apply via the Supabase Dashboard SQL Editor (recommended) or `supabase db push` if your CLI version matches the remote history.
 
-3. **AI fingerprint detection** (`detectAIFingerprints()` in `lib/ai/ai-fingerprint-detector.ts`): 21 patterns scored with confidence weighting. Content above threshold is humanized automatically. Returns authenticity score and detected pattern list.
-
----
-
-## Guardrails
-
-- **Content blocking**: Hate speech, violence, and illegal content patterns blocked entirely
-- **Harmful pattern redaction**: SSN, credit card numbers, email addresses, script/SQL/command injection patterns replaced with `[REDACTED]`
-- **Rate limiting**: 30 requests per user per 24-hour sliding window, persisted in Supabase. Fails open on DB error.
-- **CORS whitelist**: Only `chrome-extension://*`, `localhost:*`, `*.vercel.app` origins allowed
-- **Zod validation**: All API request bodies validated with strict schemas
-- **Honeypot spam prevention**: Feedback endpoint includes invisible field that bots fill
-
----
-
-## Learning Mechanism
-
-- **`acceptedExamples`**: When a user accepts a generated message, it's stored and included in future prompts (up to 3 examples). The AI matches the rhythm and style of previously accepted messages.
-- **`generated_drafts.is_accepted`**: Tracks which drafts were accepted for analytics and writing style vector computation.
-- **Writing style vectors**: 9 Supabase RPC functions enable vector similarity search across a user's historical style, category-filtered matching, and cross-user style comparison.
-
----
-
-## Extension Architecture
-
-- **Manifest V3**: Service worker-based background script (no persistent background page)
-- **Auth flow**: Extension fetches session tokens via `GET /api/extension/session` (cookie bridge), stores in `chrome.storage.local`, refreshes via alarm every 20 minutes
-- **Content scripts**: `profile-reader.js` reads LinkedIn DOM, `auth-bridge.js` detects login page sessions
-- **Service worker**: Handles `generate`, `healthCheck`, `authenticate`, `logout`, `getAuthStatus` messages from popup
-- **Token lifecycle**: Automatic proactive refresh, silent re-fetch on 401, interactive login fallback
-
----
-
-## API Documentation
-
-- **Interactive**: Visit `/docs` for Swagger UI (development only, or set `ENABLE_API_DOCS=true`)
-- **JSON spec**: `GET /api/docs` returns the OpenAPI 3.0 specification
-- **Detailed reference**: See [`API_DOCUMENTATION.md`](./API_DOCUMENTATION.md) for complete endpoint documentation including request/response schemas, error codes, CORS policy, and data flow diagrams
-
----
-
-## Environment Setup
-
-### Prerequisites
-- Node.js 18+ or 20+
-- npm
-- Supabase project (for database and auth)
-- Anthropic API key
-
-### Environment Variables
-
+**Regenerate TypeScript types** after a schema change:
 ```bash
-# Required
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
-ANTHROPIC_API_KEY=your_anthropic_api_key
+npx supabase gen types typescript \
+  --db-url "postgresql://postgres:[password]@db.[project-ref].supabase.co:5432/postgres" \
+  > lib/database/types.ts
+```
+Do not hand-edit `lib/database/types.ts` — it is fully generated.
 
-# Optional — Logging
-LOG_LEVEL=debug                    # debug | info | warn | error (default: debug in dev, info in prod)
+**Row-Level Security:** Enabled on all tables. Use `createClient()` (anon key) for user-facing queries. Only use `createServiceClient()` (service role) for background jobs and admin operations.
 
-# Optional — Analytics & Monitoring
-NEXT_PUBLIC_ENABLE_ANALYTICS=true  # Enables PostHog
-NEXT_PUBLIC_POSTHOG_KEY=your_posthog_key
-NEXT_PUBLIC_POSTHOG_HOST=https://app.posthog.com
-NEXT_PUBLIC_ENABLE_ERROR_REPORTING=true  # Enables Sentry
-NEXT_PUBLIC_SENTRY_DSN=your_sentry_dsn
-SENTRY_DSN=your_sentry_dsn
+---
 
-# Optional — API Docs
-ENABLE_API_DOCS=true               # Enable Swagger UI in production
+## Extension Development
+
+The Chrome extension lives in `ascendia-extension/` and is a **separate codebase** from the Next.js app.
+
+**Load the extension in Chrome:**
+1. Go to `chrome://extensions`
+2. Enable "Developer mode" (top right)
+3. Click "Load unpacked" → select `ascendia-extension/`
+4. The extension icon appears in your toolbar
+
+**Key files:**
+
+| File | Role |
+|------|------|
+| `background/service-worker.js` | Handles messages from popup: generate, authenticate, logout, health check |
+| `content/linkedin-reader.js` | Reads LinkedIn profile DOM on `/in/*` pages, sends data to service worker |
+| `content/auto-filler.js` | Fills the LinkedIn message compose box with the generated draft |
+| `popup/popup.js` | Main popup UI — triggers generation, shows authenticity score, captures feedback |
+| `settings/settings.js` | Extension settings page (accessible via right-click → Options) |
+
+**Session bridge:**
+The extension uses a Bearer token for API calls. On first use it fetches a token via `GET /api/extension/session` (cookie-based auth endpoint), stores it in `chrome.storage.local`, and refreshes via an alarm every 20 minutes.
+
+**Host permissions:** `linkedin.com`, `app.apollo.io`, `localhost:3000`, `*.vercel.app`
+
+After any change to extension files: reload the extension from `chrome://extensions` (click the refresh icon on the extension card).
+
+---
+
+## Testing
+
+**96 tests, all passing.** Test files are co-located with source files.
+
+### Unit tests — `make test`
+
+| Test file | What it covers |
+|-----------|---------------|
+| `lib/ai/style-analyzer.test.ts` | `analyzeStyle()`, `mergeStylePatterns()` — pure function behaviour |
+| `lib/ai/ai-fingerprint-detector.test.ts` | Pattern detection by name, platform scoping, score calculation |
+| `lib/ai/sanitizer.test.ts` | `stripSurrogates()`, `sanitizeAIOutput()` — HTML stripping, length limits, fingerprint integration |
+| `app/api/extension/feedback/route.test.ts` | `feedbackSchema` — valid payloads, required fields, enum values |
+| `app/api/settings/route.test.ts` | `settingsSchema` — optional fields, invalid values |
+| `app/api/extension/generate/route.test.ts` | `generateRequestSchema` — profile shape, URL validation, category/intent enums |
+
+### Guardrail tests — `make guardrails`
+
+Must pass before any PR that touches `lib/ai/`. Tests the sanitizer against adversarial inputs:
+- XSS (`<script>` injection)
+- SQL injection (`UNION SELECT`, `DROP TABLE`)
+- Command injection (`| rm -rf`)
+- PII patterns (SSN, credit card numbers)
+- Hate speech and violence patterns
+
+### E2E tests — `make e2e`
+
+Playwright, Chromium only. Test files go in `e2e/`. Do not call real Anthropic or Supabase APIs — mock them.
+
+### Schemas are in `schema.ts`
+
+Each API route has a `schema.ts` sibling that exports the Zod schema. Import from `schema.ts` in both the route handler and the test file:
+
+```
+app/api/extension/generate/
+  schema.ts       ← export const generateRequestSchema = z.object(...)
+  route.ts        ← import { generateRequestSchema } from './schema'
+  route.test.ts   ← import { generateRequestSchema } from './schema'
 ```
 
-### Installation
+This keeps test files free of Next.js routing constraints (Next.js only permits HTTP method exports from `route.ts`).
 
-```bash
-git clone <repository-url>
-cd aletheia
-npm ci
-cp .env.example .env.local   # Edit with your values
-npm run dev
+---
+
+## CI/CD
+
+GitHub Actions pipeline (`.github/workflows/ci.yml`). Triggers on push or PR to `main`.
+
+```
+lint-and-typecheck
+  └── ESLint + tsc --noEmit
+
+test  (needs: lint-and-typecheck)
+  └── npm run test -- --run         (83 unit tests)
+  └── npm run test:guardrails -- --run  (13 guardrail tests)
+
+build  (needs: lint-and-typecheck, test)
+  └── next build
 ```
 
----
+All three jobs must pass before a PR can merge. TypeScript strict mode is on — type errors block the build.
 
-## Scripts Reference
-
-| Script | Description |
-|--------|-------------|
-| `npm run dev` | Start development server |
-| `npm run build` | Production build |
-| `npm run start` | Start production server |
-| `npm run lint` | Run ESLint |
-| `npm run type-check` | TypeScript type checking |
-| `npm run format` | Format with Prettier |
-| `npm run format:check` | Check formatting |
-| `npm run test` | Run unit tests (Vitest) |
-| `npm run test:watch` | Watch mode |
-| `npm run test:coverage` | Coverage report |
-| `npm run test:ui` | Vitest UI |
-| `npm run test:guardrails` | Run guardrail-specific tests |
-| `npm run test:e2e` | Playwright E2E tests |
-| `npm run test:e2e:ui` | Playwright UI mode |
-| `npm run test:e2e:debug` | Playwright debug mode |
-| `npm run analyze` | Bundle analysis |
-| `npm run validate` | Startup validation script |
+**Deployment:** Vercel. Merging to `main` triggers an automatic production deploy.
 
 ---
 
-## Testing Framework
+## Adding a Feature
 
-### Unit Testing (Vitest)
-- React Testing Library for component tests
-- 80% coverage threshold for branches, functions, lines, statements
-- AI service testing utilities and streaming tests
+1. **Create `schema.ts`** next to the route with your Zod schema (never inline it in `route.ts`).
+2. **Create `route.ts`** importing from `schema.ts`.
+3. **Create `route.test.ts`** importing from `schema.ts` — test schema validation, not HTTP behaviour.
+4. **For any `lib/ai/` change:** update or add a test in `lib/ai/*.test.ts` and `lib/ai/*.guardrails.test.ts`.
+5. **Run `make ci`** — all checks must pass locally before opening a PR.
+6. **Open a PR to `main`.**
 
-### End-to-End Testing (Playwright)
-- Cross-browser: Chromium, Firefox, WebKit
-- Mobile viewports: iPhone 12, Pixel 5
-- Auth flows, AI generation workflows, visual regression, accessibility
-
-### Security Testing
-- Input validation: SQL injection, XSS, prompt injection
-- Rate limiting: user-based limits
-- Content sanitization: HTML, JSON, plain text
+Full conventions are in `CLAUDE.md` at the project root.
 
 ---
 
-## Deployment
+## Key Conventions
 
-### Vercel
-- Next.js 14 with App Router
-- Edge function support, automatic HTTPS, global CDN
-
-### CI/CD Pipeline (GitHub Actions)
-- Full test suite: unit, integration, E2E, security, accessibility
-- Performance: Lighthouse CI, bundle analysis
-- Security: dependency scanning, CodeQL
-- Automated staging (develop branch) and production (main branch) deployments
-
----
-
-## Monitoring
-
-| System | Purpose | Gate |
-|--------|---------|------|
-| **Sentry** | Error tracking (client, server, edge), session replay | `NEXT_PUBLIC_ENABLE_ERROR_REPORTING=true` |
-| **PostHog** | Product analytics, user behavior, feature usage | `NEXT_PUBLIC_ENABLE_ANALYTICS=true` |
-| **Structured logging (pino)** | JSON logs in production, pretty-printed in development | Always on |
-| **Health check** | `GET /api/health` or `/healthz` | Always on |
+| Rule | Detail |
+|------|--------|
+| Supabase client selection | `createClient()` = browser; `createServiceClient()` = server/admin. Never mix. |
+| Zod schemas | Always in `schema.ts` — not inline in `route.ts` |
+| SDK instantiation | Use lazy factory functions (`getAnthropic()`, `getSupabaseService()`). No module-level instances — they break Vercel edge cold starts. |
+| Analytics / style learning | Fire-and-forget. Never `await` these in the generate response path. |
+| Logging | `createLogger('module-name')` from `lib/logger.ts`. No `console.log`. |
+| API errors | Return `{ error: string, code?: string }` with the correct HTTP status. |
+| Security headers | Via `middleware.ts` only — not ad-hoc in individual routes. |
+| RLS | Never bypass with service role key for user-facing queries. |
 
 ---
 
-## License
+## Monitoring & Health
 
-MIT
+| System | Trigger | Endpoint / check |
+|--------|---------|-----------------|
+| **Health check** | Always on | `GET /api/health` (alias: `/healthz`) |
+| **Pino logging** | Always on | JSON in production, pretty in dev |
+| **Sentry** | Set `SENTRY_DSN` | Client + server + edge error tracking |
+| **PostHog** | Set `NEXT_PUBLIC_POSTHOG_KEY` | Product analytics, feature usage |
