@@ -181,7 +181,7 @@ describe("PATCH /api/settings", () => {
         makeRequest({ method: "PATCH", body: { reset_style: true } }),
       );
 
-      const upsertArg = mockUpsert.mock.calls[0][0] as Record<string, unknown>;
+      const upsertArg = mockUpsert.mock.calls[0]![0] as Record<string, unknown>;
       expect(upsertArg.style_patterns).toBeNull();
       expect(upsertArg.approved_message_count).toBe(0);
       expect(upsertArg.rejected_message_count).toBe(0);
@@ -190,7 +190,7 @@ describe("PATCH /api/settings", () => {
     it("does NOT include style_patterns key when reset_style is false", async () => {
       await PATCH(makeRequest({ method: "PATCH", body: { theme: "light" } }));
 
-      const upsertArg = mockUpsert.mock.calls[0][0] as Record<string, unknown>;
+      const upsertArg = mockUpsert.mock.calls[0]![0] as Record<string, unknown>;
       expect(upsertArg).not.toHaveProperty("style_patterns");
       expect(upsertArg).not.toHaveProperty("approved_message_count");
     });
@@ -200,7 +200,7 @@ describe("PATCH /api/settings", () => {
         makeRequest({ method: "PATCH", body: { reset_style: true } }),
       );
 
-      const upsertArg = mockUpsert.mock.calls[0][0] as Record<string, unknown>;
+      const upsertArg = mockUpsert.mock.calls[0]![0] as Record<string, unknown>;
       // reset_style is a control flag — it must not be persisted to the DB
       expect(upsertArg).not.toHaveProperty("reset_style");
     });

@@ -6,7 +6,7 @@ import {
   extractSubjectFromText,
   extractBodyFromText,
   stripMarkdownCodeFences,
-} from "./route";
+} from "./utils";
 import { POST } from "./route";
 import { makeRequest } from "@/__tests__/helpers/request";
 import { getCorsHeaders } from "@/lib/cors";

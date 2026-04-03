@@ -10,11 +10,18 @@ import type { StylePatterns } from "@/lib/ai/style-analyzer";
 import { sanitizeForLinkedIn, stripSurrogates } from "@/lib/ai/sanitizer";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
-import { createLogger } from "@/lib/logger";
 import { getCorsHeaders } from "@/lib/cors";
+import { createLogger } from "@/lib/logger";
+import {
+  countWords,
+  truncateToWordLimit,
+  extractSubjectFromText,
+  extractBodyFromText,
+  stripMarkdownCodeFences,
+} from "./utils";
 import { generateRequestSchema } from "./schema";
 
-const log = createLogger("extension-generate");
+const log = createLogger("generate-route");
 
 // Lazy factory functions — avoid module-level instantiation at build time
 function getAnthropic() {
@@ -599,38 +606,6 @@ export async function POST(request: NextRequest) {
       },
     );
   }
-}
-
-// ─── Utility functions (exported for unit testing) ──────────────────────────
-export function countWords(text: string): number {
-  return text
-    .trim()
-    .split(/\s+/)
-    .filter((word) => word.length > 0).length;
-}
-
-export function truncateToWordLimit(text: string, maxWords: number): string {
-  const words = text.trim().split(/\s+/);
-  if (words.length <= maxWords) return text;
-  return words.slice(0, maxWords).join(" ");
-}
-
-export function extractSubjectFromText(content: string): string {
-  const subjectMatch = content.match(/(?:Subject|SUBJECT):\s*(.+)/i);
-  if (subjectMatch?.[1]) return subjectMatch[1].trim();
-  const firstLine = content.split("\n")[0]?.trim();
-  return firstLine || "Quick connect";
-}
-
-export function extractBodyFromText(content: string): string {
-  const body = content.replace(/(?:Subject|SUBJECT):\s*(.+)\n?/i, "");
-  return body.trim();
-}
-
-export function stripMarkdownCodeFences(content: string): string {
-  const trimmed = content.trim();
-  const match = trimmed.match(/^```(?:\w+)?\s*\n?([\s\S]*?)\n?\s*```$/);
-  return match?.[1] ? match[1].trim() : trimmed;
 }
 
 // GET endpoint for health check with Bearer token validation

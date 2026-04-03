@@ -7,6 +7,9 @@ npx lint-staged || { echo "❌ Formatting failed."; exit 1; }
 echo "🔍 Pre-commit: running lint..."
 make lint || { echo "❌ Lint failed. Fix errors before committing."; exit 1; }
 
+echo "🧩 Pre-commit: running static type check..."
+make type-check || { echo "❌ Type checking failed. Fix typescript errors before committing."; exit 1; }
+
 echo "🧪 Pre-commit: running tests..."
 make test || { echo "❌ Tests failed. All tests must pass before committing."; exit 1; }
 
