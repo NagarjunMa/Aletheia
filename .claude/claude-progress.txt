@@ -186,6 +186,191 @@ Completion checklist:
   [x] Style summary visible in web settings page
   [x] Rejection feedback captured (optional quick-select before regenerating)
 
+--------------------------------------------------------------------------------
+
+PHASE 6 — Test Coverage & Unit Testing
+Status: [x] COMPLETE — 2026-04-01
+--------------------------------------------------------------------------------
+Build a test foundation from zero: config, unit tests, guardrail tests, CI gate.
+
+CLAUDE.md:
+  [x] Added test-as-you-build rule to DO section
+  [x] Added Testing Rule #6: tests are part of the definition of done
+
+CONFIG FILES CREATED:
+  [x] vitest.config.ts           — node env, v8 coverage, @-alias, excludes guardrails
+  [x] vitest.guardrails.config.ts — separate run for *.guardrails.test.ts only
+  [x] playwright.config.ts        — Chromium, ./e2e dir, webServer config
+
+UNIT TESTS (83 tests, all passing):
+  [x] lib/ai/style-analyzer.test.ts          (19 tests) — analyzeStyle, mergeStylePatterns
+  [x] lib/ai/ai-fingerprint-detector.test.ts (17 tests) — pattern detection, platform scoping, scoring
+  [x] lib/ai/sanitizer.test.ts               (15 tests) — stripSurrogates, sanitizeAIOutput
+  [x] app/api/extension/feedback/route.test.ts (11 tests) — feedbackSchema validation
+  [x] app/api/settings/route.test.ts           (9 tests)  — settingsSchema validation
+  [x] app/api/extension/generate/route.test.ts (12 tests) — generateRequestSchema validation
+
+GUARDRAIL TESTS (13 tests, all passing):
+  [x] lib/ai/sanitizer.guardrails.test.ts — XSS, SQL injection, command injection, PII, hate speech
+
+SCHEMA EXTRACTION (Next.js route constraint — routes may only export HTTP methods):
+  [x] app/api/extension/feedback/schema.ts  — feedbackSchema exported
+  [x] app/api/settings/schema.ts            — settingsSchema exported
+  [x] app/api/extension/generate/schema.ts  — generateRequestSchema exported
+
+CI UPDATE:
+  [x] .github/workflows/ci.yml — test job added (unit + guardrails) between lint-and-typecheck and build
+
+Completion checklist:
+  [x] npm run test -- --run         → PASSED (83 tests)
+  [x] npm run test:guardrails --run → PASSED (13 tests)
+  [x] npm run build                 → PASSED
+
+--------------------------------------------------------------------------------
+
+PHASE 7 — Developer Experience: Makefile + README
+Status: [x] COMPLETE — 2026-04-01
+--------------------------------------------------------------------------------
+Give developers a single accurate reference and convenient command shortcuts.
+
+MAKEFILE (created at project root):
+  [x] 22 self-documented targets (make help prints all)
+  [x] Groups: dev, build, code quality, unit tests, guardrails, e2e, utilities
+  [x] make ci — runs full local pipeline: lint → type-check → test → guardrails → build
+  [x] Default target is help — bare `make` is safe
+
+README.md (full rewrite):
+  [x] Quick Start: 5 commands from clone to running app
+  [x] Accurate architecture diagram (removed deleted /api/docs, /chat routes)
+  [x] Annotated project structure with schema.ts pattern explained
+  [x] Environment variables: removed stale vars (ENABLE_API_DOCS, NEXTAUTH_*)
+  [x] Development commands: Makefile-first reference
+  [x] AI Pipeline: correct model (claude-sonnet-4-6), accurate 3-stage description
+  [x] Database: active tables only, migration workflow, type regen command
+  [x] Extension development: load unpacked guide, file roles, session bridge
+  [x] Testing: 96 tests, co-location rule, guardrails contract
+  [x] CI/CD: accurate 3-job pipeline
+  [x] Adding a feature: contributor checklist
+  [x] Key conventions table
+  [x] Monitoring & health section
+
+Completion checklist:
+  [x] make help → prints all 22 targets cleanly
+  [x] make ci   → PASSED
+
+--------------------------------------------------------------------------------
+
+PHASE 8 — ESLint Zero-Warning Setup
+Status: [x] COMPLETE — 2026-04-01
+--------------------------------------------------------------------------------
+Eliminate all lint warnings and establish clean baseline for future development.
+
+ROOT CAUSES FIXED:
+  1. no-unused-vars only had argsIgnorePattern — missing varsIgnorePattern,
+     destructuredArrayIgnorePattern, ignoreRestSiblings, caughtErrorsIgnorePattern
+  2. lib/database/types.ts (Supabase-generated) was being linted — persistent noise
+  3. Four genuine one-line code issues
+
+.eslintrc.json:
+  [x] Expanded no-unused-vars with full ignore patterns (vars, destructured, rest siblings, caught errors)
+  [x] Added overrides for *.test.ts files (disable @next/next/no-img-element — not applicable in tests)
+
+.eslintignore (created):
+  [x] lib/database/types.ts — Supabase-generated, excluded from lint
+  [x] .next/, coverage/ — build output excluded
+
+CODE FIXES:
+  [x] app/settings/page.tsx:285    — renamed `v` → `_v` in SelectField prop type
+  [x] app/profile/page.tsx:61      — replaced <img> with <Image> from next/image (80×80)
+  [x] instrumentation-client.ts    — added onRouterTransitionStart Sentry export (was ACTION REQUIRED warning)
+
+Completion checklist:
+  [x] make lint  → 0 warnings, 0 errors
+  [x] make test  → PASSED (83 tests)
+  [x] make build → PASSED
+
+--------------------------------------------------------------------------------
+
+PHASE 9 — Comprehensive Test Coverage
+Status: [x] COMPLETE — 2026-04-02
+--------------------------------------------------------------------------------
+Raised unit test coverage from 41.88% → 65.19% by testing every untested function
+in the AI pipeline and utility modules.
+
+COVERAGE IMPROVEMENTS:
+  lib/ai/sanitizer.ts            36.49% → 85.91%  (was 10/12 functions untested)
+  lib/ai/ai-fingerprint-detector.ts  85.35% → 97.18%  (3 wrapper functions added)
+  lib/ai/prompts/linkedin-connection.ts  0% → 100%
+  lib/cors.ts                    0% → 90.9%
+  Overall                        41.88% → 65.19%
+
+FILES MODIFIED / CREATED:
+  [x] lib/ai/sanitizer.test.ts — expanded with 35 new tests covering:
+        profanity filtering, blocked content detection, harmful pattern redaction,
+        AI fingerprint humanization, formatting normalization, quickSanitize,
+        sanitizeForLinkedIn, sanitizeForEmail, sanitizeForExport, validateForStorage,
+        sanitizeResponseMetadata (12 cases), sanitizeWithCaching (5 cases)
+  [x] lib/ai/ai-fingerprint-detector.test.ts — added 17 tests for 3 untested exports:
+        isLikelyAIGenerated, sanitizeAIFingerprints, analyzeContentAuthenticity
+  [x] lib/ai/prompts/connection.test.ts — created (34 tests) covering:
+        sanitize() (11 cases), buildPrompt() (16 cases), getSystemPrompt() (5 cases),
+        NEGATIVE_LEXICON shape (2 cases)
+  [x] lib/cors.test.ts — created (18 tests) covering:
+        localhost origins, chrome-extension wildcard, unknown origins, credentials
+        spec compliance (no wildcard + credentials), custom methods
+
+Completion checklist:
+  [x] npm run test -- --run → PASSED (202 tests)
+  [x] npm run test:guardrails -- --run → PASSED (13 tests)
+  [x] npm run test:coverage → 65.19% overall (up from 41.88%)
+  [x] npm run build → PASSED
+
+--------------------------------------------------------------------------------
+
+PHASE 10 — FUNCTIONS.md Codebase Function Reference
+Status: [x] COMPLETE — 2026-04-02
+--------------------------------------------------------------------------------
+Created FUNCTIONS.md at project root documenting every function in the codebase.
+
+COVERAGE (~117 functions across 6 layers):
+  Section 1 — AI Pipeline (lib/ai/)
+    sanitizer.ts          — 9 exported + 3 internal functions
+    ai-fingerprint-detector.ts — 4 exported + 4 internal functions
+    style-analyzer.ts     — 2 exported + 2 internal functions
+    prompts/linkedin-connection.ts — 3 functions + 4 exported constants
+
+  Section 2 — Utilities (lib/)
+    cors.ts               — getCorsHeaders + buildAllowedPatterns (internal)
+    logger.ts             — createLogger, createRequestLogger
+    supabase/server.ts    — 7 functions (createClient, getUser, ensureUserProfile, etc.)
+    supabase/client.ts    — createClient
+
+  Section 3 — API Routes (app/api/)
+    7 route files documented: generate, feedback, config, session, auth/me, settings, health, feedback
+    Each route: all HTTP handlers + key internal helpers (auth, rate limit, lazy factories)
+
+  Section 4 — Middleware & App Shell
+    middleware.ts, app/providers.tsx, app/layout.tsx
+
+  Section 5 — Extension: Background & Auth
+    service-worker.js     — 10 functions + chrome.* event listeners
+    auth.js               — 14 functions (token lifecycle, session bridge, proactive refresh)
+
+  Section 6 — Extension: Content Scripts & UI
+    linkedin-reader.js    — 14 functions (profile extraction, mutation observer)
+    auto-filler.js        — 8 functions (context detection, field filling, Apollo-specific)
+    auth-bridge.js        — 4 functions (session retrieval, bridge messaging)
+    popup.js              — 7 key functions (generate, score meter, character count)
+    settings.js           — 9 key functions (connect, PDF extraction, export)
+
+Each entry documents: what it does, called from/used in, why it exists, when it runs.
+
+Completion checklist:
+  [x] FUNCTIONS.md created at project root
+  [x] All 6 sections present
+  [x] ~117 functions documented
+  [x] Summary table at bottom (function count by layer)
+
 ================================================================================
 NOTES
 ================================================================================

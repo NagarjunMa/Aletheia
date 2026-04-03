@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
 
 export default async function ProfilePage() {
   const supabase = createClient()
@@ -58,9 +59,11 @@ export default async function ProfilePage() {
           <div className="flex flex-col items-center sm:flex-row sm:items-start gap-6">
             {/* Avatar */}
             {avatarUrl ? (
-              <img
+              <Image
                 src={avatarUrl}
                 alt={displayName}
+                width={80}
+                height={80}
                 className="h-20 w-20 rounded-full border-2 border-[hsl(var(--border))] object-cover"
               />
             ) : (

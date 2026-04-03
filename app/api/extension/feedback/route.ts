@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { createLogger } from '@/lib/logger'
 import { analyzeStyle, mergeStylePatterns, type StylePatterns } from '@/lib/ai/style-analyzer'
 import { getCorsHeaders } from '@/lib/cors'
+import { feedbackSchema } from './schema'
 
 const log = createLogger('extension-feedback')
 

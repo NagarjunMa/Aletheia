@@ -146,6 +146,7 @@ Copy `.env.local.example` → `.env.local` for local dev. Never commit secrets.
 - Add security headers via middleware — don't add them ad hoc in individual routes
 - Use Supabase RLS — never bypass it with service role for user-facing operations
 - Reference only user-provided data in prompts — never invent metrics, projects, or achievements
+- Write a test for every new feature or non-trivial code change. Co-locate the test file with the source (`sanitizer.test.ts` next to `sanitizer.ts`). Minor fixes (typos, config tweaks, copy changes, dependency bumps) are exempt. For any change touching `lib/ai/`, guardrail tests are mandatory and must pass before merge.
 
 ### DON'T
 - Don't import `lib/supabase/server.ts` in client components
@@ -219,3 +220,4 @@ Response:
 3. Guardrail tests are non-negotiable — never skip or comment out
 4. Test sanitizer and fingerprint detector with adversarial inputs
 5. Cover rate limit logic for both under-limit and over-limit cases
+6. Write tests before marking any feature complete — test files are part of the definition of done
