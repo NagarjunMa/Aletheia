@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { z } from 'zod'
 import { createLogger } from '@/lib/logger'
-import { settingsSchema } from './schema'
 
 const log = createLogger('settings-api')
+
+const settingsSchema = z.object({
+  formality_level: z.enum(['casual', 'neutral', 'formal']).optional(),
+  theme: z.enum(['light', 'dark', 'system']).optional(),
+  share_analytics: z.boolean().optional(),
+  reset_style: z.boolean().optional(),
+})
 
 export async function PATCH(request: NextRequest) {
   const supabase = createClient()
