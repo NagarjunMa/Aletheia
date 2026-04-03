@@ -450,6 +450,43 @@ Completion checklist:
   [x] npm run build → PASSED (no ESLint errors, no prerender crash)
   [x] /settings page builds cleanly with ○ static marker
 
+--------------------------------------------------------------------------------
+
+PHASE 14 — CI Smoke Test Build Fix (Supabase Prerender)
+Status: [x] COMPLETE — 2026-04-02
+--------------------------------------------------------------------------------
+Fixed CI smoke-test job build failure caused by settings page calling createBrowserClient()
+during Next.js static page generation with no Supabase env vars present.
+
+ROOT CAUSE:
+  'use client' components are still SSR-rendered during next build for the initial HTML shell.
+  createBrowserClient() in settings/page.tsx ran synchronously at component render level.
+  @supabase/ssr validates URL + key at construction time → threw with no CI env vars.
+  export const dynamic = 'force-dynamic' does NOT prevent build-time rendering — only
+  prevents runtime caching. Build always does one render pass to validate each page.
+
+TWO-PART FIX:
+  1. .github/workflows/ci.yml — added placeholder NEXT_PUBLIC_SUPABASE_URL and
+     NEXT_PUBLIC_SUPABASE_ANON_KEY to the Build Next.js step env block.
+     Prevents throw without needing real credentials. NEXT_PUBLIC_ vars are non-secret.
+
+  2. app/settings/page.tsx — replaced with a thin server-safe wrapper using
+     next/dynamic({ ssr: false }). This is the only Next.js mechanism that completely
+     prevents a component from being rendered server-side.
+
+  3. app/settings/_settings-content.tsx — new file containing all actual settings
+     component logic. Only loaded in the browser, never on server.
+
+WHY LOCAL WORKS, CI FAILS:
+  Local pre-commit hook has .env.local with real Supabase credentials → no throw.
+  CI has no .env.local and no injected secrets for the build step.
+  Health check (/api/health) is irrelevant — build fails before server ever starts.
+
+Completion checklist:
+  [x] npm run build (without env vars) → PASSED
+  [x] npm run test -- --run → PASSED (286 tests)
+  [x] /settings page renders: ○ static shell with ssr:false client content
+
 ================================================================================
 NOTES
 ================================================================================
