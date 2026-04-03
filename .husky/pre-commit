@@ -16,4 +16,7 @@ make test || { echo "❌ Tests failed. All tests must pass before committing."; 
 echo "🛡️ Pre-commit: running guardrail tests..."
 make guardrails || { echo "❌ Guardrails failed. Security patterns must pass."; exit 1; }
 
+echo "🏗️ Pre-commit: running production build..."
+make build || { echo "❌ Build failed. Fix build errors before committing."; exit 1; }
+
 echo "✅ All checks passed."

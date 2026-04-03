@@ -41,7 +41,7 @@ vi.mock("@anthropic-ai/sdk", () => {
   // @ts-ignore
   AnthropicMock.APIError = class APIError extends Error {
     status: number;
-    constructor(status: number, error: any, message: string, headers: any) {
+    constructor(status: number, error: any, message: string, _headers: any) {
       super(message);
       this.status = status;
     }

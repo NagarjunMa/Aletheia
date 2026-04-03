@@ -420,6 +420,36 @@ Completion checklist:
   [x] CI Workflow no longer touches Supabase.
   [x] Push block verification established for team collaboration.
 
+--------------------------------------------------------------------------------
+
+PHASE 13 — CI Build Fixes + Unit Test Coverage Completion
+Status: [x] COMPLETE — 2026-04-02
+--------------------------------------------------------------------------------
+Fixed two CI build blockers and added unit tests for all previously untested routes/utilities.
+
+CI BLOCKERS FIXED:
+  [x] app/api/extension/generate/route.test.ts:44 — renamed `headers` → `_headers` in
+      AnthropicMock.APIError constructor to satisfy ESLint no-unused-vars rule (/^_/ prefix pattern)
+  [x] app/settings/page.tsx — added `export const dynamic = 'force-dynamic'` to prevent
+      Next.js static generation from calling createBrowserClient() at build time without env vars.
+      Root cause: 'use client' components are still SSR-rendered during next build for the initial
+      HTML shell; Supabase SSR validates env vars at construction time → throws in CI.
+
+NEW UNIT TEST FILES:
+  [x] app/api/extension/config/route.test.ts — 6 tests (GET response shape, env vars, CORS; OPTIONS 200 + methods)
+  [x] app/api/health/route.test.ts — 3 tests (status 200, status 'ok', valid ISO timestamp)
+  [x] lib/logger.test.ts — 7 tests (createLogger methods, createRequestLogger bindings + null origin)
+
+TESTING PYRAMID DECISIONS DOCUMENTED:
+  Unit test: pure string/math functions, mocked-I/O business logic, time-dependent edge cases
+  Integration: real DB + application query (future, requires live Supabase)
+  E2E: cookie auth (next/headers context), chrome.* extension APIs, LinkedIn live DOM, real Claude output
+
+Completion checklist:
+  [x] npm run test -- --run → PASSED (286 tests, 14 test files)
+  [x] npm run build → PASSED (no ESLint errors, no prerender crash)
+  [x] /settings page builds cleanly with ○ static marker
+
 ================================================================================
 NOTES
 ================================================================================
