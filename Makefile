@@ -13,6 +13,14 @@ help: ## Show this help message
 		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
 	@echo ""
 
+# ─── Setup ────────────────────────────────────────────────────────────────────
+
+install: ## Install dependencies and initialize Git pre-commit hooks (Husky)
+	npm install
+
+setup: install ## Full developer setup (install + env check)
+	npm run validate
+
 # ─── Development ──────────────────────────────────────────────────────────────
 
 dev: ## Start development server on :3000

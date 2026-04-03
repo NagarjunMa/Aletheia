@@ -371,6 +371,55 @@ Completion checklist:
   [x] ~117 functions documented
   [x] Summary table at bottom (function count by layer)
 
+--------------------------------------------------------------------------------
+
+PHASE 11 — Production API Route Unit Testing
+Status: [x] COMPLETE — 2026-04-02
+--------------------------------------------------------------------------------
+Achieved deep algorithmic test coverage across all major Next.js App Router endpoints, rocketing coverage from 65.19% → 87.54% overall.
+
+COVERAGE IMPROVEMENTS:
+  app/api/extension/generate/route.ts  0% → ~79%
+  app/api/extension/session/route.ts   0% → ~97%
+  app/api/settings/route.ts            0% → 100%
+  app/api/auth/me/route.ts             0% → ~93%
+  app/api/feedback/route.ts            0% → 100% (schema + handler)
+
+FILES MODIFIED / CREATED:
+  [x] __tests__/helpers/request.ts — Created `makeRequest` boundary factory.
+  [x] app/api/extension/generate/route.test.ts — Addressed complex Anthropic.APIError mock injections (401, 429), mocked DB logic, verified JSON parsing fallback logic, and fully tested utility sub-functions.
+  [x] app/api/extension/session/route.test.ts — Exhaustively verified CORS guards, missing cookie states, and standard session handoffs.
+  [x] app/api/settings/route.test.ts — Tested `reset_style` logic vs standard patching.
+
+Completion checklist:
+  [x] Modules utilize fully isolated `vi.mock()` for @supabase/supabase-js and @anthropic-ai/sdk.
+  [x] npm run test -- --run → PASSED (266 tests)
+  [x] Coverage thresholds proven without a local database.
+
+--------------------------------------------------------------------------------
+
+PHASE 12 — Infrastructure CI & Pre-commit Hardening
+Status: [x] COMPLETE — 2026-04-03
+--------------------------------------------------------------------------------
+Completely decoupled the CI pipeline from external dependencies and integrated a bulletproof shift-left local security hook.
+
+PIPELINE DECOUPLING (.github/workflows/ci.yml):
+  [x] Dropped `NEXT_PUBLIC_SUPABASE_URL` and `ANTHROPIC_API_KEY` environmental burdens from the test suite config.
+  [x] Separated into explicit stages: lint-and-typecheck, test (unit/guardrails), and smoke-test.
+  [x] Implemented a self-contained smoke test that inherently spins up `npm run start &` and successfully queries the newly unprotected `/api/health` validation route before exiting cleanly.
+
+LOCAL DEV HOOKS (.husky & .lintstagedrc.json):
+  [x] Standardized `npx husky init`.
+  [x] Constructed `.lintstagedrc.json` configured for target isolation: executes `eslint --fix`, `prettier --write`, and an ultra-fast `vitest related --run --passWithNoTests` strictly against modified files, bypassing the 3 minute full-suite waiting penalty.
+  
+MAKEFILE UPGRADES:
+  [x] Added `install` target → runs `npm install` gracefully forcing developers to initialize their Husky environments.
+  [x] Added `setup` target → runs `install` then directly runs `npm run validate` to test env stability dynamically.
+
+Completion checklist:
+  [x] CI Workflow no longer touches Supabase.
+  [x] Push block verification established for team collaboration.
+
 ================================================================================
 NOTES
 ================================================================================

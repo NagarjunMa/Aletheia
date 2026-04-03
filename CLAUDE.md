@@ -127,7 +127,8 @@ Copy `.env.local.example` → `.env.local` for local dev. Never commit secrets.
 - **Platform:** Vercel (configured via env vars and `next.config.js`)
 - **CI:** GitHub Actions (`.github/workflows/ci.yml`)
   - Triggers: push/PR to `main`
-  - Jobs: lint + type-check → build (Node 20.x)
+  - Jobs: lint + type-check → test (unit/guardrails) → smoke check (Node 20.x, independent of Supabase)
+  - Pre-commit: Husky hook runs `lint-staged` using `vitest related --run` for instantaneous fail-safes.
 - **Database migrations:** `supabase/migrations/` — apply via Supabase CLI
 - **No Docker** — Vercel-native deployment
 
@@ -195,9 +196,9 @@ Response:
 
 ### Unit Tests (Vitest)
 - Files: `*.test.ts` / `*.spec.ts` co-located or in `__tests__/`
-- Run: `npm run test` | `npm run test:coverage`
-- Must test: sanitizer logic, fingerprint detector patterns, Zod schema validation, style analyzer
-- Mock: Anthropic SDK, Supabase client via MSW
+- Run: `npm run test` | `npm run test:coverage` (Currently scaling >87% global coverage)
+- Must test: sanitizer logic, fingerprint detector patterns, complex route handlers, Zod schema validation
+- Mock: Anthropic SDK, Supabase client using isolated `vi.mock()` factory in `__tests__/helpers`
 - Do NOT test UI rendering — use Playwright for that
 
 ### E2E Tests (Playwright)
@@ -210,12 +211,13 @@ Response:
 - Purpose: validate sanitizer blocks harmful content (injection, hate speech, PII)
 - Must pass before any PR that touches `lib/ai/`
 
-### CI Gate
-- Lint + `tsc --noEmit` + build must all pass
+### CI Gate & Local Hooks
+- Husky Pre-Commit actively checks styled & modified files via `lint-staged`.
+- CI pipeline contains zero external database triggers; pure algorithm validation.
 - `strict: true` in tsconfig — type errors block merge
 
 ### Rules
-1. Never call real external APIs (Anthropic, Supabase) in automated tests — mock all I/O
+1. Never call real external APIs (Anthropic, Supabase) in automated tests — mock all I/O via factory helpers.
 2. Keep unit tests fast (< 5s total)
 3. Guardrail tests are non-negotiable — never skip or comment out
 4. Test sanitizer and fingerprint detector with adversarial inputs

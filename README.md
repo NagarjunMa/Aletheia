@@ -133,6 +133,8 @@ Use `make` (preferred) or `npm run` equivalents.
 
 ```bash
 make help          # list all targets
+make install       # install dependencies & initialize husky git hooks
+make setup         # full developer setup (install + env check)
 make dev           # start dev server on :3000
 make build         # production build
 make lint          # ESLint
@@ -240,18 +242,16 @@ After any change to extension files: reload the extension from `chrome://extensi
 
 ## Testing
 
-**96 tests, all passing.** Test files are co-located with source files.
+**Over 266 tests, >87.5% coverage overall.** Test files are co-located with source files.
 
 ### Unit tests — `make test`
 
 | Test file | What it covers |
 |-----------|---------------|
-| `lib/ai/style-analyzer.test.ts` | `analyzeStyle()`, `mergeStylePatterns()` — pure function behaviour |
-| `lib/ai/ai-fingerprint-detector.test.ts` | Pattern detection by name, platform scoping, score calculation |
-| `lib/ai/sanitizer.test.ts` | `stripSurrogates()`, `sanitizeAIOutput()` — HTML stripping, length limits, fingerprint integration |
-| `app/api/extension/feedback/route.test.ts` | `feedbackSchema` — valid payloads, required fields, enum values |
-| `app/api/settings/route.test.ts` | `settingsSchema` — optional fields, invalid values |
-| `app/api/extension/generate/route.test.ts` | `generateRequestSchema` — profile shape, URL validation, category/intent enums |
+| `lib/ai/*.test.ts` | Sanitizer logic, fingerprint detectors, style analyzers |
+| `app/api/**/*.test.ts` | Auth guards, CORS, generated/settings route handlers |
+| `app/api/extension/generate/route.test.ts` | Schema validation, business logic, fallback JSON parse, error boundaries |
+| `__tests__/helpers/` | Module mocks natively disconnecting Supabase and Anthropic APIs |
 
 ### Guardrail tests — `make guardrails`
 
@@ -281,23 +281,26 @@ This keeps test files free of Next.js routing constraints (Next.js only permits 
 
 ---
 
-## CI/CD
+## CI/CD & Local Hooks
 
 GitHub Actions pipeline (`.github/workflows/ci.yml`). Triggers on push or PR to `main`.
+*Contains absolutely zero external database or API dependencies.*
 
 ```
 lint-and-typecheck
-  └── ESLint + tsc --noEmit
+  └── ESLint + tsc --noEmit (Fast Fail)
 
 test  (needs: lint-and-typecheck)
-  └── npm run test -- --run         (83 unit tests)
+  └── npm run test -- --run         (~250+ unit tests)
   └── npm run test:guardrails -- --run  (13 guardrail tests)
 
-build  (needs: lint-and-typecheck, test)
+smoke-test  (needs: test)
   └── next build
+  └── npm start & curl /api/health  (Network Boot Check)
 ```
 
-All three jobs must pass before a PR can merge. TypeScript strict mode is on — type errors block the build.
+**Husky Pre-commit hook**:
+Active local block forcing `npm run lint` and `vitest related` execution locally to immediately reject unsafe or unstyled commits.
 
 **Deployment:** Vercel. Merging to `main` triggers an automatic production deploy.
 
