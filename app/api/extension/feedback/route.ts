@@ -43,6 +43,7 @@ const feedbackSchema = z.object({
   approved: z.boolean(),
   category: z.enum(['linkedin_connection', 'cold_email', 'linkedin_inmail']),
   subjectLine: z.string().optional(),
+  rejectionReason: z.enum(['too_formal', 'too_generic', 'wrong_tone']).optional(),
 })
 
 // ─── POST handler ───
@@ -62,9 +63,9 @@ export async function POST(request: NextRequest) {
 
     // Parse
     const body = await request.json()
-    const { message, approved, category, subjectLine } = feedbackSchema.parse(body)
+    const { message, approved, category, subjectLine, rejectionReason } = feedbackSchema.parse(body)
 
-    log.info({ userId: authResult.userId.substring(0, 8), approved, category }, 'Feedback received')
+    log.info({ userId: authResult.userId.substring(0, 8), approved, category, rejectionReason }, 'Feedback received')
 
     // Return 200 immediately — style analysis runs fire-and-forget
     const response = NextResponse.json(

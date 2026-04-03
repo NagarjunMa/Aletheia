@@ -272,6 +272,14 @@ export async function POST(request: NextRequest) {
             category,
             word_count: countWords(finalBody),
             character_count: finalBody.length,
+            authenticityScore: Math.min(
+              enhancedSubjectSanitization.authenticityScore ?? 100,
+              enhancedBodySanitization.authenticityScore ?? 100
+            ),
+            modificationsApplied: [
+              ...(enhancedSubjectSanitization.aiFingerprints?.detectedPatterns ?? []),
+              ...(enhancedBodySanitization.aiFingerprints?.detectedPatterns ?? []),
+            ],
             validation: {
               word_limit_passed: countWords(finalBody) <= maxWords,
               sanitization_applied: parsed.subject_line !== sanitizedSubject || parsed.body !== sanitizedBody,
@@ -318,6 +326,8 @@ export async function POST(request: NextRequest) {
               category,
               word_count: countWords(finalBody),
               character_count: finalBody.length,
+              authenticityScore: enhancedSanitization.authenticityScore ?? 100,
+              modificationsApplied: enhancedSanitization.aiFingerprints?.detectedPatterns ?? [],
               validation: {
                 word_limit_passed: countWords(finalBody) <= maxWords,
                 sanitization_applied: true,
@@ -345,6 +355,8 @@ export async function POST(request: NextRequest) {
           category,
           word_count: countWords(body),
           character_count: body.length,
+          authenticityScore: enhancedSanitization.authenticityScore ?? 100,
+          modificationsApplied: enhancedSanitization.aiFingerprints?.detectedPatterns ?? [],
           validation: {
             word_limit_passed: false,
             sanitization_applied: rawContent !== sanitizedContent,
@@ -404,6 +416,8 @@ export async function POST(request: NextRequest) {
       body: finalContent,
       category,
       character_count: finalContent.length,
+      authenticityScore: enhancedSanitization.authenticityScore ?? 100,
+      modificationsApplied: enhancedSanitization.aiFingerprints?.detectedPatterns ?? [],
       validation: {
         character_limit_passed: true,
         original_length: originalLength,

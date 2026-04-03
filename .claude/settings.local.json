@@ -29,7 +29,8 @@
       "Bash(__NEW_LINE_f7fed57871916c66__ echo:*)",
       "Bash(npm audit:*)",
       "Bash(supabase projects:*)",
-      "Bash(git:*)"
+      "Bash(git:*)",
+      "Bash(lsof:*)"
     ],
     "deny": [],
     "ask": []
