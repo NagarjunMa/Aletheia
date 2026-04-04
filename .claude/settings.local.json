@@ -44,7 +44,15 @@
       "Bash(python3:*)",
       "Bash(find /Users/nagarjunmallesh/Desktop/projects/ascendia/ascendia-extension -type f \\\\\\(-name *.js -o -name *.ts -o -name *.tsx \\\\\\))",
       "Bash(find /Users/nagarjunmallesh/Desktop/projects/ascendia/ascendia-extension/popup -type f \\\\\\(-name *.js -o -name *.ts -o -name *.tsx \\\\\\) ! -path */node_modules/*)",
-      "Bash(find /Users/nagarjunmallesh/Desktop/projects/ascendia/ascendia-extension/settings -type f \\\\\\(-name *.js -o -name *.ts -o -name *.tsx \\\\\\) ! -path */node_modules/*)"
+      "Bash(find /Users/nagarjunmallesh/Desktop/projects/ascendia/ascendia-extension/settings -type f \\\\\\(-name *.js -o -name *.ts -o -name *.tsx \\\\\\) ! -path */node_modules/*)",
+      "Bash(grep -r FeedbackForm /Users/nagarjunmallesh/Desktop/projects/ascendia/app /Users/nagarjunmallesh/Desktop/projects/ascendia/components --include=*.tsx --include=*.ts -n)",
+      "Bash(grep -r \"react-intersection-observer\\\\|posthog\\\\|pino\" /Users/nagarjunmallesh/Desktop/projects/ascendia/app /Users/nagarjunmallesh/Desktop/projects/ascendia/lib /Users/nagarjunmallesh/Desktop/projects/ascendia/components --include=*.tsx --include=*.ts -l)",
+      "Bash(grep -r \"from.*posthog\\\\|import.*posthog\" /Users/nagarjunmallesh/Desktop/projects/ascendia --include=*.tsx --include=*.ts)",
+      "Bash(grep -r \"from.*pino\\\\|import.*pino\" /Users/nagarjunmallesh/Desktop/projects/ascendia --include=*.ts --include=*.tsx)",
+      "Bash(grep -r react-intersection-observer /Users/nagarjunmallesh/Desktop/projects/ascendia --include=*.tsx --include=*.ts)",
+      "Bash(wc:*)",
+      "Bash(grep -r \"instrumentation-client\\\\|instrumentation.ts\" /Users/nagarjunmallesh/Desktop/projects/ascendia --include=*.tsx --include=*.ts --include=*.json)",
+      "Bash(make help:*)"
     ],
     "deny": [],
     "ask": []

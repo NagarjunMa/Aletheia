@@ -1,4 +1,4 @@
-.PHONY: help dev build start lint type-check format format-check \
+.PHONY: help dev build start serve lint type-check format format-check \
         test test-watch test-coverage test-ui \
         guardrails guardrails-watch \
         e2e e2e-ui e2e-debug \
@@ -31,6 +31,9 @@ build: ## Production Next.js build
 
 start: ## Start production server (run build first)
 	npm run start
+
+serve: ## Install dependencies, build, and start production server
+	npm install && npm run build && npm run start
 
 # ─── Code Quality ─────────────────────────────────────────────────────────────
 
