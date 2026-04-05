@@ -52,7 +52,9 @@
       "Bash(grep -r react-intersection-observer /Users/nagarjunmallesh/Desktop/projects/ascendia --include=*.tsx --include=*.ts)",
       "Bash(wc:*)",
       "Bash(grep -r \"instrumentation-client\\\\|instrumentation.ts\" /Users/nagarjunmallesh/Desktop/projects/ascendia --include=*.tsx --include=*.ts --include=*.json)",
-      "Bash(make help:*)"
+      "Bash(make help:*)",
+      "Skill(claude-api)",
+      "Bash(node -e \"require\\(''''@vercel/otel''''\\)\")"
     ],
     "deny": [],
     "ask": []

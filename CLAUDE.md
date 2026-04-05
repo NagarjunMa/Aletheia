@@ -65,7 +65,7 @@ Chrome Extension (MV3)              Next.js Web App
 | AI | Anthropic Claude (`claude-sonnet-4-6`) | `@anthropic-ai/sdk` |
 | Auth | Supabase Auth SSR | Bearer token (extension), cookies (web) |
 | Extension | Chrome Manifest V3 | Service worker, content scripts, popup |
-| Logging | Pino + pino-pretty | JSON in prod, pretty in dev |
+| Logging | Pino + Grafana Cloud Loki | JSON to stdout + HTTP push to Loki; pretty in dev. No pino-loki — custom fetch stream. |
 | Analytics | PostHog (optional) | Feature-gated |
 | Error Tracking | Sentry | Client + server + edge configs |
 | 3D / Animation | Three.js, React Three Fiber, Framer Motion, Lottie | Landing page only |
@@ -94,9 +94,11 @@ lib/
   ai/{sanitizer.ts,ai-fingerprint-detector.ts,style-analyzer.ts,prompts/}
   supabase/{client.ts,server.ts}
   database/types.ts
-  {logger.ts,cors.ts}
+  logger.ts            ← Pino logger (Node.js runtime only) — stdout + Grafana Loki via fetch
+  logger.edge.ts       ← Edge-compatible console logger — used ONLY by middleware.ts
+  cors.ts
 
-middleware.ts          ← auth session refresh + security headers
+middleware.ts          ← auth session refresh + security headers (imports logger.edge.ts)
 next.config.js         ← Sentry, CSP, webpack, cache control
 supabase/migrations/
 ```
@@ -114,6 +116,10 @@ supabase/migrations/
 | `ANTHROPIC_API_KEY` | Claude API |
 | `SENTRY_DSN` | Error tracking |
 | `NEXT_PUBLIC_POSTHOG_KEY` | Analytics (optional) |
+| `LOKI_HOST` | Grafana Cloud Loki push URL (e.g. `https://logs-prod-036.grafana.net`) |
+| `LOKI_USERNAME` | Grafana Cloud numeric user ID |
+| `LOKI_PASSWORD` | Grafana Cloud Access Policy token (scope: `logs:write`) |
+| `LOG_LEVEL` | Pino log level — `debug` (dev default) / `info` (prod default) |
 
 Copy `.env.local.example` → `.env.local` for local dev. Never commit secrets.
 
@@ -139,7 +145,8 @@ Copy `.env.local.example` → `.env.local` for local dev. Never commit secrets.
 ### DO
 - Use `createClient()` (browser) and `createServiceClient()` (server/admin) — never mix
 - Validate all API inputs with Zod at the route boundary
-- Use `getLogger(module)` from `lib/logger.ts` for structured logging — no `console.log`
+- Use `createLogger('module')` from `lib/logger.ts` for structured logging in API routes — no `console.log`
+- Use `createLogger('module')` from `lib/logger.edge.ts` in `middleware.ts` — it is Edge Runtime safe
 - Use lazy factory functions for SDK clients — avoid module-level instantiation
 - Keep sanitizer and fingerprint detector in `lib/ai/` — don't inline AI post-processing in routes
 - Use `check_and_increment_rate_limit` RPC for extension rate limiting — don't reimplement
@@ -151,7 +158,8 @@ Copy `.env.local.example` → `.env.local` for local dev. Never commit secrets.
 
 ### DON'T
 - Don't import `lib/supabase/server.ts` in client components
-- Don't use `console.log` — use the Pino logger
+- Don't import `lib/logger.ts` in `middleware.ts` — it uses Node.js streams which crash the Edge Runtime; use `lib/logger.edge.ts` instead
+- Don't use `console.log` — use the Pino logger (`lib/logger.ts`) or edge logger (`lib/logger.edge.ts`)
 - Don't skip Zod validation on any API input
 - Don't add new Claude API calls without going through the sanitization pipeline
 - Don't hardcode model strings — update the single constant in the generate route if model changes
@@ -160,6 +168,7 @@ Copy `.env.local.example` → `.env.local` for local dev. Never commit secrets.
 - Don't commit `.env.local` or any file containing secrets
 - Don't bypass RLS using service role key for user queries (only for admin/background jobs)
 - Don't add module-level SDK instantiation (breaks Vercel edge cold starts)
+- Don't install pino-loki or any transport that uses Node.js streams — Loki is pushed via native `fetch` in `lib/logger.ts`
 
 ---
 

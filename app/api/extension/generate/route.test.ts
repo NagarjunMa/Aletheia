@@ -103,13 +103,10 @@ beforeEach(() => {
   });
 });
 
-const validProfile = {
-  name: "Jane Doe",
-  profileUrl: "https://linkedin.com/in/janedoe",
-};
-
 const validPayload = {
-  profile: validProfile,
+  profileMarkdown:
+    "# Jane Doe\nSoftware Engineer at Acme Corp\nSan Francisco, CA",
+  profileUrl: "https://linkedin.com/in/janedoe",
   category: "linkedin_connection",
 };
 
@@ -121,16 +118,9 @@ describe("generateRequestSchema", () => {
 
   it("parses a full valid payload", () => {
     const result = generateRequestSchema.safeParse({
-      profile: {
-        name: "Jane Doe",
-        headline: "Senior Engineer at Acme",
-        location: "San Francisco, CA",
-        about: "Passionate about building things.",
-        experiences: [{ title: "Engineer", company: "Acme" }],
-        recentPosts: ["Post about AI"],
-        skills: ["TypeScript", "React"],
-        profileUrl: "https://linkedin.com/in/janedoe",
-      },
+      profileMarkdown:
+        "# Jane Doe\nSenior Engineer at Acme\nSan Francisco, CA\n\nPassionate about building things.",
+      profileUrl: "https://linkedin.com/in/janedoe",
       resume: "My resume content here.",
       jd: "Job description here.",
       category: "cold_email",
@@ -140,17 +130,19 @@ describe("generateRequestSchema", () => {
     expect(result.success).toBe(true);
   });
 
-  it("fails when profile.name is missing", () => {
+  it("fails when profileMarkdown is too short (min 10 chars)", () => {
     const result = generateRequestSchema.safeParse({
-      profile: { profileUrl: "https://linkedin.com/in/janedoe" },
+      profileMarkdown: "short",
+      profileUrl: "https://linkedin.com/in/janedoe",
       category: "linkedin_connection",
     });
     expect(result.success).toBe(false);
   });
 
-  it("fails when profile.profileUrl is not a valid URL", () => {
+  it("fails when profileUrl is not a valid URL", () => {
     const result = generateRequestSchema.safeParse({
-      profile: { name: "Jane", profileUrl: "not-a-url" },
+      profileMarkdown: "# Jane Doe\nSoftware Engineer",
+      profileUrl: "not-a-url",
       category: "linkedin_connection",
     });
     expect(result.success).toBe(false);
@@ -221,8 +213,9 @@ describe("generateRequestSchema", () => {
     expect(result.success).toBe(true);
   });
 
-  it("fails when profile is missing entirely", () => {
+  it("fails when profileMarkdown is missing entirely", () => {
     const result = generateRequestSchema.safeParse({
+      profileUrl: "https://linkedin.com/in/janedoe",
       category: "linkedin_connection",
     });
     expect(result.success).toBe(false);
