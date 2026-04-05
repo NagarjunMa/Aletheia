@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { trace, SpanStatusCode, metrics } from "@opentelemetry/api";
 import {
   getSystemPrompt,
   buildPrompt,
@@ -22,6 +23,19 @@ import {
 import { generateRequestSchema } from "./schema";
 
 const log = createLogger("generate-route");
+
+const tracer = trace.getTracer("aletheia", "1.0.0");
+const meter = metrics.getMeter("aletheia", "1.0.0");
+
+// Custom metrics shipped to Grafana — track LLM spend per user and category
+const tokenCounter = meter.createCounter("llm.tokens.total", {
+  description: "Total LLM tokens consumed (input + output)",
+  unit: "tokens",
+});
+const generationLatency = meter.createHistogram("llm.generation.latency", {
+  description: "Claude API response latency in milliseconds",
+  unit: "ms",
+});
 
 // Lazy factory functions — avoid module-level instantiation at build time
 function getAnthropic() {
@@ -172,49 +186,29 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const validatedData = generateRequestSchema.parse(body);
 
-    const { profile, resume, jd, category, intent, acceptedExamples } =
-      validatedData;
+    const {
+      profileMarkdown,
+      profileUrl,
+      resume,
+      jd,
+      category,
+      intent,
+      acceptedExamples,
+    } = validatedData;
 
-    // Sanitize all user-provided strings to strip unpaired Unicode surrogates
+    // Sanitize user-provided strings to strip unpaired Unicode surrogates
     // that cause JSON serialization failures with the Anthropic API
-    const sanitizedProfile = {
-      ...profile,
-      name: stripSurrogates(profile.name),
-      headline: profile.headline
-        ? stripSurrogates(profile.headline)
-        : profile.headline,
-      location: profile.location
-        ? stripSurrogates(profile.location)
-        : profile.location,
-      about: profile.about ? stripSurrogates(profile.about) : profile.about,
-      experiences: profile.experiences?.map((e) => ({
-        title: stripSurrogates(e.title),
-        company: e.company ? stripSurrogates(e.company) : e.company,
-      })),
-      recentPosts: profile.recentPosts?.map((p) => stripSurrogates(p)),
-      skills: profile.skills?.map((s) => stripSurrogates(s)),
-    };
+    const cleanMarkdown = stripSurrogates(profileMarkdown);
     const sanitizedResume = resume
       ? stripSurrogates(resume).slice(0, 8000)
       : resume;
     const sanitizedJd = jd ? stripSurrogates(jd).slice(0, 4000) : jd;
     const sanitizedExamples = acceptedExamples?.map((e) => stripSurrogates(e));
 
-    // Use new prompt system
     const systemPrompt = getSystemPrompt(category);
     const promptInput: GenerateInput = {
-      profile: {
-        name: sanitizedProfile.name,
-        headline: sanitizedProfile.headline || "",
-        location: sanitizedProfile.location || "",
-        about: sanitizedProfile.about || "",
-        experiences: (sanitizedProfile.experiences || []).map((e) => ({
-          title: e.title,
-          company: e.company || "",
-        })),
-        recentPosts: sanitizedProfile.recentPosts || [],
-        skills: sanitizedProfile.skills || [],
-      },
+      profileMarkdown: cleanMarkdown,
+      profileUrl,
       resume: sanitizedResume || "",
       jd: sanitizedJd || "",
       category,
@@ -226,15 +220,42 @@ export async function POST(request: NextRequest) {
     }
     const userPrompt = buildPrompt(promptInput);
 
-    // Generate content using Claude
+    // Generate content using Claude — wrapped in an OTel span for Grafana Tempo latency tracing
     const startTime = Date.now();
-    const response = await getAnthropic().messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 600,
-      temperature: 0.8,
-      system: systemPrompt,
-      messages: [{ role: "user", content: userPrompt }],
+    let response!: Awaited<
+      ReturnType<ReturnType<typeof getAnthropic>["messages"]["create"]>
+    >;
+    const aiSpan = tracer.startSpan("anthropic.messages.create", {
+      attributes: {
+        "ai.model": "claude-sonnet-4-6",
+        "ai.category": category,
+        "ai.intent": intent ?? "networking",
+        "ai.user_id": authResult.userId.substring(0, 8),
+      },
     });
+    try {
+      response = await getAnthropic().messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 600,
+        temperature: 0.8,
+        system: systemPrompt,
+        messages: [{ role: "user", content: userPrompt }],
+      });
+      aiSpan.setAttributes({
+        "ai.input_tokens": response.usage.input_tokens,
+        "ai.output_tokens": response.usage.output_tokens,
+      });
+      aiSpan.setStatus({ code: SpanStatusCode.OK });
+    } catch (err) {
+      aiSpan.recordException(err as Error);
+      aiSpan.setStatus({
+        code: SpanStatusCode.ERROR,
+        message: (err as Error).message,
+      });
+      throw err;
+    } finally {
+      aiSpan.end();
+    }
 
     const processingTime = Date.now() - startTime;
     const rawContent =
@@ -244,13 +265,28 @@ export async function POST(request: NextRequest) {
       throw new Error("No content generated by Claude");
     }
 
-    // Log usage for monitoring
+    // Log usage for monitoring and record custom metrics for Grafana dashboards
     const tokenUsage = response.usage;
+    const totalTokens = tokenUsage.input_tokens + tokenUsage.output_tokens;
+
+    tokenCounter.add(totalTokens, {
+      "ai.category": category,
+      "ai.model": "claude-sonnet-4-6",
+      "ai.user_id": authResult.userId.substring(0, 8),
+    });
+    generationLatency.record(processingTime, {
+      "ai.category": category,
+      "ai.model": "claude-sonnet-4-6",
+    });
+
     log.info(
       {
         userId: authResult.userId.substring(0, 8),
-        tokens: tokenUsage.input_tokens + tokenUsage.output_tokens,
+        inputTokens: tokenUsage.input_tokens,
+        outputTokens: tokenUsage.output_tokens,
+        totalTokens,
         processingTime,
+        category,
       },
       "Generation completed",
     );

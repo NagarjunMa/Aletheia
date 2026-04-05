@@ -86,7 +86,8 @@ aletheia/
 │   │   ├── client.ts            ← createClient() — browser only
 │   │   └── server.ts            ← createClient() + createServiceClient() — server only
 │   ├── database/types.ts        ← generated Supabase types (do not hand-edit)
-│   ├── logger.ts                ← Pino structured logger
+│   ├── logger.ts                ← Pino logger (Node.js only) — writes to stdout + Grafana Loki
+│   ├── logger.edge.ts           ← Edge-compatible console logger — used only by middleware.ts
 │   └── cors.ts                  ← CORS policy helper
 │
 ├── supabase/migrations/         ← SQL migration files (YYYYMMDD_NNN_description.sql)
@@ -119,6 +120,9 @@ Copy `.env.local.example` to `.env.local` and fill in the required values.
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `LOG_LEVEL` | `debug` (dev) / `info` (prod) | Pino log level |
+| `LOKI_HOST` | — | Grafana Cloud Loki push URL (e.g. `https://logs-prod-036.grafana.net`) |
+| `LOKI_USERNAME` | — | Grafana Cloud numeric user ID |
+| `LOKI_PASSWORD` | — | Grafana Cloud Access Policy token (scope: `logs:write`) |
 | `NEXT_PUBLIC_POSTHOG_KEY` | — | Enables PostHog analytics |
 | `NEXT_PUBLIC_POSTHOG_HOST` | `https://app.posthog.com` | PostHog endpoint |
 | `NEXT_PUBLIC_SENTRY_DSN` | — | Enables Sentry (client) |
@@ -338,7 +342,42 @@ Full conventions are in `CLAUDE.md` at the project root.
 
 | System | Trigger | Endpoint / check |
 |--------|---------|-----------------|
-| **Health check** | Always on | `GET /api/health` (alias: `/healthz`) |
-| **Pino logging** | Always on | JSON in production, pretty in dev |
+| **Health check** | Always on | `GET /api/health` |
+| **Pino logging** | Always on | JSON to stdout (Vercel logs); pretty in dev |
+| **Grafana Cloud Loki** | Set `LOKI_HOST` + `LOKI_USERNAME` + `LOKI_PASSWORD` | Structured logs shipped via HTTP — no extra packages |
 | **Sentry** | Set `SENTRY_DSN` | Client + server + edge error tracking |
 | **PostHog** | Set `NEXT_PUBLIC_POSTHOG_KEY` | Product analytics, feature usage |
+
+### Loki log queries (Grafana → Explore → Loki)
+
+```logql
+# All logs
+{app="aletheia"}
+
+# Production only / local only
+{app="aletheia", env="production"}
+{app="aletheia", env="local"}
+
+# Errors only
+{app="aletheia"} | json | level="error"
+
+# Specific module (e.g. generate route)
+{app="aletheia"} | json | module="generate"
+
+# Trace a single request end-to-end
+{app="aletheia"} | json | requestId="<x-request-id header value>"
+```
+
+### Loki architecture
+
+```
+API routes (Node.js runtime)
+  └── lib/logger.ts  (pino + custom fetch-based Loki stream)
+        ├── stdout       → Vercel log drain
+        └── fetch POST /loki/api/v1/push  → Grafana Cloud Loki → Grafana Explore
+
+middleware.ts (Edge runtime — no Node.js streams allowed)
+  └── lib/logger.edge.ts  (console.* only, same createLogger() API)
+```
+
+`middleware.ts` uses `lib/logger.edge.ts` (console-only) because the Edge Runtime forbids Node.js streams. All API routes use `lib/logger.ts` (pino + Loki). Never import `lib/logger.ts` from middleware.

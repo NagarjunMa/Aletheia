@@ -353,7 +353,8 @@ async function generateMessage() {
     const response = await chrome.runtime.sendMessage({
       action: 'generate',
       payload: {
-        profile: currentProfile,
+        profileMarkdown: currentProfile.profileMarkdown,
+        profileUrl: currentProfile.profileUrl,
         resume: resume || '',
         jd,
         category,

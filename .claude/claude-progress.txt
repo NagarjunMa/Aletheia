@@ -1,7 +1,7 @@
 ================================================================================
 ALETHEIA — PROJECT CLEANUP & IMPROVEMENT PHASES
 ================================================================================
-Last updated: 2026-04-01
+Last updated: 2026-04-05
 Goal: Remove bloat, kill dead code, sharpen what makes this product unique —
       a personalized outreach tool that learns your voice, not a humanizer.
 ================================================================================
@@ -486,6 +486,99 @@ Completion checklist:
   [x] npm run build (without env vars) → PASSED
   [x] npm run test -- --run → PASSED (286 tests)
   [x] /settings page renders: ○ static shell with ssr:false client content
+
+--------------------------------------------------------------------------------
+
+PHASE 15 — LinkedIn Scraper Rewrite + Prompt Improvements
+Status: [x] COMPLETE — 2026-04-05
+--------------------------------------------------------------------------------
+Replaced fragile CSS-selector-based LinkedIn scraping with selector-free innerText approach.
+Updated prompts to use career/experience as conversation starters instead of recent posts.
+
+SCRAPER REWRITE (ascendia-extension/content/linkedin-reader.js):
+  [x] Removed TurndownService dependency (was failing due to Chrome MV3 isolated world)
+  [x] Replaced all DOM selectors with `mainEl.innerText` — immune to LinkedIn DOM changes
+  [x] Extracted name from `document.title` ("John Smith - Engineer | LinkedIn")
+  [x] Returns { name, profileMarkdown, profileUrl, extractedAt } — flat structure
+  [x] Removed lib/turndown.js from manifest content_scripts and web_accessible_resources
+
+API SCHEMA CHANGE (app/api/extension/generate/schema.ts):
+  [x] Replaced nested `profile: z.object({...})` with flat `profileMarkdown` + `profileUrl` fields
+  [x] Updated route.ts destructuring and prompt builder accordingly
+  [x] Updated popup.js payload to match new schema
+
+PROMPT UPDATES (lib/ai/prompts/linkedin-connection.ts):
+  [x] LINKEDIN_CONNECTION_PROMPT: conversation starter uses current role/career move/skill/project
+      (not recent posts — posts are often unavailable or scraped incorrectly)
+  [x] COLD_EMAIL_PROMPT: posts listed as fallback only; career/role as primary hook
+  [x] LINKEDIN_INMAIL_PROMPT: removed hard "reference at least one post" rule
+
+Completion checklist:
+  [x] Extension generates successfully from LinkedIn profile pages
+  [x] No TurndownService dependency in extension
+  [x] npm run build → PASSED
+  [x] npm run test -- --run → PASSED (286 tests)
+
+--------------------------------------------------------------------------------
+
+PHASE 16 — Structured Logging + Grafana Cloud Loki Observability
+Status: [x] COMPLETE — 2026-04-05
+--------------------------------------------------------------------------------
+Connected application to Grafana Cloud Loki for structured log shipping.
+Fixed Edge Runtime build failure caused by pino-loki importing Node.js streams.
+Added x-request-id correlation, OTel trace/span mixin, and full logging coverage across all routes.
+
+ROOT CAUSES FIXED:
+  1. pino-loki → pino-abstract-transport → Node.js streams (process.stdout, setImmediate, process.nextTick)
+     middleware.ts imported lib/logger.ts → Edge Runtime crash (20+ build warnings + compile failure)
+  2. eslint-disable comment referenced @typescript-eslint/no-require-imports which doesn't exist
+     in this project's .eslintrc.json (uses next/core-web-vitals only)
+
+ARCHITECTURE — Logger Split:
+  lib/logger.ts       — Pino (Node.js runtime only)
+                         Writes to stdout AND Grafana Cloud Loki via custom fetch-based Writable stream
+                         No pino-loki package — direct HTTP push to /loki/api/v1/push
+                         OTel trace_id/span_id mixin via @opentelemetry/api
+  lib/logger.edge.ts  — NEW: Edge Runtime-compatible console logger (same createLogger() API shape)
+                         Used exclusively by middleware.ts — no pino, no streams
+  middleware.ts       — Updated import: lib/logger.ts → lib/logger.edge.ts
+
+GRAFANA CLOUD LOKI CONNECTION:
+  [x] LOKI_HOST, LOKI_USERNAME, LOKI_PASSWORD env vars added to .env.local
+  [x] Access Policy created in grafana.com with scope: logs:write
+  [x] Connection validated: curl test returned HTTP 204
+  [x] Test log confirmed visible in Grafana Explore → {app="aletheia"}
+  [x] Labels: app=aletheia, env=local (env comes from NEXT_PUBLIC_APP_ENV)
+  [x] Production: add same 3 env vars to Vercel — no code changes needed
+      Production logs appear as env=production, local as env=local — same Loki instance
+
+LOGGING COVERAGE ADDED:
+  [x] middleware.ts        — x-request-id generated per request (crypto.randomUUID()), forwarded to routes
+  [x] lib/logger.ts        — createRequestLogger() binds requestId from x-request-id header
+  [x] app/api/auth/me      — bearer/cookie auth result, userId on success, usage fetch count
+  [x] app/api/feedback     — honeypot check, validation result, submission success with source
+  [x] app/api/settings     — auth check, validation failure, preference update with changed fields
+  [x] app/api/health       — debug log on every health check (confirms service alive in logs)
+  [x] lib/supabase/server  — info log on profile creation success (userId prefix only)
+  [x] lib/ai/sanitizer     — info log when AI fingerprints detected (patternCount, authenticityScore, confidence)
+
+KEY LOKI QUERIES:
+  {app="aletheia"}                                 — all logs
+  {app="aletheia", env="production"}               — production only
+  {app="aletheia"} | json | level="error"          — errors only
+  {app="aletheia"} | json | module="generate"      — specific module
+  {app="aletheia"} | json | requestId="<value>"    — trace single request end-to-end
+
+Completion checklist:
+  [x] npm uninstall pino-loki → removed
+  [x] lib/logger.edge.ts created
+  [x] lib/logger.ts rewritten (custom fetch Loki stream, no pino-loki)
+  [x] middleware.ts → imports lib/logger.edge.ts
+  [x] npm run build → PASSED (0 Edge Runtime warnings from our code)
+  [x] npm run lint → PASSED (0 errors)
+  [x] npm run test -- --run → PASSED (286 tests)
+  [x] curl Loki push → HTTP 204
+  [x] Log visible in Grafana Explore
 
 ================================================================================
 NOTES
