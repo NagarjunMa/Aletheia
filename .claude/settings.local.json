@@ -54,7 +54,8 @@
       "Bash(grep -r \"instrumentation-client\\\\|instrumentation.ts\" /Users/nagarjunmallesh/Desktop/projects/ascendia --include=*.tsx --include=*.ts --include=*.json)",
       "Bash(make help:*)",
       "Skill(claude-api)",
-      "Bash(node -e \"require\\(''''@vercel/otel''''\\)\")"
+      "Bash(node -e \"require\\(''''@vercel/otel''''\\)\")",
+      "Bash(find /Users/nagarjunmallesh/Desktop/projects/ascendia -type f \\\\\\(-name *.test.ts -o -name *.test.tsx -o -name *.spec.ts -o -name *.spec.tsx \\\\\\))"
     ],
     "deny": [],
     "ask": []

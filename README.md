@@ -2,7 +2,7 @@
 
 Generate authentic, human-sounding LinkedIn connection requests, cold emails, and InMails. Aletheia reads a target's LinkedIn profile, combines it with the user's resume and intent, then runs the output through a multi-stage sanitization and AI-fingerprint-removal pipeline.
 
-**CI:** lint → test → build, all on push/PR to `main`
+**Pipeline:** PR → ci.yml (lint+test) → merge to main → cd.yml (mocked E2E → staging) → staging.yml (real E2E → production)
 **License:** MIT
 
 ---
@@ -146,7 +146,9 @@ make type-check    # tsc --noEmit
 make format        # Prettier write
 make test          # unit tests, single run
 make guardrails    # guardrail tests (mandatory before lib/ai/ PRs)
-make e2e           # Playwright E2E
+make e2e-smoke     # Playwright @smoke tests (local server, no real APIs — mirrors cd.yml)
+make e2e-staging   # Playwright @e2e tests against staging URL (set PLAYWRIGHT_BASE_URL + secrets)
+make e2e           # Run all Playwright E2E tests
 make ci            # full pipeline: lint → type-check → test → guardrails → build
 make clean         # rm -rf .next coverage node_modules/.cache
 ```
@@ -266,9 +268,28 @@ Must pass before any PR that touches `lib/ai/`. Tests the sanitizer against adve
 - PII patterns (SSN, credit card numbers)
 - Hate speech and violence patterns
 
-### E2E tests — `make e2e`
+### E2E tests — two tiers
 
-Playwright, Chromium only. Test files go in `e2e/`. Do not call real Anthropic or Supabase APIs — mock them.
+Playwright, Chromium only. Test files live in `e2e/`.
+
+| Tier | Tag | Command | When it runs |
+|------|-----|---------|-------------|
+| Mocked | `@smoke` | `make e2e-smoke` | cd.yml (post-merge on main), locally |
+| Real | `@e2e` | `make e2e-staging` | staging.yml (real Anthropic, staging URL) |
+
+**Mocked (`@smoke`):** `e2e/health.spec.ts` + `e2e/ui-smoke.spec.ts` — page loads and health check. No real APIs. Safe with dummy env vars.
+
+**Real (`@e2e`):** `e2e/generate.spec.ts` — authenticates as `test@aletheia-staging.com` via Supabase, calls the generate endpoint with real Anthropic. Capped at one call per run.
+
+To run real E2E locally against staging:
+```bash
+PLAYWRIGHT_BASE_URL=https://aletheia-staging.vercel.app \
+NEXT_PUBLIC_SUPABASE_URL=<cloud-url> \
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<cloud-anon-key> \
+STAGING_TEST_USER_EMAIL=test@aletheia-staging.com \
+STAGING_TEST_USER_PASSWORD=<password> \
+make e2e-staging
+```
 
 ### Schemas are in `schema.ts`
 
@@ -287,26 +308,40 @@ This keeps test files free of Next.js routing constraints (Next.js only permits 
 
 ## CI/CD & Local Hooks
 
-GitHub Actions pipeline (`.github/workflows/ci.yml`). Triggers on push or PR to `main`.
-*Contains absolutely zero external database or API dependencies.*
+Three-stage fully automated pipeline. Zero manual git steps after merging a PR.
 
 ```
-lint-and-typecheck
-  └── ESLint + tsc --noEmit (Fast Fail)
+feature/* → PR to main
+              └── ci.yml  (PR gate — no real APIs)
+                    lint-and-typecheck: ESLint + tsc --noEmit
+                    test: ~286 unit tests + 13 guardrail tests
+                    smoke-test: next build + curl /api/health
 
-test  (needs: lint-and-typecheck)
-  └── npm run test -- --run         (~250+ unit tests)
-  └── npm run test:guardrails -- --run  (13 guardrail tests)
+merge to main
+              └── cd.yml  (post-merge gate)
+                    quality: lint + type-check + unit + guardrails
+                    e2e-mocked: Playwright @smoke tests, local server, dummy env vars
+                    promote: fast-forward staging branch → Vercel staging auto-deploys
 
-smoke-test  (needs: test)
-  └── next build
-  └── npm start & curl /api/health  (Network Boot Check)
+staging.yml fires via workflow_run on cd.yml success
+              └── quality: lint + type-check + unit + guardrails (on staging branch)
+                  e2e-staging: Playwright @e2e tests, real Anthropic, against staging URL
+                  promote: fast-forward production branch → Vercel production auto-deploys
 ```
 
-**Husky Pre-commit hook**:
-Active local block forcing `npm run lint` and `vitest related` execution locally to immediately reject unsafe or unstyled commits.
+**Branch → Vercel mapping:**
 
-**Deployment:** Vercel. Merging to `main` triggers an automatic production deploy.
+| Branch | Vercel project | Purpose |
+|--------|---------------|---------|
+| `main` | *(none)* | Integration gate only |
+| `staging` | `aletheia-staging` | Real-data E2E gate |
+| `production` | `aletheia` | Live app |
+
+**Required GitHub Secrets** (repo Settings → Secrets):
+`STAGING_URL`, `STAGING_SUPABASE_URL`, `STAGING_SUPABASE_ANON_KEY`, `STAGING_TEST_USER_EMAIL`, `STAGING_TEST_USER_PASSWORD`, `STAGING_ANTHROPIC_API_KEY`
+
+**Husky Pre-commit hook:**
+Runs `eslint --fix`, `prettier --write`, and `vitest related --run` against modified files only (via lint-staged). Fast — only touches changed files.
 
 ---
 
