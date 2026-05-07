@@ -1,7 +1,7 @@
 ================================================================================
 ALETHEIA — PROJECT CLEANUP & IMPROVEMENT PHASES
 ================================================================================
-Last updated: 2026-04-05
+Last updated: 2026-04-06
 Goal: Remove bloat, kill dead code, sharpen what makes this product unique —
       a personalized outreach tool that learns your voice, not a humanizer.
 ================================================================================
@@ -579,6 +579,84 @@ Completion checklist:
   [x] npm run test -- --run → PASSED (286 tests)
   [x] curl Loki push → HTTP 204
   [x] Log visible in Grafana Explore
+
+--------------------------------------------------------------------------------
+
+PHASE 17 — Three-Stage CD Pipeline
+Status: [x] COMPLETE — 2026-04-06
+--------------------------------------------------------------------------------
+Implemented a fully automated CD pipeline with zero manual git steps after merging a PR.
+No GitHub PAT required — uses workflow_run trigger + GITHUB_TOKEN (contents: write).
+
+BRANCH → ENVIRONMENT MAPPING:
+  main        → no Vercel deployment (integration gate only)
+  staging     → Vercel staging project (Vercel watches staging branch)
+  production  → Vercel production project (Vercel watches production branch)
+
+PIPELINE (fully automated after merge to main):
+  ci.yml      — PR gate: lint + type-check + unit tests + guardrails + smoke build
+                Triggers on pull_request to main only (not on push — cd.yml handles that)
+  cd.yml      — Post-merge gate: quality + mocked E2E (@smoke, local server, no real APIs)
+                → fast-forward staging branch on success (Vercel stages via webhook)
+  staging.yml — Staging gate: triggered via workflow_run on cd.yml success
+                quality + real E2E (@e2e, real Anthropic, against STAGING_URL)
+                → fast-forward production branch (Vercel deploys via webhook)
+
+FILES CREATED / MODIFIED:
+  [x] playwright.config.ts         — baseURL reads PLAYWRIGHT_BASE_URL; webServer conditionally omitted via spread (exactOptionalPropertyTypes fix)
+  [x] vitest.config.ts             — added e2e/** to exclude list (prevents Playwright specs running under Vitest)
+  [x] e2e/health.spec.ts           — GET /api/health, no auth, runs in both tiers
+  [x] e2e/ui-smoke.spec.ts         — @smoke tagged: landing page + login page load, no real APIs
+  [x] e2e/generate.spec.ts         — @e2e tagged: Supabase auth + real Anthropic cold_email test
+  [x] .github/workflows/ci.yml     — changed trigger to pull_request only; added NEXT_PUBLIC_APP_ENV: dev
+  [x] .github/workflows/cd.yml     — NEW: quality → mocked E2E → staging promote
+  [x] .github/workflows/staging.yml — NEW: workflow_run trigger → quality → real E2E → production promote
+
+STAGING TEST USER:
+  Email: test@aletheia-staging.com | Password: stored in GitHub Secret STAGING_TEST_USER_PASSWORD
+  Created via SQL in Supabase Dashboard (auth.users + auth.identities inserts)
+  RLS isolates this user's data from real users
+
+GITHUB SECRETS REQUIRED (6, no PAT):
+  STAGING_URL, STAGING_SUPABASE_URL, STAGING_SUPABASE_ANON_KEY,
+  STAGING_TEST_USER_EMAIL, STAGING_TEST_USER_PASSWORD, STAGING_ANTHROPIC_API_KEY
+
+MAKEFILE ADDITIONS:
+  [x] e2e-smoke   — runs @smoke tests with local server (mirrors cd.yml)
+  [x] e2e-staging — runs @e2e tests against STAGING_URL (requires env vars)
+
+Completion checklist:
+  [x] npm run lint → PASSED
+  [x] npm run type-check → PASSED
+  [x] npm run test -- --run → PASSED (286 tests)
+  [x] npm run test:guardrails -- --run → PASSED (13 tests)
+  [x] npx playwright test --grep "@smoke" → PASSED (3 tests)
+  [x] CLAUDE.md, README.md, Makefile updated
+
+--------------------------------------------------------------------------------
+
+PHASE 18 — Bug Fix: mergePhraseLists Not-Iterable on JSONB Read
+Status: [x] COMPLETE — 2026-04-06
+--------------------------------------------------------------------------------
+Fixed TypeError: e is not iterable in background style processing after thumbs-up feedback.
+
+ROOT CAUSE:
+  style_patterns.commonPhrases is stored as JSONB in Supabase user_preferences table.
+  When read back via Supabase client and cast as StylePatterns, the field can be null
+  at runtime even though TypeScript types it as string[]. for...of null throws
+  "e is not iterable". Fire-and-forget, so the user didn't see an error — but the
+  style learning update silently failed.
+
+FIX (lib/ai/style-analyzer.ts — mergePhraseLists):
+  Added Array.isArray() guards before iterating both inputs:
+    const safeExisting = Array.isArray(existing) ? existing : []
+    const safeIncoming = Array.isArray(incoming) ? incoming : []
+  Justified: inputs come from Supabase JSONB which cannot be trusted to match
+  TypeScript types at runtime — this is a real system boundary.
+
+Completion checklist:
+  [x] lib/ai/style-analyzer.test.ts → PASSED (19 tests)
+  [x] npm run test -- --run → PASSED (286 tests)
 
 ================================================================================
 NOTES

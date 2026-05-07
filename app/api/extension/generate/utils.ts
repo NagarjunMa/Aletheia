@@ -28,3 +28,12 @@ export function stripMarkdownCodeFences(content: string): string {
   const match = trimmed.match(/^```(?:\w+)?\s*\n?([\s\S]*?)\n?\s*```$/);
   return match?.[1] ? match[1].trim() : trimmed;
 }
+
+// Extract the first complete JSON object from a string.
+// Handles cases where Claude prepends reasoning text before outputting JSON.
+export function extractJsonFromText(content: string): string {
+  const start = content.indexOf("{");
+  const end = content.lastIndexOf("}");
+  if (start === -1 || end === -1 || end <= start) return content;
+  return content.slice(start, end + 1);
+}

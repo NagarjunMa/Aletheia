@@ -124,18 +124,24 @@ supabase/migrations/
 Copy `.env.local.example` → `.env.local` for local dev. Never commit secrets.
 
 **Dev:** `npm run dev` — Pino pretty-print, Next.js fast refresh
-**Prod:** Deployed to Vercel. CI runs lint → type-check → build on push to `main`.
+**Prod:** Deployed to Vercel via the `production` branch. `main` is the integration branch — not deployed anywhere.
 
 ---
 
 ## Deployment
 
-- **Platform:** Vercel (configured via env vars and `next.config.js`)
-- **CI:** GitHub Actions (`.github/workflows/ci.yml`)
-  - Triggers: push/PR to `main`
-  - Jobs: lint + type-check → test (unit/guardrails) → smoke check (Node 20.x, independent of Supabase)
-  - Pre-commit: Husky hook runs `lint-staged` using `vitest related --run` for instantaneous fail-safes.
-- **Database migrations:** `supabase/migrations/` — apply via Supabase CLI
+- **Platform:** Vercel. Two projects: `aletheia` (production branch) + `aletheia-staging` (staging branch).
+- **Branch → environment mapping:**
+  - `main` → no Vercel deployment (integration gate only)
+  - `staging` → Vercel staging project (auto-deploys on push)
+  - `production` → Vercel production project (auto-deploys on push)
+- **Three-stage CD pipeline (fully automated after PR merge):**
+  - `ci.yml` — PR gate: lint + type-check + unit tests + guardrails + smoke build (triggers on `pull_request` to `main`)
+  - `cd.yml` — post-merge gate: quality checks + mocked E2E (`@smoke`, local server, no real APIs) → fast-forward `staging` branch (triggers on `push` to `main`)
+  - `staging.yml` — staging gate: quality checks + real E2E (`@e2e`, real Anthropic, against staging URL) → fast-forward `production` branch (triggers via `workflow_run` on cd.yml success)
+- **Pre-commit:** Husky + lint-staged runs `eslint --fix`, `prettier --write`, and `vitest related --run` against modified files only.
+- **No PAT needed** — `staging.yml` uses `workflow_run` trigger + `GITHUB_TOKEN` with `contents: write` for the production push.
+- **Database migrations:** `supabase/migrations/` — apply via Supabase CLI or SQL Editor
 - **No Docker** — Vercel-native deployment
 
 ---
@@ -210,23 +216,36 @@ Response:
 - Mock: Anthropic SDK, Supabase client using isolated `vi.mock()` factory in `__tests__/helpers`
 - Do NOT test UI rendering — use Playwright for that
 
-### E2E Tests (Playwright)
-- Run: `npm run test:e2e` | `npm run test:e2e:debug`
-- Cover: auth flows, extension session handoff, generate endpoint (mocked AI)
-- Do NOT call real Anthropic API in E2E
+### E2E Tests (Playwright) — two tiers
+
+**Mocked (`@smoke`) — used in cd.yml, safe locally with dummy env vars:**
+- `e2e/health.spec.ts` — GET /api/health, no auth (runs in both tiers)
+- `e2e/ui-smoke.spec.ts` — landing page + login page load (tagged `@smoke`)
+- Run: `make e2e-smoke` or `npx playwright test --grep "@smoke"`
+- No real Supabase or Anthropic calls. Dummy env vars are fine.
+
+**Real (`@e2e`) — used in staging.yml only, requires staging secrets:**
+- `e2e/generate.spec.ts` — auth via Supabase password grant + real Anthropic call (tagged `@e2e`)
+- Run: `make e2e-staging` (set `PLAYWRIGHT_BASE_URL`, `NEXT_PUBLIC_SUPABASE_*`, `STAGING_TEST_USER_*` first)
+- Capped at one cold_email call (~$0.01/run). Test user: `test@aletheia-staging.com`.
+
+**Rules:**
+- Tag mocked tests `@smoke`, real tests `@e2e`
+- Do NOT call real Anthropic API from `@smoke` tests
+- `e2e/` is excluded from vitest (add to `vitest.config.ts` exclude list)
 
 ### Guardrails Tests
-- Run: `npm run test:guardrails`
+- Run: `npm run test:guardrails` | `make guardrails`
 - Purpose: validate sanitizer blocks harmful content (injection, hate speech, PII)
 - Must pass before any PR that touches `lib/ai/`
 
 ### CI Gate & Local Hooks
 - Husky Pre-Commit actively checks styled & modified files via `lint-staged`.
-- CI pipeline contains zero external database triggers; pure algorithm validation.
+- CI pipeline (`ci.yml`) contains zero external database triggers — pure algorithm validation.
 - `strict: true` in tsconfig — type errors block merge
 
 ### Rules
-1. Never call real external APIs (Anthropic, Supabase) in automated tests — mock all I/O via factory helpers.
+1. Never call real external APIs (Anthropic, Supabase) in `@smoke` or unit tests — mock all I/O.
 2. Keep unit tests fast (< 5s total)
 3. Guardrail tests are non-negotiable — never skip or comment out
 4. Test sanitizer and fingerprint detector with adversarial inputs

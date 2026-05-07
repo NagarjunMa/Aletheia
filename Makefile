@@ -73,8 +73,14 @@ guardrails-watch: ## Run guardrail tests in watch mode
 
 # ─── E2E Tests ────────────────────────────────────────────────────────────────
 
-e2e: ## Run Playwright E2E tests (requires running server or starts one)
+e2e: ## Run all Playwright E2E tests (builds + starts local server)
 	npm run test:e2e
+
+e2e-smoke: ## Run @smoke tests only — local server, no real APIs (mirrors cd.yml)
+	npx playwright test --project=chromium --grep "@smoke"
+
+e2e-staging: ## Run @e2e tests against STAGING_URL (set env vars first — see README)
+	npx playwright test --project=chromium --grep "@e2e|health check"
 
 e2e-ui: ## Open Playwright UI mode
 	npm run test:e2e:ui

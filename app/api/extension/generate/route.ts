@@ -19,6 +19,7 @@ import {
   extractSubjectFromText,
   extractBodyFromText,
   stripMarkdownCodeFences,
+  extractJsonFromText,
 } from "./utils";
 import { generateRequestSchema } from "./schema";
 
@@ -300,7 +301,9 @@ export async function POST(request: NextRequest) {
     // Parse response based on category with validation
     if (category === "cold_email" || category === "linkedin_inmail") {
       try {
-        const cleanedContent = stripMarkdownCodeFences(rawContent);
+        const cleanedContent = extractJsonFromText(
+          stripMarkdownCodeFences(rawContent),
+        );
         const parsed = JSON.parse(cleanedContent);
 
         if (parsed.subject_line && parsed.body) {
@@ -429,7 +432,9 @@ export async function POST(request: NextRequest) {
 
         // Try JSON parse on sanitized content (fence-stripped) before falling through to regex
         try {
-          const cleanedSanitized = stripMarkdownCodeFences(sanitizedContent);
+          const cleanedSanitized = extractJsonFromText(
+            stripMarkdownCodeFences(sanitizedContent),
+          );
           const parsedFallback = JSON.parse(cleanedSanitized);
           if (parsedFallback.subject_line && parsedFallback.body) {
             const maxWords = category === "cold_email" ? 150 : 120;

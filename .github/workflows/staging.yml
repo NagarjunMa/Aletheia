@@ -1,0 +1,112 @@
+name: Staging — E2E & Auto-Promote
+
+# Triggered by workflow_run when CD completes successfully on main.
+# This fires regardless of whether cd.yml used GITHUB_TOKEN (which can't trigger
+# workflows via branch push) — workflow_run bypasses that restriction entirely.
+#
+# Flow: quality checks on staging branch → real Anthropic E2E against staging URL
+#       → fast-forward production → Vercel production auto-deploys via webhook.
+
+on:
+  workflow_run:
+    workflows: ['CD']
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  quality:
+    name: Quality Gates (Staging)
+    # Only run if CD passed — skip on CD failure
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout staging branch
+        uses: actions/checkout@v4
+        with:
+          ref: staging
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run type-check
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm run test -- --run
+
+      - name: Guardrail tests
+        run: npm run test:guardrails -- --run
+
+  e2e-staging:
+    name: E2E (Real Anthropic — Staging URL)
+    needs: quality
+    runs-on: ubuntu-latest
+    env:
+      PLAYWRIGHT_BASE_URL: ${{ secrets.STAGING_URL }}
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.STAGING_SUPABASE_ANON_KEY }}
+      STAGING_TEST_USER_EMAIL: ${{ secrets.STAGING_TEST_USER_EMAIL }}
+      STAGING_TEST_USER_PASSWORD: ${{ secrets.STAGING_TEST_USER_PASSWORD }}
+      ANTHROPIC_API_KEY: ${{ secrets.STAGING_ANTHROPIC_API_KEY }}
+    steps:
+      - name: Checkout staging branch
+        uses: actions/checkout@v4
+        with:
+          ref: staging
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Wait for Vercel staging deployment
+        # The quality job above takes ~3-5 min, giving Vercel time to deploy.
+        # This extra buffer covers slow Vercel cold starts.
+        run: sleep 30
+
+      - name: Run real E2E tests against staging
+        run: npx playwright test --project=chromium --grep "@e2e|health check"
+        env:
+          CI: true
+
+  promote-to-production:
+    name: Promote → Production
+    needs: e2e-staging
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Fast-forward production to staging
+        run: |
+          git fetch origin
+          git checkout production
+          git merge origin/staging --ff-only
+          git push origin production
+        # GITHUB_TOKEN push → Vercel production deploys via GitHub webhook.
