@@ -1,7 +1,7 @@
 ================================================================================
 ALETHEIA — PROJECT CLEANUP & IMPROVEMENT PHASES
 ================================================================================
-Last updated: 2026-04-06
+Last updated: 2026-05-08
 Goal: Remove bloat, kill dead code, sharpen what makes this product unique —
       a personalized outreach tool that learns your voice, not a humanizer.
 ================================================================================
@@ -657,6 +657,178 @@ FIX (lib/ai/style-analyzer.ts — mergePhraseLists):
 Completion checklist:
   [x] lib/ai/style-analyzer.test.ts → PASSED (19 tests)
   [x] npm run test -- --run → PASSED (286 tests)
+
+PHASE 19 — Tier 1 Security Hardening (Production Readiness)
+Status: [x] COMPLETE — 2026-05-08
+--------------------------------------------------------------------------------
+Five critical security issues identified during strict production readiness audit
+(see .claude/production-readiness-evaluation.md). All fixed and verified.
+
+FIX #1 — Rate Limit Fail-Open → Fail-Closed:
+  File: app/api/extension/generate/route.ts (lines 105-111)
+  Before: Supabase RPC failure → allowed: true (unlimited requests during outage)
+  After: Supabase RPC failure → allowed: false, 1-minute retry window
+  [x] Fixed
+
+FIX #2 — Claude API Timeout (30s):
+  File: app/api/extension/generate/route.ts (lines 238-246, 605-620)
+  Before: No timeout on messages.create() — hung request = stuck worker forever
+  After: { timeout: 30_000 } on API call + APIConnectionTimeoutError handler → 504
+  [x] Fixed
+
+FIX #3 — Session Endpoint Rate Limiting:
+  File: app/api/extension/session/route.ts (new code)
+  Before: Zero rate limiting — free DoS and token enumeration vector
+  After: In-memory sliding window, 20 req/min/IP, stale entry cleanup every 5 min
+  [x] Fixed
+
+FIX #4 — DOMPurify Insecure Regex Fallback → Fail-Closed:
+  File: lib/ai/sanitizer.ts (lines 28-46)
+  Before: If DOMPurify import fails → regex /<[^>]*>/g (vulnerable to CDATA, polyglots)
+  After: If DOMPurify fails AND content has HTML → strip entire input. Plain text passes through.
+  [x] Fixed
+
+FIX #5 — Prompt Injection via <user_input> Tag Escape:
+  File: lib/ai/prompts/linkedin-connection.ts (buildPrompt function)
+  Before: User content injected raw into <user_input> tags — </user_input> in resume breaks boundary
+  After: escapeForXmlTag() applied to all 6 injection points (resume, profile, JD, projects, examples)
+  [x] Fixed
+
+DOCUMENTATION:
+  [x] .claude/tier1-security-fixes.md — detailed before/after + technical explanation per fix
+  [x] .claude/production-readiness-evaluation.md — full audit with scores (6.5/10 overall)
+
+Completion checklist:
+  [x] npm run test -- --run → PASSED (286 tests)
+  [x] npm run test:guardrails -- --run → PASSED (13 tests)
+  [x] npm run type-check → PASSED (0 errors)
+  [x] CLAUDE.md updated with new DO/DON'T rules for all 5 fixes
+  [x] README.md updated with security hardening notes
+
+--------------------------------------------------------------------------------
+
+PHASE 20 — Tier 2 Security & Quality Fixes
+Status: [x] COMPLETE — 2026-05-08
+--------------------------------------------------------------------------------
+Five scaling/quality issues from production readiness evaluation. All fixed.
+
+FIX #6 — CSP Nonce-Based (remove unsafe-inline/eval):
+  Files: middleware.ts, next.config.js, app/layout.tsx, app/providers.tsx
+  Before: script-src 'self' 'unsafe-inline' 'unsafe-eval' — CSP defeated entirely
+  After: script-src 'self' 'nonce-{nonce}' 'strict-dynamic' — per-request nonce via x-nonce header
+  Layout reads nonce from headers(), passes to Providers → ThemeProvider
+  [x] Fixed
+
+FIX #7 — Robust JSON Extraction:
+  File: app/api/extension/generate/utils.ts
+  Before: extractJsonFromText() used first { to last } — garbage with multiple JSON objects
+  After: Balanced brace matching with string boundary tracking and escape char handling
+  [x] Fixed
+
+FIX #8 — Anthropic 401 → 502 Bad Gateway:
+  File: app/api/extension/generate/route.ts, route.test.ts
+  Before: Upstream Anthropic auth failure returned 500 Internal Server Error
+  After: Returns 502 Bad Gateway — correct semantics for upstream dependency failure
+  [x] Fixed
+
+FIX #9 — Context-Aware Email Redaction:
+  File: lib/ai/sanitizer.ts
+  Before: All email addresses redacted unconditionally via HARMFUL_PATTERNS
+  After: Email pattern separated. Only redacted for linkedin/general platforms. Cold email keeps addresses.
+  [x] Fixed
+
+FIX #10 — isAIGenerated OR → AND Logic:
+  File: lib/ai/ai-fingerprint-detector.ts
+  Before: confidenceScore >= 30 || authenticityScore < 50 — flagged formal human writing as AI
+  After: confidenceScore >= 30 && authenticityScore < 50 — both must agree
+  [x] Fixed
+
+Completion checklist:
+  [x] npm run test -- --run → PASSED (286 tests)
+  [x] npm run test:guardrails -- --run → PASSED (13 tests)
+  [x] npm run type-check → PASSED (0 errors)
+
+--------------------------------------------------------------------------------
+
+PHASE 21 — Tier 3 Quality & Hardening Fixes
+Status: [x] COMPLETE — 2026-05-08
+--------------------------------------------------------------------------------
+Five code quality issues from production readiness evaluation. All fixed.
+
+FIX #11 — CORS Wildcard Removal for Null-Origin:
+  File: lib/cors.ts, lib/cors.test.ts
+  Before: Null origin + x-extension-source header → ACAO: * (CORS bypass risk)
+  After: No ACAO set for null-origin requests. Extensions send chrome-extension:// origin.
+  [x] Fixed
+
+FIX #12 — Remove Forced Period in cleanupSanitizedContent:
+  File: lib/ai/ai-fingerprint-detector.ts
+  Before: "Thanks" → "Thanks." — forced period changes tone to curt/passive-aggressive
+  After: No terminal punctuation forced. Content preserved as-is.
+  [x] Fixed
+
+FIX #13 — Zod Errors Return Field Details:
+  File: app/api/extension/generate/route.ts, route.test.ts
+  Before: 400 response just said "Invalid request" — client can't debug which field
+  After: details: [{ field: "profileMarkdown", message: "Required" }] included
+  [x] Fixed
+
+FIX #14 — Model String Extracted to Constant:
+  File: app/api/extension/generate/route.ts
+  Before: "claude-sonnet-4-6" hardcoded 4 times across file
+  After: Single const CLAUDE_MODEL = "claude-sonnet-4-6" referenced everywhere
+  [x] Fixed
+
+FIX #15 — Schema Max Limits on Inputs:
+  File: app/api/extension/generate/schema.ts
+  Before: resume, jd, acceptedExamples had no max length — potential memory spike
+  After: profileUrl.max(2048), resume.max(50000), jd.max(20000),
+         acceptedExamples.max(5) with each string.max(5000)
+  [x] Fixed
+
+Completion checklist:
+  [x] npm run test -- --run → PASSED (286 tests)
+  [x] npm run test:guardrails -- --run → PASSED (13 tests)
+  [x] npm run type-check → PASSED (0 errors)
+
+--------------------------------------------------------------------------------
+
+PHASE 22 — Remaining Issues Sweep (All Severity Levels)
+Status: [x] COMPLETE — 2026-05-08
+--------------------------------------------------------------------------------
+13 remaining issues from production readiness evaluation. All fixed in one pass.
+
+SECURITY AUDIT:
+  #8  User ID truncated 8→full in telemetry spans (route.ts ai.user_id)    [x]
+  #9  Service role key: explicit null-check + never passed to logger        [x]
+  #10 Style merge race: atomic RPC with upsert fallback (feedback/route.ts) [x]
+  #11 Cache hash: 32-bit djb2 → 64-bit FNV-1a (sanitizer.ts)              [x]
+
+GENERATE ROUTE:
+  Non-null assertion → explicit env var check + clear error message          [x]
+  DAILY_LIMIT → env var EXTENSION_DAILY_LIMIT with fallback 30              [x]
+  Dead code email:"" → returns actual user.email from Supabase              [x]
+  Silent non-text response → explicit error with content type logging       [x]
+
+SANITIZER:
+  Profanity: 8 terms → 5 pattern groups covering stretched/compound forms   [x]
+  Blocked content: added leet-speak obfuscation variants (n@zi, k1ll, etc)  [x]
+
+FINGERPRINT DETECTOR:
+  Perfect paragraph breaks: only flags 3+ consecutive uppercase-start ¶s    [x]
+
+SCHEMA:
+  Whitespace bypass: .trim().min(10) on profileMarkdown                     [x]
+
+UTILS:
+  stripMarkdownCodeFences: dropped ^ anchor, finds fence anywhere in text   [x]
+
+Completion checklist:
+  [x] npm run test -- --run → PASSED (286 tests)
+  [x] npm run test:guardrails -- --run → PASSED (13 tests)
+  [x] npm run type-check → PASSED (0 errors)
+
+--------------------------------------------------------------------------------
 
 ================================================================================
 NOTES

@@ -45,12 +45,19 @@ export function createClient() {
 }
 
 // Service Role client for admin operations (use carefully!)
+// The service role key is read once and never logged or exposed.
 export function createServiceClient() {
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!serviceRoleKey) {
+    throw new Error(
+      "SUPABASE_SERVICE_ROLE_KEY environment variable is not set",
+    );
+  }
   const cookieStore = cookies();
 
   return createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    serviceRoleKey,
     {
       cookies: {
         get(name: string) {
@@ -160,7 +167,7 @@ export async function ensureUserProfile(user: User) {
     throw error;
   }
 
-  log.info({ userId: user.id.substring(0, 8) }, "Profile created");
+  log.info({ userId: user.id.substring(0, 12) }, "Profile created");
   return newProfile;
 }
 

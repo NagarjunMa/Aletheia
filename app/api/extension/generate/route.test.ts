@@ -46,6 +46,15 @@ vi.mock("@anthropic-ai/sdk", () => {
       this.status = status;
     }
   };
+  // @ts-ignore
+  AnthropicMock.APIConnectionTimeoutError = class APIConnectionTimeoutError extends (
+    Error
+  ) {
+    constructor(message = "Request timed out") {
+      super(message);
+      this.name = "APIConnectionTimeoutError";
+    }
+  };
   return { default: AnthropicMock };
 });
 
@@ -386,7 +395,7 @@ describe("POST /api/extension/generate", () => {
     expect(body.validation.truncated).toBe(true);
   });
 
-  it("returns 400 on Zod validation failure (bad payload)", async () => {
+  it("returns 400 on Zod validation failure with field details", async () => {
     const res = await POST(
       makeRequest({
         method: "POST",
@@ -397,9 +406,13 @@ describe("POST /api/extension/generate", () => {
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.error).toBe("Invalid request");
+    expect(body.details).toBeDefined();
+    expect(Array.isArray(body.details)).toBe(true);
+    expect(body.details[0]).toHaveProperty("field");
+    expect(body.details[0]).toHaveProperty("message");
   });
 
-  it("returns 500 when Anthropic throws APIError status 401", async () => {
+  it("returns 502 when Anthropic throws APIError status 401", async () => {
     mockAnthropicCreate.mockRejectedValueOnce(
       new (await import("@anthropic-ai/sdk")).default.APIError(
         401,
@@ -416,9 +429,11 @@ describe("POST /api/extension/generate", () => {
         body: validPayload,
       }),
     );
-    expect(res.status).toBe(500);
+    expect(res.status).toBe(502);
     const body = await res.json();
-    expect(body.error).toBe("Anthropic API authentication failed");
+    expect(body.error).toBe(
+      "AI service authentication failed. Please contact support.",
+    );
   });
 
   it("returns 429 when Anthropic throws APIError status 429", async () => {

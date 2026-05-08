@@ -33,13 +33,22 @@ async function getDOMPurify() {
       const { default: purify } = await import("isomorphic-dompurify");
       DOMPurify = purify;
     } catch (error) {
-      log.warn("DOMPurify not available, using fallback sanitization");
-      // Fallback sanitization function
+      log.error(
+        { err: error },
+        "DOMPurify failed to load — refusing to sanitize with insecure fallback",
+      );
+      // Fail closed: strip ALL HTML by rejecting any string containing tags.
+      // This is safer than a regex that misses edge cases (CDATA, polyglots, entity encoding).
       DOMPurify = {
-        sanitize: (html: string) =>
-          html
-            .replace(/<script[^>]*>.*?<\/script>/gi, "")
-            .replace(/<[^>]*>/g, ""),
+        sanitize: (html: string) => {
+          if (/<[a-z/!?][\s\S]*>/i.test(html)) {
+            log.warn(
+              "HTML detected in content but DOMPurify unavailable — stripping entire input",
+            );
+            return "";
+          }
+          return html;
+        },
       };
     }
   }
@@ -70,12 +79,14 @@ export interface SanitizationResult {
   isAIGenerated?: boolean | undefined;
 }
 
-// Common profanity patterns (basic implementation)
+// Profanity patterns — covers common terms and compound forms.
+// For high-volume production, consider a dedicated library (e.g. bad-words, obscenity).
 const PROFANITY_PATTERNS = [
-  // This would typically be a more comprehensive list
-  // For production, consider using a dedicated profanity filter library
   /\b(damn|hell|crap|shit|fuck|bitch|ass|bastard)\b/gi,
-  /\b(asshole|dumbass|jackass|smartass)\b/gi,
+  /\b(asshole|dumbass|jackass|smartass|douchebag|dipshit|bullshit)\b/gi,
+  /\b(stfu|gtfo|wtf|lmfao|fml)\b/gi,
+  /\b(f+u+c+k+|s+h+i+t+|b+i+t+c+h+)\b/gi, // stretched variants (fuuuck, shiiit)
+  /\b(motherfuck\w*|cocksucker|wanker|twat|prick)\b/gi,
 ];
 
 // Suspicious content patterns that might indicate harmful output
@@ -83,7 +94,6 @@ const HARMFUL_PATTERNS = [
   // Personal information patterns
   /\b\d{3}-\d{2}-\d{4}\b/g, // SSN format
   /\b\d{16}\b/g, // Credit card format
-  /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, // Email patterns (if not in appropriate context)
 
   // Potential injection patterns
   /<script[^>]*>.*?<\/script>/gi,
@@ -102,17 +112,25 @@ const HARMFUL_PATTERNS = [
   /\|\s*curl/gi,
 ];
 
-// Content that should be blocked entirely
+// Email pattern — only redacted for non-email platforms (linkedin, general).
+// Cold emails legitimately include the user's email in the signature.
+const EMAIL_PATTERN = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g;
+
+// Content that should be blocked entirely.
+// Includes common leet-speak/obfuscation variants to prevent bypass.
 const BLOCKED_CONTENT_PATTERNS = [
-  // Hate speech indicators
-  /\b(nazi|hitler|genocide|ethnic\s+cleansing)\b/gi,
+  // Hate speech indicators + obfuscated variants
+  /\b(nazi|n[a@]z[i1!]|hitler|h[i1!]tl[e3]r|genocide|ethnic\s+cleansing)\b/gi,
 
   // Violence indicators
-  /\b(kill\s+yourself|commit\s+suicide|end\s+your\s+life)\b/gi,
+  /\b(kill\s+yourself|k[i1!]ll\s+y[o0]urs[e3]lf|commit\s+suicide|end\s+your\s+life)\b/gi,
 
   // Illegal activity
   /\b(how\s+to\s+make\s+(bombs?|explosives?))\b/gi,
   /\b(drug\s+dealing|selling\s+drugs)\b/gi,
+
+  // Slurs — common obfuscation forms
+  /\b(n[i1!]gg[e3a@]r|f[a@]gg?[o0]t|r[e3]t[a@]rd)\b/gi,
 ];
 
 /**
@@ -224,6 +242,20 @@ export async function sanitizeAIOutput(
         warnings.push("Potentially sensitive information was redacted");
       }
     });
+
+    // 6b. Redact email addresses only on non-email platforms.
+    // Cold emails legitimately include the sender's email in the signature.
+    if (platform !== "email") {
+      const emailMatches = sanitizedContent.match(EMAIL_PATTERN);
+      if (emailMatches) {
+        sanitizedContent = sanitizedContent.replace(
+          EMAIL_PATTERN,
+          "[REDACTED]",
+        );
+        modificationsApplied.push("Redacted email addresses");
+        warnings.push("Email addresses were redacted");
+      }
+    }
 
     // 7. Profanity filtering
     if (removeProfanity) {
@@ -531,14 +563,16 @@ export async function sanitizeWithCaching(
 }
 
 function hashContent(content: string): string {
-  // Simple hash function for caching
-  let hash = 0;
+  // FNV-1a 64-bit hash (split into two 32-bit halves for JS).
+  // Much lower collision probability than the old 32-bit djb2.
+  let h1 = 0x811c9dc5;
+  let h2 = 0xcbf29ce4;
   for (let i = 0; i < content.length; i++) {
-    const char = content.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash = hash & hash; // Convert to 32-bit integer
+    const c = content.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 0x01000193);
+    h2 = Math.imul(h2 ^ c, 0x01000193);
   }
-  return hash.toString(36);
+  return (h1 >>> 0).toString(36) + (h2 >>> 0).toString(36);
 }
 
 function cleanupCache(): void {

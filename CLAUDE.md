@@ -43,6 +43,8 @@ Chrome Extension (MV3)              Next.js Web App
 - **Fire-and-forget analytics:** style learning / feedback processing is async, never blocks response
 - **Multi-layer fallback parsing:** JSON → sanitize+retry → regex extraction → raw text
 - **Smart truncation:** LinkedIn 270-char limit enforced by last-sentence boundary, not hard cut
+- **Fail-closed rate limiting:** if Supabase RPC fails, requests are denied (not allowed) — prevents unlimited API burn during outages
+- **Prompt injection defense:** all user inputs escaped via `escapeForXmlTag()` before injection into `<user_input>` tags
 
 **AI Pipeline (core differentiator):**
 1. Build prompt from category templates (`/lib/ai/prompts/`)
@@ -120,6 +122,7 @@ supabase/migrations/
 | `LOKI_USERNAME` | Grafana Cloud numeric user ID |
 | `LOKI_PASSWORD` | Grafana Cloud Access Policy token (scope: `logs:write`) |
 | `LOG_LEVEL` | Pino log level — `debug` (dev default) / `info` (prod default) |
+| `EXTENSION_DAILY_LIMIT` | Max generation requests per user per day (default: 30) |
 
 Copy `.env.local.example` → `.env.local` for local dev. Never commit secrets.
 
@@ -150,16 +153,19 @@ Copy `.env.local.example` → `.env.local` for local dev. Never commit secrets.
 
 ### DO
 - Use `createClient()` (browser) and `createServiceClient()` (server/admin) — never mix
-- Validate all API inputs with Zod at the route boundary
+- Validate all API inputs with Zod at the route boundary — use `.trim()` before `.min()` on string fields
 - Use `createLogger('module')` from `lib/logger.ts` for structured logging in API routes — no `console.log`
 - Use `createLogger('module')` from `lib/logger.edge.ts` in `middleware.ts` — it is Edge Runtime safe
-- Use lazy factory functions for SDK clients — avoid module-level instantiation
+- Use lazy factory functions for SDK clients — validate env vars exist at call time with clear error messages
 - Keep sanitizer and fingerprint detector in `lib/ai/` — don't inline AI post-processing in routes
 - Use `check_and_increment_rate_limit` RPC for extension rate limiting — don't reimplement
-- Return errors with structured JSON `{ error: string, code?: string }` and correct HTTP status
+- Return errors with structured JSON `{ error: string, code?: string, details?: Array }` and correct HTTP status — include field-level Zod details on 400s
 - Add security headers via middleware — don't add them ad hoc in individual routes
 - Use Supabase RLS — never bypass it with service role for user-facing operations
 - Reference only user-provided data in prompts — never invent metrics, projects, or achievements
+- Use atomic RPCs for concurrent data operations (style merge, counters) — fall back to upsert only if RPC unavailable
+- Add `.max()` limits on all Zod string/array fields to prevent memory exhaustion via oversized payloads
+- Log full user IDs in telemetry spans (for audit trails) but truncate to 12 chars in log messages (for privacy)
 - Write a test for every new feature or non-trivial code change. Co-locate the test file with the source (`sanitizer.test.ts` next to `sanitizer.ts`). Minor fixes (typos, config tweaks, copy changes, dependency bumps) are exempt. For any change touching `lib/ai/`, guardrail tests are mandatory and must pass before merge.
 
 ### DON'T
@@ -168,6 +174,7 @@ Copy `.env.local.example` → `.env.local` for local dev. Never commit secrets.
 - Don't use `console.log` — use the Pino logger (`lib/logger.ts`) or edge logger (`lib/logger.edge.ts`)
 - Don't skip Zod validation on any API input
 - Don't add new Claude API calls without going through the sanitization pipeline
+- Don't add new Claude API calls without a timeout — always pass `{ timeout: 30_000 }` as the second arg to `messages.create()`
 - Don't hardcode model strings — update the single constant in the generate route if model changes
 - Don't block the generate response with analytics/style processing — keep it fire-and-forget
 - Don't modify the AI fingerprint patterns list without updating the authenticity scoring weights
@@ -175,13 +182,22 @@ Copy `.env.local.example` → `.env.local` for local dev. Never commit secrets.
 - Don't bypass RLS using service role key for user queries (only for admin/background jobs)
 - Don't add module-level SDK instantiation (breaks Vercel edge cold starts)
 - Don't install pino-loki or any transport that uses Node.js streams — Loki is pushed via native `fetch` in `lib/logger.ts`
+- Don't inject user-supplied content into prompt XML tags without escaping — always use `escapeForXmlTag()` from `lib/ai/prompts/linkedin-connection.ts`
+- Don't add regex-based HTML sanitization fallbacks — if DOMPurify is unavailable, fail closed (strip content entirely), never pretend regex is safe
+- Don't make rate limiting fail-open — if the rate limit check fails, deny the request (fail-closed) to prevent unlimited API spend during outages
+- Don't use non-null assertions (`!`) on environment variables — always validate with an explicit check and throw a clear error
+- Don't log or expose `SUPABASE_SERVICE_ROLE_KEY` — read once into a local variable, never pass to logger
+- Don't silently swallow non-text Claude response blocks — throw explicit errors with content type info
+- Don't hardcode magic numbers — use env vars with fallback defaults (e.g. `EXTENSION_DAILY_LIMIT`)
+- Don't return Zod 400 errors without field-level details — clients need `details: [{ field, message }]` to debug
+- Don't use CORS wildcard `*` for null-origin requests — extensions must send `chrome-extension://` origin
 
 ---
 
 ## Key API Contracts
 
 **POST `/api/extension/generate`** — main generation endpoint
-Auth: Bearer token (JWT) | Rate limit: 30 req/day/user (`extension_rate_limits` table)
+Auth: Bearer token (JWT) | Rate limit: `EXTENSION_DAILY_LIMIT` req/day/user (default 30, `extension_rate_limits` table)
 
 Request body (Zod-validated):
 ```typescript

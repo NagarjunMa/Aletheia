@@ -1,89 +1,122 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { createClient as createSupabaseClient } from '@supabase/supabase-js'
-import { z } from 'zod'
-import { createLogger } from '@/lib/logger'
-import { analyzeStyle, mergeStylePatterns, type StylePatterns } from '@/lib/ai/style-analyzer'
-import { getCorsHeaders } from '@/lib/cors'
-import { feedbackSchema } from './schema'
+import { NextRequest, NextResponse } from "next/server";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { z } from "zod";
+import { createLogger } from "@/lib/logger";
+import {
+  analyzeStyle,
+  mergeStylePatterns,
+  type StylePatterns,
+} from "@/lib/ai/style-analyzer";
+import { getCorsHeaders } from "@/lib/cors";
+import { feedbackSchema } from "./schema";
 
-const log = createLogger('extension-feedback')
+const log = createLogger("extension-feedback");
 
 // Lazy factory functions — avoid module-level instantiation at build time
 function getSupabaseService() {
-  return createSupabaseClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+  return createSupabaseClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
 }
 
 function getSupabaseAuth() {
-  return createSupabaseClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
+  return createSupabaseClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  );
 }
 
 // ─── Auth helper (duplicated from generate/route.ts) ───
 
-async function authenticateRequest(request: NextRequest): Promise<{ userId: string; email: string } | null> {
-  const authHeader = request.headers.get('authorization')
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    log.info('No Bearer token in Authorization header')
-    return null
+async function authenticateRequest(
+  request: NextRequest,
+): Promise<{ userId: string; email: string } | null> {
+  const authHeader = request.headers.get("authorization");
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    log.info("No Bearer token in Authorization header");
+    return null;
   }
 
-  const accessToken = authHeader.slice(7)
-  const { data: { user }, error } = await getSupabaseAuth().auth.getUser(accessToken)
+  const accessToken = authHeader.slice(7);
+  const {
+    data: { user },
+    error,
+  } = await getSupabaseAuth().auth.getUser(accessToken);
 
   if (error || !user) {
-    log.info({ err: error?.message }, 'Token validation failed')
-    return null
+    log.info({ err: error?.message }, "Token validation failed");
+    return null;
   }
 
-  return { userId: user.id, email: user.email || '' }
+  return { userId: user.id, email: user.email || "" };
 }
 
 // ─── POST handler ───
 
 export async function POST(request: NextRequest) {
-  const corsHeaders = getCorsHeaders(request, { allowCredentials: true, methods: 'GET, POST, OPTIONS' })
+  const corsHeaders = getCorsHeaders(request, {
+    allowCredentials: true,
+    methods: "GET, POST, OPTIONS",
+  });
 
   try {
     // Auth
-    const authResult = await authenticateRequest(request)
+    const authResult = await authenticateRequest(request);
     if (!authResult) {
       return NextResponse.json(
-        { error: 'Unauthorized', message: 'Valid Bearer token required' },
-        { status: 401, headers: corsHeaders }
-      )
+        { error: "Unauthorized", message: "Valid Bearer token required" },
+        { status: 401, headers: corsHeaders },
+      );
     }
 
     // Parse
-    const body = await request.json()
-    const { message, approved, category, subjectLine, rejectionReason } = feedbackSchema.parse(body)
+    const body = await request.json();
+    const { message, approved, category, subjectLine, rejectionReason } =
+      feedbackSchema.parse(body);
 
-    log.info({ userId: authResult.userId.substring(0, 8), approved, category, rejectionReason }, 'Feedback received')
+    log.info(
+      {
+        userId: authResult.userId.substring(0, 12),
+        approved,
+        category,
+        rejectionReason,
+      },
+      "Feedback received",
+    );
 
     // Return 200 immediately — style analysis runs fire-and-forget
     const response = NextResponse.json(
       { success: true },
-      { headers: corsHeaders }
-    )
+      { headers: corsHeaders },
+    );
 
     // Fire-and-forget async processing
-    processStyleFeedback(authResult.userId, message, approved, category, subjectLine).catch(err => {
-      log.error({ err }, 'Background style processing failed')
-    })
+    processStyleFeedback(
+      authResult.userId,
+      message,
+      approved,
+      category,
+      subjectLine,
+    ).catch((err) => {
+      log.error({ err }, "Background style processing failed");
+    });
 
-    return response
+    return response;
   } catch (error) {
-    log.error({ err: error }, 'Feedback endpoint error')
+    log.error({ err: error }, "Feedback endpoint error");
 
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { success: false, error: 'Invalid request' },
-        { status: 400, headers: corsHeaders }
-      )
+        { success: false, error: "Invalid request" },
+        { status: 400, headers: corsHeaders },
+      );
     }
 
     return NextResponse.json(
-      { success: false, error: 'Internal server error' },
-      { status: 500, headers: corsHeaders }
-    )
+      { success: false, error: "Internal server error" },
+      { status: 500, headers: corsHeaders },
+    );
   }
 }
 
@@ -98,54 +131,96 @@ async function processStyleFeedback(
 ) {
   // Fetch existing preferences
   const { data: prefs, error: fetchErr } = await getSupabaseService()
-    .from('user_preferences')
-    .select('style_patterns, approved_message_count, rejected_message_count')
-    .eq('user_id', userId)
-    .maybeSingle()
+    .from("user_preferences")
+    .select("style_patterns, approved_message_count, rejected_message_count")
+    .eq("user_id", userId)
+    .maybeSingle();
 
   if (fetchErr) {
-    log.error({ err: fetchErr }, 'Failed to fetch user_preferences')
-    return
+    log.error({ err: fetchErr }, "Failed to fetch user_preferences");
+    return;
   }
 
   if (approved) {
     // Analyze style from approved message
-    const fullText = subjectLine ? `${subjectLine}\n\n${message}` : message
-    const incoming = analyzeStyle(fullText)
+    const fullText = subjectLine ? `${subjectLine}\n\n${message}` : message;
+    const incoming = analyzeStyle(fullText);
 
-    const existingPatterns = (prefs?.style_patterns ?? null) as StylePatterns | null
+    const existingPatterns = (prefs?.style_patterns ??
+      null) as StylePatterns | null;
     const merged = existingPatterns
       ? mergeStylePatterns(existingPatterns, incoming)
-      : incoming
+      : incoming;
 
-    const currentCount = (prefs?.approved_message_count ?? 0) as number
+    // Use atomic increment via RPC to avoid read-then-write race condition.
+    // Fallback to upsert if RPC unavailable (non-critical background op).
+    const supabase = getSupabaseService();
+    const { error: rpcErr } = await supabase.rpc("increment_approved_count", {
+      p_user_id: userId,
+      p_style_patterns: merged as unknown as Record<string, unknown>,
+    });
 
-    const { error: upsertErr } = await getSupabaseService()
-      .from('user_preferences')
-      .upsert({
-        user_id: userId,
-        style_patterns: merged as unknown as Record<string, unknown>,
-        approved_message_count: currentCount + 1,
-      }, { onConflict: 'user_id' })
+    if (rpcErr) {
+      // Fallback: non-atomic upsert (acceptable for style data — eventual consistency)
+      log.warn(
+        { err: rpcErr },
+        "Atomic increment RPC unavailable, falling back to upsert",
+      );
+      const currentCount = (prefs?.approved_message_count ?? 0) as number;
+      const { error: upsertErr } = await supabase
+        .from("user_preferences")
+        .upsert(
+          {
+            user_id: userId,
+            style_patterns: merged as unknown as Record<string, unknown>,
+            approved_message_count: currentCount + 1,
+          },
+          { onConflict: "user_id" },
+        );
 
-    if (upsertErr) {
-      log.error({ err: upsertErr }, 'Failed to upsert style_patterns')
+      if (upsertErr) {
+        log.error({ err: upsertErr }, "Failed to upsert style_patterns");
+      } else {
+        log.info(
+          { userId: userId.substring(0, 8), approvedCount: currentCount + 1 },
+          "Style patterns updated (fallback)",
+        );
+      }
     } else {
-      log.info({ userId, approvedCount: currentCount + 1 }, 'Style patterns updated')
+      log.info(
+        { userId: userId.substring(0, 8) },
+        "Style patterns updated (atomic)",
+      );
     }
   } else {
-    // Rejected: just increment counter
-    const currentCount = (prefs?.rejected_message_count ?? 0) as number
+    // Rejected: atomic increment via RPC with upsert fallback
+    const supabase = getSupabaseService();
+    const { error: rpcErr } = await supabase.rpc("increment_rejected_count", {
+      p_user_id: userId,
+    });
 
-    const { error: upsertErr } = await getSupabaseService()
-      .from('user_preferences')
-      .upsert({
-        user_id: userId,
-        rejected_message_count: currentCount + 1,
-      }, { onConflict: 'user_id' })
+    if (rpcErr) {
+      log.warn(
+        { err: rpcErr },
+        "Atomic increment RPC unavailable, falling back to upsert",
+      );
+      const currentCount = (prefs?.rejected_message_count ?? 0) as number;
+      const { error: upsertErr } = await supabase
+        .from("user_preferences")
+        .upsert(
+          {
+            user_id: userId,
+            rejected_message_count: currentCount + 1,
+          },
+          { onConflict: "user_id" },
+        );
 
-    if (upsertErr) {
-      log.error({ err: upsertErr }, 'Failed to increment rejected_message_count')
+      if (upsertErr) {
+        log.error(
+          { err: upsertErr },
+          "Failed to increment rejected_message_count",
+        );
+      }
     }
   }
 }
@@ -156,8 +231,11 @@ export async function OPTIONS(request: NextRequest) {
   return new Response(null, {
     status: 200,
     headers: {
-      ...getCorsHeaders(request, { allowCredentials: true, methods: 'GET, POST, OPTIONS' }),
-      'Access-Control-Max-Age': '86400',
+      ...getCorsHeaders(request, {
+        allowCredentials: true,
+        methods: "GET, POST, OPTIONS",
+      }),
+      "Access-Control-Max-Age": "86400",
     },
-  })
+  });
 }
