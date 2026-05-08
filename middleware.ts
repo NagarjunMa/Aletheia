@@ -190,10 +190,18 @@ export async function middleware(request: NextRequest) {
   response.headers.set("X-XSS-Protection", "1; mode=block");
   response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
 
-  // Content Security Policy
+  // Nonce-based Content Security Policy.
+  // Generate a per-request nonce to replace 'unsafe-inline' for scripts.
+  // Next.js reads the nonce from the x-nonce header and applies it to inline scripts.
+  // 'strict-dynamic' allows scripts loaded by nonced scripts (Next.js chunks).
+  // 'unsafe-inline' kept for style-src only — Tailwind/CSS-in-JS requires it,
+  // and style injection is low-risk compared to script injection.
+  const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
+  response.headers.set("x-nonce", nonce);
+
   const cspHeader = [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://app.posthog.com",
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https://app.posthog.com`,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: https: blob:",
     "font-src 'self' data:",

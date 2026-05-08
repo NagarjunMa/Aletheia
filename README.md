@@ -127,6 +127,7 @@ Copy `.env.local.example` to `.env.local` and fill in the required values.
 | `NEXT_PUBLIC_POSTHOG_HOST` | `https://app.posthog.com` | PostHog endpoint |
 | `NEXT_PUBLIC_SENTRY_DSN` | — | Enables Sentry (client) |
 | `SENTRY_DSN` | — | Enables Sentry (server/edge) |
+| `EXTENSION_DAILY_LIMIT` | `30` | Max generation requests per user per day |
 | `NEXT_TELEMETRY_DISABLED` | — | Set `1` to opt out of Next.js telemetry |
 
 ---
@@ -248,7 +249,7 @@ After any change to extension files: reload the extension from `chrome://extensi
 
 ## Testing
 
-**Over 266 tests, >87.5% coverage overall.** Test files are co-located with source files.
+**286 tests, >87.5% coverage overall.** Test files are co-located with source files.
 
 ### Unit tests — `make test`
 
@@ -355,6 +356,57 @@ Runs `eslint --fix`, `prettier --write`, and `vitest related --run` against modi
 6. **Open a PR to `main`.**
 
 Full conventions are in `CLAUDE.md` at the project root.
+
+---
+
+## Security Hardening
+
+28 issues identified via strict production readiness audit. All resolved across 4 tiers. See `.claude/production-readiness-evaluation.md` for full audit trail.
+
+### Tier 1 — Critical Security
+
+| Measure | Implementation | File |
+|---------|---------------|------|
+| **Fail-closed rate limiting** | Supabase RPC failure = denied. 1-minute retry window. | `route.ts` |
+| **Claude API timeout** | 30s timeout on `messages.create()`. Explicit `504`. | `route.ts` |
+| **Session endpoint rate limit** | In-memory sliding window: 20 req/min per IP. | `session/route.ts` |
+| **DOMPurify fail-closed** | HTML tags stripped entirely if DOMPurify unavailable. No regex fallback. | `sanitizer.ts` |
+| **Prompt injection defense** | `escapeForXmlTag()` on all user inputs before XML tag injection. | `linkedin-connection.ts` |
+
+### Tier 2 — Security & Quality
+
+| Measure | Implementation | File |
+|---------|---------------|------|
+| **Nonce-based CSP** | `'nonce-{nonce}' 'strict-dynamic'` replaces `'unsafe-inline' 'unsafe-eval'`. Per-request nonce via `x-nonce` header. | `middleware.ts`, `layout.tsx` |
+| **Balanced JSON extraction** | Brace-depth tracking with string boundary awareness. | `utils.ts` |
+| **Anthropic 401 → 502** | Upstream auth failure returns 502 Bad Gateway, not 500. | `route.ts` |
+| **Context-aware email redaction** | Email addresses preserved in cold emails, redacted on LinkedIn. | `sanitizer.ts` |
+| **AI detection AND logic** | Both confidence + authenticity must agree to flag as AI. | `ai-fingerprint-detector.ts` |
+
+### Tier 3 — Hardening
+
+| Measure | Implementation | File |
+|---------|---------------|------|
+| **CORS wildcard removed** | No `*` for null-origin. Extensions send `chrome-extension://` origin. | `cors.ts` |
+| **Zod error field details** | 400 responses include `details: [{ field, message }]`. | `route.ts` |
+| **Model string constant** | Single `CLAUDE_MODEL` constant, no scattered literals. | `route.ts` |
+| **Schema input limits** | `profileUrl.max(2048)`, `resume.max(50k)`, `jd.max(20k)`, `examples.max(5)`. | `schema.ts` |
+
+### Final Sweep
+
+| Measure | Implementation | File |
+|---------|---------------|------|
+| **Service role key guard** | Explicit null-check; key never passed to logger. | `lib/supabase/server.ts` |
+| **ANTHROPIC_API_KEY guard** | Explicit check + clear error if missing. | `route.ts` |
+| **Atomic style merge** | RPC-based atomic increment with upsert fallback. | `feedback/route.ts` |
+| **64-bit cache hash** | FNV-1a replaces 32-bit djb2. | `sanitizer.ts` |
+| **Configurable daily limit** | `EXTENSION_DAILY_LIMIT` env var, fallback 30. | `route.ts` |
+| **Dead code removed** | `email: ""` → returns actual `user.email`. | `route.ts` |
+| **Non-text response handling** | Explicit error + content type logging. | `route.ts` |
+| **Expanded profanity filter** | 5 pattern groups: stretched, compound, acronyms. | `sanitizer.ts` |
+| **Leet-speak blocked content** | Obfuscation variants: `n@zi`, `k1ll`, slurs. | `sanitizer.ts` |
+| **Whitespace schema fix** | `.trim().min(10)` on profileMarkdown. | `schema.ts` |
+| **Code fence stripping** | Finds fence anywhere in text, not just wrapping. | `utils.ts` |
 
 ---
 

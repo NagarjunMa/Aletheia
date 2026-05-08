@@ -1,19 +1,24 @@
-'use client'
+"use client";
 
-import { ThemeProvider } from 'next-themes'
-import { PostHogProvider } from '@/lib/posthog/provider'
+import { ThemeProvider } from "next-themes";
+import { PostHogProvider } from "@/lib/posthog/provider";
 
-export function Providers({ children }: { children: React.ReactNode }) {
+export function Providers({
+  children,
+  nonce,
+}: {
+  children: React.ReactNode;
+  nonce?: string;
+}) {
   return (
     <ThemeProvider
       attribute="class"
       defaultTheme="system"
       enableSystem
       disableTransitionOnChange
+      {...(nonce ? { nonce } : {})}
     >
-      <PostHogProvider>
-        {children}
-      </PostHogProvider>
+      <PostHogProvider>{children}</PostHogProvider>
     </ThemeProvider>
-  )
+  );
 }

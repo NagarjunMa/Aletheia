@@ -185,13 +185,15 @@ const nextConfig = {
       }
     ]
 
-    // Add CSP header for production
+    // CSP header for production static responses (middleware handles dynamic ones with nonces).
+    // Static responses can't have nonces, so we use 'strict-dynamic' only.
+    // Middleware-served pages get the nonce-based CSP which is stronger.
     if (process.env.NODE_ENV === 'production') {
       headers[0].headers.push({
         key: 'Content-Security-Policy',
         value: [
           "default-src 'self'",
-          "script-src 'self' 'unsafe-inline' https://app.posthog.com",
+          "script-src 'self' 'strict-dynamic' https://app.posthog.com",
           "style-src 'self' 'unsafe-inline'",
           "img-src 'self' data: https: blob:",
           "font-src 'self' https:",
