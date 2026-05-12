@@ -199,13 +199,21 @@ export async function middleware(request: NextRequest) {
   const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
   response.headers.set("x-nonce", nonce);
 
+  const isDev = process.env.NODE_ENV === "development";
+
   const cspHeader = [
     "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https://app.posthog.com`,
+    // Dev needs 'unsafe-eval' for Next.js hot reload (react-refresh uses eval).
+    // Production uses nonce + strict-dynamic only.
+    isDev
+      ? `script-src 'self' 'unsafe-eval' 'nonce-${nonce}' 'strict-dynamic'`
+      : `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: https: blob:",
     "font-src 'self' data:",
-    "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.anthropic.com",
+    isDev
+      ? "connect-src 'self' http://127.0.0.1:* ws://localhost:* https://*.supabase.co wss://*.supabase.co https://api.anthropic.com"
+      : "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.anthropic.com",
     "media-src 'self' blob:",
     "worker-src 'self' blob:",
     "object-src 'none'",

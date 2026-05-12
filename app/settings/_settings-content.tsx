@@ -229,9 +229,8 @@ export default function SettingsContent() {
             </div>
           ) : (
             <p className="text-sm text-[hsl(var(--muted-foreground))]">
-              {approvedCount === 0
-                ? "Generate and approve messages in the extension to start learning your voice."
-                : `${approvedCount} message approved — approve ${3 - approvedCount} more to unlock full style learning.`}
+              Generate and approve a message in the extension to start learning
+              your voice.
             </p>
           )}
         </div>

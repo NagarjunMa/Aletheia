@@ -13,14 +13,18 @@
     "clean": "rm -rf dist",
     "prebuild": "npm run clean",
     "security:audit": "npm audit --audit-level moderate",
-    "test": "echo 'Tests will be implemented' && exit 0"
+    "test": "vitest --run",
+    "test:watch": "vitest",
+    "build:ext": "node build.mjs"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.260",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
+    "esbuild": "^0.28.0",
     "eslint": "^8.57.0",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "vitest": "^2.1.9"
   },
   "keywords": [
     "chrome-extension",

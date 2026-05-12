@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { trace, SpanStatusCode, metrics } from "@opentelemetry/api";
 import {
   getSystemPrompt,
   buildPrompt,
@@ -16,27 +15,11 @@ import { createLogger } from "@/lib/logger";
 import {
   countWords,
   truncateToWordLimit,
-  extractSubjectFromText,
-  extractBodyFromText,
   stripMarkdownCodeFences,
-  extractJsonFromText,
 } from "./utils";
 import { generateRequestSchema } from "./schema";
 
 const log = createLogger("generate-route");
-
-const tracer = trace.getTracer("aletheia", "1.0.0");
-const meter = metrics.getMeter("aletheia", "1.0.0");
-
-// Custom metrics shipped to Grafana — track LLM spend per user and category
-const tokenCounter = meter.createCounter("llm.tokens.total", {
-  description: "Total LLM tokens consumed (input + output)",
-  unit: "tokens",
-});
-const generationLatency = meter.createHistogram("llm.generation.latency", {
-  description: "Claude API response latency in milliseconds",
-  unit: "ms",
-});
 
 // Lazy factory functions — avoid module-level instantiation at build time
 function getAnthropic() {
@@ -153,7 +136,7 @@ export async function POST(request: NextRequest) {
 
       if (
         prefs &&
-        (prefs.approved_message_count ?? 0) >= 3 &&
+        (prefs.approved_message_count ?? 0) >= 1 &&
         prefs.style_patterns
       ) {
         styleProfile = prefs.style_patterns as unknown as StylePatterns;
@@ -226,45 +209,17 @@ export async function POST(request: NextRequest) {
     }
     const userPrompt = buildPrompt(promptInput);
 
-    // Generate content using Claude — wrapped in an OTel span for Grafana Tempo latency tracing
     const startTime = Date.now();
-    let response!: Awaited<
-      ReturnType<ReturnType<typeof getAnthropic>["messages"]["create"]>
-    >;
-    const aiSpan = tracer.startSpan("anthropic.messages.create", {
-      attributes: {
-        "ai.model": CLAUDE_MODEL,
-        "ai.category": category,
-        "ai.intent": intent ?? "networking",
-        "ai.user_id": authResult.userId,
+    const response = await getAnthropic().messages.create(
+      {
+        model: CLAUDE_MODEL,
+        max_tokens: 600,
+        temperature: 0.8,
+        system: systemPrompt,
+        messages: [{ role: "user", content: userPrompt }],
       },
-    });
-    try {
-      response = await getAnthropic().messages.create(
-        {
-          model: CLAUDE_MODEL,
-          max_tokens: 600,
-          temperature: 0.8,
-          system: systemPrompt,
-          messages: [{ role: "user", content: userPrompt }],
-        },
-        { timeout: 30_000 },
-      );
-      aiSpan.setAttributes({
-        "ai.input_tokens": response.usage.input_tokens,
-        "ai.output_tokens": response.usage.output_tokens,
-      });
-      aiSpan.setStatus({ code: SpanStatusCode.OK });
-    } catch (err) {
-      aiSpan.recordException(err as Error);
-      aiSpan.setStatus({
-        code: SpanStatusCode.ERROR,
-        message: (err as Error).message,
-      });
-      throw err;
-    } finally {
-      aiSpan.end();
-    }
+      { timeout: 30_000 },
+    );
 
     const processingTime = Date.now() - startTime;
     const textBlock = response.content.find((block) => block.type === "text");
@@ -277,19 +232,8 @@ export async function POST(request: NextRequest) {
     }
     const rawContent = textBlock.text;
 
-    // Log usage for monitoring and record custom metrics for Grafana dashboards
     const tokenUsage = response.usage;
     const totalTokens = tokenUsage.input_tokens + tokenUsage.output_tokens;
-
-    tokenCounter.add(totalTokens, {
-      "ai.category": category,
-      "ai.model": CLAUDE_MODEL,
-      "ai.user_id": authResult.userId.substring(0, 8),
-    });
-    generationLatency.record(processingTime, {
-      "ai.category": category,
-      "ai.model": CLAUDE_MODEL,
-    });
 
     log.info(
       {
@@ -312,9 +256,7 @@ export async function POST(request: NextRequest) {
     // Parse response based on category with validation
     if (category === "cold_email" || category === "linkedin_inmail") {
       try {
-        const cleanedContent = extractJsonFromText(
-          stripMarkdownCodeFences(rawContent),
-        );
+        const cleanedContent = stripMarkdownCodeFences(rawContent);
         const parsed = JSON.parse(cleanedContent);
 
         if (parsed.subject_line && parsed.body) {
@@ -335,37 +277,19 @@ export async function POST(request: NextRequest) {
             ? enhancedBodySanitization.sanitizedContent
             : basicBodySanitization;
 
-          const subjectHasAI = enhancedSubjectSanitization.isAIGenerated;
-          const bodyHasAI = enhancedBodySanitization.isAIGenerated;
+          const subjectPatterns =
+            enhancedSubjectSanitization.aiFingerprints?.detectedPatterns ?? [];
+          const bodyPatterns =
+            enhancedBodySanitization.aiFingerprints?.detectedPatterns ?? [];
 
-          if (subjectHasAI || bodyHasAI) {
-            log.warn(
+          if (subjectPatterns.length || bodyPatterns.length) {
+            log.info(
               {
-                subject: subjectHasAI
-                  ? {
-                      confidence:
-                        enhancedSubjectSanitization.aiFingerprints?.confidence,
-                      patterns:
-                        enhancedSubjectSanitization.aiFingerprints
-                          ?.detectedPatterns,
-                      authenticityScore:
-                        enhancedSubjectSanitization.authenticityScore,
-                    }
-                  : null,
-                body: bodyHasAI
-                  ? {
-                      confidence:
-                        enhancedBodySanitization.aiFingerprints?.confidence,
-                      patterns:
-                        enhancedBodySanitization.aiFingerprints
-                          ?.detectedPatterns,
-                      authenticityScore:
-                        enhancedBodySanitization.authenticityScore,
-                    }
-                  : null,
+                subjectPatterns,
+                bodyPatterns,
                 category: validatedData.category,
               },
-              "AI fingerprints detected in Chrome extension generation",
+              "AI fingerprints stripped in Chrome extension generation",
             );
           }
 
@@ -390,24 +314,6 @@ export async function POST(request: NextRequest) {
               category,
               word_count: countWords(finalBody),
               character_count: finalBody.length,
-              authenticityScore: Math.min(
-                enhancedSubjectSanitization.authenticityScore ?? 100,
-                enhancedBodySanitization.authenticityScore ?? 100,
-              ),
-              modificationsApplied: [
-                ...(enhancedSubjectSanitization.aiFingerprints
-                  ?.detectedPatterns ?? []),
-                ...(enhancedBodySanitization.aiFingerprints?.detectedPatterns ??
-                  []),
-              ],
-              validation: {
-                word_limit_passed: countWords(finalBody) <= maxWords,
-                sanitization_applied:
-                  parsed.subject_line !== sanitizedSubject ||
-                  parsed.body !== sanitizedBody,
-                ai_patterns_detected: subjectHasAI || bodyHasAI,
-                json_parsing_successful: true,
-              },
               usage: tokenUsage,
               processingTime,
             },
@@ -422,97 +328,16 @@ export async function POST(request: NextRequest) {
           "Failed to parse JSON response, attempting fallback",
         );
 
-        const basicSanitization = sanitize(rawContent);
-        const enhancedSanitization =
-          await sanitizeForLinkedIn(basicSanitization);
-        const sanitizedContent = enhancedSanitization.success
-          ? enhancedSanitization.sanitizedContent
-          : basicSanitization;
-
-        if (enhancedSanitization.isAIGenerated) {
-          log.warn(
-            {
-              confidence: enhancedSanitization.aiFingerprints?.confidence,
-              patterns: enhancedSanitization.aiFingerprints?.detectedPatterns,
-              authenticityScore: enhancedSanitization.authenticityScore,
-              category: validatedData.category,
-            },
-            "AI fingerprints detected in fallback processing",
-          );
-        }
-
-        // Try JSON parse on sanitized content (fence-stripped) before falling through to regex
-        try {
-          const cleanedSanitized = extractJsonFromText(
-            stripMarkdownCodeFences(sanitizedContent),
-          );
-          const parsedFallback = JSON.parse(cleanedSanitized);
-          if (parsedFallback.subject_line && parsedFallback.body) {
-            const maxWords = category === "cold_email" ? 150 : 120;
-            const wordCount =
-              parsedFallback.word_count || countWords(parsedFallback.body);
-            let finalBody = parsedFallback.body;
-            if (wordCount > maxWords) {
-              finalBody = truncateToWordLimit(finalBody, maxWords);
-            }
-            return NextResponse.json(
-              {
-                success: true,
-                subject_line: parsedFallback.subject_line,
-                body: finalBody,
-                category,
-                word_count: countWords(finalBody),
-                character_count: finalBody.length,
-                authenticityScore:
-                  enhancedSanitization.authenticityScore ?? 100,
-                modificationsApplied:
-                  enhancedSanitization.aiFingerprints?.detectedPatterns ?? [],
-                validation: {
-                  word_limit_passed: countWords(finalBody) <= maxWords,
-                  sanitization_applied: true,
-                  ai_patterns_detected: enhancedSanitization.isAIGenerated,
-                  json_parsing_successful: true,
-                  fallback_json_recovery: true,
-                },
-                usage: tokenUsage,
-                processingTime,
-              },
-              {
-                headers: { ...corsHeaders, ...rateLimitHeaders },
-              },
-            );
-          }
-        } catch {
-          // JSON recovery failed, fall through to regex extraction
-        }
-
-        const subject = extractSubjectFromText(sanitizedContent);
-        const body = extractBodyFromText(sanitizedContent);
-
+        log.warn(
+          { category: validatedData.category },
+          "JSON parse failed for cold_email — returning 502",
+        );
         return NextResponse.json(
           {
-            success: true,
-            subject_line: subject,
-            body: body,
-            category,
-            word_count: countWords(body),
-            character_count: body.length,
-            authenticityScore: enhancedSanitization.authenticityScore ?? 100,
-            modificationsApplied:
-              enhancedSanitization.aiFingerprints?.detectedPatterns ?? [],
-            validation: {
-              word_limit_passed: false,
-              sanitization_applied: rawContent !== sanitizedContent,
-              ai_patterns_detected: enhancedSanitization.isAIGenerated,
-              json_parsing_successful: false,
-              fallback_parsing: true,
-            },
-            usage: tokenUsage,
-            processingTime,
+            error: "Generation format error, please retry",
+            code: "PARSE_FAILED",
           },
-          {
-            headers: { ...corsHeaders, ...rateLimitHeaders },
-          },
+          { status: 502, headers: { ...corsHeaders, ...rateLimitHeaders } },
         );
       }
     }
@@ -524,45 +349,33 @@ export async function POST(request: NextRequest) {
       ? enhancedSanitization.sanitizedContent
       : basicSanitization;
 
-    if (enhancedSanitization.isAIGenerated) {
-      log.warn(
+    const linkedinPatterns =
+      enhancedSanitization.aiFingerprints?.detectedPatterns ?? [];
+    if (linkedinPatterns.length) {
+      log.info(
         {
-          confidence: enhancedSanitization.aiFingerprints?.confidence,
-          patterns: enhancedSanitization.aiFingerprints?.detectedPatterns,
-          authenticityScore: enhancedSanitization.authenticityScore,
+          patterns: linkedinPatterns,
           category: validatedData.category,
         },
-        "AI fingerprints detected in LinkedIn connection generation",
+        "AI fingerprints stripped in LinkedIn connection generation",
       );
     }
 
-    // Apply smart character limit preserving the OPEN sentence
     let finalContent = sanitizedContent;
-    let wasTruncated = false;
-    const originalLength = sanitizedContent.length;
 
     if (finalContent.length > 300) {
-      log.warn(
-        { length: finalContent.length, limit: 300 },
-        "LinkedIn connection exceeds character limit",
-      );
-
-      // Smart truncation: find the last sentence boundary (period) within 300 chars
       const within300 = finalContent.substring(0, 300);
       const lastPeriod = within300.lastIndexOf(".");
 
       if (lastPeriod > 150) {
-        // Cut at the last complete sentence
         finalContent = finalContent.substring(0, lastPeriod + 1).trim();
       } else {
-        // Fallback: cut at last word boundary to avoid chopping mid-word
         const lastSpace = within300.lastIndexOf(" ");
         finalContent = finalContent
           .substring(0, lastSpace > 0 ? lastSpace : 297)
           .trim();
       }
 
-      wasTruncated = true;
       log.info(
         { truncatedLength: finalContent.length },
         "LinkedIn message truncated at sentence boundary",
@@ -575,15 +388,6 @@ export async function POST(request: NextRequest) {
         body: finalContent,
         category,
         character_count: finalContent.length,
-        authenticityScore: enhancedSanitization.authenticityScore ?? 100,
-        modificationsApplied:
-          enhancedSanitization.aiFingerprints?.detectedPatterns ?? [],
-        validation: {
-          character_limit_passed: true,
-          original_length: originalLength,
-          truncated: wasTruncated,
-          sanitization_applied: rawContent !== sanitizedContent,
-        },
         usage: tokenUsage,
         processingTime,
       },

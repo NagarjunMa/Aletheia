@@ -3,8 +3,6 @@ import { generateRequestSchema } from "./schema";
 import {
   countWords,
   truncateToWordLimit,
-  extractSubjectFromText,
-  extractBodyFromText,
   stripMarkdownCodeFences,
 } from "./utils";
 import { POST } from "./route";
@@ -255,36 +253,6 @@ describe("Utility Functions", () => {
     });
   });
 
-  describe("extractSubjectFromText", () => {
-    it("extracts subject when prefix exists", () => {
-      expect(extractSubjectFromText("Subject: Hey there\nBody goes here")).toBe(
-        "Hey there",
-      );
-      expect(extractSubjectFromText("SUBJECT: Hey there")).toBe("Hey there");
-    });
-    it("falls back to the first line if no Subject prefix is found", () => {
-      expect(
-        extractSubjectFromText("First line is subject\nSecond is body"),
-      ).toBe("First line is subject");
-    });
-    it("returns a default string if content is completely empty", () => {
-      expect(extractSubjectFromText("")).toBe("Quick connect");
-    });
-  });
-
-  describe("extractBodyFromText", () => {
-    it("removes the subject line and its trailing newline", () => {
-      expect(
-        extractBodyFromText("Subject: Hey there\nBody goes here\nAnd here"),
-      ).toBe("Body goes here\nAnd here");
-    });
-    it("returns the whole text if no subject line exists", () => {
-      expect(extractBodyFromText("Body goes here\nAnd here")).toBe(
-        "Body goes here\nAnd here",
-      );
-    });
-  });
-
   describe("stripMarkdownCodeFences", () => {
     it("removes triple backtick fences at start and end", () => {
       expect(stripMarkdownCodeFences("```\nHello\n```")).toBe("Hello");
@@ -392,7 +360,6 @@ describe("POST /api/extension/generate", () => {
 
     expect(body.body.length).toBeLessThanOrEqual(300);
     expect(body.body.endsWith(".")).toBe(true);
-    expect(body.validation.truncated).toBe(true);
   });
 
   it("returns 400 on Zod validation failure with field details", async () => {
