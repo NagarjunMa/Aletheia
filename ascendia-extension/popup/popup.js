@@ -434,67 +434,9 @@ function displayOutput(output) {
   }
 
   displayValidationFeedback(processedOutput);
-  renderScoreMeter(processedOutput);
 
   outputSection.classList.remove('hidden');
   hideError();
-}
-
-function renderScoreMeter(output) {
-  const section = document.getElementById('score-section');
-  const scoreValue = document.getElementById('score-value');
-  const scoreFill = document.getElementById('score-fill');
-  const patternsToggle = document.getElementById('patterns-toggle');
-  const patternsList = document.getElementById('patternsList');
-  const patternsBtn = document.getElementById('patternsBtn');
-
-  const score = typeof output.authenticityScore === 'number' ? output.authenticityScore : null;
-  const patterns = Array.isArray(output.modificationsApplied) ? output.modificationsApplied : [];
-
-  if (score === null) {
-    section.classList.add('hidden');
-    return;
-  }
-
-  scoreValue.textContent = `${Math.round(score)}/100`;
-
-  // Color the bar
-  scoreFill.className = 'score-bar-fill';
-  if (score >= 70) scoreFill.classList.add('score-high');
-  else if (score >= 40) scoreFill.classList.add('score-mid');
-  else scoreFill.classList.add('score-low');
-
-  // Animate width after a brief delay so the transition fires
-  scoreFill.style.width = '0%';
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      scoreFill.style.width = `${Math.round(score)}%`;
-    });
-  });
-
-  if (patterns.length > 0) {
-    patternsList.innerHTML = '';
-    patterns.forEach(p => {
-      const li = document.createElement('li');
-      li.textContent = p;
-      patternsList.appendChild(li);
-    });
-    patternsToggle.classList.remove('hidden');
-
-    // Reset toggle state
-    patternsList.classList.add('hidden');
-    patternsBtn.textContent = 'Show removed patterns ▾';
-
-    patternsBtn.onclick = () => {
-      const isHidden = patternsList.classList.contains('hidden');
-      patternsList.classList.toggle('hidden', !isHidden);
-      patternsBtn.textContent = isHidden ? 'Hide removed patterns ▴' : 'Show removed patterns ▾';
-    };
-  } else {
-    patternsToggle.classList.add('hidden');
-  }
-
-  section.classList.remove('hidden');
 }
 
 function updateCharacterCountDisplay(text, category) {

@@ -1,8 +1,8 @@
 # Aletheia — AI-Powered LinkedIn Outreach Platform
 
-Generate authentic, human-sounding LinkedIn connection requests, cold emails, and InMails. Aletheia reads a target's LinkedIn profile, combines it with the user's resume and intent, then runs the output through a multi-stage sanitization and AI-fingerprint-removal pipeline.
+Generate authentic, human-sounding LinkedIn connection requests, cold emails, and InMails. Aletheia reads a target's LinkedIn profile, combines it with the user's resume and intent, then runs the output through a multi-stage sanitization + AI-fingerprint-stripping pipeline.
 
-**Pipeline:** PR → ci.yml (lint+test) → merge to main → cd.yml (mocked E2E → staging) → staging.yml (real E2E → production)
+**Pipeline:** PR → `ci.yml` (lint + type + test + guardrails + smoke build) → merge to `main` → Vercel auto-deploys.
 **License:** MIT
 
 ---
@@ -17,7 +17,7 @@ cp .env.local.example .env.local   # fill in required values (see below)
 npm run dev                         # or: make dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). The app is running when you see the dashboard login.
+Open [http://localhost:3000](http://localhost:3000).
 
 ---
 
@@ -41,12 +41,12 @@ Chrome Extension (MV3)                  Next.js Web App
              session/            ← GET   cookie → token bridge
            app/api/auth/me/      ← GET   user info + usage
            app/api/feedback/     ← POST  general feedback
-           app/api/health/       ← GET   health check (/healthz alias)
+           app/api/health/       ← GET   health check
                  │
         ┌────────┼────────┐
         ▼        ▼        ▼
-   Supabase  Anthropic  PostHog / Sentry
-   (DB+Auth) (Claude)   (analytics / errors)
+   Supabase  Anthropic  Sentry
+   (DB+Auth) (Claude)   (errors)
 ```
 
 ---
@@ -60,7 +60,7 @@ aletheia/
 │   │   ├── extension/{generate,feedback,config,session}/
 │   │   │   ├── route.ts        ← HTTP handler
 │   │   │   ├── schema.ts       ← Zod schema (imported by route + tests)
-│   │   │   └── route.test.ts   ← schema validation tests
+│   │   │   └── route.test.ts   ← schema + handler tests
 │   │   ├── {auth/me,feedback,health}/
 │   │   └── settings/
 │   ├── auth/{login,register,callback,forgot-password,reset-password}/
@@ -70,33 +70,31 @@ aletheia/
 ├── ascendia-extension/          ← Chrome MV3 extension (separate from web app)
 │   ├── background/service-worker.js
 │   ├── content/{linkedin-reader.js,auto-filler.js}
-│   ├── popup/{popup.html,popup.js,popup.css}
+│   ├── popup/{popup.html,popup.js,popup.css,popup-core.js}
 │   ├── settings/{settings.html,settings.js,settings.css}
 │   └── manifest.json
 │
-├── components/landing/          ← Landing page components (Hero, Navbar, Features, Footer)
+├── components/landing/          ← Landing page components
 │
 ├── lib/
 │   ├── ai/
 │   │   ├── prompts/             ← Category-specific system prompt builders
-│   │   ├── sanitizer.ts         ← sanitizeAIOutput() — HTML/PII/injection filtering
-│   │   ├── ai-fingerprint-detector.ts  ← detectAIFingerprints() — 21 patterns, 0–100 score
+│   │   ├── sanitizer.ts         ← sanitizeAIOutput() — content + safety filtering
+│   │   ├── ai-fingerprint-detector.ts  ← detectAIFingerprints() — 21 patterns
 │   │   └── style-analyzer.ts    ← analyzeStyle() + mergeStylePatterns()
-│   ├── supabase/
-│   │   ├── client.ts            ← createClient() — browser only
-│   │   └── server.ts            ← createClient() + createServiceClient() — server only
-│   ├── database/types.ts        ← generated Supabase types (do not hand-edit)
-│   ├── logger.ts                ← Pino logger (Node.js only) — writes to stdout + Grafana Loki
-│   ├── logger.edge.ts           ← Edge-compatible console logger — used only by middleware.ts
-│   └── cors.ts                  ← CORS policy helper
+│   ├── supabase/{client.ts,server.ts}
+│   ├── database/types.ts        ← generated Supabase types
+│   ├── logger.ts                ← Pino → stdout (Vercel logs)
+│   ├── logger.edge.ts           ← Edge-compatible console logger (middleware only)
+│   └── cors.ts
 │
-├── supabase/migrations/         ← SQL migration files (YYYYMMDD_NNN_description.sql)
-├── middleware.ts                 ← Auth session refresh + security headers
+├── supabase/migrations/         ← SQL migrations (YYYYMMDD_NNN_description.sql)
+├── middleware.ts                 ← auth session refresh + security headers + CSP nonce
 ├── next.config.js
-├── vitest.config.ts              ← Unit test config
-├── vitest.guardrails.config.ts   ← Guardrail test config (separate run)
-├── playwright.config.ts          ← E2E test config
-├── Makefile                      ← Developer command shortcuts
+├── vitest.config.ts
+├── vitest.guardrails.config.ts
+├── playwright.config.ts
+├── Makefile
 └── CLAUDE.md                     ← Full code conventions reference
 ```
 
@@ -104,15 +102,15 @@ aletheia/
 
 ## Environment Variables
 
-Copy `.env.local.example` to `.env.local` and fill in the required values.
+Copy `.env.local.example` to `.env.local`.
 
 ### Required
 
-| Variable | Where to find it |
-|----------|-----------------|
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project → Settings → API |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase project → Settings → API |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase project → Settings → API (keep server-only) |
+| Variable | Where |
+|----------|-------|
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase → Settings → API |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase → Settings → API |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Settings → API (server-only) |
 | `ANTHROPIC_API_KEY` | [console.anthropic.com](https://console.anthropic.com) |
 
 ### Optional
@@ -120,13 +118,8 @@ Copy `.env.local.example` to `.env.local` and fill in the required values.
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `LOG_LEVEL` | `debug` (dev) / `info` (prod) | Pino log level |
-| `LOKI_HOST` | — | Grafana Cloud Loki push URL (e.g. `https://logs-prod-036.grafana.net`) |
-| `LOKI_USERNAME` | — | Grafana Cloud numeric user ID |
-| `LOKI_PASSWORD` | — | Grafana Cloud Access Policy token (scope: `logs:write`) |
-| `NEXT_PUBLIC_POSTHOG_KEY` | — | Enables PostHog analytics |
-| `NEXT_PUBLIC_POSTHOG_HOST` | `https://app.posthog.com` | PostHog endpoint |
-| `NEXT_PUBLIC_SENTRY_DSN` | — | Enables Sentry (client) |
-| `SENTRY_DSN` | — | Enables Sentry (server/edge) |
+| `NEXT_PUBLIC_SENTRY_DSN` | — | Sentry client errors |
+| `SENTRY_DSN` | — | Sentry server/edge errors |
 | `EXTENSION_DAILY_LIMIT` | `30` | Max generation requests per user per day |
 | `NEXT_TELEMETRY_DISABLED` | — | Set `1` to opt out of Next.js telemetry |
 
@@ -134,12 +127,10 @@ Copy `.env.local.example` to `.env.local` and fill in the required values.
 
 ## Development Commands
 
-Use `make` (preferred) or `npm run` equivalents.
-
 ```bash
 make help          # list all targets
-make install       # install dependencies & initialize husky git hooks
-make setup         # full developer setup (install + env check)
+make install       # install deps + initialize husky hooks
+make setup         # install + env check
 make dev           # start dev server on :3000
 make build         # production build
 make lint          # ESLint
@@ -147,44 +138,52 @@ make type-check    # tsc --noEmit
 make format        # Prettier write
 make test          # unit tests, single run
 make guardrails    # guardrail tests (mandatory before lib/ai/ PRs)
-make e2e-smoke     # Playwright @smoke tests (local server, no real APIs — mirrors cd.yml)
-make e2e-staging   # Playwright @e2e tests against staging URL (set PLAYWRIGHT_BASE_URL + secrets)
+make e2e-smoke     # Playwright @smoke tests (local server, no real APIs)
 make e2e           # Run all Playwright E2E tests
 make ci            # full pipeline: lint → type-check → test → guardrails → build
+make test-ext      # extension unit + integration tests
+make build-ext     # extension esbuild → ascendia-extension/dist/
 make clean         # rm -rf .next coverage node_modules/.cache
 ```
 
-All targets map 1:1 to `npm run` scripts in `package.json`. See `Makefile` for the full list.
+All targets map 1:1 to `npm run` scripts. See `Makefile`.
 
 ---
 
 ## AI Pipeline
 
-Every message generated by `POST /api/extension/generate` passes through three stages:
+Every message generated by `POST /api/extension/generate` passes through:
 
-### Stage 1 — Negative lexicon (prompt-level)
-`sanitize()` in `lib/ai/prompts/linkedin-connection.ts`
-Strips 22 known AI vocabulary fingerprints from the raw Claude output before further processing (e.g., "I'm reaching out", "leverage", "delve into").
+### Stage 1 — Prompt building (the moat)
+`lib/ai/prompts/linkedin-connection.ts`
+Category-specific system prompts with grounding rules, banned phrase lists (39 LinkedIn, 25 email), no-fabrication enforcement. User inputs escaped via `escapeForXmlTag()` before injection.
 
-### Stage 2 — Content sanitization
+### Stage 2 — Claude generation
+- Model: `claude-sonnet-4-6`
+- Temperature: 0.8
+- Max tokens: 600
+- Timeout: 30s (returns 504 on exceed)
+
+### Stage 3 — Sanitization
 `sanitizeAIOutput()` in `lib/ai/sanitizer.ts`
-- HTML tag stripping (DOMPurify via `isomorphic-dompurify`)
-- Profanity filtering
-- PII pattern redaction: SSN (`\d{3}-\d{2}-\d{4}`), credit cards (`\d{16}`), email addresses
-- Injection blocking: `<script>`, `javascript:`, `UNION SELECT`, `DROP TABLE`, `| rm -rf`
-- Hate speech / violence / illegal activity detection → returns `success: false`
+- HTML tag stripping (regex — AI output is text-only, never rendered as HTML)
+- Profanity filtering (5 pattern groups)
+- PII redaction: SSN, credit card, email (context-aware — preserved for cold email)
+- Injection blocking: `<script>`, `javascript:`, SQL/command patterns
+- Hate speech / violence → returns `success: false`
 
-### Stage 3 — AI fingerprint detection
+### Stage 4 — AI fingerprint stripping
 `detectAIFingerprints()` in `lib/ai/ai-fingerprint-detector.ts`
-Runs 21 named regex patterns (em-dash usage, "hope this finds you well", corporate buzzwords, etc.) against the sanitized content. Each pattern match reduces the **authenticity score** (0–100). Detected patterns are replaced with human equivalents and returned in `modificationsApplied`.
+21 regex patterns (em-dash, "hope this finds you well", corporate buzzwords, formality formulas) rewritten with human equivalents. No scoring — patterns are stripped or not.
 
-**Model:** `claude-sonnet-4-6` | **Temperature:** 0.8 | **Max tokens:** 600
+### Stage 5 — Style learning (feedback loop)
+After user thumbs-up: `analyzeStyle()` + `mergeStylePatterns()` update `user_preferences.style_patterns` via atomic RPC. Next generate request reads style patterns + recent approved messages and injects them as `acceptedExamples` + `styleProfile` into the prompt.
 
 **Category constraints:**
 
 | Category | Format | Limit |
 |----------|--------|-------|
-| `linkedin_connection` | Plain text | 270 chars |
+| `linkedin_connection` | Plain text | 300 chars |
 | `cold_email` | JSON `{ subject, body }` | 150 words |
 | `linkedin_inmail` | JSON `{ subject, body }` | 120 words |
 
@@ -197,104 +196,84 @@ Runs 21 named regex patterns (em-dash usage, "hope this finds you well", corpora
 | Table | Purpose |
 |-------|---------|
 | `profiles` | User profile data, synced from Supabase Auth |
-| `generated_drafts` | All generated messages with authenticity scores |
-| `user_feedback` | Explicit thumbs-up/down feedback on drafts |
-| `user_preferences` | Per-user settings: formality, theme, style patterns |
-| `extension_rate_limits` | 30 req/day rolling window per user |
+| `generated_drafts` | All generated messages |
+| `user_feedback` | Thumbs-up/down feedback on drafts |
+| `user_preferences` | Per-user settings + learned style patterns |
+| `extension_rate_limits` | Daily rolling window per user |
 
-**Migrations:**
-Files live in `supabase/migrations/` with the naming convention `YYYYMMDD_NNN_description.sql`.
-Apply via the Supabase Dashboard SQL Editor (recommended) or `supabase db push` if your CLI version matches the remote history.
+**Migrations:** Files in `supabase/migrations/` follow `YYYYMMDD_NNN_description.sql`. Apply via Supabase Dashboard SQL Editor or `supabase db push`.
 
-**Regenerate TypeScript types** after a schema change:
+**Regenerate TypeScript types:**
 ```bash
-npx supabase gen types typescript \
-  --db-url "postgresql://postgres:[password]@db.[project-ref].supabase.co:5432/postgres" \
-  > lib/database/types.ts
+npx supabase gen types typescript --linked > lib/database/types.ts
 ```
-Do not hand-edit `lib/database/types.ts` — it is fully generated.
+Do not hand-edit `lib/database/types.ts`.
 
-**Row-Level Security:** Enabled on all tables. Use `createClient()` (anon key) for user-facing queries. Only use `createServiceClient()` (service role) for background jobs and admin operations.
+**RLS:** Enabled on all tables. Use `createClient()` (anon) for user queries. Only use `createServiceClient()` (service role) for background jobs.
 
 ---
 
 ## Extension Development
 
-The Chrome extension lives in `ascendia-extension/` and is a **separate codebase** from the Next.js app.
+The Chrome extension lives in `ascendia-extension/` — separate codebase.
 
-**Load the extension in Chrome:**
-1. Go to `chrome://extensions`
+**Load in Chrome:**
+1. `chrome://extensions`
 2. Enable "Developer mode" (top right)
-3. Click "Load unpacked" → select `ascendia-extension/`
-4. The extension icon appears in your toolbar
+3. "Load unpacked" → select `ascendia-extension/`
 
 **Key files:**
 
 | File | Role |
 |------|------|
-| `background/service-worker.js` | Handles messages from popup: generate, authenticate, logout, health check |
-| `content/linkedin-reader.js` | Reads LinkedIn profile DOM on `/in/*` pages, sends data to service worker |
-| `content/auto-filler.js` | Fills the LinkedIn message compose box with the generated draft |
-| `popup/popup.js` | Main popup UI — triggers generation, shows authenticity score, captures feedback |
-| `settings/settings.js` | Extension settings page (accessible via right-click → Options) |
+| `background/service-worker.js` | Routes popup messages: generate, auth, logout |
+| `background/auth-core.js` | Token lifecycle, session bridge, 20-min proactive refresh |
+| `content/linkedin-reader.js` | Reads LinkedIn profile via `innerText` |
+| `content/auto-filler.js` | Fills LinkedIn compose box with generated draft |
+| `popup/popup.js` | Main UI — triggers generation, captures feedback |
+| `popup/popup-core.js` | Pure functions: parsing, payload building, char counts |
 
-**Session bridge:**
-The extension uses a Bearer token for API calls. On first use it fetches a token via `GET /api/extension/session` (cookie-based auth endpoint), stores it in `chrome.storage.local`, and refreshes via an alarm every 20 minutes.
+**Session bridge:** Extension uses Bearer token. On first use, fetches via `GET /api/extension/session` (cookie auth), stores in `chrome.storage.local`, refreshes via alarm every 20 min.
 
 **Host permissions:** `linkedin.com`, `app.apollo.io`, `localhost:3000`, `*.vercel.app`
 
-After any change to extension files: reload the extension from `chrome://extensions` (click the refresh icon on the extension card).
+Reload extension after any change: `chrome://extensions` → refresh icon on extension card.
 
 ---
 
 ## Testing
 
-**286 tests, >87.5% coverage overall.** Test files are co-located with source files.
+**232 root unit tests + 13 guardrails + 94 extension tests** — all co-located with source.
 
 ### Unit tests — `make test`
 
-| Test file | What it covers |
-|-----------|---------------|
-| `lib/ai/*.test.ts` | Sanitizer logic, fingerprint detectors, style analyzers |
-| `app/api/**/*.test.ts` | Auth guards, CORS, generated/settings route handlers |
-| `app/api/extension/generate/route.test.ts` | Schema validation, business logic, fallback JSON parse, error boundaries |
-| `__tests__/helpers/` | Module mocks natively disconnecting Supabase and Anthropic APIs |
+| Test file | Coverage |
+|-----------|----------|
+| `lib/ai/*.test.ts` | Sanitizer, fingerprint detector, style analyzer, prompt builder |
+| `app/api/**/*.test.ts` | Auth guards, CORS, all route handlers |
+| `app/api/extension/generate/route.test.ts` | Schema validation, business logic, error branches |
+| `__tests__/helpers/` | Module mocks for Supabase + Anthropic |
 
 ### Guardrail tests — `make guardrails`
 
-Must pass before any PR that touches `lib/ai/`. Tests the sanitizer against adversarial inputs:
+Mandatory before any PR touching `lib/ai/`. Adversarial sanitizer inputs:
 - XSS (`<script>` injection)
 - SQL injection (`UNION SELECT`, `DROP TABLE`)
 - Command injection (`| rm -rf`)
-- PII patterns (SSN, credit card numbers)
-- Hate speech and violence patterns
+- PII (SSN, credit card)
+- Hate speech / violence (incl. leet-speak obfuscation)
 
-### E2E tests — two tiers
+### E2E tests — `make e2e-smoke`
 
-Playwright, Chromium only. Test files live in `e2e/`.
+Playwright, Chromium, `@smoke` tag. `e2e/health.spec.ts` + `e2e/ui-smoke.spec.ts`. No real APIs. Safe with dummy env vars.
 
-| Tier | Tag | Command | When it runs |
-|------|-----|---------|-------------|
-| Mocked | `@smoke` | `make e2e-smoke` | cd.yml (post-merge on main), locally |
-| Real | `@e2e` | `make e2e-staging` | staging.yml (real Anthropic, staging URL) |
+### Extension tests — `make test-ext`
 
-**Mocked (`@smoke`):** `e2e/health.spec.ts` + `e2e/ui-smoke.spec.ts` — page loads and health check. No real APIs. Safe with dummy env vars.
+Run from `ascendia-extension/`. Covers auth core, profile extractor, popup core, and full generate-flow integration with chrome.* API mocks.
 
-**Real (`@e2e`):** `e2e/generate.spec.ts` — authenticates as `test@aletheia-staging.com` via Supabase, calls the generate endpoint with real Anthropic. Capped at one call per run.
+### Schemas in `schema.ts`
 
-To run real E2E locally against staging:
-```bash
-PLAYWRIGHT_BASE_URL=https://aletheia-staging.vercel.app \
-NEXT_PUBLIC_SUPABASE_URL=<cloud-url> \
-NEXT_PUBLIC_SUPABASE_ANON_KEY=<cloud-anon-key> \
-STAGING_TEST_USER_EMAIL=test@aletheia-staging.com \
-STAGING_TEST_USER_PASSWORD=<password> \
-make e2e-staging
-```
-
-### Schemas are in `schema.ts`
-
-Each API route has a `schema.ts` sibling that exports the Zod schema. Import from `schema.ts` in both the route handler and the test file:
+Each API route has a `schema.ts` sibling exporting the Zod schema. Imported by both `route.ts` and `route.test.ts`. Keeps tests free of Next.js routing constraints (Next.js only allows HTTP method exports from `route.ts`).
 
 ```
 app/api/extension/generate/
@@ -303,110 +282,83 @@ app/api/extension/generate/
   route.test.ts   ← import { generateRequestSchema } from './schema'
 ```
 
-This keeps test files free of Next.js routing constraints (Next.js only permits HTTP method exports from `route.ts`).
-
 ---
 
 ## CI/CD & Local Hooks
 
-Three-stage fully automated pipeline. Zero manual git steps after merging a PR.
+Single-stage pipeline. PR-gated. Vercel auto-deploys `main` to production.
 
 ```
 feature/* → PR to main
               └── ci.yml  (PR gate — no real APIs)
                     lint-and-typecheck: ESLint + tsc --noEmit
-                    test: ~286 unit tests + 13 guardrail tests
+                    test: 232 unit + 13 guardrail tests
                     smoke-test: next build + curl /api/health
 
 merge to main
-              └── cd.yml  (post-merge gate)
-                    quality: lint + type-check + unit + guardrails
-                    e2e-mocked: Playwright @smoke tests, local server, dummy env vars
-                    promote: fast-forward staging branch → Vercel staging auto-deploys
-
-staging.yml fires via workflow_run on cd.yml success
-              └── quality: lint + type-check + unit + guardrails (on staging branch)
-                  e2e-staging: Playwright @e2e tests, real Anthropic, against staging URL
-                  promote: fast-forward production branch → Vercel production auto-deploys
+              └── Vercel auto-deploys → production
 ```
 
-**Branch → Vercel mapping:**
+**Branch protection on `main`:** require 1 PR approval + all 3 `ci.yml` checks green before merge.
 
-| Branch | Vercel project | Purpose |
-|--------|---------------|---------|
-| `main` | *(none)* | Integration gate only |
-| `staging` | `aletheia-staging` | Real-data E2E gate |
-| `production` | `aletheia` | Live app |
+**Required GitHub Secrets:**
+- `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (build-time)
+- `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`, `SENTRY_DSN` (runtime — set in Vercel project env)
 
-**Required GitHub Secrets** (repo Settings → Secrets):
-`STAGING_URL`, `STAGING_SUPABASE_URL`, `STAGING_SUPABASE_ANON_KEY`, `STAGING_TEST_USER_EMAIL`, `STAGING_TEST_USER_PASSWORD`, `STAGING_ANTHROPIC_API_KEY`
-
-**Husky Pre-commit hook:**
-Runs `eslint --fix`, `prettier --write`, and `vitest related --run` against modified files only (via lint-staged). Fast — only touches changed files.
+**Husky pre-commit:** `eslint --fix`, `prettier --write`, `vitest related --run` against modified files only via lint-staged. Fast — only touches changed files.
 
 ---
 
 ## Adding a Feature
 
-1. **Create `schema.ts`** next to the route with your Zod schema (never inline it in `route.ts`).
-2. **Create `route.ts`** importing from `schema.ts`.
-3. **Create `route.test.ts`** importing from `schema.ts` — test schema validation, not HTTP behaviour.
-4. **For any `lib/ai/` change:** update or add a test in `lib/ai/*.test.ts` and `lib/ai/*.guardrails.test.ts`.
-5. **Run `make ci`** — all checks must pass locally before opening a PR.
-6. **Open a PR to `main`.**
+1. Create `schema.ts` next to the route with your Zod schema (never inline in `route.ts`).
+2. Create `route.ts` importing from `schema.ts`.
+3. Create `route.test.ts` importing from `schema.ts` — test schema validation + handler logic.
+4. For any `lib/ai/` change: update `lib/ai/*.test.ts` and `lib/ai/*.guardrails.test.ts`.
+5. Run `make ci` — all checks must pass locally before opening PR.
+6. Open PR to `main`.
 
-Full conventions are in `CLAUDE.md` at the project root.
+Full conventions in `CLAUDE.md`.
 
 ---
 
 ## Security Hardening
 
-28 issues identified via strict production readiness audit. All resolved across 4 tiers. See `.claude/production-readiness-evaluation.md` for full audit trail.
+28 production-readiness issues resolved across 4 tiers. See `.claude/production-readiness-evaluation.md` for audit trail.
 
 ### Tier 1 — Critical Security
 
 | Measure | Implementation | File |
 |---------|---------------|------|
-| **Fail-closed rate limiting** | Supabase RPC failure = denied. 1-minute retry window. | `route.ts` |
+| **Fail-closed rate limiting** | Supabase RPC failure = denied. 1-min retry window. | `route.ts` |
 | **Claude API timeout** | 30s timeout on `messages.create()`. Explicit `504`. | `route.ts` |
-| **Session endpoint rate limit** | In-memory sliding window: 20 req/min per IP. | `session/route.ts` |
-| **DOMPurify fail-closed** | HTML tags stripped entirely if DOMPurify unavailable. No regex fallback. | `sanitizer.ts` |
-| **Prompt injection defense** | `escapeForXmlTag()` on all user inputs before XML tag injection. | `linkedin-connection.ts` |
+| **Session endpoint rate limit** | In-memory sliding window: 20 req/min/IP. | `session/route.ts` |
+| **Prompt injection defense** | `escapeForXmlTag()` on all user inputs. | `linkedin-connection.ts` |
 
 ### Tier 2 — Security & Quality
 
 | Measure | Implementation | File |
 |---------|---------------|------|
-| **Nonce-based CSP** | `'nonce-{nonce}' 'strict-dynamic'` replaces `'unsafe-inline' 'unsafe-eval'`. Per-request nonce via `x-nonce` header. | `middleware.ts`, `layout.tsx` |
-| **Balanced JSON extraction** | Brace-depth tracking with string boundary awareness. | `utils.ts` |
-| **Anthropic 401 → 502** | Upstream auth failure returns 502 Bad Gateway, not 500. | `route.ts` |
-| **Context-aware email redaction** | Email addresses preserved in cold emails, redacted on LinkedIn. | `sanitizer.ts` |
-| **AI detection AND logic** | Both confidence + authenticity must agree to flag as AI. | `ai-fingerprint-detector.ts` |
+| **Nonce-based CSP** | `'nonce-{nonce}' 'strict-dynamic'` per request via `x-nonce` header. | `middleware.ts`, `layout.tsx` |
+| **Anthropic 401 → 502** | Upstream auth failure returns 502 Bad Gateway. | `route.ts` |
+| **Context-aware email redaction** | Emails preserved in cold email, redacted on LinkedIn. | `sanitizer.ts` |
 
 ### Tier 3 — Hardening
 
 | Measure | Implementation | File |
 |---------|---------------|------|
-| **CORS wildcard removed** | No `*` for null-origin. Extensions send `chrome-extension://` origin. | `cors.ts` |
-| **Zod error field details** | 400 responses include `details: [{ field, message }]`. | `route.ts` |
-| **Model string constant** | Single `CLAUDE_MODEL` constant, no scattered literals. | `route.ts` |
-| **Schema input limits** | `profileUrl.max(2048)`, `resume.max(50k)`, `jd.max(20k)`, `examples.max(5)`. | `schema.ts` |
+| **CORS** | No `*` for null-origin. Extensions send `chrome-extension://` origin. | `cors.ts` |
+| **Zod error details** | 400 responses include `details: [{ field, message }]`. | `route.ts` |
+| **Model string constant** | Single `CLAUDE_MODEL` constant. | `route.ts` |
+| **Schema input limits** | `profileUrl.max(2048)`, `resume.max(50k)`, `jd.max(20k)`. | `schema.ts` |
 
-### Final Sweep
+### Tier 4 — MVP Right-Sizing (Phase 24)
 
-| Measure | Implementation | File |
-|---------|---------------|------|
-| **Service role key guard** | Explicit null-check; key never passed to logger. | `lib/supabase/server.ts` |
-| **ANTHROPIC_API_KEY guard** | Explicit check + clear error if missing. | `route.ts` |
-| **Atomic style merge** | RPC-based atomic increment with upsert fallback. | `feedback/route.ts` |
-| **64-bit cache hash** | FNV-1a replaces 32-bit djb2. | `sanitizer.ts` |
-| **Configurable daily limit** | `EXTENSION_DAILY_LIMIT` env var, fallback 30. | `route.ts` |
-| **Dead code removed** | `email: ""` → returns actual `user.email`. | `route.ts` |
-| **Non-text response handling** | Explicit error + content type logging. | `route.ts` |
-| **Expanded profanity filter** | 5 pattern groups: stretched, compound, acronyms. | `sanitizer.ts` |
-| **Leet-speak blocked content** | Obfuscation variants: `n@zi`, `k1ll`, slurs. | `sanitizer.ts` |
-| **Whitespace schema fix** | `.trim().min(10)` on profileMarkdown. | `schema.ts` |
-| **Code fence stripping** | Finds fence anywhere in text, not just wrapping. | `utils.ts` |
+Removed measurement theater while keeping moat. See `.claude/phase-24-strategic-deletion.md`.
+- AI pipeline LoC: 1,688 → 1,097 (-35%)
+- Deps removed: 16 packages (zustand, react-query, OTel, Loki, PostHog, DOMPurify, webpack polyfills, pino-pretty)
+- CI workflows: 3 → 1
+- All moat preserved: prompt grounding, style learning, scraper, fail-closed rate limit, prompt escape, 30s timeout, Zod validation.
 
 ---
 
@@ -414,14 +366,14 @@ Full conventions are in `CLAUDE.md` at the project root.
 
 | Rule | Detail |
 |------|--------|
-| Supabase client selection | `createClient()` = browser; `createServiceClient()` = server/admin. Never mix. |
+| Supabase client | `createClient()` = browser; `createServiceClient()` = server/admin. Never mix. |
 | Zod schemas | Always in `schema.ts` — not inline in `route.ts` |
-| SDK instantiation | Use lazy factory functions (`getAnthropic()`, `getSupabaseService()`). No module-level instances — they break Vercel edge cold starts. |
-| Analytics / style learning | Fire-and-forget. Never `await` these in the generate response path. |
-| Logging | `createLogger('module-name')` from `lib/logger.ts`. No `console.log`. |
-| API errors | Return `{ error: string, code?: string }` with the correct HTTP status. |
-| Security headers | Via `middleware.ts` only — not ad-hoc in individual routes. |
-| RLS | Never bypass with service role key for user-facing queries. |
+| SDK instantiation | Lazy factory functions only — no module-level instances (breaks Vercel edge cold starts). |
+| Style learning / analytics | Fire-and-forget. Never `await` in generate response path. |
+| Logging | `createLogger('module')` from `lib/logger.ts`. No `console.log`. Middleware uses `lib/logger.edge.ts`. |
+| API errors | Return `{ error: string, code?: string, details?: Array }` with correct HTTP status. |
+| Security headers | Via `middleware.ts` only — not ad-hoc in routes. |
+| RLS | Never bypass with service role for user-facing queries. |
 
 ---
 
@@ -430,41 +382,7 @@ Full conventions are in `CLAUDE.md` at the project root.
 | System | Trigger | Endpoint / check |
 |--------|---------|-----------------|
 | **Health check** | Always on | `GET /api/health` |
-| **Pino logging** | Always on | JSON to stdout (Vercel logs); pretty in dev |
-| **Grafana Cloud Loki** | Set `LOKI_HOST` + `LOKI_USERNAME` + `LOKI_PASSWORD` | Structured logs shipped via HTTP — no extra packages |
+| **Pino logging** | Always on | JSON to stdout → Vercel function logs |
 | **Sentry** | Set `SENTRY_DSN` | Client + server + edge error tracking |
-| **PostHog** | Set `NEXT_PUBLIC_POSTHOG_KEY` | Product analytics, feature usage |
 
-### Loki log queries (Grafana → Explore → Loki)
-
-```logql
-# All logs
-{app="aletheia"}
-
-# Production only / local only
-{app="aletheia", env="production"}
-{app="aletheia", env="local"}
-
-# Errors only
-{app="aletheia"} | json | level="error"
-
-# Specific module (e.g. generate route)
-{app="aletheia"} | json | module="generate"
-
-# Trace a single request end-to-end
-{app="aletheia"} | json | requestId="<x-request-id header value>"
-```
-
-### Loki architecture
-
-```
-API routes (Node.js runtime)
-  └── lib/logger.ts  (pino + custom fetch-based Loki stream)
-        ├── stdout       → Vercel log drain
-        └── fetch POST /loki/api/v1/push  → Grafana Cloud Loki → Grafana Explore
-
-middleware.ts (Edge runtime — no Node.js streams allowed)
-  └── lib/logger.edge.ts  (console.* only, same createLogger() API)
-```
-
-`middleware.ts` uses `lib/logger.edge.ts` (console-only) because the Edge Runtime forbids Node.js streams. All API routes use `lib/logger.ts` (pino + Loki). Never import `lib/logger.ts` from middleware.
+Vercel function logs cover the 10–50 user MVP tier. For higher retention or log query language, add a log aggregator (Axiom, Better Stack, or Grafana Cloud Loki) by extending `lib/logger.ts` with a custom pino stream.

@@ -65,7 +65,16 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  if (!corsHeaders["Access-Control-Allow-Origin"]) {
+  // Session endpoint allows:
+  // 1. Requests with a recognized CORS origin (chrome-extension://, localhost, app URL)
+  // 2. Null-origin requests with x-extension-source header (service worker fetches)
+  // Service worker fetch() with credentials:'include' sends no origin header,
+  // but does send the custom header we set.
+  const hasAllowedOrigin = !!corsHeaders["Access-Control-Allow-Origin"];
+  const isExtensionSource =
+    request.headers.get("x-extension-source") === "aletheia-extension";
+
+  if (!hasAllowedOrigin && !isExtensionSource) {
     log.info("Origin not allowed");
     return NextResponse.json(
       { error: "Origin not allowed" },

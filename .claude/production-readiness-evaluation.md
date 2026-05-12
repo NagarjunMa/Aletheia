@@ -207,7 +207,7 @@ Claimed >87% — but `vitest.config.ts` excludes database types, Supabase wrappe
 4. ~~Change rate limit to fail-closed~~ — **DONE 2026-05-08**
 5. ~~Escape user inputs in system prompts (CDATA or encoding)~~ — **DONE 2026-05-08**
 6. ~~Make DOMPurify mandatory (remove regex fallback)~~ — **DONE 2026-05-08**
-7. Add extension tests (at minimum: service worker auth flow)
+7. ~~Add extension tests (at minimum: service worker auth flow)~~ — **DONE 2026-05-08** — 100 tests (auth, content scripts, popup, integration)
 
 ### Should-Have for Scale
 8. ~~Extract magic numbers to config constants~~ — **DONE 2026-05-08** — DAILY_LIMIT via env var
@@ -224,7 +224,7 @@ Claimed >87% — but `vitest.config.ts` excludes database types, Supabase wrappe
 17. Frontend page tests
 18. Accessibility audit (WCAG 2.1 AA)
 19. Visual regression testing
-20. Extension integration tests
+20. ~~Extension integration tests~~ — **DONE 2026-05-08** — 8 integration tests
 21. Real-time field validation on auth forms
 22. Conversation threading (schema exists, code doesn't)
 23. Vector embedding style matching (RPCs exist, unused)
@@ -237,12 +237,12 @@ Claimed >87% — but `vitest.config.ts` excludes database types, Supabase wrappe
 |------|-------------|-------------|-------------|-------------|-------|-------|
 | Architecture | 7.5/10 | 8/10 | 8.5/10 | 8.5/10 | **9/10** | Atomic RPCs, env var config, explicit error paths |
 | Security | 4/10 | 6.5/10 | 8/10 | 8.5/10 | **9/10** | All critical/high/medium resolved. Leet-speak blocked. |
-| Testing | 5/10 | 5/10 | 5/10 | 5/10 | 5/10 | Extension + frontend still untested |
+| Testing | 5/10 | 5/10 | 5/10 | 5/10 | **7/10** | Extension: 100 tests. Frontend pages still untested. |
 | Deployment | 7/10 | 7/10 | 7/10 | 7/10 | 7/10 | No change |
 | Generation Quality | 6.5/10 | 6.5/10 | 7/10 | 7.5/10 | **8/10** | False positives fixed, profanity expanded |
 | Code Quality | 7/10 | 7.5/10 | 8/10 | 8.5/10 | **9/10** | No dead code, no magic numbers, explicit errors |
-| Production Readiness | 5/10 | 6.5/10 | 7.5/10 | 8/10 | **8.5/10** | 6/7 must-haves + all code issues resolved |
-| **Overall** | **6.5/10** | **7.5/10** | **8/10** | **8.5/10** | **9/10** | **Extension tests = only remaining gap** |
+| Production Readiness | 5/10 | 6.5/10 | 7.5/10 | 8/10 | **9/10** | 7/7 must-haves resolved |
+| **Overall** | **6.5/10** | **7.5/10** | **8/10** | **8.5/10** | **9.5/10** | **All must-haves done. Frontend pages = nice-to-have.** |
 
 ---
 

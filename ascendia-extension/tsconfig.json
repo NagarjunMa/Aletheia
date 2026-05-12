@@ -44,6 +44,8 @@
     "node_modules",
     "dist",
     "**/*.js",
-    "**/*.d.ts"
+    "**/*.d.ts",
+    "**/*.test.ts",
+    "test/**"
   ]
 }

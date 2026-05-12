@@ -830,6 +830,153 @@ Completion checklist:
 
 --------------------------------------------------------------------------------
 
+PHASE 23 — Extension Testing Implementation
+Status: [x] COMPLETE — 2026-05-08
+--------------------------------------------------------------------------------
+Last production-readiness blocker: extension had zero tests.
+
+Phase 0 — Refactored for testability:
+  Extracted pure functions from IIFEs into ES modules:
+  - background/auth-core.js — 20 exported functions (token validation, storage,
+    refresh, session fetch, usage, cookie parsing)
+  - content/profile-extractor.js — 5 exported functions (DOM extraction, name parsing)
+  - popup/popup-core.js — 5 exported functions (response parsing, char counts, payloads)
+  Added esbuild build step (build.mjs) for bundling ES modules → IIFEs for Chrome.
+
+Phase 1 — Test infrastructure:
+  - ascendia-extension/vitest.config.ts — Node environment, setup file
+  - ascendia-extension/test/setup.ts — Full chrome.* API mock (MV3 complete)
+  - ascendia-extension/test/chrome-mocks.ts — In-memory storage, runtime, alarms,
+    tabs, cookies, scripting mocks + wireMessagePassing() for integration tests
+
+Phase 2 — Auth core tests (44 tests):
+  Token validation, refresh, session fetch, cookie parsing, storage roundtrip,
+  usage limits, usage logging, accepted example filtering, auth error detection
+
+Phase 3 — Content script tests (22 tests):
+  Profile extraction from DOM, name parsing from title, LinkedIn page detection,
+  markdown extraction with truncation, profile change detection
+
+Phase 4 — Popup core tests (26 tests):
+  JSON response parsing, code fence stripping, char count limits per category,
+  payload construction, score display formatting, auth error detection
+
+Phase 5 — Integration tests (8 tests):
+  Full generate flow, cold email JSON parsing, expired token → refresh,
+  usage limit blocking, session roundtrip, clearAuth → status check
+
+Config:
+  - Root vitest.config.ts excludes ascendia-extension/** (separate test suite)
+  - Makefile: test-ext, build-ext targets
+  - .gitignore: ascendia-extension/dist/
+  - Extension package.json: test, test:watch, build:ext scripts
+
+Completion checklist:
+  [x] cd ascendia-extension && npx vitest --run → PASSED (100 tests, 4 files)
+  [x] npm run test -- --run → PASSED (286 tests, root unchanged)
+  [x] npm run test:guardrails -- --run → PASSED (13 tests)
+
+--------------------------------------------------------------------------------
+
+PHASE 24 — Strategic Deletion (MVP Right-Sizing for 10–50 Users)
+Status: [x] COMPLETE — 2026-05-11
+--------------------------------------------------------------------------------
+Removed measurement theater and overbuilt scaffolding. Kept moat (prompt grounding,
+style learning, AI-tell stripping, scraper, fail-closed rate limit, prompt escape).
+Plan: .claude/phase-24-strategic-deletion.md
+
+§1 Observability trim:
+  [x] lib/logger.ts — rewritten. Pino → stdout only. Loki HTTP push deleted. OTel mixin deleted.
+  [x] instrumentation.ts — dropped @vercel/otel registerOTel call. Sentry registration retained.
+  [x] lib/posthog/provider.tsx — deleted. lib/posthog/ removed.
+  [x] app/providers.tsx — PostHogProvider removed.
+  [x] app/api/extension/generate/route.ts — OTel tracer/meter/spans/metrics deleted.
+  [x] middleware.ts — posthog.com removed from CSP.
+  [x] package.json dev script — pino-pretty pipe removed.
+
+§2 Sanitizer dead-code removal (lib/ai/sanitizer.ts 585 → 245 LoC):
+  [x] Deleted: quickSanitize, sanitizeForExport, validateForStorage, sanitizeResponseMetadata,
+       sanitizeWithCaching, hashContent, cleanupCache, sanitizationCache, CACHE_TTL,
+       AIResponseMetadata interface, DOMPurify dynamic import + fallback path.
+  [x] Verified: only `dangerouslySetInnerHTML` site is JSON-LD on landing page —
+       AI output never rendered as HTML. HTML strip via regex retained.
+  [x] sanitizer.test.ts — removed 4 dead-export describe blocks.
+  [x] lib/ai/README.md — deleted (stale).
+
+§3 Fingerprint detector — drop scorer, keep stripper (515 → 195 LoC):
+  [x] Deleted: calculateAuthenticityScore, calculateInformalityScore, calculateVariation,
+       PLATFORM_AUTHENTICITY_RULES, isLikelyAIGenerated, sanitizeAIFingerprints,
+       analyzeContentAuthenticity, authenticityScore + confidence + isAIGenerated fields.
+  [x] Kept: AI_FINGERPRINT_PATTERNS (21 patterns), detectAIFingerprints (now strip-only),
+       cleanupSanitizedContent.
+  [x] ai-fingerprint-detector.test.ts — pruned to 13 pattern tests (was ~17 with score math).
+
+§4 Score UI removal from response + popup:
+  [x] generate/route.ts — authenticityScore, isAIGenerated, modificationsApplied,
+       validation object dropped from all response branches. Response shape now:
+       { success, body, [subject_line, word_count], category, character_count, usage, processingTime }
+  [x] popup.js — renderScoreMeter() deleted entirely.
+  [x] popup.html — #score-section block removed.
+  [x] popup-core.js — formatScoreDisplay() deleted.
+  [x] popup-core.test.ts — 6 score-display tests removed.
+
+§5 Triple parse → one retry (utils.ts 76 → 19 LoC):
+  [x] Deleted: extractJsonFromText, extractSubjectFromText, extractBodyFromText.
+  [x] generate/route.ts — regex-fallback branch (~100 LoC) replaced with 502 response
+       + "Generation format error, please retry" message. User retry = single human action.
+  [x] route.test.ts — 2 extract-utility describes removed, 1 truncation assertion updated.
+
+§6 Style threshold 3 → 1:
+  [x] generate/route.ts:139 — approved_message_count >= 3 → >= 1.
+  [x] settings/_settings-content.tsx — placeholder copy simplified to "approve a message".
+
+§7 CD pipeline collapse:
+  [x] Deleted .github/workflows/cd.yml, .github/workflows/staging.yml.
+  [x] Deleted e2e/generate.spec.ts (real-Anthropic E2E).
+  [x] Kept ci.yml — PR gate: lint + type-check + test + guardrails + smoke build.
+  [x] Makefile — e2e-staging target removed.
+  [x] Vercel: requires manual cleanup post-merge (delete aletheia-staging project,
+       point production project at main, delete staging+production branches, delete 6 STAGING_* secrets).
+
+§8 Dependency removal (16 packages dropped from package.json):
+  [x] zustand, @tanstack/react-query, @tanstack/react-query-devtools
+  [x] posthog-js, @vercel/otel, @opentelemetry/api, pino-pretty
+  [x] isomorphic-dompurify (no longer used after §2)
+  [x] crypto-browserify, stream-browserify, buffer, process (next.config.js webpack
+       fallbacks no longer needed — OTel was the only consumer)
+  [x] next.config.js — webpack fallback block + isomorphic-dompurify external trimmed.
+
+§9 Test suite pruning:
+  [x] Before: 286 root + 100 extension. After: 232 root + 94 extension (326 total).
+  [x] All test files green: npm run test, npm run test:guardrails, ascendia-extension vitest.
+
+§10 Documentation sync:
+  [x] CLAUDE.md — architecture diagram, tech stack table, env table, deployment section,
+       AI pipeline description, dos/don'ts, API contract — all updated.
+  [x] CLAUDE.md DON'T list — removed stale rules about pino-loki, DOMPurify regex fallback,
+       authenticity scoring weights.
+  [x] .env.local.example — POSTHOG, BUGSNAG entries removed.
+  [x] .claude/phase-24-strategic-deletion.md — full plan retained for reference.
+
+Numbers (estimated, pre/post):
+  AI pipeline LoC:    1,688  → ~950   (-44%)
+  generate/route.ts:    738  → ~480   (-35%)
+  Total root deps:       54  → 38     (-30%)
+  CI workflows:           3  → 1
+  Vercel projects:        2  → 1 (after manual cleanup)
+  Tests:                286  → 232 (root); 100 → 94 (extension)
+  All previous behaviour preserved: prompt grounding, style learning, scraper,
+  fail-closed rate limit, prompt-XML escape, 30s Claude timeout, Zod validation.
+
+Completion checklist:
+  [x] npx tsc --noEmit                       → 0 errors
+  [x] npx vitest --run                       → 232 tests passed
+  [x] npx vitest --config vitest.guardrails  → 13 tests passed
+  [x] cd ascendia-extension && npx vitest    → 94 tests passed
+  [x] npm run build                          → 19 routes, no errors
+
+--------------------------------------------------------------------------------
+
 ================================================================================
 NOTES
 ================================================================================

@@ -1,7 +1,6 @@
 "use client";
 
 import { ThemeProvider } from "next-themes";
-import { PostHogProvider } from "@/lib/posthog/provider";
 
 export function Providers({
   children,
@@ -18,7 +17,7 @@ export function Providers({
       disableTransitionOnChange
       {...(nonce ? { nonce } : {})}
     >
-      <PostHogProvider>{children}</PostHogProvider>
+      {children}
     </ThemeProvider>
   );
 }

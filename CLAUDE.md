@@ -33,25 +33,25 @@ Chrome Extension (MV3)              Next.js Web App
                  │
         ┌────────┼────────┐
         ▼        ▼        ▼
-   Supabase  Anthropic  PostHog/Sentry
-   (DB+Auth) (Claude)   (analytics/errors)
+   Supabase  Anthropic  Sentry
+   (DB+Auth) (Claude)   (errors)
 ```
 
 **Key design patterns:**
 - **SSR-first:** App Router, server actions, server components where possible
 - **Lazy factory functions:** `getAnthropic()`, `getSupabaseService()` — no module-level instantiation
 - **Fire-and-forget analytics:** style learning / feedback processing is async, never blocks response
-- **Multi-layer fallback parsing:** JSON → sanitize+retry → regex extraction → raw text
+- **Single-pass parsing:** JSON → on failure, 502 with retry instruction. No regex extraction layer.
 - **Smart truncation:** LinkedIn 270-char limit enforced by last-sentence boundary, not hard cut
 - **Fail-closed rate limiting:** if Supabase RPC fails, requests are denied (not allowed) — prevents unlimited API burn during outages
 - **Prompt injection defense:** all user inputs escaped via `escapeForXmlTag()` before injection into `<user_input>` tags
 
 **AI Pipeline (core differentiator):**
-1. Build prompt from category templates (`/lib/ai/prompts/`)
-2. Claude generates (temp 0.8, max 600 tokens)
-3. Basic sanitization — unicode stripping, blocked patterns, HTML sanitization, whitespace
-4. AI fingerprint detection — 21 patterns scored against 100-point authenticity scale
-5. Return sanitized content + authenticity score + detected patterns
+1. Build prompt from category templates (`/lib/ai/prompts/`) — grounded, banned-phrase enforced
+2. Claude generates (temp 0.8, max 600 tokens, 30s timeout)
+3. Sanitization — unicode strip, blocked patterns, HTML tag strip, profanity, email redaction
+4. AI fingerprint stripping — 21 patterns rewritten (em-dash, buzzwords, formality formulas)
+5. Style learning — approved messages feed back into prompt as `acceptedExamples` + `styleProfile`
 
 ---
 
@@ -61,17 +61,15 @@ Chrome Extension (MV3)              Next.js Web App
 |-------|-----------|-------|
 | Framework | Next.js 14 (App Router) | SSR, API routes, middleware, Vercel edge |
 | UI | React 18, Tailwind CSS, Radix UI, shadcn/ui | Dark mode via class strategy |
-| State | Zustand (client), TanStack Query v5 (server) | React Hook Form for forms |
-| Validation | Zod | All API inputs validated at boundary |
+| Forms | React Hook Form + Zod | Validation at API boundary |
 | Database | Supabase (PostgreSQL + Auth + RLS) | `createClient()` for browser, `createServiceClient()` for admin |
 | AI | Anthropic Claude (`claude-sonnet-4-6`) | `@anthropic-ai/sdk` |
 | Auth | Supabase Auth SSR | Bearer token (extension), cookies (web) |
 | Extension | Chrome Manifest V3 | Service worker, content scripts, popup |
-| Logging | Pino + Grafana Cloud Loki | JSON to stdout + HTTP push to Loki; pretty in dev. No pino-loki — custom fetch stream. |
-| Analytics | PostHog (optional) | Feature-gated |
+| Logging | Pino → stdout | JSON to stdout, picked up by Vercel logs |
 | Error Tracking | Sentry | Client + server + edge configs |
-| 3D / Animation | Three.js, React Three Fiber, Framer Motion, Lottie | Landing page only |
-| Testing | Vitest (unit), Playwright (E2E), MSW (mocking) | |
+| Animation | Framer Motion | Landing + auth only |
+| Testing | Vitest (unit), Playwright (E2E) | |
 
 ---
 
@@ -96,7 +94,7 @@ lib/
   ai/{sanitizer.ts,ai-fingerprint-detector.ts,style-analyzer.ts,prompts/}
   supabase/{client.ts,server.ts}
   database/types.ts
-  logger.ts            ← Pino logger (Node.js runtime only) — stdout + Grafana Loki via fetch
+  logger.ts            ← Pino logger (Node.js runtime only) — JSON to stdout (Vercel logs)
   logger.edge.ts       ← Edge-compatible console logger — used ONLY by middleware.ts
   cors.ts
 
@@ -117,33 +115,23 @@ supabase/migrations/
 | `SUPABASE_SERVICE_ROLE_KEY` | Admin operations (server only) |
 | `ANTHROPIC_API_KEY` | Claude API |
 | `SENTRY_DSN` | Error tracking |
-| `NEXT_PUBLIC_POSTHOG_KEY` | Analytics (optional) |
-| `LOKI_HOST` | Grafana Cloud Loki push URL (e.g. `https://logs-prod-036.grafana.net`) |
-| `LOKI_USERNAME` | Grafana Cloud numeric user ID |
-| `LOKI_PASSWORD` | Grafana Cloud Access Policy token (scope: `logs:write`) |
 | `LOG_LEVEL` | Pino log level — `debug` (dev default) / `info` (prod default) |
 | `EXTENSION_DAILY_LIMIT` | Max generation requests per user per day (default: 30) |
 
 Copy `.env.local.example` → `.env.local` for local dev. Never commit secrets.
 
-**Dev:** `npm run dev` — Pino pretty-print, Next.js fast refresh
-**Prod:** Deployed to Vercel via the `production` branch. `main` is the integration branch — not deployed anywhere.
+**Dev:** `npm run dev` — Next.js fast refresh, JSON logs to stdout.
+**Prod:** Deployed to Vercel from `main` branch. Single Vercel project.
 
 ---
 
 ## Deployment
 
-- **Platform:** Vercel. Two projects: `aletheia` (production branch) + `aletheia-staging` (staging branch).
-- **Branch → environment mapping:**
-  - `main` → no Vercel deployment (integration gate only)
-  - `staging` → Vercel staging project (auto-deploys on push)
-  - `production` → Vercel production project (auto-deploys on push)
-- **Three-stage CD pipeline (fully automated after PR merge):**
+- **Platform:** Vercel. Single project — auto-deploys `main` to production.
+- **CI pipeline:**
   - `ci.yml` — PR gate: lint + type-check + unit tests + guardrails + smoke build (triggers on `pull_request` to `main`)
-  - `cd.yml` — post-merge gate: quality checks + mocked E2E (`@smoke`, local server, no real APIs) → fast-forward `staging` branch (triggers on `push` to `main`)
-  - `staging.yml` — staging gate: quality checks + real E2E (`@e2e`, real Anthropic, against staging URL) → fast-forward `production` branch (triggers via `workflow_run` on cd.yml success)
+  - Merge to `main` → Vercel deploys automatically. No staging environment.
 - **Pre-commit:** Husky + lint-staged runs `eslint --fix`, `prettier --write`, and `vitest related --run` against modified files only.
-- **No PAT needed** — `staging.yml` uses `workflow_run` trigger + `GITHUB_TOKEN` with `contents: write` for the production push.
 - **Database migrations:** `supabase/migrations/` — apply via Supabase CLI or SQL Editor
 - **No Docker** — Vercel-native deployment
 
@@ -155,7 +143,7 @@ Copy `.env.local.example` → `.env.local` for local dev. Never commit secrets.
 - Use `createClient()` (browser) and `createServiceClient()` (server/admin) — never mix
 - Validate all API inputs with Zod at the route boundary — use `.trim()` before `.min()` on string fields
 - Use `createLogger('module')` from `lib/logger.ts` for structured logging in API routes — no `console.log`
-- Use `createLogger('module')` from `lib/logger.edge.ts` in `middleware.ts` — it is Edge Runtime safe
+- Use `createLogger('module')` from `lib/logger.edge.ts` in `middleware.ts` — Edge Runtime safe (pino uses Node streams)
 - Use lazy factory functions for SDK clients — validate env vars exist at call time with clear error messages
 - Keep sanitizer and fingerprint detector in `lib/ai/` — don't inline AI post-processing in routes
 - Use `check_and_increment_rate_limit` RPC for extension rate limiting — don't reimplement
@@ -177,13 +165,11 @@ Copy `.env.local.example` → `.env.local` for local dev. Never commit secrets.
 - Don't add new Claude API calls without a timeout — always pass `{ timeout: 30_000 }` as the second arg to `messages.create()`
 - Don't hardcode model strings — update the single constant in the generate route if model changes
 - Don't block the generate response with analytics/style processing — keep it fire-and-forget
-- Don't modify the AI fingerprint patterns list without updating the authenticity scoring weights
 - Don't commit `.env.local` or any file containing secrets
 - Don't bypass RLS using service role key for user queries (only for admin/background jobs)
 - Don't add module-level SDK instantiation (breaks Vercel edge cold starts)
-- Don't install pino-loki or any transport that uses Node.js streams — Loki is pushed via native `fetch` in `lib/logger.ts`
+- Don't install pino transports that use Node.js streams in middleware — middleware runs on Edge Runtime
 - Don't inject user-supplied content into prompt XML tags without escaping — always use `escapeForXmlTag()` from `lib/ai/prompts/linkedin-connection.ts`
-- Don't add regex-based HTML sanitization fallbacks — if DOMPurify is unavailable, fail closed (strip content entirely), never pretend regex is safe
 - Don't make rate limiting fail-open — if the rate limit check fails, deny the request (fail-closed) to prevent unlimited API spend during outages
 - Don't use non-null assertions (`!`) on environment variables — always validate with an explicit check and throw a clear error
 - Don't log or expose `SUPABASE_SERVICE_ROLE_KEY` — read once into a local variable, never pass to logger
@@ -211,15 +197,33 @@ Request body (Zod-validated):
 }
 ```
 
-Response:
+Response (LinkedIn connection):
 ```typescript
 {
-  message: string
-  authenticityScore: number   // 0-100
-  isAIGenerated: boolean
-  modificationsApplied: string[]
+  success: true
+  body: string
+  category: string
+  character_count: number
+  usage: { input_tokens, output_tokens }
+  processingTime: number
 }
 ```
+
+Response (cold_email / linkedin_inmail):
+```typescript
+{
+  success: true
+  subject_line: string
+  body: string
+  category: string
+  word_count: number
+  character_count: number
+  usage: { input_tokens, output_tokens }
+  processingTime: number
+}
+```
+
+Failure modes: 400 (Zod with `details[]`), 401 (auth), 402 (rate limit), 502 (upstream Anthropic / format parse), 504 (timeout).
 
 ---
 
@@ -234,21 +238,15 @@ Response:
 
 ### E2E Tests (Playwright) — two tiers
 
-**Mocked (`@smoke`) — used in cd.yml, safe locally with dummy env vars:**
-- `e2e/health.spec.ts` — GET /api/health, no auth (runs in both tiers)
+**Mocked (`@smoke`) — safe locally with dummy env vars:**
+- `e2e/health.spec.ts` — GET /api/health, no auth
 - `e2e/ui-smoke.spec.ts` — landing page + login page load (tagged `@smoke`)
 - Run: `make e2e-smoke` or `npx playwright test --grep "@smoke"`
-- No real Supabase or Anthropic calls. Dummy env vars are fine.
-
-**Real (`@e2e`) — used in staging.yml only, requires staging secrets:**
-- `e2e/generate.spec.ts` — auth via Supabase password grant + real Anthropic call (tagged `@e2e`)
-- Run: `make e2e-staging` (set `PLAYWRIGHT_BASE_URL`, `NEXT_PUBLIC_SUPABASE_*`, `STAGING_TEST_USER_*` first)
-- Capped at one cold_email call (~$0.01/run). Test user: `test@aletheia-staging.com`.
+- No real Supabase or Anthropic calls.
 
 **Rules:**
-- Tag mocked tests `@smoke`, real tests `@e2e`
-- Do NOT call real Anthropic API from `@smoke` tests
-- `e2e/` is excluded from vitest (add to `vitest.config.ts` exclude list)
+- Tag E2E tests `@smoke`. No real-API E2E tier currently.
+- `e2e/` is excluded from vitest.
 
 ### Guardrails Tests
 - Run: `npm run test:guardrails` | `make guardrails`

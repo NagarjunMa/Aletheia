@@ -13,6 +13,7 @@ export default defineConfig({
       ".next/**",
       "__tests__/helpers/**",
       "e2e/**",
+      "ascendia-extension/**",
     ],
     coverage: {
       provider: "v8",

@@ -76,11 +76,8 @@ guardrails-watch: ## Run guardrail tests in watch mode
 e2e: ## Run all Playwright E2E tests (builds + starts local server)
 	npm run test:e2e
 
-e2e-smoke: ## Run @smoke tests only — local server, no real APIs (mirrors cd.yml)
+e2e-smoke: ## Run @smoke tests only — local server, no real APIs
 	npx playwright test --project=chromium --grep "@smoke"
-
-e2e-staging: ## Run @e2e tests against STAGING_URL (set env vars first — see README)
-	npx playwright test --project=chromium --grep "@e2e|health check"
 
 e2e-ui: ## Open Playwright UI mode
 	npm run test:e2e:ui
@@ -98,6 +95,14 @@ validate: ## Run startup environment validation script
 
 clean: ## Remove Next.js build output and Vite cache
 	rm -rf .next node_modules/.cache coverage
+
+# ─── Extension Tests ──────────────────────────────────────────────────────────
+
+test-ext: ## Run extension unit + integration tests
+	cd ascendia-extension && npx vitest --run
+
+build-ext: ## Build extension (esbuild: source → dist/)
+	cd ascendia-extension && node build.mjs
 
 # ─── CI Simulation ────────────────────────────────────────────────────────────
 

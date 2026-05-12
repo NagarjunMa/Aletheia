@@ -55,7 +55,18 @@
       "Bash(make help:*)",
       "Skill(claude-api)",
       "Bash(node -e \"require\\(''''@vercel/otel''''\\)\")",
-      "Bash(find /Users/nagarjunmallesh/Desktop/projects/ascendia -type f \\\\\\(-name *.test.ts -o -name *.test.tsx -o -name *.spec.ts -o -name *.spec.tsx \\\\\\))"
+      "Bash(find /Users/nagarjunmallesh/Desktop/projects/ascendia -type f \\\\\\(-name *.test.ts -o -name *.test.tsx -o -name *.spec.ts -o -name *.spec.tsx \\\\\\))",
+      "Bash(grep:*)",
+      "Bash(node:*)",
+      "WebFetch(domain:playwright.dev)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:www.npmjs.com)",
+      "WebFetch(domain:dev.to)",
+      "Bash(npm view:*)",
+      "WebFetch(domain:developer.chrome.com)",
+      "Bash(./node_modules/.bin/vitest --run)",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(NEXT_PUBLIC_SUPABASE_URL=https://placeholder.supabase.co NEXT_PUBLIC_SUPABASE_ANON_KEY=placeholder npm run build)"
     ],
     "deny": [],
     "ask": []

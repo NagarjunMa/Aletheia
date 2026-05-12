@@ -44,60 +44,20 @@ const nextConfig = {
       use: ['@svgr/webpack']
     })
 
-    // Fix OpenTelemetry/Sentry dependency conflicts
-    config.externals = config.externals || []
-
-    if (isServer) {
-      // Server-side externals to prevent bundling issues
-      config.externals.push(
-        'require-in-the-middle',
-        '@opentelemetry/instrumentation',
-        '@opentelemetry/auto-instrumentations-node',
-        'import-in-the-middle'
-      )
-    } else {
-      // Client-side externals
-      config.externals.push({
-        'isomorphic-dompurify': 'isomorphic-dompurify'
-      })
-    }
-
-    // Resolve fallbacks for Node.js modules in client bundle
+    // Node.js module fallbacks for client bundle (Sentry needs some of these)
     config.resolve.fallback = {
       ...config.resolve.fallback,
       fs: false,
       net: false,
       tls: false,
-      crypto: require.resolve('crypto-browserify'),
-      stream: require.resolve('stream-browserify'),
-      buffer: require.resolve('buffer'),
-      process: require.resolve('process/browser'),
       vm: false,
       worker_threads: false,
       child_process: false,
-      'require-in-the-middle': false
     }
 
-    // Fix for ESM modules
     config.resolve.extensionAlias = {
       '.js': ['.js', '.ts'],
       '.jsx': ['.jsx', '.tsx']
-    }
-
-    // Add module resolution for problematic packages
-    config.resolve.alias = {
-      ...config.resolve.alias,
-      '@opentelemetry/api': require.resolve('@opentelemetry/api'),
-    }
-
-    // Ignore problematic dynamic requires in client bundle
-    if (!isServer && webpack) {
-      config.plugins = config.plugins || []
-      config.plugins.push(
-        new webpack.IgnorePlugin({
-          resourceRegExp: /^(require-in-the-middle|import-in-the-middle)$/,
-        })
-      )
     }
 
     // Development-only optimizations
