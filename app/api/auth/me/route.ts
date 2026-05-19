@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 const log = createLogger("auth-me");
 
-const DAILY_LIMIT = 30;
+const DAILY_LIMIT = Number(process.env.EXTENSION_DAILY_LIMIT) || 30;
 
 // Lazy factory functions — avoid module-level Supabase instantiation at build time
 function getSupabaseAuth() {

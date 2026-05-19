@@ -72,8 +72,14 @@ export async function POST(request: NextRequest) {
 
     // Parse
     const body = await request.json();
-    const { message, approved, category, subjectLine, rejectionReason } =
-      feedbackSchema.parse(body);
+    const {
+      message,
+      approved,
+      category,
+      subjectLine,
+      rejectionReason,
+      evalMetadata,
+    } = feedbackSchema.parse(body);
 
     log.info(
       {
@@ -81,9 +87,34 @@ export async function POST(request: NextRequest) {
         approved,
         category,
         rejectionReason,
+        promptVersion: evalMetadata?.promptVersion,
       },
       "Feedback received",
     );
+
+    // Persist eval event into user_feedback (synchronous — eval signal must
+    // not be lost if fire-and-forget worker dies after response).
+    const { error: insertErr } = await getSupabaseService()
+      .from("user_feedback")
+      .insert({
+        user_id: authResult.userId,
+        feedback_type: approved ? "approved" : "rejected",
+        rating: approved ? 5 : 1,
+        comment: rejectionReason ?? null,
+        metadata: {
+          category,
+          message_length: message.length,
+          has_subject: !!subjectLine,
+          ...(evalMetadata ?? {}),
+        },
+      });
+
+    if (insertErr) {
+      log.error(
+        { err: insertErr },
+        "Failed to persist user_feedback row — eval signal lost",
+      );
+    }
 
     // Return 200 immediately — style analysis runs fire-and-forget
     const response = NextResponse.json(

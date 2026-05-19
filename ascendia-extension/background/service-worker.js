@@ -46,7 +46,7 @@ chrome.alarms.get('aletheia-token-refresh', (alarm) => {
 
 // Extension configuration
 const CONFIG = {
-  DEFAULT_API_URL: 'https://aletheia.vercel.app', // Production default
+  DEFAULT_API_URL: 'https://www.aletheia.live', // Production default
   API_ENDPOINTS: {
     generate: '/api/extension/generate',
     health: '/api/extension/generate'
@@ -259,12 +259,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return false;
 });
 
-// Helper: resolve the effective API URL from sync > local > default
+// Helper: resolve the effective API URL from sync > local > default.
+// Auto-heals stale localhost values left over from local dev installs.
 async function getEffectiveApiUrl() {
   const { apiBaseUrl } = await chrome.storage.sync.get('apiBaseUrl');
-  if (apiBaseUrl) return apiBaseUrl;
+  if (apiBaseUrl && !apiBaseUrl.includes('localhost')) return apiBaseUrl;
+  if (apiBaseUrl) {
+    await chrome.storage.sync.remove('apiBaseUrl');
+    console.log('[SW] Wiped stale localhost apiBaseUrl from sync storage');
+  }
   const { apiUrl } = await chrome.storage.local.get('apiUrl');
-  return apiUrl || CONFIG.DEFAULT_API_URL;
+  if (apiUrl && !apiUrl.includes('localhost')) return apiUrl;
+  if (apiUrl) {
+    await chrome.storage.local.remove('apiUrl');
+    console.log('[SW] Wiped stale localhost apiUrl from local storage');
+  }
+  return CONFIG.DEFAULT_API_URL;
 }
 
 async function initializeDefaultSettings() {

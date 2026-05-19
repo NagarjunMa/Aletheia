@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter, DM_Sans, Cormorant_Garamond } from "next/font/google";
+import localFont from "next/font/local";
 import { headers } from "next/headers";
 import "./globals.css";
 import { Providers } from "./providers";
@@ -13,37 +14,61 @@ const cormorant = Cormorant_Garamond({
   variable: "--font-cormorant",
 });
 
+const harmond = localFont({
+  src: "../public/fonts/Harmond-ExtraBoldExpanded.otf",
+  variable: "--font-harmond",
+  display: "swap",
+  weight: "800",
+  style: "normal",
+});
+
+const flaviotte = localFont({
+  src: [
+    {
+      path: "../public/fonts/Flaviotte.woff2",
+      weight: "400",
+      style: "normal",
+    },
+    {
+      path: "../public/fonts/Flaviotte.woff",
+      weight: "400",
+      style: "normal",
+    },
+  ],
+  variable: "--font-flaviotte",
+  display: "swap",
+});
+
 export const metadata: Metadata = {
   title: {
     default:
-      "Aletheia — AI LinkedIn Message Generator | Authentic Outreach, Zero Clichés",
+      "Aletheia — LinkedIn outreach drafted from their profile and your resume",
     template: "%s | Aletheia",
   },
   description:
-    "Chrome extension that reads LinkedIn profiles and generates authentic connection requests, cold emails, and InMails. 42-word negative lexicon and 21-pattern AI fingerprint detector strip robotic phrasing. Free, 30 messages/day.",
+    "Chrome extension that drafts personal LinkedIn connection requests, cold emails, and InMails from the recipient's profile and your resume. Review every draft before you send. Free tier: 30 drafts/day.",
   keywords: [
     "LinkedIn outreach",
-    "AI message generator",
+    "LinkedIn drafting tool",
+    "personalized outreach",
+    "connection request drafts",
     "Chrome extension",
     "cold email",
     "networking",
     "InMail",
     "connection request",
-    "authentic LinkedIn messages",
-    "human-sounding AI",
-    "AI fingerprint detection",
     "profile-grounded messages",
-    "cliché-free outreach",
   ],
-  authors: [{ name: "Aletheia Team" }],
+  authors: [{ name: "Nagarjun Mallesh" }],
   icons: {
     icon: "/Aletheia.svg",
     apple: "/Aletheia.svg",
   },
   openGraph: {
-    title: "Aletheia — LinkedIn Messages That Strip AI Clichés Automatically",
+    title:
+      "Aletheia — personal LinkedIn outreach, drafted from their profile and your resume",
     description:
-      "Chrome extension that reads LinkedIn profiles and writes connection requests, cold emails, and InMails. 42-word negative lexicon. 21 AI fingerprint patterns detected and humanized.",
+      "Chrome extension that drafts personal LinkedIn connection requests, cold emails, and InMails from the recipient's profile and your resume. Review every draft before you send. Free tier: 30 drafts/day.",
     type: "website",
     locale: "en_US",
     images: [
@@ -51,15 +76,16 @@ export const metadata: Metadata = {
         url: "/Aletheia.svg",
         width: 1200,
         height: 630,
-        alt: "Aletheia — AI LinkedIn Message Generator",
+        alt: "Aletheia — personal LinkedIn outreach drafting tool",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Aletheia — LinkedIn Messages That Strip AI Clichés Automatically",
+    title:
+      "Aletheia — personal LinkedIn outreach, drafted from their profile and your resume",
     description:
-      "Chrome extension that reads LinkedIn profiles and writes connection requests, cold emails, and InMails. 42-word negative lexicon. 21 AI fingerprint patterns detected and humanized.",
+      "Chrome extension that drafts personal LinkedIn connection requests, cold emails, and InMails from the recipient's profile and your resume. Review every draft before you send. Free tier: 30 drafts/day.",
     images: ["/Aletheia.svg"],
   },
   robots: {
@@ -78,7 +104,7 @@ export default async function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${inter.className} ${dmSans.variable} ${cormorant.variable} aurora-grain`}
+        className={`${inter.className} ${dmSans.variable} ${cormorant.variable} ${harmond.variable} ${flaviotte.variable} aurora-grain`}
       >
         <Providers {...(nonce ? { nonce } : {})}>{children}</Providers>
       </body>

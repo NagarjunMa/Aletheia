@@ -10,7 +10,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 })
 
 // Production default — used when no custom URL has been saved
-const DEFAULT_API_URL = 'https://aletheia.vercel.app'
+const DEFAULT_API_URL = 'https://www.aletheia.live'
 
 // Global state
 let currentSettings = {

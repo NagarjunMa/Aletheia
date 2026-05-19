@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient as createBrowserClient } from "@/lib/supabase/client";
+import ShaderBackground from "@/components/ShaderBackground";
 
 interface StylePatterns {
   avgSentenceLength: number;
@@ -120,7 +121,7 @@ export default function SettingsContent() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-[100dvh] flex items-center justify-center">
         <div className="h-6 w-6 animate-spin rounded-full border-2 border-white border-t-transparent" />
       </div>
     );
@@ -130,7 +131,8 @@ export default function SettingsContent() {
   const approvedCount = prefs.approved_message_count ?? 0;
 
   return (
-    <div className="min-h-screen px-4 py-12 sm:px-6 lg:px-8">
+    <div className="landing min-h-[100dvh] px-4 py-12 sm:px-6 lg:px-8">
+      <ShaderBackground />
       <div className="mx-auto max-w-2xl animate-fade-in">
         {/* Header */}
         <div className="mb-10">
