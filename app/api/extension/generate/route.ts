@@ -4,6 +4,7 @@ import {
   getSystemPrompt,
   buildPrompt,
   sanitize,
+  PROMPT_VERSION,
   type GenerateInput,
 } from "@/lib/ai/prompts/linkedin-connection";
 import type { StylePatterns } from "@/lib/ai/style-analyzer";
@@ -243,9 +244,23 @@ export async function POST(request: NextRequest) {
         totalTokens,
         processingTime,
         category,
+        promptVersion: PROMPT_VERSION,
       },
       "Generation completed",
     );
+
+    // Eval metadata — echoed back to client, sent back in feedback payload,
+    // ultimately persisted in user_feedback.metadata for per-version eval analysis.
+    const evalMetadata = {
+      promptVersion: PROMPT_VERSION,
+      model: CLAUDE_MODEL,
+      temperature: 0.8,
+      category,
+      intent: intent ?? "networking",
+      generationTimeMs: processingTime,
+      inputTokens: tokenUsage.input_tokens,
+      outputTokens: tokenUsage.output_tokens,
+    };
 
     const rateLimitHeaders = {
       "X-RateLimit-Limit": String(DAILY_LIMIT),
@@ -316,6 +331,7 @@ export async function POST(request: NextRequest) {
               character_count: finalBody.length,
               usage: tokenUsage,
               processingTime,
+              evalMetadata,
             },
             {
               headers: { ...corsHeaders, ...rateLimitHeaders },
@@ -390,6 +406,7 @@ export async function POST(request: NextRequest) {
         character_count: finalContent.length,
         usage: tokenUsage,
         processingTime,
+        evalMetadata,
       },
       {
         headers: { ...corsHeaders, ...rateLimitHeaders },

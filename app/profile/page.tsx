@@ -1,44 +1,49 @@
-import { createClient } from '@/lib/supabase/server'
-import { redirect } from 'next/navigation'
-import Link from 'next/link'
-import Image from 'next/image'
+import { createClient } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
+import Link from "next/link";
+import Image from "next/image";
+import ShaderBackground from "@/components/ShaderBackground";
 
 export default async function ProfilePage() {
-  const supabase = createClient()
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
+  const supabase = createClient();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
 
   if (authError || !user) {
-    redirect('/auth/login')
+    redirect("/auth/login");
   }
 
   const { data: profile } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', user.id)
-    .single()
+    .from("profiles")
+    .select("*")
+    .eq("id", user.id)
+    .single();
 
-  const displayName = profile?.full_name || user.email?.split('@')[0] || 'User'
-  const email = profile?.email || user.email || ''
-  const avatarUrl = profile?.avatar_url
-  const cplScore = profile?.cpl_score ?? 0
+  const displayName = profile?.full_name || user.email?.split("@")[0] || "User";
+  const email = profile?.email || user.email || "";
+  const avatarUrl = profile?.avatar_url;
+  const cplScore = profile?.cpl_score ?? 0;
   const memberSince = profile?.created_at
-    ? new Date(profile.created_at).toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
+    ? new Date(profile.created_at).toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
       })
-    : 'Unknown'
+    : "Unknown";
 
   // Extract initials for fallback avatar
   const initials = displayName
-    .split(' ')
+    .split(" ")
     .map((n: string) => n[0])
-    .join('')
+    .join("")
     .toUpperCase()
-    .slice(0, 2)
+    .slice(0, 2);
 
   return (
-    <div className="min-h-screen px-4 py-12 sm:px-6 lg:px-8">
+    <div className="landing min-h-[100dvh] px-4 py-12 sm:px-6 lg:px-8">
+      <ShaderBackground />
       <div className="mx-auto max-w-2xl animate-fade-in">
         {/* Header */}
         <div className="mb-10">
@@ -46,8 +51,18 @@ export default async function ProfilePage() {
             href="/dashboard"
             className="inline-flex items-center gap-1.5 text-sm text-[hsl(var(--muted-foreground))] hover:text-white transition-colors mb-4"
           >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            <svg
+              className="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M15 19l-7-7 7-7"
+              />
             </svg>
             Back to Dashboard
           </Link>
@@ -77,7 +92,9 @@ export default async function ProfilePage() {
             {/* Info */}
             <div className="flex-1 text-center sm:text-left">
               <h2 className="text-2xl font-bold text-white">{displayName}</h2>
-              <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">{email}</p>
+              <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
+                {email}
+              </p>
             </div>
           </div>
         </div>
@@ -94,14 +111,16 @@ export default async function ProfilePage() {
         </div>
       </div>
     </div>
-  )
+  );
 }
 
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] px-4 py-3">
-      <span className="text-sm text-[hsl(var(--muted-foreground))]">{label}</span>
+      <span className="text-sm text-[hsl(var(--muted-foreground))]">
+        {label}
+      </span>
       <span className="text-sm font-medium text-white">{value}</span>
     </div>
-  )
+  );
 }

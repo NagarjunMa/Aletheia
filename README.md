@@ -65,6 +65,8 @@ aletheia/
 │   │   └── settings/
 │   ├── auth/{login,register,callback,forgot-password,reset-password}/
 │   ├── {dashboard,settings,profile}/
+│   ├── privacy/page.tsx          ← Privacy Policy (Phase 29)
+│   ├── terms/page.tsx            ← Terms of Service (Phase 29)
 │   └── layout.tsx, page.tsx, providers.tsx
 │
 ├── ascendia-extension/          ← Chrome MV3 extension (separate from web app)
@@ -74,7 +76,15 @@ aletheia/
 │   ├── settings/{settings.html,settings.js,settings.css}
 │   └── manifest.json
 │
-├── components/landing/          ← Landing page components
+├── components/
+│   ├── landing/                 ← Landing page components (Hero, Navbar, WhyAletheia, HowItWorks, Pricing, FAQ, CTA, FounderNote, Footer, FloatingSidebar)
+│   │   └── Testimonials.tsx     ← HIDDEN — re-mount in app/page.tsx once real attributed beta quotes are collected (see component docblock)
+│   ├── ShaderBackground.tsx     ← Full-viewport WebGL MeshGradient (Paper Design @paper-design/shaders-react) — reused on landing, auth, privacy, terms, dashboard, profile, settings
+│   └── AuroraBackground.tsx     ← Legacy CSS aurora shards. No active importers; kept on disk
+│
+├── public/fonts/                ← Local fonts (Flaviotte primary, Harmond extra-bold expanded)
+│
+├── ascendia-extension/assets/fonts/  ← Same Flaviotte bundled into extension for popup + settings
 │
 ├── lib/
 │   ├── ai/
@@ -146,6 +156,13 @@ make build-ext     # extension esbuild → ascendia-extension/dist/
 make clean         # rm -rf .next coverage node_modules/.cache
 ```
 
+```bash
+npm run build:extension   # build downloadable extension zip
+                          # → public/ascendia-extension.zip + version.json
+                          # also runs via prebuild (automatic before next build)
+                          # also runs via husky pre-commit when ext source changes
+```
+
 All targets map 1:1 to `npm run` scripts. See `Makefile`.
 
 ---
@@ -177,7 +194,10 @@ Category-specific system prompts with grounding rules, banned phrase lists (39 L
 21 regex patterns (em-dash, "hope this finds you well", corporate buzzwords, formality formulas) rewritten with human equivalents. No scoring — patterns are stripped or not.
 
 ### Stage 5 — Style learning (feedback loop)
-After user thumbs-up: `analyzeStyle()` + `mergeStylePatterns()` update `user_preferences.style_patterns` via atomic RPC. Next generate request reads style patterns + recent approved messages and injects them as `acceptedExamples` + `styleProfile` into the prompt.
+`POST /api/extension/feedback` synchronously inserts the `user_feedback` row (preserves eval signal even if the worker dies), then returns 200 and runs `analyzeStyle()` + `mergeStylePatterns()` fire-and-forget. Style merge updates `user_preferences.style_patterns` via atomic RPC (`increment_approved_count`). The next generate request reads style patterns + recent approved messages and injects them as `acceptedExamples` + `styleProfile` into the prompt.
+
+### Eval metadata
+Each generate response includes an `evalMetadata` blob (`promptVersion`, `model`, `temperature`, `category`, `intent`, `generationTimeMs`, `inputTokens`, `outputTokens`). The extension echoes it back on `POST /api/extension/feedback`; it's persisted in `user_feedback.metadata` for per-prompt-version regression analysis. Bump `PROMPT_VERSION` in `lib/ai/prompts/linkedin-connection.ts` on every prompt change.
 
 **Category constraints:**
 
@@ -193,13 +213,16 @@ After user thumbs-up: `analyzeStyle()` + `mergeStylePatterns()` update `user_pre
 
 **Active tables:**
 
-| Table | Purpose |
-|-------|---------|
-| `profiles` | User profile data, synced from Supabase Auth |
-| `generated_drafts` | All generated messages |
-| `user_feedback` | Thumbs-up/down feedback on drafts |
-| `user_preferences` | Per-user settings + learned style patterns |
-| `extension_rate_limits` | Daily rolling window per user |
+| Table | Purpose | Used by |
+|-------|---------|---------|
+| `profiles` | User profile data, synced from Supabase Auth | Web + extension |
+| `generated_drafts` | All generated messages | Web (dashboard list) |
+| `user_feedback` | Thumbs-up/down feedback on drafts + eval metadata | Extension (sync write), web (read) |
+| `user_preferences` | Per-user settings + learned style patterns + approved/rejected counters | Web + extension |
+| `extension_rate_limits` | Daily rolling window per user — fail-closed gate | Extension generate flow |
+| `user_inputs` | Request history | Web app only |
+| `threads` | Conversation container | Web app only |
+| `thread_folders` | Organize threads | Web app only |
 
 **Migrations:** Files in `supabase/migrations/` follow `YYYYMMDD_NNN_description.sql`. Apply via Supabase Dashboard SQL Editor or `supabase db push`.
 
@@ -217,10 +240,22 @@ Do not hand-edit `lib/database/types.ts`.
 
 The Chrome extension lives in `ascendia-extension/` — separate codebase.
 
-**Load in Chrome:**
+**Load in Chrome (developer):**
 1. `chrome://extensions`
 2. Enable "Developer mode" (top right)
 3. "Load unpacked" → select `ascendia-extension/`
+
+**Load in Chrome (end user, from the web app):**
+1. Visit the deployed app, click **Get Extension** (Navbar / CTA / Pricing)
+2. Browser downloads `ascendia-extension.zip` (~439 KB)
+3. Unzip → `chrome://extensions` → Developer mode → Load unpacked → select unzipped folder
+
+The downloadable zip is generated by `scripts/build-extension-zip.mjs`:
+- Triggered by `npm run prebuild` (runs automatically before `next build` on Vercel)
+- Triggered by `.husky/pre-commit` when `ascendia-extension/(background|content|popup|settings|icons|lib|manifest.json)` files change
+- Manual: `npm run build:extension`
+
+The zip is **gitignored** — it's a build artifact, never enters git history. Version metadata exposed at `GET /api/extension/version` → `{ version, sha, builtAt, sizeBytes }`.
 
 **Key files:**
 
@@ -232,6 +267,7 @@ The Chrome extension lives in `ascendia-extension/` — separate codebase.
 | `content/auto-filler.js` | Fills LinkedIn compose box with generated draft |
 | `popup/popup.js` | Main UI — triggers generation, captures feedback |
 | `popup/popup-core.js` | Pure functions: parsing, payload building, char counts |
+| `scripts/build-extension-zip.mjs` | esbuild + jszip pipeline → `public/ascendia-extension.zip` |
 
 **Session bridge:** Extension uses Bearer token. On first use, fetches via `GET /api/extension/session` (cookie auth), stores in `chrome.storage.local`, refreshes via alarm every 20 min.
 
@@ -243,7 +279,7 @@ Reload extension after any change: `chrome://extensions` → refresh icon on ext
 
 ## Testing
 
-**232 root unit tests + 13 guardrails + 94 extension tests** — all co-located with source.
+**235 root unit tests + 13 guardrails + 94 extension tests + 3 Playwright `@smoke`** — all co-located with source.
 
 ### Unit tests — `make test`
 
@@ -359,6 +395,50 @@ Removed measurement theater while keeping moat. See `.claude/phase-24-strategic-
 - Deps removed: 16 packages (zustand, react-query, OTel, Loki, PostHog, DOMPurify, webpack polyfills, pino-pretty)
 - CI workflows: 3 → 1
 - All moat preserved: prompt grounding, style learning, scraper, fail-closed rate limit, prompt escape, 30s timeout, Zod validation.
+
+### Tier 5 — Anti-Phishing Trust Surface (Phase 29)
+
+Triggered by Google Safe Browsing flagging `aletheia.live`. See `.claude/claude-progress.txt` PHASE 29 for full audit.
+
+| Measure | Implementation | File |
+|---------|---------------|------|
+| **Privacy Policy** | 11 sections — operator identity, processor list with policy links, GDPR/CCPA rights, retention, contact. | `app/privacy/page.tsx` |
+| **Terms of Service** | 17 sections — acceptable use, **LinkedIn trademark disclaimer (§5, bolded)**, USD 50 liability cap, MA governing law. | `app/terms/page.tsx` |
+| **LinkedIn disclaimer in footer** | "Not affiliated with, endorsed by, or sponsored by LinkedIn Corporation" below copyright. | `components/landing/Footer.tsx` |
+| **Founder identity** | First-person founder note with name, location, moat story — counters anonymous-operator phishing signal. | `components/landing/FounderNote.tsx` |
+| **Domain unification** | All mailto + brand references on `aletheia.live` (was inconsistently `.ai`/`.live`). | landing components |
+| **Copy de-jargon** | All user-visible "42-word/21-pattern negative lexicon / AI fingerprint detector" repetition removed from Hero, WhyAletheia, HowItWorks, Pricing, FAQ, CTA, auth shell, metadata. Internal code comment in `generate/route.ts:361` intentionally retained. | landing + auth + metadata |
+| **No fake testimonials** | `Testimonials.tsx` ships only as placeholder; commented out of `app/page.tsx` until real beta quotes collected. | `app/page.tsx` |
+
+---
+
+## Design System (web + extension)
+
+Single visual language across landing, auth, dashboard, profile, settings, privacy, terms, and the Chrome extension popup + settings page.
+
+**Background — `components/ShaderBackground.tsx`**
+- WebGL `MeshGradient` from `@paper-design/shaders-react@0.0.76`.
+- Palette: `#204050 → #285868 → #308890 → #5888a0 → #70b8c8` over `#182830` base.
+- `distortion: 0.85`, `swirl: 0.25`, `speed: 0.35`, `grainMixer: 0.05`, `grainOverlay: 0.05`.
+- Mounted fixed (`inset:0`, `z-index:-1`) so all sections sit translucent above it.
+- Extension popup + settings use a static radial-gradient approximation of the same palette (no WebGL inside the popup to keep the bundle light).
+
+**Typography**
+- Display + body: **Flaviotte** (custom, `public/fonts/Flaviotte.woff2`).
+- Registered via `next/font/local` in `app/layout.tsx` as `--font-flaviotte`.
+- Fallbacks: Playfair Display (serif accents), Cormorant Garamond (Aletheia wordmark legacy), DM Sans (sans body).
+- Every inline `fontFamily` leads with `var(--font-flaviotte)` before the fallback chain.
+- Extension mirrors the font via `@font-face` in `popup/popup.css` + `settings/settings.css`, sourcing `ascendia-extension/assets/fonts/Flaviotte.{woff2,woff}`.
+
+**Primary CTA — `.btn-primary` ("Aurora Veil")**
+- Deep teal gradient `#1c2d36 → #182830 → #121e26`, 1px cyan rim, 2px corner radius.
+- Idle: 4.2s ambient halo breath (layered box-shadows pulsing 0.18→0.32 opacity, up to 60px outer reach).
+- Hover: bottom-up cyan aurora wash via `::before` (screen blend), single-pass hairline scan via `::after`, text picks up cyan glow, rim brightens, lifts 1px, halo speeds to 2.4s with 140px reach.
+- `:active` 0.985 scale snap, `:focus-visible` double-ring outline, `prefers-reduced-motion` static fallback.
+
+**Navbar glass — GSAP ScrollTrigger**
+- Transparent over hero, crosses to `rgba(5,31,32,0.45)` + 18px backdrop blur + mint-tinted bottom border + soft shadow at ≥95% scroll progress past hero. Reverses on scroll-up.
+- Mobile menu uses an orchestrated GSAP timeline pair (open `expo.out` + close `elastic.out(1, 0.45)`) rather than `framer-motion AnimatePresence`.
 
 ---
 

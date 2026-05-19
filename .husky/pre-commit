@@ -19,4 +19,11 @@ make guardrails || { echo "❌ Guardrails failed. Security patterns must pass.";
 echo "🏗️ Pre-commit: running production build..."
 make build || { echo "❌ Build failed. Fix build errors before committing."; exit 1; }
 
+# Only rebuild the downloadable extension zip when extension source actually
+# changed. Excludes tests/configs/dist so plain doc edits don't trigger it.
+if git diff --cached --name-only | grep -qE '^ascendia-extension/(background|content|popup|settings|icons|lib|manifest\.json)'; then
+  echo "📦 Pre-commit: extension source changed — rebuilding downloadable zip..."
+  npm run build:extension || { echo "❌ Extension zip build failed."; exit 1; }
+fi
+
 echo "✅ All checks passed."

@@ -40,7 +40,7 @@ Chrome Extension (MV3)              Next.js Web App
 **Key design patterns:**
 - **SSR-first:** App Router, server actions, server components where possible
 - **Lazy factory functions:** `getAnthropic()`, `getSupabaseService()` — no module-level instantiation
-- **Fire-and-forget analytics:** style learning / feedback processing is async, never blocks response
+- **Hybrid feedback persistence:** `POST /api/extension/feedback` synchronously inserts the `user_feedback` row (eval signal must not be lost on worker crash), then returns 200 and runs style merge fire-and-forget
 - **Single-pass parsing:** JSON → on failure, 502 with retry instruction. No regex extraction layer.
 - **Smart truncation:** LinkedIn 270-char limit enforced by last-sentence boundary, not hard cut
 - **Fail-closed rate limiting:** if Supabase RPC fails, requests are denied (not allowed) — prevents unlimited API burn during outages
@@ -68,7 +68,9 @@ Chrome Extension (MV3)              Next.js Web App
 | Extension | Chrome Manifest V3 | Service worker, content scripts, popup |
 | Logging | Pino → stdout | JSON to stdout, picked up by Vercel logs |
 | Error Tracking | Sentry | Client + server + edge configs |
-| Animation | Framer Motion | Landing + auth only |
+| Animation | Framer Motion + GSAP (`gsap@^3.15`, `ScrollTrigger`) | Framer for landing reveals; GSAP for navbar scroll-glass + mobile menu timelines |
+| Visual / shader | `@paper-design/shaders-react@0.0.76` | `MeshGradient` powers `components/ShaderBackground.tsx` — single full-viewport canvas, 5 colors `#204050 → #70b8c8`, distortion 0.85, swirl 0.25, grain 0.05/0.05 |
+| Typography | Flaviotte (display + body) + Playfair Display / Cormorant Garamond / DM Sans (fallbacks) | `--font-flaviotte` via `next/font/local` from `public/fonts/Flaviotte.woff2`. Same font bundled into extension at `ascendia-extension/assets/fonts/Flaviotte.{woff2,woff}` with `@font-face` in popup.css + settings.css |
 | Testing | Vitest (unit), Playwright (E2E) | |
 
 ---
@@ -77,10 +79,12 @@ Chrome Extension (MV3)              Next.js Web App
 
 ```
 app/
-  api/extension/{generate,feedback,config,session}/  ← core API
-  api/{auth/me,health,feedback,docs}/
+  api/extension/{generate,feedback,config,session,version}/  ← core API
+  api/{auth/me,health,feedback}/
   auth/{login,register,callback,forgot-password,reset-password}/
-  {dashboard,profile,settings,docs}/
+  {dashboard,profile,settings}/
+  privacy/page.tsx     ← legal (Phase 29)
+  terms/page.tsx       ← legal (Phase 29)
   layout.tsx, page.tsx, providers.tsx
 
 ascendia-extension/
@@ -88,7 +92,16 @@ ascendia-extension/
   content/{linkedin-reader.js,auto-filler.js}
   popup/    settings/    lib/    manifest.json
 
-components/landing/   ← 16 landing page components
+components/landing/   ← landing page components (Hero, Navbar, WhyAletheia, HowItWorks, Pricing, FAQ, CTA, FounderNote, Footer, FloatingSidebar, Testimonials*).
+                       *Testimonials is hidden from app/page.tsx pending real beta quotes; re-enable instructions in the component docblock.
+components/ShaderBackground.tsx  ← full-viewport MeshGradient background reused by landing, auth, privacy, terms, dashboard, profile, settings
+components/AuroraBackground.tsx  ← legacy CSS aurora shards. No active importers (kept on disk).
+
+public/fonts/
+  Flaviotte.woff2 / Flaviotte.woff  ← local font, registered via next/font/local
+
+ascendia-extension/assets/fonts/
+  Flaviotte.woff2 / Flaviotte.woff  ← same font bundled inside the extension
 
 lib/
   ai/{sanitizer.ts,ai-fingerprint-detector.ts,style-analyzer.ts,prompts/}
@@ -131,7 +144,8 @@ Copy `.env.local.example` → `.env.local` for local dev. Never commit secrets.
 - **CI pipeline:**
   - `ci.yml` — PR gate: lint + type-check + unit tests + guardrails + smoke build (triggers on `pull_request` to `main`)
   - Merge to `main` → Vercel deploys automatically. No staging environment.
-- **Pre-commit:** Husky + lint-staged runs `eslint --fix`, `prettier --write`, and `vitest related --run` against modified files only.
+- **Pre-commit:** Husky + lint-staged runs `eslint --fix`, `prettier --write`, and `vitest related --run` against modified files only. Also rebuilds the downloadable extension zip when `ascendia-extension/(background|content|popup|settings|icons|lib|manifest.json)` files change (Phase 28).
+- **Extension distribution:** `npm run prebuild` runs `scripts/build-extension-zip.mjs` before every `next build`. esbuild bundles the extension, jszip packages it → `public/ascendia-extension.zip` (gitignored, ~439 KB). Vercel edge CDN serves the static asset at `/ascendia-extension.zip`. Version metadata at `/api/extension/version` (`{ version, sha, builtAt, sizeBytes }`).
 - **Database migrations:** `supabase/migrations/` — apply via Supabase CLI or SQL Editor
 - **No Docker** — Vercel-native deployment
 
@@ -155,6 +169,9 @@ Copy `.env.local.example` → `.env.local` for local dev. Never commit secrets.
 - Add `.max()` limits on all Zod string/array fields to prevent memory exhaustion via oversized payloads
 - Log full user IDs in telemetry spans (for audit trails) but truncate to 12 chars in log messages (for privacy)
 - Write a test for every new feature or non-trivial code change. Co-locate the test file with the source (`sanitizer.test.ts` next to `sanitizer.ts`). Minor fixes (typos, config tweaks, copy changes, dependency bumps) are exempt. For any change touching `lib/ai/`, guardrail tests are mandatory and must pass before merge.
+- Use `<ShaderBackground />` (from `components/ShaderBackground.tsx`) for every authenticated or landing surface that needs the brand background. Wrap the page root in `className="landing"` so theme tokens (`--l-*`) resolve.
+- Lead every `font-family` declaration with `var(--font-flaviotte)` before any Playfair / Cormorant / DM Sans fallback. Body default is already set in `app/globals.css` — only override inline when a component needs a specific stack.
+- Mirror palette + typography in the Chrome extension: import Flaviotte via `@font-face` from `ascendia-extension/assets/fonts/`, base backgrounds use the cyan/teal radial palette (`#285868` / `#5888a0` / `#308890` / `#70b8c8` over `#182830`).
 
 ### DON'T
 - Don't import `lib/supabase/server.ts` in client components
@@ -164,7 +181,7 @@ Copy `.env.local.example` → `.env.local` for local dev. Never commit secrets.
 - Don't add new Claude API calls without going through the sanitization pipeline
 - Don't add new Claude API calls without a timeout — always pass `{ timeout: 30_000 }` as the second arg to `messages.create()`
 - Don't hardcode model strings — update the single constant in the generate route if model changes
-- Don't block the generate response with analytics/style processing — keep it fire-and-forget
+- Don't block the generate response with analytics/style processing — keep it fire-and-forget. The `user_feedback` row insert in the feedback route is the one allowed sync write (eval signal preservation).
 - Don't commit `.env.local` or any file containing secrets
 - Don't bypass RLS using service role key for user queries (only for admin/background jobs)
 - Don't add module-level SDK instantiation (breaks Vercel edge cold starts)
@@ -177,6 +194,10 @@ Copy `.env.local.example` → `.env.local` for local dev. Never commit secrets.
 - Don't hardcode magic numbers — use env vars with fallback defaults (e.g. `EXTENSION_DAILY_LIMIT`)
 - Don't return Zod 400 errors without field-level details — clients need `details: [{ field, message }]` to debug
 - Don't use CORS wildcard `*` for null-origin requests — extensions must send `chrome-extension://` origin
+- Don't reintroduce `AuroraBackground` on new pages — it's legacy CSS aurora shards. The current background is `ShaderBackground` (WebGL `MeshGradient`). The old component is kept on disk but has no importers.
+- Don't put a solid opaque background on hero/section wrappers — sections must stay translucent (`rgba(0,0,0,0.10)` / `var(--l-bg)`) so the fixed `ShaderBackground` (z-index `-1`) shows through.
+- Don't render a `<GridBackground />` / dotted canvas overlay on top of the shader — the shader is the canonical hero backdrop.
+- Don't add `prefers-reduced-motion` exceptions for the shader; the `MeshGradient` `speed` is already conservative (0.35).
 
 ---
 
@@ -185,15 +206,16 @@ Copy `.env.local.example` → `.env.local` for local dev. Never commit secrets.
 **POST `/api/extension/generate`** — main generation endpoint
 Auth: Bearer token (JWT) | Rate limit: `EXTENSION_DAILY_LIMIT` req/day/user (default 30, `extension_rate_limits` table)
 
-Request body (Zod-validated):
+Request body (Zod-validated — see `app/api/extension/generate/schema.ts`):
 ```typescript
 {
-  profile: { name, headline, location, about, experiences, recentPosts, skills, profileUrl }
-  resume?: string          // max 8000 chars
-  jd?: string              // max 4000 chars
+  profileMarkdown: string   // trim().min(10).max(10000) — LinkedIn profile innerText
+  profileUrl: string        // url().max(2048)
+  resume?: string           // max 50000 chars
+  jd?: string               // max 20000 chars
   category: 'linkedin_connection' | 'cold_email' | 'linkedin_inmail'
-  intent: 'networking' | 'referral' | 'mentorship' | 'job_inquiry'
-  acceptedExamples?: string[]  // prior approved messages for style matching
+  intent?: 'networking' | 'referral' | 'mentorship' | 'job_inquiry'  // default 'networking'
+  acceptedExamples?: string[]  // max 5 entries × max 5000 chars each
 }
 ```
 
@@ -206,24 +228,24 @@ Response (LinkedIn connection):
   character_count: number
   usage: { input_tokens, output_tokens }
   processingTime: number
+  evalMetadata: {
+    promptVersion: string  // PROMPT_VERSION constant — bump per prompt change
+    model: string          // CLAUDE_MODEL
+    temperature: number
+    category: string
+    intent: string
+    generationTimeMs: number
+    inputTokens: number
+    outputTokens: number
+  }
 }
 ```
 
-Response (cold_email / linkedin_inmail):
-```typescript
-{
-  success: true
-  subject_line: string
-  body: string
-  category: string
-  word_count: number
-  character_count: number
-  usage: { input_tokens, output_tokens }
-  processingTime: number
-}
-```
+Response (cold_email / linkedin_inmail): same fields + `subject_line: string` + `word_count: number`.
 
-Failure modes: 400 (Zod with `details[]`), 401 (auth), 402 (rate limit), 502 (upstream Anthropic / format parse), 504 (timeout).
+`evalMetadata` is echoed by the client back to `POST /api/extension/feedback` and persisted in `user_feedback.metadata` for per-version eval / regression analysis.
+
+Failure modes: 400 (Zod with `details[]`), 401 (auth), 429 (rate limit — local OR upstream Anthropic 429), 502 (upstream Anthropic 401 / JSON parse failure), 504 (`APIConnectionTimeoutError`).
 
 ---
 

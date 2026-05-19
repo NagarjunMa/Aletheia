@@ -1,90 +1,94 @@
-'use client'
+"use client";
 
-import { Suspense, useState, useEffect } from 'react'
-import { useSearchParams } from 'next/navigation'
-import Link from 'next/link'
-import Image from 'next/image'
-import { KeyRound } from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
+import { Suspense, useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
+import Link from "next/link";
+import Image from "next/image";
+import { KeyRound } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 
 export default function ResetPasswordPage() {
   return (
-    <Suspense fallback={
-      <div className="flex items-center justify-center py-20">
-        <div className="w-8 h-8 border-2 border-[hsl(var(--primary))] border-t-transparent rounded-full animate-spin" />
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center py-20">
+          <div className="w-8 h-8 border-2 border-[hsl(var(--primary))] border-t-transparent rounded-full animate-spin" />
+        </div>
+      }
+    >
       <ResetPasswordForm />
     </Suspense>
-  )
+  );
 }
 
 function ResetPasswordForm() {
-  const searchParams = useSearchParams()
-  const source = searchParams.get('source')
+  const searchParams = useSearchParams();
+  const source = searchParams.get("source");
 
-  const [password, setPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [success, setSuccess] = useState(false)
-  const [sessionReady, setSessionReady] = useState(false)
-  const [sessionError, setSessionError] = useState(false)
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [sessionReady, setSessionReady] = useState(false);
+  const [sessionError, setSessionError] = useState(false);
 
   useEffect(() => {
-    const supabase = createClient()
+    const supabase = createClient();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'PASSWORD_RECOVERY') {
-        setSessionReady(true)
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "PASSWORD_RECOVERY") {
+        setSessionReady(true);
       }
-    })
+    });
 
     const timeout = setTimeout(() => {
       if (!sessionReady) {
-        setSessionError(true)
+        setSessionError(true);
       }
-    }, 5000)
+    }, 5000);
 
     return () => {
-      subscription.unsubscribe()
-      clearTimeout(timeout)
-    }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+      subscription.unsubscribe();
+      clearTimeout(timeout);
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setError('')
+    e.preventDefault();
+    setError("");
 
     if (password !== confirmPassword) {
-      setError('Passwords do not match')
-      return
+      setError("Passwords do not match");
+      return;
     }
 
     if (password.length < 8) {
-      setError('Password must be at least 8 characters')
-      return
+      setError("Password must be at least 8 characters");
+      return;
     }
 
-    setLoading(true)
+    setLoading(true);
 
-    const supabase = createClient()
+    const supabase = createClient();
     const { error: updateError } = await supabase.auth.updateUser({
       password,
-    })
+    });
 
     if (updateError) {
-      if (updateError.message.includes('same password')) {
-        setError('New password must be different from your current password')
+      if (updateError.message.includes("same password")) {
+        setError("New password must be different from your current password");
       } else {
-        setError(updateError.message)
+        setError(updateError.message);
       }
-      setLoading(false)
-      return
+      setLoading(false);
+      return;
     }
 
-    setSuccess(true)
-    setLoading(false)
+    setSuccess(true);
+    setLoading(false);
   }
 
   // Error state - invalid or expired reset link
@@ -94,24 +98,37 @@ function ResetPasswordForm() {
         <div className="glass rounded-2xl p-8 w-full max-w-md animate-fade-in text-center">
           <div className="mb-4 flex items-center justify-center">
             <div className="w-16 h-16 rounded-full bg-[hsl(var(--destructive))]/20 flex items-center justify-center">
-              <svg className="w-8 h-8 text-[hsl(var(--destructive))]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              <svg
+                className="w-8 h-8 text-[hsl(var(--destructive))]"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z"
+                />
               </svg>
             </div>
           </div>
-          <h1 className="text-2xl font-bold text-white mb-2">Invalid reset link</h1>
+          <h1 className="text-2xl font-bold text-white mb-2">
+            Invalid reset link
+          </h1>
           <p className="text-sm text-[hsl(var(--muted-foreground))] mb-6">
-            This password reset link has expired or is invalid. Please request a new one.
+            This password reset link has expired or is invalid. Please request a
+            new one.
           </p>
           <Link
-            href={`/auth/forgot-password${source ? `?source=${source}` : ''}`}
+            href={`/auth/forgot-password${source ? `?source=${source}` : ""}`}
             className="inline-block rounded-lg bg-[hsl(var(--primary))] px-6 py-2.5 text-sm font-medium text-white hover:brightness-110 transition-all"
           >
             Request new link
           </Link>
         </div>
       </div>
-    )
+    );
   }
 
   // Success state
@@ -121,24 +138,37 @@ function ResetPasswordForm() {
         <div className="glass rounded-2xl p-8 w-full max-w-md animate-fade-in text-center">
           <div className="mb-4 flex items-center justify-center">
             <div className="w-16 h-16 rounded-full bg-emerald-500/20 flex items-center justify-center">
-              <svg className="w-8 h-8 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              <svg
+                className="w-8 h-8 text-emerald-400"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2.5}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M5 13l4 4L19 7"
+                />
               </svg>
             </div>
           </div>
-          <h1 className="text-2xl font-bold text-white mb-2">Password updated!</h1>
+          <h1 className="text-2xl font-bold text-white mb-2">
+            Password updated!
+          </h1>
           <p className="text-sm text-[hsl(var(--muted-foreground))] mb-6">
-            Your password has been reset successfully. You can now sign in with your new password.
+            Your password has been reset successfully. You can now sign in with
+            your new password.
           </p>
           <Link
-            href={`/auth/login${source ? `?source=${source}` : ''}`}
+            href={`/auth/login${source ? `?source=${source}` : ""}`}
             className="inline-block rounded-lg bg-[hsl(var(--primary))] px-6 py-2.5 text-sm font-medium text-white hover:brightness-110 transition-all"
           >
             Sign in
           </Link>
         </div>
       </div>
-    )
+    );
   }
 
   // Loading state - waiting for recovery session
@@ -154,7 +184,7 @@ function ResetPasswordForm() {
           </p>
         </div>
       </div>
-    )
+    );
   }
 
   // Password reset form
@@ -162,8 +192,25 @@ function ResetPasswordForm() {
     <div className="w-full max-w-[420px] mx-auto animate-fade-in">
       {/* Logo + brand */}
       <div className="flex items-center gap-3 mb-10">
-        <Image src="/Aletheia.svg" alt="Aletheia" width={36} height={36} className="rounded-lg" />
-        <span style={{ fontFamily: 'var(--font-cormorant), Georgia, serif', fontWeight: 300, fontSize: '1.4rem', color: 'white', letterSpacing: '0.04em' }}>Aletheia</span>
+        <Image
+          src="/Aletheia.svg"
+          alt="Aletheia"
+          width={36}
+          height={36}
+          className="rounded-lg"
+        />
+        <span
+          style={{
+            fontFamily:
+              "var(--font-flaviotte), var(--font-cormorant), Georgia, serif",
+            fontWeight: 300,
+            fontSize: "1.4rem",
+            color: "white",
+            letterSpacing: "0.04em",
+          }}
+        >
+          Aletheia
+        </span>
       </div>
 
       {/* Heading */}
@@ -175,7 +222,10 @@ function ResetPasswordForm() {
       {/* Form */}
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label htmlFor="password" className="block text-sm font-medium text-[hsl(var(--muted-foreground))] mb-1.5">
+          <label
+            htmlFor="password"
+            className="block text-sm font-medium text-[hsl(var(--muted-foreground))] mb-1.5"
+          >
             New password
           </label>
           <div className="relative">
@@ -195,7 +245,10 @@ function ResetPasswordForm() {
         </div>
 
         <div>
-          <label htmlFor="confirmPassword" className="block text-sm font-medium text-[hsl(var(--muted-foreground))] mb-1.5">
+          <label
+            htmlFor="confirmPassword"
+            className="block text-sm font-medium text-[hsl(var(--muted-foreground))] mb-1.5"
+          >
             Confirm new password
           </label>
           <div className="relative">
@@ -224,9 +277,9 @@ function ResetPasswordForm() {
           disabled={loading}
           className="w-full rounded-lg bg-[hsl(var(--primary))] px-4 py-2.5 text-sm font-medium text-white hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] focus:ring-offset-2 focus:ring-offset-[#0a0a0a] disabled:opacity-50 disabled:cursor-not-allowed transition-all"
         >
-          {loading ? 'Updating...' : 'Update password'}
+          {loading ? "Updating..." : "Update password"}
         </button>
       </form>
     </div>
-  )
+  );
 }

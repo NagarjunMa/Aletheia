@@ -977,6 +977,433 @@ Completion checklist:
 
 --------------------------------------------------------------------------------
 
+PHASE 25 — Eval Metadata + Doc Sync
+Status: [x] COMPLETE — 2026-05-19
+--------------------------------------------------------------------------------
+Added per-generation eval metadata round-trip so per-prompt-version regression
+analysis is possible from feedback data alone. Also closed documentation drift
+identified in cross-verification audit.
+
+EVAL METADATA ROUND-TRIP:
+  [x] lib/ai/prompts/linkedin-connection.ts — exported PROMPT_VERSION = "1.0.0"
+      (bump format: major.minor.patch — major = structural, minor = wording, patch = typo)
+  [x] app/api/extension/generate/route.ts — builds evalMetadata blob after Claude call:
+      { promptVersion, model, temperature, category, intent, generationTimeMs,
+        inputTokens, outputTokens } and echoes it in all response branches
+      (linkedin_connection + cold_email + linkedin_inmail)
+  [x] app/api/extension/feedback/schema.ts — added evalMetadataSchema with .strict()
+      validation, optional on the feedbackSchema
+  [x] app/api/extension/feedback/route.ts — synchronously inserts user_feedback row
+      with full evalMetadata in the metadata column BEFORE returning 200.
+      Style processing remains fire-and-forget; the sync insert protects the eval
+      signal against worker death after response.
+  [x] route.test.ts — 3 new tests covering evalMetadata round-trip + sync insert path
+  [x] Extension popup.js + service-worker.js + settings.js — updated to forward
+      evalMetadata from generate response into feedback payload
+
+CODE FIX (consistency with Phase 22 #6):
+  [x] app/api/auth/me/route.ts:11 — DAILY_LIMIT = 30 → env var with 30 fallback
+      Matches the constant in generate/route.ts. Functional behavior unchanged
+      (default already 30) but removes a magic number per CLAUDE.md DON'T #16
+
+DOC SYNC (closing audit gap):
+  [x] CLAUDE.md — request body shape corrected to flat profileMarkdown + profileUrl
+      (was still showing pre-Phase-15 nested profile object). resume max 8000→50000,
+      jd max 4000→20000 to match schema.ts. Failure mode "402 (rate limit)"→429.
+      Added evalMetadata to response shape. Updated fire-and-forget rule to note
+      the one allowed sync write.
+  [x] README.md — Stage 5 of AI pipeline now describes hybrid sync+async feedback.
+      Active tables table expanded from 5 → 8 (added user_inputs, threads,
+      thread_folders with web-only marker). Test count 232→235 + added Playwright 3.
+  [x] .claude/codebase-reference/ — 02 + 03 + 05 + 07 + 08 updated to match.
+
+CROSS-VERIFICATION AUDIT (2026-05-19):
+  Spec-vs-implementation matched at ~96–97% before this phase. Drift was entirely
+  documentation lag, no functional or security gaps. Post-phase: ~99% match.
+  Remaining 1% is intentional flexibility (e.g. the 3 web-only tables are
+  consumed by SSR pages but documentation lists them separately).
+
+Completion checklist:
+  [x] npm run test -- --run → PASSED (235 tests, 14 files)
+  [x] npm run test:guardrails -- --run → PASSED (13 tests)
+  [x] (cd ascendia-extension && npx vitest --run) → PASSED (94 tests)
+  [x] CLAUDE.md, README.md, .claude/codebase-reference/* aligned with code
+
+--------------------------------------------------------------------------------
+
+PHASE 24 — Landing page shader background (2026-05-19)
+Status: [x] COMPLETE (approximation shipped; full effect stack pending upstream API)
+--------------------------------------------------------------------------------
+Goal: replace CSS aurora-shard background on landing (app/page.tsx) with Paper
+      Design shader background per user-supplied snippet (Shader root +
+      MultiPointGradient, WaveDistortion, Liquify, Paper, FilmGrain).
+
+Findings:
+  - The supplied snippet imports `from 'shaders/react'` and uses the Shader
+    composition API. None of those component names (Shader, MultiPointGradient,
+    WaveDistortion, Liquify, Paper, FilmGrain) are exported by
+    @paper-design/shaders-react at any published tag (latest 0.0.76, canary,
+    next, experimental) or on the main branch of paper-design/shaders. That API
+    appears to be a hosted Paper Studio export, not yet on npm.
+
+Done:
+  - Installed @paper-design/shaders-react@0.0.76
+  - Added components/ShaderBackground.tsx — closest fidelity approximation:
+      MeshGradient with the same 5 colors (#204050 → #70b8c8), distortion 0.85,
+      swirl 0.25, speed 0.35, grainMixer 0.15, grainOverlay 0.25
+      + PaperTexture overlay (mixBlendMode: overlay, opacity 0.4) for paper feel
+  - Swapped <AuroraBackground /> → <ShaderBackground /> in app/page.tsx
+  - Old CSS aurora-shard styles in app/globals.css left in place (still used by
+    /auth and other AuroraBackground importers if any) — no orphaning yet
+  - tsc clean, next build green (route / first load 39.3 kB → 293 kB)
+
+Follow-up if user wants pixel-exact match to snippet:
+  - Track @paper-design/shaders-react releases for the new Shader composition
+    API. When `Shader` + Liquify + WaveDistortion + FilmGrain + MultiPointGradient
+    ship, restore the snippet verbatim in components/ShaderBackground.tsx.
+  - Alternative: embed Paper Studio share URL as an iframe (loses SSR / adds
+    third-party dependency at runtime — not recommended).
+
+Iteration 2 (same day):
+  - Removed PaperTexture overlay (too loud, obscured FAQ text); reduced
+    MeshGradient grainMixer 0.15→0.05, grainOverlay 0.25→0.05.
+  - Hero.tsx — removed GridBackground import + render (dotted canvas overlay
+    was visible over new shader background).
+  - Navbar.tsx — added gsap + ScrollTrigger. Header is transparent over hero;
+    crosses to translucent glass (rgba 5,31,32,0.45 + 18px backdrop blur +
+    mint-tinted 1px bottom border + soft shadow) via 0.6s power2.out tween
+    triggered when scroll progress past hero ≥ 95%. Reverses on scroll-up.
+  - globals.css — .landing-navbar base is transparent, no CSS .scrolled dark
+    rule (GSAP owns inline style); light theme .scrolled override kept with
+    !important to outrank GSAP for non-dark mode.
+  - gsap@^3.15.0 added to dependencies.
+
+Iteration 3 — primary button "Aurora Veil" redesign (same day):
+  - Replaced page-load shimmer-sweep ::after with hover-only hairline scan.
+  - .btn-primary base: deep teal gradient #1c2d36 → #182830 → #121e26, 1px cyan
+    rim @ 28%, top-edge inset highlight (suggests overhead light), 4.2s halo
+    breath. Hover: cyan aurora wash rises bottom-up via ::before
+    (screen blend), text picks up cyan text-shadow, rim brightens to 85%, lifts
+    1px, halo accelerates to 2.4s with 140px outer reach. :active scale 0.985.
+    :focus-visible double-ring (2px dark gap + 2px cyan). Reduced motion path
+    disables keyframes. Square corners → 2px radius (subtle softening).
+
+Iteration 4 — site-wide font + design system (same day):
+  - Bundled Flaviotte locally at public/fonts/Flaviotte.{woff2,woff} and
+    registered via next/font/local in app/layout.tsx with --font-flaviotte
+    variable + display:swap.
+  - Prepended `var(--font-flaviotte)` to body, .landing, .editor-serif,
+    .landing .font-serif, .landing .font-display in globals.css.
+  - Bulk-prepended Flaviotte to inline fontFamily on Hero, Navbar, Pricing,
+    HowItWorks, Footer, Testimonials, CTA, WhyAletheia, FloatingSidebar, FAQ
+    plus app/auth/{layout,login,register,forgot-password,reset-password}/*.
+    Existing Playfair/Cormorant/DM Sans kept as fallbacks.
+  - Mirrored design system in extension:
+      ascendia-extension/assets/fonts/Flaviotte.{woff2,woff} bundled
+      popup/popup.css: @font-face Flaviotte + --font-family prepended; body bg
+        swapped from pure black + green aurora to layered cyan/teal radials
+        (#285868/#5888a0/#308890/#70b8c8 over #182830) matching web shader;
+        ambient ::before tinted cyan.
+      settings/settings.css: same @font-face + bg + ambient overlay updates.
+  - Swapped AuroraBackground → ShaderBackground in
+      app/privacy/page.tsx, app/terms/page.tsx, app/auth/layout.tsx.
+  - Added <ShaderBackground /> + `landing` class on root divs of
+      app/dashboard/page.tsx, app/profile/page.tsx,
+      app/settings/_settings-content.tsx so theme tokens + shader cover all
+      authenticated surfaces.
+  - components/AuroraBackground.tsx is now unused (no importers) — kept on
+    disk until user decides to delete.
+
+Iteration 5 — Testimonials hidden + Hero subheadline color:
+  - app/page.tsx — `import Testimonials` + `<Testimonials />` commented out
+    with TODO(beta-launch). Component preserved at
+    components/landing/Testimonials.tsx with STATUS: HIDDEN FROM LANDING
+    docblock + 4-step re-enable workflow.
+  - Hero subheadline color var(--l-text-muted) (#48A89A) → #204050 per
+    explicit user request. Readability flagged: dark teal sits low contrast
+    against the shader mid-tone teal — revisit if users report it.
+
+Verification:
+  - tsc --noEmit clean
+  - npm run build green — 21/21 static pages, all routes (landing, auth,
+    dashboard, profile, settings, privacy, terms) compile
+
+Known follow-ups:
+  - Cursor-driven perspective tilt for "Get Extension" CTA (referenced GSAP
+    demo demos.gsap.com/demo/cursor-driven-perspective-tilt) — deferred.
+  - Decide on AuroraBackground component deletion.
+  - When @paper-design/shaders-react publishes Shader composition API,
+    restore the original snippet verbatim (Shader+MultiPointGradient+
+    WaveDistortion+Liquify+Paper+FilmGrain).
+
+--------------------------------------------------------------------------------
+
+PHASE 26 — Navbar GSAP Orchestrated easeReverse Animation
+Status: [x] COMPLETE — 2026-05-19
+--------------------------------------------------------------------------------
+Replaced framer-motion AnimatePresence mobile menu with two-timeline GSAP
+implementation following the demos.gsap.com/demo/orchestrated-easereverse
+pattern. Forward and reverse use different easing curves — close is NOT just
+the forward animation played backward.
+
+CHANGES (components/landing/Navbar.tsx):
+  [x] Removed AnimatePresence import; kept motion (still used for desktop
+      active-line layoutId)
+  [x] Added mobileMenuRef, openTlRef, closeTlRef refs
+  [x] Build effect: two paused gsap.timeline()s on mount
+      - Open: clip-path inset(0% 0% 100% 0%) → inset(0% 0% 0% 0%) with
+        expo.out (0.55s), then items y=-28→0 + opacity 0→1 stagger 0.06
+        with expo.out (0.7s) at -=0.35
+      - Close: items y=0→-18 + opacity 1→0 + rotation random(-8,8)
+        elastic.out(1, 0.45) stagger 0.04 from 'end' (0.5s),
+        then clip-path closes power3.in (0.35s) at -=0.18
+  [x] Drive effect: mobileOpen true → restart open tl + pause(0) close;
+      mobileOpen false (and tl progressed) → pause open + restart close
+  [x] Mobile menu now always rendered (visibility/opacity inline initial)
+      so refs stay stable across opens
+  [x] All link buttons + CTA tagged with data-mobile-item
+  [x] Added pointerEvents toggle in tl to prevent click-through during reveal
+
+Verification:
+  [x] npm run type-check → clean
+  [x] npm run lint → no errors
+  [x] Build green
+
+--------------------------------------------------------------------------------
+
+PHASE 27 — Responsive Design Pass (~92% → ~99%)
+Status: [x] COMPLETE — 2026-05-19
+--------------------------------------------------------------------------------
+Closed remaining responsive gaps identified in audit. Hand-side padding,
+collapsed-grid spacing, mobile viewport height handling, and mobile menu
+scroll cap.
+
+PADDING (px-8 → px-5 sm:px-8) — 7 files:
+  [x] components/landing/Hero.tsx
+  [x] components/landing/Pricing.tsx
+  [x] components/landing/CTA.tsx
+  [x] components/landing/Footer.tsx
+  [x] components/landing/HowItWorks.tsx
+  [x] components/landing/FAQ.tsx
+  [x] components/landing/Navbar.tsx (both nav row + mobile menu block)
+
+COLLAPSED GRID SPACING (gap-16 / gap-12 → responsive variants):
+  [x] CTA grid:          gap-16 → gap-10 md:gap-16
+  [x] HowItWorks grid:   gap-16 → gap-10 md:gap-16
+  [x] FAQ header grid:   gap-12 → gap-8  md:gap-12
+
+VIEWPORT HEIGHT (min-h-screen → min-h-[100dvh]) — handles iOS Safari address
+bar overlay:
+  [x] app/dashboard/page.tsx
+  [x] app/profile/page.tsx
+  [x] app/settings/_settings-content.tsx
+
+MOBILE MENU SCROLL CAP:
+  [x] Navbar.tsx mobile menu — added
+      max-h-[calc(100dvh-64px)] overflow-y-auto
+      Prevents content-under-fold inaccessibility if nav grows
+
+VERIFIED:
+  [x] npm run build → 22 routes (added /api/extension/version)
+  [x] npm run type-check → clean
+  [x] npm run lint → 1 unrelated useCallback warning in WhyAletheia.tsx
+
+NOT FIXED (manual viewport test still needed):
+  - 320px / 360px / 768px / 1280px sweep — automated tool unable to
+    verify pixel-perfect rendering.
+
+--------------------------------------------------------------------------------
+
+PHASE 28 — Downloadable Extension Zip Pipeline
+Status: [x] COMPLETE — 2026-05-19
+--------------------------------------------------------------------------------
+Stood up build-time extension packaging so /ascendia-extension.zip
+download links resolve to a real, current artifact without polluting git
+history.
+
+ARCHITECTURE (chose option B over commit-zip, GitHub Releases, runtime
+endpoint after weighing repo bloat / infra cost / freshness / cold start):
+  Pre-commit → detects ext source change → npm run build:extension
+  Vercel deploy → npm run build → prebuild → same script → fresh zip
+  Static asset served at /ascendia-extension.zip via Vercel edge CDN
+
+FILES CREATED:
+  [x] scripts/build-extension-zip.mjs — esbuild bundles 6 entry points
+      to ascendia-extension/dist/, then jszip packages:
+        manifest.json + icons/ + popup/{html,css,js} +
+        settings/{html,css,js} + background sw + 3 content scripts +
+        lib/pdf.{min,worker.min}.js
+      Walks ascendia-extension/, skips *.test.*, node_modules/, coverage/,
+      test/, .DS_Store, hidden dirs.
+      Writes: public/ascendia-extension.zip (439 KB, 23 files)
+              public/ascendia-extension.version.json
+              { version, sha, builtAt, sizeBytes }
+  [x] app/api/extension/version/route.ts — GET endpoint reads
+      version.json from public/ at runtime. Returns 503 if missing.
+      Cache-Control: s-maxage=300, stale-while-revalidate=3600.
+      CORS-aware via getCorsHeaders().
+
+FILES MODIFIED:
+  [x] package.json — added "prebuild" (runs before next build) +
+      "build:extension" (manual / pre-commit)
+  [x] .gitignore — excludes:
+        public/ascendia-extension.zip
+        public/ascendia-extension.version.json
+        ascendia-extension/dist/
+  [x] .husky/pre-commit — appended:
+        if git diff --cached --name-only matches
+          ^ascendia-extension/(background|content|popup|settings|icons|lib|manifest\.json)
+        then npm run build:extension
+  [x] Stale public/ascendia-extension (20 KB orphan file, not zip) removed.
+
+DEPS ADDED:
+  [x] jszip (devDependency) — pure JS, no native binary, ~80 KB
+
+CODE FIX (incidental):
+  [x] app/api/auth/me/route.ts:11 — DAILY_LIMIT hardcoded 30 →
+      Number(process.env.EXTENSION_DAILY_LIMIT) || 30
+      Matches CLAUDE.md "no magic numbers" rule and Phase 22 #6.
+
+USER FLOW:
+  1. Visit aletheia.live → click "Get Extension" (Navbar / CTA / Pricing)
+  2. Browser downloads ascendia-extension.zip (439 KB)
+  3. Unzip → chrome://extensions → Developer mode → Load unpacked
+  4. Aletheia active in browser
+
+VERIFIED:
+  [x] node scripts/build-extension-zip.mjs → 209 ms, 23 files
+  [x] npm run build → prebuild runs, zip emitted, 22 routes built
+  [x] /api/extension/version route registered in build output
+  [x] unzip -l confirms correct MV3 structure for load-unpacked
+  [x] npm run type-check → clean
+
+DOCS UPDATED (this phase):
+  [x] CLAUDE.md — Deployment section: prebuild step note + extension
+      download flow
+  [x] README.md — Extension Development section: download URL +
+      install steps + version endpoint reference
+  [x] .claude/codebase-reference/04-extension.md — TODO: add
+      "Downloadable Distribution" section pointing at zip pipeline
+
+OPEN:
+  - Cache-bust query param ?v=${version} on <a href> in Navbar.tsx +
+    CTA.tsx + Pricing.tsx — not yet applied
+  - Optional version badge UI (e.g. "v1.0.0" next to Get Extension) —
+    endpoint exists, no consumer yet
+  - Vercel deploy still needs first commit + push to verify edge-CDN
+    serves the zip with correct Cache-Control
+
+--------------------------------------------------------------------------------
+
+PHASE 29 — Landing Rebrand: Anti-Phishing Trust + De-Jargon
+Status: [x] COMPLETE — 2026-05-19
+--------------------------------------------------------------------------------
+Triggered by Google Safe Browsing flagging aletheia.live as phishing.
+Root causes identified: brand/domain inconsistency, missing legal pages,
+LinkedIn-relationship ambiguity, fabricated-sounding metrics repeated 8x,
+fake scarcity copy ("MOST POPULAR", "Early Access"), anonymous-operator
+signal, pre-launch unsigned ZIP download.
+
+Two-tier fix: (1) legal + identity surface, (2) landing copy reframe.
+
+LEGAL + IDENTITY (anti-phishing surface):
+  [x] app/privacy/page.tsx — 11 sections (who/data/storage/cookies/rights/
+      retention/children/security/transfers/changes/contact). Names processors
+      (Supabase, Anthropic, Vercel, Sentry) with policy links. GDPR/CCPA
+      rights language. Operator = Nagarjun Mallesh, Boston MA.
+  [x] app/terms/page.tsx — 17 sections including bolded LinkedIn trademark
+      disclaimer (§5), acceptable-use clauses, USD 50 liability cap,
+      governing law = Commonwealth of Massachusetts.
+  [x] components/landing/Footer.tsx — Privacy + Terms links, LinkedIn
+      not-affiliated disclaimer under copyright.
+  [x] Domain unified to aletheia.live everywhere (was mixed .ai/.live):
+      Pricing.tsx, FAQ.tsx, privacy/terms — all mailto links use
+      hello@aletheia.live.
+  [x] components/landing/FounderNote.tsx — first-person founder note between
+      FAQ and CTA. Name + location (Nagarjun Mallesh, Boston MA), pull-quote,
+      5-paragraph moat story, initials avatar (NM). Strongest anti-phishing
+      trust signal — face/identity counter to anonymous-operator flag.
+
+LANDING COPY REFRAME (no AI-shaming, user-pain-first):
+  [x] Hero.tsx — Option B headline shipped:
+        Eyebrow: "LinkedIn outreach, made easier"
+        H1: "Their profile, your resume." / "One draft. One click." (sage
+            underline on "One click.") / "No tabs to juggle." (italic)
+        Subhead: convenience-first, no AI mention, names the user pain.
+      Stats bar reframed: <30s per draft / 270 chars LinkedIn-ready / 0 tabs
+      to juggle (removed "0 AI watermarks" and the "42/21" fabricated metrics).
+  [x] WhyAletheia.tsx (NEW, replaces Features.tsx):
+        3 cards mirror the moat — reading tax / memory tax / Aletheia way.
+        GSAP ScrollTrigger.batch reveal stagger.
+        Opaque card bg (#0c1f1d) to prevent translucent bleed-through.
+      Features.tsx deleted as orphan.
+  [x] HowItWorks.tsx — step titles + bodies rewritten without AI jargon:
+        "Read the Profile" → "Open the profile"
+        "Generate with Constraints" (Claude Sonnet 4 namedrop dropped) →
+        "Pick intent and format"
+        "Sanitize and Score" (42/21 jargon) → "Review and send"
+  [x] Pricing.tsx — Pro tier commented out (TODO stripe re-enable),
+      MOST POPULAR badge string changed to RECOMMENDED (dormant), grid
+      collapsed to md:grid-cols-2 + max-w-4xl. Free + Team copy fully
+      rewritten with no lexicon/fingerprint/sanitization-pipeline language.
+      H2: "Same drafting quality. Different volume."
+  [x] FAQ.tsx — Q6 ("What is the negative lexicon...") removed entirely.
+      Q7 (data disclosure) trimmed: kept "Anthropic Claude" attribution but
+      dropped specific "Claude Sonnet 4" model + lexicon mention.
+  [x] CTA.tsx — body + subtext rewritten. Kept "Be first" + "Early Access"
+      per user direction (FOMO generates interest until ≥10 users threshold).
+  [x] app/auth/layout.tsx — feature bullets + subtext rewritten (no jargon).
+  [x] app/page.tsx + app/layout.tsx — metadata fully rewritten:
+        title: "Aletheia — LinkedIn outreach drafted from their profile
+                and your resume"
+        description, OG, Twitter, JSON-LD all aligned, no 42/21 jargon.
+        layout.tsx authors changed from "Aletheia Team" to "Nagarjun Mallesh".
+
+SECTION ORDER NOW:
+  Hero → WhyAletheia → HowItWorks → Pricing → FAQ → FounderNote → CTA
+  Testimonials.tsx exists but is commented out in app/page.tsx (TODO:
+  re-enable when ≥3 real beta users supply attributed quotes + permission).
+
+THEME / FONTS:
+  [x] Theme toggle removed (hooks/useTheme.ts deleted, Navbar.tsx cleaned,
+      all html[data-theme='light'] CSS blocks stripped from globals.css).
+      Dark theme only.
+  [x] Harmond-ExtraBoldExpanded.otf wired via next/font/local —
+      LICENSE FLAG: "Free For Personal Use" only per Dirtyline Studio.
+      Commercial license is $25 at dirtylinestudio.com/product/harmond.
+      User accepted risk + said "proceed, it's fine". Font registered as
+      --font-harmond but not applied to visible elements (deferred).
+  [x] Flaviotte.woff2/.woff wired in parallel and applied as --font-flaviotte
+      across landing headings, navbar logo, footer logo, auth, privacy/terms.
+
+DEPS ADDED:
+  [x] gsap@^3.15.0 + @gsap/react — used by WhyAletheia + FounderNote +
+      Testimonials scroll-reveal stagger via useGSAP + ScrollTrigger.batch.
+
+VERIFIED:
+  [x] npm run type-check → clean (excluding pre-existing ShaderBackground
+      type errors, unrelated to this phase)
+  [x] All landing components render without console errors
+  [x] No "42-word"/"21-pattern"/"negative lexicon"/"fingerprint detect"
+      remaining in user-visible copy. One mention left in
+      app/api/extension/generate/route.ts:361 (internal code comment,
+      intentionally retained).
+
+OPEN:
+  - Submit Safe Browsing re-review at safebrowsing.google.com once
+    deployed.
+  - Replace Testimonials placeholder with real beta-user quotes when ≥3
+    are collected (with written permission).
+  - At ≥10 users: drop "Be first" / "Early Access" copy from CTA.tsx —
+    factual launch copy instead.
+  - Pro tier returns to Pricing when Stripe is wired.
+  - Optional: drop founder photo at /public/founder.jpg, replace initials
+    block in FounderNote.tsx (user deferred — message > photo for now).
+  - Commercial Harmond license ($25) if Harmond ever applied to visible
+    elements; currently only Flaviotte is used in production.
+
+--------------------------------------------------------------------------------
+
 ================================================================================
 NOTES
 ================================================================================

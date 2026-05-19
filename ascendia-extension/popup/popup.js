@@ -656,10 +656,11 @@ async function handleFeedback(type, rejectionReason) {
   const category = document.getElementById('category').value;
   const messageBody = currentOutput.body || currentOutput.message || '';
 
+  const evalMetadata = currentOutput.evalMetadata || undefined;
+
   if (type === 'accept') {
     await saveAcceptedMessage();
     showTemporaryFeedback(document.getElementById('acceptBtn'), 'Saved!');
-    // Fire-and-forget: persist approval to backend for style learning
     chrome.runtime.sendMessage({
       action: 'sendFeedback',
       payload: {
@@ -667,10 +668,10 @@ async function handleFeedback(type, rejectionReason) {
         category,
         approved: true,
         subjectLine: currentOutput.subject_line || undefined,
+        ...(evalMetadata ? { evalMetadata } : {}),
       }
-    }).catch(() => {}); // swallow errors — non-blocking
+    }).catch(() => {});
   } else if (type === 'reject') {
-    // Fire-and-forget: persist rejection + optional reason to backend
     chrome.runtime.sendMessage({
       action: 'sendFeedback',
       payload: {
@@ -678,8 +679,9 @@ async function handleFeedback(type, rejectionReason) {
         category,
         approved: false,
         ...(rejectionReason ? { rejectionReason } : {}),
+        ...(evalMetadata ? { evalMetadata } : {}),
       }
-    }).catch(() => {}); // swallow errors — non-blocking
+    }).catch(() => {});
     await generateMessage();
   }
 }
