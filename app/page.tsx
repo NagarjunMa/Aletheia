@@ -3,10 +3,6 @@ import Navbar from "@/components/landing/Navbar";
 import Hero from "@/components/landing/Hero";
 import WhyAletheia from "@/components/landing/WhyAletheia";
 import HowItWorks from "@/components/landing/HowItWorks";
-// TODO(beta-launch): Re-enable <Testimonials /> once real attributed quotes
-// from beta users are collected. Component preserved at
-// components/landing/Testimonials.tsx; hidden from landing until then.
-// import Testimonials from '@/components/landing/Testimonials'
 import Pricing from "@/components/landing/Pricing";
 import FAQ from "@/components/landing/FAQ";
 import CTA from "@/components/landing/CTA";
@@ -76,7 +72,6 @@ export default function Home() {
         <Hero />
         <WhyAletheia />
         <HowItWorks />
-        {/* <Testimonials /> — hidden until beta quotes are collected (see import comment) */}
         <Pricing />
         <FAQ />
         <FounderNote />
