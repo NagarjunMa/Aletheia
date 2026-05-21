@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { useState, useEffect, useRef } from "react";
 
 const stats = [
-  { value: "<30s", label: "Per draft" },
+  { value: "Seconds", label: "Per draft" },
   { value: "270", label: "Chars, LinkedIn-ready" },
   { value: "0", label: "Tabs to juggle" },
 ];
