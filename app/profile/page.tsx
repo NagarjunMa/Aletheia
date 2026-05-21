@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import ShaderBackground from "@/components/ShaderBackground";
+import ProfileForm from "./ProfileForm";
 
 export default async function ProfilePage() {
   const supabase = createClient();
@@ -109,6 +110,12 @@ export default async function ProfilePage() {
             <DetailRow label="CPL Score" value={cplScore.toFixed(1)} />
           </div>
         </div>
+
+        <ProfileForm
+          initialFullName={profile?.full_name ?? ""}
+          initialResume={profile?.resume ?? ""}
+          initialTargetJobDescription={profile?.target_job_description ?? ""}
+        />
       </div>
     </div>
   );
