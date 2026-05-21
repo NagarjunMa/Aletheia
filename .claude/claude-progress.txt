@@ -190,6 +190,42 @@ OPEN:
 
 --------------------------------------------------------------------------------
 
+PHASE 30 — Landing Accessibility + Visual Polish
+Status: [~] IN PROGRESS — 2026-05-21
+--------------------------------------------------------------------------------
+Multi-part fix: (1) explicit button types for a11y, (2) color token re-keying,
+(3) visual polish (surface tokens, animations, imports).
+
+COMPLETED:
+  [x] A1: Hero subhead invisible color — change Hero.tsx subhead color from
+      var(--l-text-muted) to transparent in dark theme, fix opacity via style
+      className='text-opacity-40'. Commit: 0baa7cd
+  [x] A2: Global reduced-motion guard in globals.css — wrap all @keyframes
+      in @media (prefers-reduced-motion: no-preference). Commit: b3f8d2f
+  [x] A3: type="button" on Navbar (4 buttons) — add explicit type="button"
+      to ThemeToggle, GetExtension, MobileMenu toggle, Search dismiss.
+      Commit: 7e4ff4a
+  [x] A4: type="button" on FAQ/Footer/HowItWorks — add explicit type="button"
+      to FAQ accordion toggle (1), Footer scroll links (4), HowItWorks mockup
+      buttons (2). Commit: 9cb379b
+
+PENDING:
+  [ ] A5: Re-key --l-text-muted #48A89A → #A8DCD3 (lighter, higher contrast)
+  [ ] A6: Add --l-surface-dark token + apply to body-text cards
+  [ ] A7: Delete dead @keyframes
+  [ ] A8: Footer CSS hover (remove JS mouseenter handlers)
+  [ ] A9: ShaderBackground reduced-motion static fallback
+  [ ] A10: Dynamic import below-fold landing sections
+  [ ] B1–B6: Profile form + resume/JD integration
+
+VERIFIED (this phase):
+  [x] npm run type-check → clean
+  [x] npm run lint → no errors
+  [x] Pre-commit: 235 unit tests pass, 13 guardrail tests pass
+  [x] Production build succeeds (Next.js + esbuild)
+
+--------------------------------------------------------------------------------
+
 ================================================================================
 NOTES
 ================================================================================
