@@ -11,6 +11,11 @@ if (typeof window !== "undefined") {
   gsap.registerPlugin(ScrollTrigger);
 }
 
+// Replace with real Web Store URL once the listing is published. Until then,
+// link to /demo so the click still lands on a high-trust surface.
+const CHROME_WEB_STORE_URL: string =
+  process.env.NEXT_PUBLIC_CHROME_WEB_STORE_URL ?? "/demo";
+
 const navLinks = [
   { label: "Features", href: "#features" },
   { label: "Process", href: "#how-it-works" },
@@ -246,12 +251,21 @@ export default function Navbar() {
         {/* Right side: CTA */}
         <div className="hidden md:flex items-center gap-3">
           <a
-            href="/ascendia-extension.zip"
-            download
+            href={CHROME_WEB_STORE_URL}
+            target={
+              CHROME_WEB_STORE_URL.startsWith("http") ? "_blank" : undefined
+            }
+            rel={
+              CHROME_WEB_STORE_URL.startsWith("http")
+                ? "noopener noreferrer"
+                : undefined
+            }
             className="btn-primary"
             style={{ fontSize: "0.68rem", padding: "0.65rem 1.4rem" }}
           >
-            Get Extension
+            {CHROME_WEB_STORE_URL.startsWith("http")
+              ? "Get on Chrome Web Store"
+              : "See a real draft"}
           </a>
         </div>
 
@@ -308,12 +322,21 @@ export default function Navbar() {
         })}
         <div data-mobile-item className="mt-5">
           <a
-            href="/ascendia-extension.zip"
-            download
+            href={CHROME_WEB_STORE_URL}
+            target={
+              CHROME_WEB_STORE_URL.startsWith("http") ? "_blank" : undefined
+            }
+            rel={
+              CHROME_WEB_STORE_URL.startsWith("http")
+                ? "noopener noreferrer"
+                : undefined
+            }
             className="btn-primary"
             style={{ width: "100%", display: "flex", justifyContent: "center" }}
           >
-            Get Extension
+            {CHROME_WEB_STORE_URL.startsWith("http")
+              ? "Get on Chrome Web Store"
+              : "See a real draft"}
           </a>
         </div>
       </div>
