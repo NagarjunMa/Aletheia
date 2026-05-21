@@ -77,6 +77,7 @@ export default function Footer() {
                 </Link>
               ) : (
                 <button
+                  type="button"
                   key={link.href}
                   onClick={() => scrollTo(link.href)}
                   className={linkClasses}

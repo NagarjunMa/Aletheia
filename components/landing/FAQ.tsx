@@ -103,6 +103,7 @@ export default function FAQ() {
             <div key={i}>
               <div className="divider" />
               <button
+                type="button"
                 onClick={() => setOpen(open === i ? null : i)}
                 className="flex w-full items-center justify-between py-6 text-left cursor-pointer group"
                 aria-expanded={open === i}
