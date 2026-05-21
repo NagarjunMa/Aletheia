@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 
-// @smoke — Mocked E2E used in cd.yml only.
+// @smoke — Mocked E2E used in ci.yml only.
 // Verifies the /demo route loads without auth and renders the sample draft.
 // No Supabase auth or Anthropic calls — safe to run with dummy env vars.
 
