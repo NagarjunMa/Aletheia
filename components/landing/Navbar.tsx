@@ -192,6 +192,7 @@ export default function Navbar() {
       <nav className="mx-auto flex max-w-7xl items-center justify-between px-5 sm:px-8 py-5">
         {/* Logo — color driven by .landing-nav-logo CSS class */}
         <button
+          type="button"
           onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
           className="flex items-center gap-2.5 cursor-pointer"
         >
@@ -217,6 +218,7 @@ export default function Navbar() {
             const isActive = activeSection === sectionId;
             return (
               <button
+                type="button"
                 key={link.href}
                 onClick={() => scrollTo(link.href)}
                 className={`landing-nav-link relative cursor-pointer ${isActive ? "active" : ""}`}
@@ -272,6 +274,7 @@ export default function Navbar() {
         {/* Mobile */}
         <div className="flex md:hidden items-center gap-3">
           <button
+            type="button"
             onClick={() => setMobileOpen(!mobileOpen)}
             className="landing-menu-icon cursor-pointer p-1"
             aria-label="Toggle menu"
@@ -299,6 +302,7 @@ export default function Navbar() {
           const isActive = activeSection === sectionId;
           return (
             <button
+              type="button"
               key={link.href}
               data-mobile-item
               onClick={() => scrollTo(link.href)}
