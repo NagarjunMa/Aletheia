@@ -303,9 +303,10 @@
   /* Background layers — translucent so aurora shards show through */
   --l-bg:        rgba(0, 0, 0, 0.10);
   --l-bg-alt:    rgba(0, 0, 0, 0.30);
-  --l-surface:   rgba(255, 255, 255, 0.03);
-  --l-surface-2: rgba(255, 255, 255, 0.05);
-  --l-surface-3: rgba(255, 255, 255, 0.08);
+  --l-surface:      rgba(255, 255, 255, 0.03);
+  --l-surface-2:    rgba(255, 255, 255, 0.05);
+  --l-surface-3:    rgba(255, 255, 255, 0.08);
+  --l-surface-dark: rgba(8, 16, 22, 0.55);
 
   /* Text */
   --l-text:      #CBEFEB;

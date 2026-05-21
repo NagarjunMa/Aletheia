@@ -133,7 +133,12 @@ export default function FAQ() {
                   >
                     <p
                       className="pb-8 text-sm leading-relaxed"
-                      style={{ color: "var(--l-text-muted)" }}
+                      style={{
+                        color: "var(--l-text-muted)",
+                        background: "var(--l-surface-dark)",
+                        backdropFilter: "blur(6px)",
+                        padding: "1rem 1.25rem 2rem",
+                      }}
                     >
                       {faq.a}
                     </p>
