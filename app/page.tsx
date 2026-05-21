@@ -8,7 +8,6 @@ import FAQ from "@/components/landing/FAQ";
 import CTA from "@/components/landing/CTA";
 import FounderNote from "@/components/landing/FounderNote";
 import Footer from "@/components/landing/Footer";
-import FloatingSidebar from "@/components/landing/FloatingSidebar";
 import ShaderBackground from "@/components/ShaderBackground";
 
 export const metadata: Metadata = {
@@ -65,8 +64,6 @@ export default function Home() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
-      {/* Fixed left sidebar — visible on xl+ screens */}
-      <FloatingSidebar />
       <Navbar />
       <main>
         <Hero />
