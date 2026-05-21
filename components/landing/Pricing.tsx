@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { motion } from "framer-motion";
 
 type Tier = {
@@ -58,29 +57,9 @@ const tiers: Tier[] = [
   //         'Priority support',
   //     ],
   // },
-  {
-    name: "Team",
-    monthlyPrice: null,
-    annualPrice: null,
-    period: "",
-    description:
-      "Everything in Pro, shared across your team. Usage tracking, per-seat voice profiles, dedicated support with SLA.",
-    cta: "Contact Sales",
-    ctaHref: "mailto:hello@aletheia.live",
-    download: false,
-    highlighted: false,
-    features: [
-      "Everything in Pro",
-      "Team dashboard",
-      "Per-seat voice profiles",
-      "SLA + dedicated support",
-    ],
-  },
 ];
 
 export default function Pricing() {
-  const [annual, setAnnual] = useState(false);
-
   return (
     <section
       id="pricing"
@@ -114,77 +93,16 @@ export default function Pricing() {
               letterSpacing: "-0.02em",
             }}
           >
-            Same drafting quality.{" "}
-            <em style={{ fontStyle: "italic" }}>Different volume.</em>
+            Free while we&apos;re in beta.{" "}
+            <em style={{ fontStyle: "italic" }}>
+              Paid tiers when you ask for them.
+            </em>
           </h2>
-
-          {/* Annual/Monthly toggle */}
-          <div className="mt-6 flex items-center justify-center gap-4">
-            <span
-              className="text-xs font-bold tracking-widest uppercase"
-              style={{
-                color: annual ? "var(--l-text-dim)" : "var(--l-text)",
-                transition: "color 0.2s ease",
-              }}
-            >
-              Monthly
-            </span>
-            <button
-              onClick={() => setAnnual(!annual)}
-              role="switch"
-              aria-checked={annual}
-              className="relative cursor-pointer"
-              style={{
-                width: 44,
-                height: 24,
-                background: annual ? "var(--l-blue)" : "var(--l-surface-3)",
-                borderRadius: 0,
-                border: "1.5px solid var(--l-border)",
-                padding: 0,
-                display: "flex",
-                alignItems: "center",
-                transition: "background 0.25s ease",
-              }}
-            >
-              <motion.span
-                animate={{ x: annual ? 22 : 2 }}
-                transition={{ type: "spring", stiffness: 500, damping: 35 }}
-                style={{
-                  display: "block",
-                  width: 16,
-                  height: 16,
-                  background: annual ? "var(--l-bg)" : "var(--l-text-muted)",
-                }}
-              />
-            </button>
-            <span
-              className="text-xs font-bold tracking-widest uppercase"
-              style={{
-                color: annual ? "var(--l-text)" : "var(--l-text-dim)",
-                transition: "color 0.2s ease",
-              }}
-            >
-              Annual
-              {annual && (
-                <span
-                  className="ml-2 px-2 py-0.5"
-                  style={{
-                    background: "var(--l-blue)",
-                    color: "var(--l-bg)",
-                    fontSize: "0.6rem",
-                    letterSpacing: "0.1em",
-                  }}
-                >
-                  SAVE 20%
-                </span>
-              )}
-            </span>
-          </div>
         </motion.div>
 
-        {/* Pricing cards — col count tracks visible tier count */}
+        {/* Pricing cards */}
         <div
-          className="grid gap-px md:grid-cols-2 mx-auto max-w-4xl"
+          className="grid gap-px mx-auto max-w-md"
           style={{ background: "var(--l-border)" }}
         >
           {tiers.map((tier, i) => {
@@ -193,9 +111,7 @@ export default function Pricing() {
                 ? "Custom"
                 : tier.monthlyPrice === 0
                   ? "$0"
-                  : annual
-                    ? `$${tier.annualPrice}`
-                    : `$${tier.monthlyPrice}`;
+                  : `$${tier.monthlyPrice}`;
 
             return (
               <motion.div
@@ -254,7 +170,7 @@ export default function Pricing() {
                 {/* Price */}
                 <div className="flex items-end gap-1 mb-5">
                   <motion.span
-                    key={`${tier.name}-${annual}`}
+                    key={tier.name}
                     initial={{ opacity: 0, y: -6 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.2 }}
