@@ -130,7 +130,8 @@ export default function WhyAletheia() {
                 key={card.tag}
                 className="why-card relative flex flex-col p-8"
                 style={{
-                  background: "#0c1f1d",
+                  background: "var(--l-surface-dark)",
+                  backdropFilter: "blur(6px)",
                   border: "1px solid var(--l-border)",
                   minHeight: "380px",
                 }}

@@ -70,7 +70,12 @@ export default function FounderNote() {
 
         <div
           className="founder-reveal space-y-6 text-base leading-relaxed"
-          style={{ color: "var(--l-text-muted)" }}
+          style={{
+            color: "var(--l-text-muted)",
+            background: "var(--l-surface-dark)",
+            backdropFilter: "blur(6px)",
+            padding: "2.5rem",
+          }}
         >
           <p>Hi — I&apos;m Nagarjun.</p>
 
