@@ -27,6 +27,12 @@ export default defineConfig({
         "lib/supabase/server.ts", // SSR cookie wiring — no business logic
         "__tests__/**",
       ],
+      thresholds: {
+        lines: 84,
+        statements: 84,
+        branches: 87,
+        functions: 83,
+      },
     },
   },
   resolve: {
