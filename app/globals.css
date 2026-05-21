@@ -1209,3 +1209,15 @@
 .text-aurora-teal   { color: #4ECDC4; }
 .border-aurora-mint { border-color: rgba(218, 241, 222, 0.15); }
 
+/* WCAG 2.1 SC 2.3.3 — honor user motion preference for all non-essential animation */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
