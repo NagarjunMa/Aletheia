@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createLogger } from "@/lib/logger";
+import { getCorsHeaders } from "@/lib/cors";
 import { settingsSchema } from "./schema";
 
 const log = createLogger("settings-api");
@@ -78,4 +79,61 @@ export async function PATCH(request: NextRequest) {
     "Settings updated",
   );
   return NextResponse.json({ success: true, preferences: data });
+}
+
+export async function GET(request: NextRequest) {
+  const corsHeaders = getCorsHeaders(request, {
+    allowCredentials: true,
+    methods: "GET, PATCH, OPTIONS",
+  });
+
+  const supabase = createClient();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    log.info({ err: authError?.message }, "Unauthenticated GET /api/settings");
+    return NextResponse.json(
+      { error: "Unauthorized" },
+      { status: 401, headers: corsHeaders },
+    );
+  }
+
+  log.debug(
+    { userId: user.id.substring(0, 8) },
+    "GET /api/settings — fetching profile resume/JD",
+  );
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("resume, target_job_description, resume_updated_at")
+    .eq("id", user.id)
+    .single();
+
+  if (error) {
+    log.error({ err: error.message }, "Failed to fetch profile resume/JD");
+    return NextResponse.json(
+      { error: "Failed to fetch settings" },
+      { status: 500, headers: corsHeaders },
+    );
+  }
+
+  return NextResponse.json(
+    {
+      resume: data?.resume ?? null,
+      target_job_description: data?.target_job_description ?? null,
+      resume_updated_at: data?.resume_updated_at ?? null,
+    },
+    { headers: corsHeaders },
+  );
+}
+
+export async function OPTIONS(request: NextRequest) {
+  const corsHeaders = getCorsHeaders(request, {
+    allowCredentials: true,
+    methods: "GET, PATCH, OPTIONS",
+  });
+  return new NextResponse(null, { status: 204, headers: corsHeaders });
 }

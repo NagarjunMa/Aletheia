@@ -8,6 +8,7 @@ const mockSingle = vi.hoisted(() => vi.fn());
 const mockSelect = vi.hoisted(() => vi.fn());
 const mockUpsert = vi.hoisted(() => vi.fn());
 const mockFrom = vi.hoisted(() => vi.fn());
+const mockEq = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(() => ({
@@ -17,7 +18,7 @@ vi.mock("@/lib/supabase/server", () => ({
 }));
 
 // ─── Route handler ────────────────────────────────────────────────────────────
-import { PATCH } from "./route";
+import { PATCH, GET, OPTIONS } from "./route";
 
 // ─── Test fixtures ────────────────────────────────────────────────────────────
 const MOCK_USER = { id: "user-uuid-abc", email: "user@example.com" };
@@ -35,11 +36,14 @@ beforeEach(() => {
   mockUpsert.mockReset();
   mockSelect.mockReset();
   mockFrom.mockReset();
+  mockEq.mockReset();
 
   // Re-establish upsert chain: from().upsert().select().single()
-  mockSelect.mockReturnValue({ single: mockSingle });
+  mockSelect.mockReturnValue({ single: mockSingle, eq: mockEq });
   mockUpsert.mockReturnValue({ select: mockSelect });
-  mockFrom.mockReturnValue({ upsert: mockUpsert });
+  // Re-establish select chain for GET: from().select().eq().single()
+  mockEq.mockReturnValue({ single: mockSingle });
+  mockFrom.mockReturnValue({ upsert: mockUpsert, select: mockSelect });
 });
 
 // ─── Schema Tests (preserved) ─────────────────────────────────────────────────
@@ -242,5 +246,110 @@ describe("PATCH /api/settings", () => {
       );
       expect(res.status).toBe(400);
     });
+  });
+});
+
+// ─── GET /api/settings ────────────────────────────────────────────────────────
+describe("GET /api/settings", () => {
+  const MOCK_PROFILE = {
+    resume: "Software engineer with 5 years experience",
+    target_job_description: "Looking for senior roles",
+    resume_updated_at: "2026-05-01T12:00:00Z",
+  };
+
+  describe("authentication guard", () => {
+    it("returns 401 when user is not authenticated", async () => {
+      mockGetUser.mockResolvedValue({
+        data: { user: null },
+        error: { message: "not authenticated" },
+      });
+
+      const res = await GET(makeRequest({ method: "GET" }));
+      expect(res.status).toBe(401);
+      const body = await res.json();
+      expect(body.error).toBe("Unauthorized");
+    });
+
+    it("returns 401 when getUser returns auth error with null user", async () => {
+      mockGetUser.mockResolvedValue({
+        data: { user: null },
+        error: { message: "JWT expired" },
+      });
+
+      const res = await GET(makeRequest({ method: "GET" }));
+      expect(res.status).toBe(401);
+    });
+  });
+
+  describe("happy path", () => {
+    beforeEach(() => {
+      mockGetUser.mockResolvedValue({ data: { user: MOCK_USER }, error: null });
+    });
+
+    it("returns 200 with resume, target_job_description, and resume_updated_at", async () => {
+      mockSingle.mockResolvedValue({ data: MOCK_PROFILE, error: null });
+
+      const res = await GET(makeRequest({ method: "GET" }));
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.resume).toBe(MOCK_PROFILE.resume);
+      expect(body.target_job_description).toBe(
+        MOCK_PROFILE.target_job_description,
+      );
+      expect(body.resume_updated_at).toBe(MOCK_PROFILE.resume_updated_at);
+    });
+
+    it("returns null fields when profile has no resume or JD", async () => {
+      mockSingle.mockResolvedValue({
+        data: {
+          resume: null,
+          target_job_description: null,
+          resume_updated_at: null,
+        },
+        error: null,
+      });
+
+      const res = await GET(makeRequest({ method: "GET" }));
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.resume).toBeNull();
+      expect(body.target_job_description).toBeNull();
+      expect(body.resume_updated_at).toBeNull();
+    });
+
+    it("queries profiles table with correct user id", async () => {
+      mockSingle.mockResolvedValue({ data: MOCK_PROFILE, error: null });
+
+      await GET(makeRequest({ method: "GET" }));
+
+      expect(mockFrom).toHaveBeenCalledWith("profiles");
+      expect(mockEq).toHaveBeenCalledWith("id", MOCK_USER.id);
+    });
+  });
+
+  describe("error handling", () => {
+    beforeEach(() => {
+      mockGetUser.mockResolvedValue({ data: { user: MOCK_USER }, error: null });
+    });
+
+    it("returns 500 when Supabase profile fetch fails", async () => {
+      mockSingle.mockResolvedValue({
+        data: null,
+        error: { message: "relation does not exist" },
+      });
+
+      const res = await GET(makeRequest({ method: "GET" }));
+      expect(res.status).toBe(500);
+      const body = await res.json();
+      expect(body.error).toBeTruthy();
+    });
+  });
+});
+
+// ─── OPTIONS /api/settings ────────────────────────────────────────────────────
+describe("OPTIONS /api/settings", () => {
+  it("returns 204 for CORS preflight", async () => {
+    const res = await OPTIONS(makeRequest({ method: "OPTIONS" }));
+    expect(res.status).toBe(204);
   });
 });
