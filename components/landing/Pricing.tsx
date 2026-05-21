@@ -5,7 +5,6 @@ import { motion } from "framer-motion";
 type Tier = {
   name: string;
   monthlyPrice: number | null;
-  annualPrice: number | null;
   period: string;
   description: string;
   cta: string;
@@ -23,7 +22,6 @@ const tiers: Tier[] = [
   {
     name: "Free",
     monthlyPrice: 0,
-    annualPrice: 0,
     period: "/mo",
     description:
       "30 drafts per day. Reads the profile you have open and your resume. Short, on-purpose notes — every time.",
