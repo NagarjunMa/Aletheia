@@ -1,0 +1,82 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
+// Mock Supabase client BEFORE importing action
+vi.mock("@/lib/supabase/server", () => ({
+  createClient: vi.fn(),
+}));
+
+import { updateProfile } from "./actions";
+import { createClient } from "@/lib/supabase/server";
+
+describe("updateProfile", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("rejects when resume exceeds 50000 chars", async () => {
+    const result = await updateProfile({
+      full_name: "Test",
+      resume: "x".repeat(50_001),
+      target_job_description: "",
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/resume/i);
+  });
+
+  it("rejects when target_job_description exceeds 20000 chars", async () => {
+    const result = await updateProfile({
+      full_name: "Test",
+      resume: "ok",
+      target_job_description: "x".repeat(20_001),
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/job/i);
+  });
+
+  it("returns auth error when no session", async () => {
+    (createClient as any).mockReturnValue({
+      auth: {
+        getUser: vi
+          .fn()
+          .mockResolvedValue({ data: { user: null }, error: null }),
+      },
+    });
+    const result = await updateProfile({
+      full_name: "Test",
+      resume: "",
+      target_job_description: "",
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/auth|sign/i);
+  });
+
+  it("writes valid input to profiles row", async () => {
+    const updateMock = vi.fn().mockReturnValue({
+      eq: vi.fn().mockResolvedValue({ error: null }),
+    });
+    (createClient as any).mockReturnValue({
+      auth: {
+        getUser: vi
+          .fn()
+          .mockResolvedValue({
+            data: { user: { id: "user-123" } },
+            error: null,
+          }),
+      },
+      from: vi.fn().mockReturnValue({ update: updateMock }),
+    });
+    const result = await updateProfile({
+      full_name: "Nagarjun",
+      resume: "MS CS Boston University",
+      target_job_description: "ML infra eng",
+    });
+    expect(result.ok).toBe(true);
+    expect(updateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        full_name: "Nagarjun",
+        resume: "MS CS Boston University",
+        target_job_description: "ML infra eng",
+      }),
+    );
+  });
+});
