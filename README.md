@@ -398,17 +398,12 @@ Removed measurement theater while keeping moat. See `.claude/phase-24-strategic-
 
 ### Tier 5 — Anti-Phishing Trust Surface (Phase 29)
 
-Triggered by Google Safe Browsing flagging `aletheia.live`. See `.claude/claude-progress.txt` PHASE 29 for full audit.
-
-| Measure | Implementation | File |
-|---------|---------------|------|
-| **Privacy Policy** | 11 sections — operator identity, processor list with policy links, GDPR/CCPA rights, retention, contact. | `app/privacy/page.tsx` |
-| **Terms of Service** | 17 sections — acceptable use, **LinkedIn trademark disclaimer (§5, bolded)**, USD 50 liability cap, MA governing law. | `app/terms/page.tsx` |
-| **LinkedIn disclaimer in footer** | "Not affiliated with, endorsed by, or sponsored by LinkedIn Corporation" below copyright. | `components/landing/Footer.tsx` |
-| **Founder identity** | First-person founder note with name, location, moat story — counters anonymous-operator phishing signal. | `components/landing/FounderNote.tsx` |
-| **Domain unification** | All mailto + brand references on `aletheia.live` (was inconsistently `.ai`/`.live`). | landing components |
-| **Copy de-jargon** | All user-visible "42-word/21-pattern negative lexicon / AI fingerprint detector" repetition removed from Hero, WhyAletheia, HowItWorks, Pricing, FAQ, CTA, auth shell, metadata. Internal code comment in `generate/route.ts:361` intentionally retained. | landing + auth + metadata |
-| **No fake testimonials** | `Testimonials.tsx` ships only as placeholder; commented out of `app/page.tsx` until real beta quotes collected. | `app/page.tsx` |
+Triggered by Google Safe Browsing flagging `aletheia.live`. Added legal pages
+(`app/privacy/page.tsx`, `app/terms/page.tsx`) with LinkedIn trademark
+disclaimer, founder note with real identity (`components/landing/FounderNote.tsx`),
+LinkedIn non-affiliation line in the footer, domain unified to `aletheia.live`,
+and fabricated metric copy stripped from landing/auth/metadata.
+See `.claude/archive/claude-progress-phases-1-27.txt` for the full audit.
 
 ---
 
