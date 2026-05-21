@@ -125,6 +125,7 @@ const MockupCard = () => (
 
     <div className="flex gap-2">
       <button
+        type="button"
         style={{
           flex: 1,
           padding: "8px",
@@ -142,6 +143,7 @@ const MockupCard = () => (
         Copy Message
       </button>
       <button
+        type="button"
         style={{
           padding: "8px 12px",
           fontSize: "11px",
