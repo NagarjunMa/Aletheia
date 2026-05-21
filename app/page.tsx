@@ -1,14 +1,16 @@
 import type { Metadata } from "next";
+import dynamic from "next/dynamic";
 import Navbar from "@/components/landing/Navbar";
 import Hero from "@/components/landing/Hero";
 import WhyAletheia from "@/components/landing/WhyAletheia";
 import HowItWorks from "@/components/landing/HowItWorks";
-import Pricing from "@/components/landing/Pricing";
-import FAQ from "@/components/landing/FAQ";
-import CTA from "@/components/landing/CTA";
-import FounderNote from "@/components/landing/FounderNote";
 import Footer from "@/components/landing/Footer";
 import ShaderBackground from "@/components/ShaderBackground";
+
+const Pricing = dynamic(() => import("@/components/landing/Pricing"));
+const FAQ = dynamic(() => import("@/components/landing/FAQ"));
+const FounderNote = dynamic(() => import("@/components/landing/FounderNote"));
+const CTA = dynamic(() => import("@/components/landing/CTA"));
 
 export const metadata: Metadata = {
   title:
