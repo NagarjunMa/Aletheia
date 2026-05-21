@@ -29,11 +29,6 @@ export default function Footer() {
     document.querySelector(href)?.scrollIntoView({ behavior: "smooth" });
   };
 
-  const colorIn = (e: React.MouseEvent<HTMLElement>) =>
-    (e.currentTarget.style.color = "var(--l-text)");
-  const colorOut = (e: React.MouseEvent<HTMLElement>) =>
-    (e.currentTarget.style.color = "var(--l-text-dim)");
-
   return (
     <footer
       className="relative px-5 sm:px-8 py-12"
@@ -68,10 +63,7 @@ export default function Footer() {
                 <Link
                   key={link.href}
                   href={link.href}
-                  className={linkClasses}
-                  style={{ color: "var(--l-text-dim)" }}
-                  onMouseEnter={colorIn}
-                  onMouseLeave={colorOut}
+                  className={`${linkClasses} text-[var(--l-text-dim)] hover:text-[var(--l-text)] transition-colors duration-150`}
                 >
                   {link.label}
                 </Link>
@@ -80,10 +72,7 @@ export default function Footer() {
                   type="button"
                   key={link.href}
                   onClick={() => scrollTo(link.href)}
-                  className={linkClasses}
-                  style={{ color: "var(--l-text-dim)" }}
-                  onMouseEnter={colorIn}
-                  onMouseLeave={colorOut}
+                  className={`${linkClasses} text-[var(--l-text-dim)] hover:text-[var(--l-text)] transition-colors duration-150`}
                 >
                   {link.label}
                 </button>
