@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import ShaderBackground from "@/components/ShaderBackground";
+import EmptyState from "./EmptyState";
 
 export default async function DashboardPage() {
   const supabase = createClient();
@@ -142,6 +143,8 @@ export default async function DashboardPage() {
             </p>
           </div>
         </div>
+
+        {totalDrafts === 0 && <EmptyState />}
 
         {/* Recent Messages */}
         {recentDrafts.length > 0 && (
