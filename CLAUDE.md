@@ -70,7 +70,7 @@ Chrome Extension (MV3)              Next.js Web App
 | Error Tracking | Sentry | Client + server + edge configs |
 | Animation | Framer Motion + GSAP (`gsap@^3.15`, `ScrollTrigger`) | Framer for landing reveals; GSAP for navbar scroll-glass + mobile menu timelines |
 | Visual / shader | `@paper-design/shaders-react@0.0.76` | `MeshGradient` powers `components/ShaderBackground.tsx` — single full-viewport canvas, 5 colors `#204050 → #70b8c8`, distortion 0.85, swirl 0.25, grain 0.05/0.05 |
-| Typography | Flaviotte (display + body) + Playfair Display / Cormorant Garamond / DM Sans (fallbacks) | `--font-flaviotte` via `next/font/local` from `public/fonts/Flaviotte.woff2`. Same font bundled into extension at `ascendia-extension/assets/fonts/Flaviotte.{woff2,woff}` with `@font-face` in popup.css + settings.css |
+| Typography | Flaviotte (display + body) | Local via `next/font/local` from `public/fonts/Flaviotte.woff2`. Bundled into extension at `ascendia-extension/assets/fonts/`. |
 | Testing | Vitest (unit), Playwright (E2E) | |
 
 ---
@@ -83,8 +83,11 @@ app/
   api/{auth/me,health,feedback}/
   auth/{login,register,callback,forgot-password,reset-password}/
   {dashboard,profile,settings}/
-  privacy/page.tsx     ← legal (Phase 29)
-  terms/page.tsx       ← legal (Phase 29)
+  dashboard/EmptyState.tsx  ← first-login CTA (Phase 30)
+  demo/{page.tsx,sample-data.ts}  ← public no-auth sample (Phase 30)
+  status/page.tsx               ← public build version + SHA (Phase 30)
+  privacy/page.tsx              ← legal (Phase 29)
+  terms/page.tsx                ← legal (Phase 29)
   layout.tsx, page.tsx, providers.tsx
 
 ascendia-extension/
@@ -92,10 +95,9 @@ ascendia-extension/
   content/{linkedin-reader.js,auto-filler.js}
   popup/    settings/    lib/    manifest.json
 
-components/landing/   ← landing page components (Hero, Navbar, WhyAletheia, HowItWorks, Pricing, FAQ, CTA, FounderNote, Footer, FloatingSidebar, Testimonials*).
-                       *Testimonials is hidden from app/page.tsx pending real beta quotes; re-enable instructions in the component docblock.
-components/ShaderBackground.tsx  ← full-viewport MeshGradient background reused by landing, auth, privacy, terms, dashboard, profile, settings
-components/AuroraBackground.tsx  ← legacy CSS aurora shards. No active importers (kept on disk).
+components/landing/   ← Hero, Navbar, WhyAletheia, HowItWorks, Pricing, FAQ, CTA, FounderNote, Footer
+components/demo/DemoExample.tsx  ← client component for /demo route (Phase 30)
+components/ShaderBackground.tsx  ← full-viewport MeshGradient background reused by landing, auth, privacy, terms, dashboard, profile, settings, demo, status
 
 public/fonts/
   Flaviotte.woff2 / Flaviotte.woff  ← local font, registered via next/font/local
