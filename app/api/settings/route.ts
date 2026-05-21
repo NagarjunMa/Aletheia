@@ -7,6 +7,11 @@ import { settingsSchema } from "./schema";
 const log = createLogger("settings-api");
 
 export async function PATCH(request: NextRequest) {
+  const corsHeaders = getCorsHeaders(request, {
+    allowCredentials: true,
+    methods: "GET, PATCH, OPTIONS",
+  });
+
   const supabase = createClient();
   const {
     data: { user },
@@ -15,7 +20,10 @@ export async function PATCH(request: NextRequest) {
 
   if (authError || !user) {
     log.info({ err: authError?.message }, "Unauthenticated settings request");
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json(
+      { error: "Unauthorized" },
+      { status: 401, headers: corsHeaders },
+    );
   }
 
   log.debug(
@@ -27,7 +35,10 @@ export async function PATCH(request: NextRequest) {
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Invalid JSON" },
+      { status: 400, headers: corsHeaders },
+    );
   }
 
   const parsed = settingsSchema.safeParse(body);
@@ -41,7 +52,7 @@ export async function PATCH(request: NextRequest) {
     );
     return NextResponse.json(
       { error: "Invalid request", details: parsed.error.flatten() },
-      { status: 400 },
+      { status: 400, headers: corsHeaders },
     );
   }
 
@@ -70,7 +81,7 @@ export async function PATCH(request: NextRequest) {
     log.error({ err: error.message }, "Failed to update user preferences");
     return NextResponse.json(
       { error: "Failed to update settings" },
-      { status: 500 },
+      { status: 500, headers: corsHeaders },
     );
   }
 
@@ -78,7 +89,10 @@ export async function PATCH(request: NextRequest) {
     { userId: user.id.substring(0, 8), resetStyle: reset_style ?? false },
     "Settings updated",
   );
-  return NextResponse.json({ success: true, preferences: data });
+  return NextResponse.json(
+    { success: true, preferences: data },
+    { headers: corsHeaders },
+  );
 }
 
 export async function GET(request: NextRequest) {
