@@ -218,17 +218,8 @@ export default function Hero() {
           >
             Join the Waitlist
           </a>
-          <a
-            href="#how-it-works"
-            className="btn-secondary"
-            onClick={(e) => {
-              e.preventDefault();
-              document
-                .querySelector("#how-it-works")
-                ?.scrollIntoView({ behavior: "smooth" });
-            }}
-          >
-            View Demo
+          <a href="/demo" className="btn-secondary">
+            See a real draft
           </a>
         </motion.div>
 
@@ -241,6 +232,16 @@ export default function Hero() {
           transition={{ duration: 0.5, delay: 1.05 }}
         >
           Coming soon to Chrome Web Store · Free tier · 30 drafts/day
+        </motion.p>
+
+        <motion.p
+          className="mt-2 text-[10px] tracking-widest uppercase"
+          style={{ color: "var(--l-text-dim)" }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.5, delay: 1.18 }}
+        >
+          Profile HTML stripped in your browser · No background scraping
         </motion.p>
       </div>
 
