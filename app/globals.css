@@ -309,7 +309,7 @@
 
   /* Text */
   --l-text:      #CBEFEB;
-  --l-text-muted: #48A89A;
+  --l-text-muted: #A8DCD3; /* luminance 0.66 — readable on shader-light blooms; AAA on shader-dark */
   --l-text-dim:  rgba(203, 239, 235, 0.45);
 
   /* Accent — mint / sage green */
