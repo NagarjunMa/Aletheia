@@ -188,7 +188,7 @@ export default function Hero() {
         {/* Subheadline */}
         <motion.p
           className="mx-auto mt-8 max-w-2xl text-lg"
-          style={{ color: "#204050", lineHeight: 1.7 }}
+          style={{ color: "var(--l-text)", opacity: 0.82, lineHeight: 1.7 }}
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.72, ease }}
