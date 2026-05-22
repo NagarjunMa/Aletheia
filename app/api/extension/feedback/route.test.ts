@@ -1,5 +1,46 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { feedbackSchema } from "./schema";
+
+// ─── Hoisted mocks for POST route tests ─────────────────────────────────────
+const mockAuthGetUser = vi.hoisted(() => vi.fn());
+const mockInsert = vi.hoisted(() => vi.fn());
+const mockUpsert = vi.hoisted(() => vi.fn());
+const mockSelect = vi.hoisted(() => vi.fn());
+const mockEq = vi.hoisted(() => vi.fn());
+const mockMaybeSingle = vi.hoisted(() => vi.fn());
+const mockRpc = vi.hoisted(() => vi.fn());
+const mockServiceFrom = vi.hoisted(() => vi.fn());
+
+vi.mock("@supabase/supabase-js", () => ({
+  createClient: vi.fn((url: string, key: string) => {
+    // Return different mocks for auth vs service depending on which key is passed.
+    if (key && key.includes("anon")) {
+      return { auth: { getUser: mockAuthGetUser } };
+    }
+    return {
+      from: mockServiceFrom,
+      rpc: mockRpc,
+    };
+  }),
+}));
+
+vi.mock("@/lib/cors", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/cors")>();
+  return {
+    ...actual,
+    getCorsHeaders: vi.fn(actual.getCorsHeaders),
+  };
+});
+
+// Wire chain: from("user_feedback").insert(...) or from("user_preferences").select(...).eq(...).maybeSingle() / upsert(...)
+mockServiceFrom.mockImplementation((table: string) => {
+  if (table === "user_feedback") return { insert: mockInsert };
+  if (table === "user_preferences")
+    return { select: mockSelect, upsert: mockUpsert };
+  return { insert: mockInsert, upsert: mockUpsert, select: mockSelect };
+});
+mockSelect.mockReturnValue({ eq: mockEq });
+mockEq.mockReturnValue({ maybeSingle: mockMaybeSingle });
 
 describe("feedbackSchema", () => {
   const validPayload = {
@@ -135,5 +176,117 @@ describe("feedbackSchema", () => {
       },
     });
     expect(result.success).toBe(false);
+  });
+});
+
+// ─── POST route tests (T8, T9, T10) ─────────────────────────────────────────
+import { POST } from "./route";
+import { makeRequest } from "@/__tests__/helpers/request";
+
+const validBody = {
+  message: "Hi Priya — short personal note.",
+  approved: true,
+  category: "linkedin_connection",
+};
+
+describe("POST /api/extension/feedback — dual-behavior persistence contract", () => {
+  beforeEach(() => {
+    mockAuthGetUser.mockReset();
+    mockInsert.mockReset();
+    mockUpsert.mockReset();
+    mockRpc.mockReset();
+    mockMaybeSingle.mockReset();
+
+    // Default: authenticated user
+    mockAuthGetUser.mockResolvedValue({
+      data: { user: { id: "test-user-id", email: "u@example.com" } },
+      error: null,
+    });
+    // Default: no existing prefs row
+    mockMaybeSingle.mockResolvedValue({ data: null, error: null });
+    // Default: insert + RPC succeed
+    mockInsert.mockResolvedValue({ error: null });
+    mockRpc.mockResolvedValue({ error: null });
+    mockUpsert.mockResolvedValue({ error: null });
+  });
+
+  // T8 — sync user_feedback insert + 200
+  it("inserts user_feedback row synchronously and returns 200", async () => {
+    const res = await POST(
+      makeRequest({
+        method: "POST",
+        headers: { authorization: "Bearer test" },
+        body: validBody,
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(mockServiceFrom).toHaveBeenCalledWith("user_feedback");
+    expect(mockInsert).toHaveBeenCalled();
+  });
+
+  // T8 — fire-and-forget guarantee (RPC error must not affect HTTP response)
+  it("returns 200 even when style RPC throws (fire-and-forget guarantee)", async () => {
+    mockRpc.mockRejectedValueOnce(new Error("RPC crashed"));
+    const res = await POST(
+      makeRequest({
+        method: "POST",
+        headers: { authorization: "Bearer test" },
+        body: validBody,
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(mockInsert).toHaveBeenCalled();
+  });
+
+  // T8 — insert error is logged but does not propagate as 5xx
+  it("returns 200 even when user_feedback insert errors (logged not propagated)", async () => {
+    mockInsert.mockResolvedValueOnce({
+      error: { message: "constraint violation" },
+    });
+    const res = await POST(
+      makeRequest({
+        method: "POST",
+        headers: { authorization: "Bearer test" },
+        body: validBody,
+      }),
+    );
+    expect(res.status).toBe(200);
+  });
+
+  // T9 — approved messages fire the style-merge RPC
+  it("calls increment_approved_count RPC on approved message", async () => {
+    await POST(
+      makeRequest({
+        method: "POST",
+        headers: { authorization: "Bearer test" },
+        body: {
+          message: "Hey Priya, your sparse attention work caught my eye.",
+          approved: true,
+          category: "linkedin_connection",
+        },
+      }),
+    );
+    // Allow fire-and-forget Promise to resolve
+    await new Promise((r) => setImmediate(r));
+    expect(mockRpc).toHaveBeenCalled();
+    const rpcCallName = mockRpc.mock.calls[0]?.[0] as string;
+    expect(rpcCallName).toMatch(/approved|increment|style/i);
+  });
+
+  // T10 — RPC unavailable triggers user_preferences upsert fallback
+  it("falls back to user_preferences upsert when style RPC errors", async () => {
+    mockRpc.mockResolvedValueOnce({
+      error: { code: "42883", message: "function not found" },
+    });
+    await POST(
+      makeRequest({
+        method: "POST",
+        headers: { authorization: "Bearer test" },
+        body: validBody,
+      }),
+    );
+    await new Promise((r) => setImmediate(r));
+    expect(mockRpc).toHaveBeenCalled();
+    expect(mockUpsert).toHaveBeenCalled();
   });
 });
