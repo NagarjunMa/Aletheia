@@ -46,15 +46,15 @@ export default function DemoPage() {
         <DemoExample />
 
         <div className="mt-14 flex flex-col items-center gap-3">
-          <Link href="/#cta" className="btn-primary">
-            Join the Waitlist
+          <Link href="/install" className="btn-primary">
+            Download Extension
           </Link>
           <Link
-            href="/ascendia-extension.zip"
+            href="/"
             className="text-xs tracking-widest uppercase"
             style={{ color: "var(--l-text-dim)" }}
           >
-            Or download the extension (.zip)
+            ← Back to home
           </Link>
         </div>
       </div>

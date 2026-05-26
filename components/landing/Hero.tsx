@@ -206,17 +206,8 @@ export default function Hero() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.86, ease }}
         >
-          <a
-            href="#cta"
-            className="btn-primary"
-            onClick={(e) => {
-              e.preventDefault();
-              document
-                .querySelector("#cta")
-                ?.scrollIntoView({ behavior: "smooth" });
-            }}
-          >
-            Join the Waitlist
+          <a href="/install" className="btn-primary">
+            Download Extension
           </a>
           <a href="/demo" className="btn-secondary">
             See a real draft
@@ -231,7 +222,7 @@ export default function Hero() {
           animate={{ opacity: 1 }}
           transition={{ duration: 0.5, delay: 1.05 }}
         >
-          Coming soon to Chrome Web Store · Free tier · 30 drafts/day
+          Available for Chrome · Free · 30 drafts/day
         </motion.p>
 
         <motion.p
