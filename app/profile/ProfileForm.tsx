@@ -20,6 +20,39 @@ export default function ProfileForm({
   const [pending, startTransition] = useTransition();
   const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
+  const [uploadStatus, setUploadStatus] = useState<
+    "idle" | "uploading" | "error"
+  >("idle");
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  const onFilePick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadStatus("uploading");
+    setUploadError(null);
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const res = await fetch("/api/profile/parse-resume", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setUploadStatus("error");
+        setUploadError(data.error ?? "Upload failed");
+        return;
+      }
+      setResume(data.text);
+      setUploadStatus("idle");
+      e.target.value = "";
+    } catch (err) {
+      setUploadStatus("error");
+      setUploadError(err instanceof Error ? err.message : "Network error");
+    }
+  };
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -71,9 +104,30 @@ export default function ProfileForm({
         >
           Resume{" "}
           <span className="lowercase opacity-60">
-            (paste plain text — used to ground drafts)
+            (upload .pdf or .txt — or paste below)
           </span>
         </label>
+        <div className="flex items-center gap-3">
+          <label
+            htmlFor="resume-file"
+            className="cursor-pointer rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card))] px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[hsl(var(--secondary))]"
+          >
+            {uploadStatus === "uploading" ? "Parsing…" : "Upload file"}
+          </label>
+          <input
+            id="resume-file"
+            type="file"
+            accept=".pdf,.txt,application/pdf,text/plain"
+            onChange={onFilePick}
+            disabled={uploadStatus === "uploading"}
+            className="sr-only"
+          />
+          {uploadStatus === "error" && uploadError && (
+            <span className="text-xs text-red-400" role="alert">
+              {uploadError}
+            </span>
+          )}
+        </div>
         <textarea
           id="resume"
           value={resume}
