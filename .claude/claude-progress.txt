@@ -190,39 +190,75 @@ OPEN:
 
 --------------------------------------------------------------------------------
 
-PHASE 30 — Landing Accessibility + Visual Polish
-Status: [~] IN PROGRESS — 2026-05-21
+PHASE 30 — Landing Accessibility + Visual Polish + Profile Resume Track B
+Status: [x] COMPLETE — 2026-05-22 (merged via feat/polish-and-profile-resume)
 --------------------------------------------------------------------------------
-Multi-part fix: (1) explicit button types for a11y, (2) color token re-keying,
-(3) visual polish (surface tokens, animations, imports).
+A1–A10 + B1–B6 landed. See plan
+docs/superpowers/plans/2026-05-21-frontend-polish-and-profile-resume.md.
 
-COMPLETED:
-  [x] A1: Hero subhead invisible color — change Hero.tsx subhead color from
-      var(--l-text-muted) to transparent in dark theme, fix opacity via style
-      className='text-opacity-40'. Commit: 0baa7cd
-  [x] A2: Global reduced-motion guard in globals.css — wrap all @keyframes
-      in @media (prefers-reduced-motion: no-preference). Commit: b3f8d2f
-  [x] A3: type="button" on Navbar (4 buttons) — add explicit type="button"
-      to ThemeToggle, GetExtension, MobileMenu toggle, Search dismiss.
-      Commit: 7e4ff4a
-  [x] A4: type="button" on FAQ/Footer/HowItWorks — add explicit type="button"
-      to FAQ accordion toggle (1), Footer scroll links (4), HowItWorks mockup
-      buttons (2). Commit: 9cb379b
+--------------------------------------------------------------------------------
 
-PENDING:
-  [ ] A5: Re-key --l-text-muted #48A89A → #A8DCD3 (lighter, higher contrast)
-  [ ] A6: Add --l-surface-dark token + apply to body-text cards
-  [ ] A7: Delete dead @keyframes
-  [ ] A8: Footer CSS hover (remove JS mouseenter handlers)
-  [ ] A9: ShaderBackground reduced-motion static fallback
-  [ ] A10: Dynamic import below-fold landing sections
-  [ ] B1–B6: Profile form + resume/JD integration
+PHASE 31 — AI Test Safety Net
+Status: [x] COMPLETE — 2026-05-22 (merged via feat/ai-test-safety-net)
+--------------------------------------------------------------------------------
+- escapeForXmlTag corpus tests (10)
+- ai-fingerprint-detector: 21/21 pattern coverage (24 tests)
+- generate route: inmail happy path, 504 timeout, 502 parse, 401 token,
+  sentence-boundary truncation (36 tests)
+- feedback route: dual-behavior contract, style RPC accumulation, upsert
+  fallback (19 tests)
+Coverage 87% → 92%.
 
-VERIFIED (this phase):
-  [x] npm run type-check → clean
-  [x] npm run lint → no errors
-  [x] Pre-commit: 235 unit tests pass, 13 guardrail tests pass
-  [x] Production build succeeds (Next.js + esbuild)
+--------------------------------------------------------------------------------
+
+PHASE 32 — Login Redirect + Sign Out
+Status: [x] COMPLETE — 2026-05-26 (merged via fix/login-redirect-to-dashboard)
+--------------------------------------------------------------------------------
+- Default post-login redirect: "/" → "/dashboard" (login page + middleware)
+- signOutAction server action + SignOutButton client component on dashboard
+- .gitignore: add .env-backup
+
+--------------------------------------------------------------------------------
+
+PHASE 33 — Profile Resume Upload (PDF + TXT)
+Status: [x] COMPLETE — 2026-05-26 (merged via feat/profile-resume-upload)
+--------------------------------------------------------------------------------
+- POST /api/profile/parse-resume — unpdf server-side text extraction
+  5 MB file cap, 50k char output cap, 8 unit tests (401/400/413/415/
+  200 PDF/200 TXT/truncation/422 corrupt)
+- ProfileForm: file picker populates resume textarea pre-Save
+- unpdf@1.6.2 added to deps
+
+VERIFIED (post-merge):
+  [x] 285 unit tests pass
+  [x] 13 guardrails pass
+  [x] Production build succeeds
+  [x] Extension loaded locally + tested end-to-end:
+       - Auth (login + session restore via /api/extension/session)
+       - Generate WITH resume → personalized message, real name
+       - Generate WITHOUT resume → placeholder name (anti-hallucination
+         working as designed)
+       - Feedback (accept) → POST /api/extension/feedback 200
+       - Retry survived transient 502 (likely Vercel cold start or
+         Anthropic JSON parse), attempt 2 → 200
+
+--------------------------------------------------------------------------------
+
+KNOWN LOCAL-LOAD GOTCHA (logged for later cleanup, not blocking)
+--------------------------------------------------------------------------------
+public/ascendia-extension.zip is currently BROKEN — esbuild bundles
+service-worker.js but leaves importScripts('auth.js') intact while
+auth.js is not an entry point, so the unzipped folder has no auth.js
+and Chrome rejects with "Service worker registration failed. Status
+code: 15".
+
+WORKAROUND for local dev: load ascendia-extension/ source directly
+into Chrome — files are already plain MV3 JS, no bundling needed.
+
+PROPER FIX before Chrome Web Store submission: update
+scripts/build-extension-zip.mjs to either (a) add background/auth.js
+as an entry point AND strip importScripts() from service-worker, OR
+(b) skip bundling for background/* and copy verbatim into the zip.
 
 --------------------------------------------------------------------------------
 
