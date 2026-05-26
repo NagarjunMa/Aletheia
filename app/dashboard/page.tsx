@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import ShaderBackground from "@/components/ShaderBackground";
+import SignOutButton from "@/components/SignOutButton";
 import EmptyState from "./EmptyState";
 
 export default async function DashboardPage() {
@@ -53,13 +54,16 @@ export default async function DashboardPage() {
       <ShaderBackground />
       <div className="mx-auto max-w-4xl animate-fade-in">
         {/* Header */}
-        <div className="mb-10">
-          <h1 className="text-3xl font-bold text-white">
-            Welcome back, {displayName}
-          </h1>
-          <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">
-            {user.email}
-          </p>
+        <div className="mb-10 flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-white">
+              Welcome back, {displayName}
+            </h1>
+            <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">
+              {user.email}
+            </p>
+          </div>
+          <SignOutButton />
         </div>
 
         {/* Stats Cards */}
