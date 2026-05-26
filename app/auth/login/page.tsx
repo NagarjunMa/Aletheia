@@ -98,7 +98,7 @@ export default function LoginPage() {
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirectTo = searchParams.get("redirectTo") || "/";
+  const redirectTo = searchParams.get("redirectTo") || "/dashboard";
   const source = searchParams.get("source");
 
   const [email, setEmail] = useState("");

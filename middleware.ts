@@ -171,7 +171,7 @@ export async function middleware(request: NextRequest) {
   if (isAuthRoute && user && !isExtensionLogin && !isServerAction) {
     const redirectTo = request.nextUrl.searchParams.get("redirectTo");
     const dashboardUrl = request.nextUrl.clone();
-    dashboardUrl.pathname = redirectTo || "/";
+    dashboardUrl.pathname = redirectTo || "/dashboard";
     dashboardUrl.searchParams.delete("redirectTo");
     log.info(
       { redirectTo: dashboardUrl.pathname },
