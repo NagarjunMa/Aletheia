@@ -27,6 +27,7 @@ pnpm-debug.log*
 .env.production
 .env.staging
 .env.sentry-build-plugin
+.env-backup
 
 # API keys, certificates, and sensitive configuration
 *.pem
