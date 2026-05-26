@@ -12,9 +12,9 @@ if (typeof window !== "undefined") {
 }
 
 // Replace with real Web Store URL once the listing is published. Until then,
-// link to /demo so the click still lands on a high-trust surface.
+// link to /install so the click lands on the sideload guide.
 const CHROME_WEB_STORE_URL: string =
-  process.env.NEXT_PUBLIC_CHROME_WEB_STORE_URL ?? "/demo";
+  process.env.NEXT_PUBLIC_CHROME_WEB_STORE_URL ?? "/install";
 
 const navLinks = [
   { label: "Features", href: "#features" },
@@ -267,7 +267,7 @@ export default function Navbar() {
           >
             {CHROME_WEB_STORE_URL.startsWith("http")
               ? "Get on Chrome Web Store"
-              : "See a real draft"}
+              : "Download Extension"}
           </a>
         </div>
 
@@ -340,7 +340,7 @@ export default function Navbar() {
           >
             {CHROME_WEB_STORE_URL.startsWith("http")
               ? "Get on Chrome Web Store"
-              : "See a real draft"}
+              : "Download Extension"}
           </a>
         </div>
       </div>

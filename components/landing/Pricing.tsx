@@ -25,8 +25,8 @@ const tiers: Tier[] = [
     period: "/mo",
     description:
       "30 drafts per day. Reads the profile you have open and your resume. Short, on-purpose notes — every time.",
-    cta: "Join Waitlist",
-    ctaHref: "#cta",
+    cta: "Download Extension",
+    ctaHref: "/install",
     download: false,
     highlighted: false,
     features: [
