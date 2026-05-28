@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import {
+  createClient,
+  createBearerAuthClient,
+  createBearerServiceClient,
+} from "@/lib/supabase/server";
 import { createLogger } from "@/lib/logger";
 import { getCorsHeaders } from "@/lib/cors";
 
@@ -12,17 +15,11 @@ const DAILY_LIMIT = Number(process.env.EXTENSION_DAILY_LIMIT) || 30;
 
 // Lazy factory functions — avoid module-level Supabase instantiation at build time
 function getSupabaseAuth() {
-  return createSupabaseClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  );
+  return createBearerAuthClient();
 }
 
 function getSupabaseService() {
-  return createSupabaseClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  );
+  return createBearerServiceClient();
 }
 
 // ─── Usage query ───

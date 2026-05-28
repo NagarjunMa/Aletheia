@@ -103,16 +103,14 @@
             <strong>API Base URL</strong>
           </label>
           <select id="apiUrlSelect" class="text-input">
-            <option value="https://aletheia.vercel.app">https://aletheia.vercel.app (Production)</option>
-            <option value="http://localhost:3000">http://localhost:3000 (Development)</option>
-            <option value="custom">Custom URL...</option>
+            <option value="https://www.aletheia.live">https://www.aletheia.live (Production)</option>
           </select>
-          <input type="url" id="apiUrlCustom" placeholder="https://your-custom-deployment.vercel.app"
+          <input type="url" id="apiUrlCustom" placeholder="https://www.aletheia.live"
             class="text-input hidden" style="margin-top: 8px;" />
           <!-- Hidden input kept for backward compatibility -->
           <input type="hidden" id="apiUrlInput" />
           <div class="help-text">
-            Select your Aletheia deployment. Use "Development" for local testing.
+            Aletheia connects to the production deployment.
           </div>
         </div>
 

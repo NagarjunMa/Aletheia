@@ -212,3 +212,4 @@ docs/.docusaurus/
 .babelrc.js
 .vercel
 .env*
+.claude/security-*.md

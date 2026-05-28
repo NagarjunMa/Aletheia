@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@supabase/supabase-js";
+import { createBearerServiceClient } from "@/lib/supabase/server";
 import { createLogger } from "@/lib/logger";
 
 const log = createLogger("feedback");
@@ -13,10 +13,7 @@ const feedbackSchema = z.object({
 });
 
 function getSupabaseAdmin() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  );
+  return createBearerServiceClient();
 }
 
 export async function POST(req: NextRequest) {
