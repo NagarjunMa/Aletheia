@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Aletheia - LinkedIn Message Generator",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Generate personalized LinkedIn connection messages and cold emails using AI",
   "permissions": [
     "storage",
@@ -16,9 +16,7 @@
     "https://www.linkedin.com/*",
     "https://app.apollo.io/*",
     "https://www.aletheia.live/*",
-    "https://aletheia.live/*",
-    "http://localhost:3000/*",
-    "https://*.vercel.app/*"
+    "https://aletheia.live/*"
   ],
   "side_panel": {
     "default_path": "popup/popup.html"

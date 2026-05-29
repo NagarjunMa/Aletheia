@@ -260,19 +260,31 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 // Helper: resolve the effective API URL from sync > local > default.
-// Auto-heals stale localhost values left over from local dev installs.
+// Only allow hosts present in manifest host_permissions to prevent
+// stale storage values (e.g. localhost from dev installs, *.vercel.app
+// from earlier prod fallback) from routing requests to disallowed
+// origins after manifest narrowing.
+const ALLOWED_API_HOSTS = ['aletheia.live', 'www.aletheia.live'];
+function isAllowedApiUrl(value) {
+  if (!value) return false;
+  try {
+    return ALLOWED_API_HOSTS.includes(new URL(value).hostname);
+  } catch {
+    return false;
+  }
+}
 async function getEffectiveApiUrl() {
   const { apiBaseUrl } = await chrome.storage.sync.get('apiBaseUrl');
-  if (apiBaseUrl && !apiBaseUrl.includes('localhost')) return apiBaseUrl;
+  if (isAllowedApiUrl(apiBaseUrl)) return apiBaseUrl;
   if (apiBaseUrl) {
     await chrome.storage.sync.remove('apiBaseUrl');
-    console.log('[SW] Wiped stale localhost apiBaseUrl from sync storage');
+    console.log('[SW] Wiped stale apiBaseUrl from sync storage');
   }
   const { apiUrl } = await chrome.storage.local.get('apiUrl');
-  if (apiUrl && !apiUrl.includes('localhost')) return apiUrl;
+  if (isAllowedApiUrl(apiUrl)) return apiUrl;
   if (apiUrl) {
     await chrome.storage.local.remove('apiUrl');
-    console.log('[SW] Wiped stale localhost apiUrl from local storage');
+    console.log('[SW] Wiped stale apiUrl from local storage');
   }
   return CONFIG.DEFAULT_API_URL;
 }

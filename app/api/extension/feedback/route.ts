@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { createLogger } from "@/lib/logger";
 import {
@@ -7,6 +6,10 @@ import {
   mergeStylePatterns,
   type StylePatterns,
 } from "@/lib/ai/style-analyzer";
+import {
+  createBearerAuthClient,
+  createBearerServiceClient,
+} from "@/lib/supabase/server";
 import { getCorsHeaders } from "@/lib/cors";
 import { feedbackSchema } from "./schema";
 
@@ -14,17 +17,11 @@ const log = createLogger("extension-feedback");
 
 // Lazy factory functions — avoid module-level instantiation at build time
 function getSupabaseService() {
-  return createSupabaseClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  );
+  return createBearerServiceClient();
 }
 
 function getSupabaseAuth() {
-  return createSupabaseClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  );
+  return createBearerAuthClient();
 }
 
 // ─── Auth helper (duplicated from generate/route.ts) ───

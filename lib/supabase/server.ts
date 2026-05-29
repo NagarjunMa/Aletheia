@@ -3,6 +3,7 @@
 // Purpose: Server-side Supabase client for Server Actions and SSR
 
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import { createClient as createSupabaseJsClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import type { User } from "@supabase/supabase-js";
 import type { Database, TablesInsert } from "@/lib/database/types";
@@ -53,33 +54,79 @@ export function createServiceClient() {
       "SUPABASE_SERVICE_ROLE_KEY environment variable is not set",
     );
   }
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!supabaseUrl) {
+    throw new Error("NEXT_PUBLIC_SUPABASE_URL environment variable is not set");
+  }
   const cookieStore = cookies();
 
-  return createServerClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    serviceRoleKey,
-    {
-      cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value;
-        },
-        set(name: string, value: string, options: CookieOptions) {
-          try {
-            cookieStore.set({ name, value, ...options });
-          } catch {
-            // Handle cookie setting errors
-          }
-        },
-        remove(name: string, options: CookieOptions) {
-          try {
-            cookieStore.set({ name, value: "", ...options });
-          } catch {
-            // Handle cookie removal errors
-          }
-        },
+  return createServerClient<Database>(supabaseUrl, serviceRoleKey, {
+    cookies: {
+      get(name: string) {
+        return cookieStore.get(name)?.value;
+      },
+      set(name: string, value: string, options: CookieOptions) {
+        try {
+          cookieStore.set({ name, value, ...options });
+        } catch {
+          // Handle cookie setting errors
+        }
+      },
+      remove(name: string, options: CookieOptions) {
+        try {
+          cookieStore.set({ name, value: "", ...options });
+        } catch {
+          // Handle cookie removal errors
+        }
       },
     },
-  );
+  });
+}
+
+// Cookie-less service-role client for Bearer-token API routes (extension
+// endpoints). Use this instead of the cookie-bound `createServiceClient()`
+// when the route is not part of the SSR cookie flow — i.e. when auth is
+// validated via Bearer JWT, not session cookies.
+//
+// Validates env vars at call time. Reads the service role key into a local
+// variable; never logged, never returned.
+//
+// Intentionally NOT generic over Database: the bearer routes historically
+// used the untyped `createClient` form and rely on JSONB / dynamic table
+// access. Tightening to `Database` requires a sweep of those routes; do
+// that as a follow-up, not in the security refactor.
+export function createBearerServiceClient() {
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!serviceRoleKey) {
+    throw new Error(
+      "SUPABASE_SERVICE_ROLE_KEY environment variable is not set",
+    );
+  }
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!supabaseUrl) {
+    throw new Error("NEXT_PUBLIC_SUPABASE_URL environment variable is not set");
+  }
+  return createSupabaseJsClient(supabaseUrl, serviceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
+// Anon-key Supabase client used by extension routes only to validate Bearer
+// JWTs via `auth.getUser(accessToken)`. Validates env vars at call time.
+export function createBearerAuthClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!supabaseUrl) {
+    throw new Error("NEXT_PUBLIC_SUPABASE_URL environment variable is not set");
+  }
+  if (!anonKey) {
+    throw new Error(
+      "NEXT_PUBLIC_SUPABASE_ANON_KEY environment variable is not set",
+    );
+  }
+  return createSupabaseJsClient(supabaseUrl, anonKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
 }
 
 // Helper function to get authenticated user

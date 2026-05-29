@@ -12,21 +12,16 @@ const mockSelect = vi.hoisted(() => vi.fn());
 const mockFrom = vi.hoisted(() => vi.fn());
 
 // ─── Module mocks ─────────────────────────────────────────────────────────────
-// @supabase/supabase-js: used by getSupabaseAuth() (anon key) and getSupabaseService() (service key)
-vi.mock("@supabase/supabase-js", () => ({
-  createClient: vi.fn().mockImplementation((_url: string, key: string) => {
-    if (key === "test-service-key") {
-      return { from: mockFrom };
-    }
-    return { auth: { getUser: mockBearerGetUser } };
-  }),
-}));
-
-// @/lib/supabase/server: used for cookie-based session fallback
+// @/lib/supabase/server: provides cookie-bound client + cookie-less Bearer
+// helpers used by the route after the service-role refactor.
 vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(() => ({
     auth: { getUser: mockCookieGetUser },
   })),
+  createBearerAuthClient: vi.fn(() => ({
+    auth: { getUser: mockBearerGetUser },
+  })),
+  createBearerServiceClient: vi.fn(() => ({ from: mockFrom })),
 }));
 
 // ─── Route handler ────────────────────────────────────────────────────────────

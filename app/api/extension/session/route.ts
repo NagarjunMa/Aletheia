@@ -175,10 +175,14 @@ export async function GET(request: NextRequest) {
     }
 
     log.info({ userId: user.id.substring(0, 8) }, "Returning session");
+    // Note: refresh_token is intentionally NOT returned. Token refresh
+    // happens by re-calling this endpoint — the cookie-bound flow refreshes
+    // server-side via Supabase SSR. Returning the refresh_token in the
+    // response body exposes it to any same-origin XSS that can read the
+    // session response.
     return NextResponse.json(
       {
         access_token: session.access_token,
-        refresh_token: session.refresh_token,
         expires_at: session.expires_at,
         user: {
           id: user.id,

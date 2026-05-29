@@ -9,7 +9,10 @@ import {
 } from "@/lib/ai/prompts/linkedin-connection";
 import type { StylePatterns } from "@/lib/ai/style-analyzer";
 import { sanitizeForLinkedIn, stripSurrogates } from "@/lib/ai/sanitizer";
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import {
+  createBearerAuthClient,
+  createBearerServiceClient,
+} from "@/lib/supabase/server";
 import { z } from "zod";
 import { getCorsHeaders } from "@/lib/cors";
 import { createLogger } from "@/lib/logger";
@@ -32,17 +35,11 @@ function getAnthropic() {
 }
 
 function getSupabaseService() {
-  return createSupabaseClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  );
+  return createBearerServiceClient();
 }
 
 function getSupabaseAuth() {
-  return createSupabaseClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  );
+  return createBearerAuthClient();
 }
 
 const DAILY_LIMIT = Number(process.env.EXTENSION_DAILY_LIMIT) || 30;

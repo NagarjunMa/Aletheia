@@ -220,7 +220,7 @@ async function _doRefreshToken(auth) {
       try {
         const { apiBaseUrl } = await chrome.storage.sync.get('apiBaseUrl');
         const { apiUrl } = await chrome.storage.local.get('apiUrl');
-        const url = apiBaseUrl || apiUrl || 'https://aletheia.vercel.app';
+        const url = apiBaseUrl || apiUrl || 'https://www.aletheia.live';
         const configResp = await fetch(`${url}/api/extension/config`, {
           headers: { 'X-Extension-Source': 'aletheia-extension' }
         });
@@ -418,7 +418,7 @@ function handleAuthBridgeSession(sessionData) {
     chrome.storage.sync.get('apiBaseUrl'),
     chrome.storage.local.get('apiUrl'),
   ]).then(async ([{ apiBaseUrl }, { apiUrl }]) => {
-    const url = apiBaseUrl || apiUrl || 'https://aletheia.vercel.app';
+    const url = apiBaseUrl || apiUrl || 'https://www.aletheia.live';
     let supabaseUrl, supabaseAnonKey;
     try {
       const configResp = await fetch(`${url}/api/extension/config`, {

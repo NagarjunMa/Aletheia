@@ -151,13 +151,16 @@ describe("GET /api/extension/session", () => {
   });
 
   describe("Happy Path", () => {
-    it("returns 200 with tokens, user info, and supabase credentials", async () => {
+    it("returns 200 with access_token, user info, and supabase credentials but NEVER refresh_token", async () => {
       const res = await GET(makeRequest());
       expect(res.status).toBe(200);
 
       const body = await res.json();
       expect(body.access_token).toBe("test-access");
-      expect(body.refresh_token).toBe("test-refresh");
+      // refresh_token must NOT be in response body — extension refreshes
+      // by re-calling this endpoint via cookie-bound flow. Returning it
+      // exposes it to same-origin XSS.
+      expect(body.refresh_token).toBeUndefined();
       expect(body.user.id).toBe("test-user-id");
       expect(body.user.full_name).toBe("Test User");
       expect(body.supabase_url).toBe(process.env.NEXT_PUBLIC_SUPABASE_URL);
