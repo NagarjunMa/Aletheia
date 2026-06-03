@@ -71,6 +71,7 @@ vi.mock("@/lib/ai/sanitizer", () => ({
     isAIGenerated: false,
   })),
   stripSurrogates: vi.fn((str) => str),
+  stripModelPreambleAndSuffix: vi.fn((str) => str),
 }));
 
 // Setup mock chain

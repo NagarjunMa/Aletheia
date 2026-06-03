@@ -244,6 +244,61 @@ VERIFIED (post-merge):
 
 --------------------------------------------------------------------------------
 
+PHASE 34 — Prompt Leak Fix: Preamble + Suffix Strip
+Status: [x] COMPLETE — 2026-06-03 (branch fix/prompt-leak-preamble-suffix)
+--------------------------------------------------------------------------------
+Triggered by live leak: connection note shipped with "Counting carefully
+before finalizing." preamble + "---" separator + "Character count: 221 ✓"
+suffix. Root cause: prompt verb "COUNT your characters before returning"
+read as reasoning step; weak OUTPUT gate; no post-process strip.
+
+FILES MODIFIED:
+  [x] lib/ai/sanitizer.ts — new stripModelPreambleAndSuffix() exported.
+      Walks lines from both ends, drops meta lines matching narrow regex
+      (preambles, label headers, char/word-count tails, separators).
+      Also strips inline label prefix on first remaining line.
+  [x] lib/ai/prompts/linkedin-connection.ts —
+        PROMPT_VERSION 1.0.0 → 1.1.0
+        COUNT line → "Stay silently under 270 chars... Do not narrate or
+        annotate this trimming."
+        OUTPUT FORMAT block tightened: "Return ONLY the connection note
+        body. Nothing else. Do NOT include: preambles, separator lines,
+        character/word counts, labels, quotes, explanations..."
+        cold_email + linkedin_inmail OUTPUT FORMAT also tightened:
+        "First character must be '{'. Last character must be '}'."
+  [x] app/api/extension/generate/route.ts — stripModelPreambleAndSuffix
+      wired in before sanitize() at 3 sites:
+        - rawContent (linkedin_connection)
+        - parsed.subject_line (cold_email / linkedin_inmail)
+        - parsed.body         (cold_email / linkedin_inmail)
+
+TESTS ADDED (10 new):
+  [x] lib/ai/sanitizer.test.ts — stripModelPreambleAndSuffix corpus:
+        - real-world leak (Counting + --- + Character count)
+        - "Here is the message:" leading label
+        - "Output:" inline label prefix
+        - "Word count: N ✓" trailing tail
+        - separator styles (---, ***, ===, ___)
+        - "Let me draft this." preamble
+        - false-positive resist: "Here is what I do for fun..." (kept)
+        - false-positive resist: "Quick note on your final project..." (kept)
+        - empty input
+        - all-meta input → empty string
+
+DEFENSE-IN-DEPTH: prompt fix lowers leak rate; sanitizer catches drift.
+
+VERIFIED:
+  [x] npx vitest run → 315/315 unit pass
+  [x] npm run test:guardrails → 13/13 pass
+  [x] npm run type-check → clean
+
+OPEN:
+  - Watch eval signal for leak recurrence on next ~50 generations.
+  - If still leaking, escalate to forced JSON output for connection too
+    (matches cold_email path).
+
+--------------------------------------------------------------------------------
+
 KNOWN LOCAL-LOAD GOTCHA (logged for later cleanup, not blocking)
 --------------------------------------------------------------------------------
 public/ascendia-extension.zip is currently BROKEN — esbuild bundles
