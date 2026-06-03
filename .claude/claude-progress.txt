@@ -244,8 +244,48 @@ VERIFIED (post-merge):
 
 --------------------------------------------------------------------------------
 
+PHASE 1B (security) — AI Exfil Defense: Injection Heuristic + RL Refund
+Status: [x] COMPLETE — 2026-06-03 (merged via chore/security-phase-1b-ai-exfil)
+--------------------------------------------------------------------------------
+Threat-model Top-10 items #4 (refund-on-failure) and #7 (injection
+heuristic preflight).
+
+FILES CREATED:
+  [x] lib/ai/prompts/injection-heuristic.ts — scanForInjection()
+      pre-flight on profileMarkdown. Detects red-flag patterns:
+      "ignore previous", "system:", "you are now", base64 blocks,
+      >5% non-ASCII. On match: drop resume + jd from prompt + emit
+      warning in response. Blast-radius reduction for AI-1.
+  [x] lib/ai/prompts/injection-heuristic.test.ts — pattern coverage
+  [x] supabase/migrations/20260527_release_rate_limit.sql — new RPC
+      release_rate_limit_reservation. Closes Sc-C + D-A-1.
+
+FILES MODIFIED:
+  [x] app/api/extension/generate/route.ts — wire scanForInjection +
+      decrement rate-limit slot on Claude 502/504/429 errors
+
+VERIFIED:
+  [x] 342 unit + 13 guardrails pass
+  [x] type-check clean
+  [x] CI green on merged PR
+
+OPEN (Top-10 remaining):
+  - #5 disposable email block + Cloudflare Turnstile
+  - #6 DELETE /api/profile + pg_dump backup
+  - #8 pin GitHub Actions to SHAs
+  - #9 wrap PG errors before client return
+  - #3 residual: Anthropic ZDR email (manual ops)
+  - #10 YubiKey + offline backup (manual ops)
+
+DEPLOYMENT REQUIRED:
+  - Apply migration: supabase/migrations/20260527_release_rate_limit.sql
+    in Supabase SQL editor BEFORE first user hits 502/504 path,
+    otherwise refund call no-ops silently.
+
+--------------------------------------------------------------------------------
+
 PHASE 34 — Prompt Leak Fix: Preamble + Suffix Strip
-Status: [x] COMPLETE — 2026-06-03 (branch fix/prompt-leak-preamble-suffix)
+Status: [x] COMPLETE — 2026-06-03 (merged via fix/prompt-leak-preamble-suffix)
 --------------------------------------------------------------------------------
 Triggered by live leak: connection note shipped with "Counting carefully
 before finalizing." preamble + "---" separator + "Character count: 221 ✓"
