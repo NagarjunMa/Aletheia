@@ -16,11 +16,19 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
   chrome.tabs.onActivated.addListener(() => checkLinkedInProfile());
 
-  // React to auth state changes (e.g., auth-bridge stores session while popup is open)
+  // React to auth state changes (e.g., auth-bridge stores session while popup is open).
+  // Full reload is the safest path: showAuthRequired() may have wiped #mainContent
+  // contents, so a fresh DOM is needed to restore #jdInput, #category, etc.
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'local' && changes.aletheia_auth) {
-      console.log('[POPUP] Auth state changed, reinitializing...');
-      initializePopup().then(() => checkLinkedInProfile());
+      const before = changes.aletheia_auth.oldValue;
+      const after = changes.aletheia_auth.newValue;
+      // Only reload on transition into authenticated state — avoid reload
+      // loops when the SW writes the same auth back on a refresh tick.
+      if (!before?.access_token && after?.access_token) {
+        console.log('[POPUP] Auth state changed → authenticated, reloading popup');
+        window.location.reload();
+      }
     }
   });
 });
@@ -719,6 +727,11 @@ function updateUIForCategory() {
 function setupCharacterCounter() {
   const jdInput = document.getElementById('jdInput');
   const charCount = document.getElementById('jdCharCount');
+
+  // After showAuthRequired() wipes mainContent.innerHTML the original
+  // #jdInput is gone. If initializePopup() re-runs on a storage event
+  // before the user reloads, these elements are null. Bail safely.
+  if (!jdInput || !charCount) return;
 
   jdInput.addEventListener('input', () => {
     charCount.textContent = jdInput.value.length;
