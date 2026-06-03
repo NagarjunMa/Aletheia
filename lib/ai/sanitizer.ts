@@ -21,6 +21,57 @@ export function stripSurrogates(str: string): string {
   );
 }
 
+// Lines the model emits as meta-commentary around the message body.
+// Patterns are intentionally narrow to avoid stripping real content that
+// happens to begin with a verb like "Here is" or "Let me".
+const MODEL_META_LINE = new RegExp(
+  [
+    // Self-narration preambles. Must be a short single sentence ending in a
+    // period (no colon → no inline content). e.g. "Counting carefully before
+    // finalizing." but NOT "Counting takes patience and I learned that early."
+    "^(?:counting|verifying|checking|reviewing|finaliz(?:e|ing)|drafting|preparing|thinking|considering)\\b[^:]{0,60}\\.\\s*$",
+    // Header lines that are JUST a label (no message content after the colon)
+    "^(?:output|note|message|connection note|draft|response|result|final(?: message)?|here(?:'| i)s (?:the (?:message|draft|note|connection note|output|response)))\\s*[:\\-]?\\s*$",
+    // "Let me X." / "Let's X." style — must end with period and be brief.
+    "^let(?:\\s+me|(?:'|)s)\\s+(?:draft|write|compose|put together|think|verify|finalize|count)\\b[^:]{0,40}\\.\\s*$",
+    // Character/word count tails like "Character count: 221 ✓"
+    "^(?:character|char|word)\\s*count\\s*[:=]?\\s*\\d+\\s*[✓✔✗xX]?\\s*$",
+    // Stand-alone separator lines: --- *** === ___
+    "^[\\-*_=]{3,}\\s*$",
+  ].join("|"),
+  "i",
+);
+
+// Inline-prefix labels: model emits the label on the same line as content.
+// Strip only the label prefix, keep the content. e.g. "Output: foo" → "foo"
+const INLINE_LABEL_PREFIX =
+  /^(?:output|note|message|connection note|draft|response|result|final(?: message)?|here(?:'|)s (?:the (?:message|draft|note|connection note|output|response)))\s*[:\-]\s+/i;
+
+/**
+ * Strip leading and trailing meta lines emitted by the model around the
+ * actual message body. Catches output-format violations like
+ * "Counting carefully before finalizing." preambles or
+ * "Character count: 221 ✓" tails without removing real message content.
+ *
+ * Walks from each end; stops at the first line that is not meta.
+ * Also drops a single inline label prefix on the first remaining line.
+ */
+export function stripModelPreambleAndSuffix(content: string): string {
+  if (!content) return content;
+  const lines = content.split("\n");
+  let start = 0;
+  let end = lines.length;
+  while (start < end && MODEL_META_LINE.test(lines[start]!.trim())) start++;
+  while (end > start && MODEL_META_LINE.test(lines[end - 1]!.trim())) end--;
+  if (start < end) {
+    lines[start] = lines[start]!.replace(INLINE_LABEL_PREFIX, "");
+  }
+  if (start === 0 && end === lines.length && lines[0] === content) {
+    return content;
+  }
+  return lines.slice(start, end).join("\n").trim();
+}
+
 export interface SanitizationOptions {
   maxLength?: number;
   preserveFormatting?: boolean;

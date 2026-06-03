@@ -8,7 +8,11 @@ import {
   type GenerateInput,
 } from "@/lib/ai/prompts/linkedin-connection";
 import type { StylePatterns } from "@/lib/ai/style-analyzer";
-import { sanitizeForLinkedIn, stripSurrogates } from "@/lib/ai/sanitizer";
+import {
+  sanitizeForLinkedIn,
+  stripSurrogates,
+  stripModelPreambleAndSuffix,
+} from "@/lib/ai/sanitizer";
 import {
   createBearerAuthClient,
   createBearerServiceClient,
@@ -272,8 +276,12 @@ export async function POST(request: NextRequest) {
         const parsed = JSON.parse(cleanedContent);
 
         if (parsed.subject_line && parsed.body) {
-          const basicSubjectSanitization = sanitize(parsed.subject_line);
-          const basicBodySanitization = sanitize(parsed.body);
+          const basicSubjectSanitization = sanitize(
+            stripModelPreambleAndSuffix(parsed.subject_line),
+          );
+          const basicBodySanitization = sanitize(
+            stripModelPreambleAndSuffix(parsed.body),
+          );
 
           const enhancedSubjectSanitization = await sanitizeForLinkedIn(
             basicSubjectSanitization,
@@ -356,7 +364,7 @@ export async function POST(request: NextRequest) {
     }
 
     // For LinkedIn connections - apply AI fingerprint detection and sanitization
-    const basicSanitization = sanitize(rawContent);
+    const basicSanitization = sanitize(stripModelPreambleAndSuffix(rawContent));
     const enhancedSanitization = await sanitizeForLinkedIn(basicSanitization);
     const sanitizedContent = enhancedSanitization.success
       ? enhancedSanitization.sanitizedContent

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   stripSurrogates,
+  stripModelPreambleAndSuffix,
   sanitizeAIOutput,
   sanitizeForLinkedIn,
   sanitizeForEmail,
@@ -33,6 +34,85 @@ describe("stripSurrogates", () => {
 
   it("handles empty string", () => {
     expect(stripSurrogates("")).toBe("");
+  });
+});
+
+describe("stripModelPreambleAndSuffix", () => {
+  it("returns text unchanged when no meta lines present", () => {
+    const body = "Saw your work at EY. Would love to chat about open roles.";
+    expect(stripModelPreambleAndSuffix(body)).toBe(body);
+  });
+
+  it("strips real-world leak: 'Counting carefully' preamble + '---' + 'Character count' tail", () => {
+    const leaked = [
+      "Counting carefully before finalizing.",
+      "---",
+      "Saw your work at EY in consulting and your PSPO cert. Vikas mentioned you - his brother here, exploring full-time roles. Would love to hear about open positions at EY and whether a referral might be possible.",
+      "Character count: 221 ✓",
+    ].join("\n");
+    const out = stripModelPreambleAndSuffix(leaked);
+    expect(out.startsWith("Saw your work at EY")).toBe(true);
+    expect(out.endsWith("might be possible.")).toBe(true);
+    expect(out).not.toMatch(/counting|character count|---/i);
+  });
+
+  it("strips leading 'Here is the message:' label", () => {
+    const leaked =
+      "Here is the message:\nSaw your recent move to Stripe. Would love to chat.";
+    expect(stripModelPreambleAndSuffix(leaked)).toBe(
+      "Saw your recent move to Stripe. Would love to chat.",
+    );
+  });
+
+  it("strips leading 'Output:' label", () => {
+    const leaked = "Output: Saw your post. Open to a quick call?";
+    expect(stripModelPreambleAndSuffix(leaked)).toBe(
+      "Saw your post. Open to a quick call?",
+    );
+  });
+
+  it("strips trailing word count tail", () => {
+    const leaked =
+      "Saw your AWS reInvent talk. Open to a quick exchange on the topic?\nWord count: 14 ✓";
+    expect(stripModelPreambleAndSuffix(leaked)).toBe(
+      "Saw your AWS reInvent talk. Open to a quick exchange on the topic?",
+    );
+  });
+
+  it("strips multiple separator styles", () => {
+    expect(stripModelPreambleAndSuffix("---\nHi there.\n***")).toBe(
+      "Hi there.",
+    );
+    expect(stripModelPreambleAndSuffix("===\nHi there.\n___")).toBe(
+      "Hi there.",
+    );
+  });
+
+  it("strips 'Let me draft this.' style preambles", () => {
+    const leaked = "Let me draft this carefully.\nHi Sarah, saw your work.";
+    expect(stripModelPreambleAndSuffix(leaked)).toBe(
+      "Hi Sarah, saw your work.",
+    );
+  });
+
+  it("does not strip message text that begins with a normal sentence", () => {
+    const body = "Here is what I do for fun: I run marathons.";
+    expect(stripModelPreambleAndSuffix(body)).toBe(body);
+  });
+
+  it("does not match conversational uses of 'note' or 'final' embedded mid-sentence", () => {
+    const body =
+      "Quick note on your final project: the architecture choices were sharp.";
+    expect(stripModelPreambleAndSuffix(body)).toBe(body);
+  });
+
+  it("handles empty string", () => {
+    expect(stripModelPreambleAndSuffix("")).toBe("");
+  });
+
+  it("handles all-meta input by returning empty string", () => {
+    const allMeta = "Counting now.\n---\nCharacter count: 0";
+    expect(stripModelPreambleAndSuffix(allMeta)).toBe("");
   });
 });
 
