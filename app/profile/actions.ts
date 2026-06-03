@@ -2,6 +2,9 @@
 
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { createLogger } from "@/lib/logger";
+
+const log = createLogger("profile-actions");
 
 const ProfileUpdateSchema = z.object({
   full_name: z.string().trim().max(120).optional().default(""),
@@ -51,6 +54,15 @@ export async function updateProfile(
     })
     .eq("id", user.id);
 
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    log.error(
+      { err: error.message, userId: user.id.substring(0, 12) },
+      "Profile update failed",
+    );
+    return {
+      ok: false,
+      error: "Could not save profile. Please try again.",
+    };
+  }
   return { ok: true };
 }

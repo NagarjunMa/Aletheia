@@ -50,18 +50,53 @@ describe("updateProfile", () => {
     if (!result.ok) expect(result.error).toMatch(/auth|sign/i);
   });
 
+  it("returns generic error and does NOT leak PG error message on DB failure", async () => {
+    const pgError = {
+      message:
+        'duplicate key value violates unique constraint "profiles_email_key"',
+      code: "23505",
+      details: "Key (email)=(foo@bar.com) already exists.",
+      hint: "Try a different email",
+    };
+    const updateMock = vi.fn().mockReturnValue({
+      eq: vi.fn().mockResolvedValue({ error: pgError }),
+    });
+    (createClient as any).mockReturnValue({
+      auth: {
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: "user-123" } },
+          error: null,
+        }),
+      },
+      from: vi.fn().mockReturnValue({ update: updateMock }),
+    });
+    const result = await updateProfile({
+      full_name: "Test",
+      resume: "ok",
+      target_job_description: "ok",
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      // Client gets a generic message
+      expect(result.error).toBe("Could not save profile. Please try again.");
+      // None of the PG internals leak through
+      expect(result.error).not.toContain("duplicate key");
+      expect(result.error).not.toContain("constraint");
+      expect(result.error).not.toContain("profiles_email_key");
+      expect(result.error).not.toContain("23505");
+    }
+  });
+
   it("writes valid input to profiles row", async () => {
     const updateMock = vi.fn().mockReturnValue({
       eq: vi.fn().mockResolvedValue({ error: null }),
     });
     (createClient as any).mockReturnValue({
       auth: {
-        getUser: vi
-          .fn()
-          .mockResolvedValue({
-            data: { user: { id: "user-123" } },
-            error: null,
-          }),
+        getUser: vi.fn().mockResolvedValue({
+          data: { user: { id: "user-123" } },
+          error: null,
+        }),
       },
       from: vi.fn().mockReturnValue({ update: updateMock }),
     });

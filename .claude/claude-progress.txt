@@ -299,6 +299,74 @@ OPEN:
 
 --------------------------------------------------------------------------------
 
+PHASE 1B (security) — AI Exfil Defense: Injection Heuristic + RL Refund
+Status: [x] COMPLETE — 2026-06-03 (merged via chore/security-phase-1b-ai-exfil)
+--------------------------------------------------------------------------------
+Threat-model Top-10 items #4 (refund-on-failure) + #7 (injection heuristic).
+
+FILES CREATED:
+  [x] lib/ai/prompts/injection-heuristic.ts — scanForInjection() pre-flight
+      on profileMarkdown. On red-flag match: drop resume + jd from prompt,
+      emit response warning. Blast-radius reduction for AI-1.
+  [x] lib/ai/prompts/injection-heuristic.test.ts — pattern coverage.
+  [x] supabase/migrations/20260527_release_rate_limit.sql — RPC
+      release_rate_limit_reservation. Generate route decrements slot on
+      Claude 502/504/429. Closes Sc-C + D-A-1.
+  [x] supabase/migrations/20260603145000_harden_release_rate_limit_reservation.sql
+      Pin search_path + revoke EXECUTE from anon/auth post-merge per
+      advisor 0011/0028/0029.
+
+FILES MODIFIED:
+  [x] app/api/extension/generate/route.ts — wire scanForInjection +
+      release-on-failure call.
+
+VERIFIED:
+  [x] Migrations applied via Supabase MCP. Advisor 0 warnings on new fn.
+  [x] 342 unit + 13 guardrails pass.
+
+--------------------------------------------------------------------------------
+
+PHASE 1C (security) — Quick Wins: Pin GHA SHAs + Wrap PG Errors
+Status: [x] COMPLETE — 2026-06-03 (branch chore/security-phase-1c-quick-wins)
+--------------------------------------------------------------------------------
+Threat-model Top-10 items #8 (pin GHA) + #9 (wrap PG errors).
+
+FILES MODIFIED:
+  [x] .github/workflows/ci.yml — all 7 action references pinned to full
+      commit SHA + version-tag comment:
+        actions/checkout@34e1148...        # v4.3.1
+        actions/setup-node@49933ea...      # v4.4.0
+        actions/upload-artifact@ea165f8... # v4.6.2
+      Closes SC-6 (mutable tag drift / supply chain).
+  [x] app/profile/actions.ts — replace raw error.message with generic
+      client message + structured server log. Closes I-W-5 (PG constraint
+      / column name disclosure).
+
+FILES CREATED:
+  [x] .github/dependabot.yml — weekly GHA SHA bumps, 5 PRs max,
+      conventional commit prefix.
+
+TESTS ADDED:
+  [x] app/profile/actions.test.ts — assert generic client message +
+      constraint / column / code names DO NOT leak.
+
+AUDIT:
+  - app/api/settings/route.ts:81,130 — already correct (logs full err,
+    returns generic).
+  - No other error.message leaks in app/api/** or app/**/actions.ts.
+
+VERIFIED:
+  [x] 343 unit + 13 guardrails pass
+  [x] type-check clean
+
+OPEN (Top-10 remaining):
+  - #5 disposable email block + Cloudflare Turnstile
+  - #6 DELETE /api/profile + pg_dump backup
+  - #3 residual: Anthropic ZDR email (manual)
+  - #10 YubiKey + offline backup (manual)
+
+--------------------------------------------------------------------------------
+
 KNOWN LOCAL-LOAD GOTCHA (logged for later cleanup, not blocking)
 --------------------------------------------------------------------------------
 public/ascendia-extension.zip is currently BROKEN — esbuild bundles

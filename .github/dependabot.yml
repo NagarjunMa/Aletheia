@@ -1,0 +1,12 @@
+version: 2
+updates:
+  # GitHub Actions are pinned to commit SHAs (see .github/workflows/ci.yml).
+  # Dependabot auto-PRs SHA updates so we don't drift on security patches.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore
+      include: scope
