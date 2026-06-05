@@ -17,8 +17,15 @@
     if (!allCookies) return null;
 
     const cookiePairs = allCookies.split(';').map(c => c.trim());
-    const authCookies = cookiePairs
-      .filter(c => c.startsWith('sb-') && c.includes('-auth-token'));
+    // Exclude PKCE code-verifier cookies (`sb-<ref>-auth-token-code-verifier`)
+    // — they share the `-auth-token` substring but carry a plain random
+    // string, not a session payload. Including them sends the parser into
+    // its final fallback for every prefetch hit.
+    const authCookies = cookiePairs.filter(c => {
+      if (!c.startsWith('sb-')) return false;
+      const name = c.split('=', 1)[0];
+      return /^sb-[^=]+-auth-token(?:\.\d+)?$/.test(name);
+    });
 
     if (authCookies.length === 0) return null;
 
@@ -62,14 +69,17 @@
       try {
         return JSON.parse(atob(candidate.slice(7)));
       } catch (e) {
-        console.warn('[AUTH-BRIDGE] base64- prefixed value failed to decode');
+        // Downgraded from warn — @supabase/ssr writes the real session
+        // cookie HttpOnly, so the content script almost never sees it.
+        // The bridge is a best-effort signal; the SW server endpoint is
+        // the canonical source.
         return null;
       }
     }
 
     try { return JSON.parse(candidate); } catch (e) { /* try base64 fallback */ }
     try { return JSON.parse(atob(candidate)); } catch (e) {
-      console.warn('[AUTH-BRIDGE] Could not parse session cookie');
+      // Same: HttpOnly invisibility means this miss is expected.
       return null;
     }
   }
