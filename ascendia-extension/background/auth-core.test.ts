@@ -138,6 +138,52 @@ describe("parseChunkedCookies", () => {
     ]);
     expect(result).toBeNull();
   });
+
+  it("parses base64- prefixed value (modern @supabase/ssr v0.5+ format)", () => {
+    const session = { access_token: "tok-ssr5", refresh_token: "ref-ssr5" };
+    const value = "base64-" + btoa(JSON.stringify(session));
+    const result = parseChunkedCookies([{ name: "sb-xyz-auth-token", value }]);
+    expect(result).toEqual(session);
+  });
+
+  it("reassembles chunked base64- prefixed cookies in numeric order", () => {
+    const session = {
+      access_token: "tok-chunked-ssr5",
+      refresh_token: "ref-chunked-ssr5",
+      user: { id: "u1", email: "x@y.com" },
+    };
+    const fullValue = "base64-" + btoa(JSON.stringify(session));
+    const mid = Math.floor(fullValue.length / 2);
+
+    const result = parseChunkedCookies([
+      { name: "sb-xyz-auth-token.1", value: fullValue.slice(mid) },
+      { name: "sb-xyz-auth-token.0", value: fullValue.slice(0, mid) },
+    ]);
+    expect(result).toEqual(session);
+  });
+
+  it("sorts chunks numerically not lexicographically (handles .10 correctly)", () => {
+    // Lexicographic sort would put .10 before .2 — must use numeric.
+    const session = { access_token: "tok-many-chunks" };
+    const fullValue = "base64-" + btoa(JSON.stringify(session));
+    const chunkSize = Math.ceil(fullValue.length / 11);
+    const chunks: Array<{ name: string; value: string }> = [];
+    for (let i = 0; i < 11; i++) {
+      chunks.push({
+        name: `sb-xyz-auth-token.${i}`,
+        value: fullValue.slice(i * chunkSize, (i + 1) * chunkSize),
+      });
+    }
+    // Shuffle the input order — parser must reorder by .N
+    const shuffled = [
+      chunks[10],
+      chunks[1],
+      chunks[0],
+      chunks[2],
+      ...chunks.slice(3, 10),
+    ];
+    expect(parseChunkedCookies(shuffled)).toEqual(session);
+  });
 });
 
 // ─── normalizeUser ───

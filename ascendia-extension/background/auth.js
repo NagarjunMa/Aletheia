@@ -129,8 +129,7 @@ async function _doFetchSessionFromWebApp(apiUrl) {
   console.log('[AUTH] All cookies for', apiUrl, ':', cookies.map(c => `${c.name}=${c.value.substring(0, 20)}...`).join(', ') || '(none)');
 
   const authCookies = cookies
-    .filter(c => c.name.startsWith('sb-') && c.name.includes('-auth-token'))
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .filter(c => c.name.startsWith('sb-') && c.name.includes('-auth-token'));
 
   console.log('[AUTH] Auth cookies found:', authCookies.map(c => c.name).join(', ') || '(none)');
 
@@ -138,27 +137,40 @@ async function _doFetchSessionFromWebApp(apiUrl) {
     throw new Error('No active session found. Please log in to the web app first.');
   }
 
-  // Reassemble: single cookie or chunked
+  // Reassemble: single cookie or chunked (@supabase/ssr ≥0.5 splits
+  // sessions across `sb-<ref>-auth-token.0`, `.1`, ... above ~3180 bytes).
   let rawValue;
-  const baseCookie = authCookies.find(c => /sb-.*-auth-token$/.test(c.name));
+  const baseCookie = authCookies.find(c => /^sb-[^.]+-auth-token$/.test(c.name));
   if (baseCookie) {
     rawValue = baseCookie.value;
   } else {
-    rawValue = authCookies.map(c => c.value).join('');
+    const chunks = authCookies
+      .filter(c => /\.\d+$/.test(c.name))
+      .sort((a, b) => {
+        const ai = parseInt(a.name.split('.').pop(), 10);
+        const bi = parseInt(b.name.split('.').pop(), 10);
+        return ai - bi;
+      });
+    rawValue = chunks.map(c => c.value).join('');
   }
 
-  let session;
-  try {
-    session = JSON.parse(decodeURIComponent(rawValue));
-  } catch (e) {
-    try {
-      session = JSON.parse(atob(rawValue));
-    } catch (e2) {
-      throw new Error('Could not parse session from cookies. Please log in again.');
+  // Modern @supabase/ssr prefixes the value with literal "base64-".
+  let candidate = rawValue;
+  try { candidate = decodeURIComponent(rawValue); } catch (e) { /* not URL-encoded */ }
+
+  let session = null;
+  if (candidate.startsWith('base64-')) {
+    try { session = JSON.parse(atob(candidate.slice(7))); }
+    catch (e) { throw new Error('Could not parse base64- prefixed session cookie. Please log in again.'); }
+  } else {
+    try { session = JSON.parse(candidate); }
+    catch (e) {
+      try { session = JSON.parse(atob(candidate)); }
+      catch (e2) { throw new Error('Could not parse session from cookies. Please log in again.'); }
     }
   }
 
-  if (!session.access_token) {
+  if (!session || !session.access_token) {
     throw new Error('Invalid session data in cookies. Please log in again.');
   }
 

@@ -367,6 +367,69 @@ OPEN (Top-10 remaining):
 
 --------------------------------------------------------------------------------
 
+PHASE 35 — Extension Daily Re-Login Fix (cookie base64- + refresh_token)
+Status: [x] COMPLETE — 2026-06-05
+--------------------------------------------------------------------------------
+ROOT CAUSE (two compounding bugs surfaced as "daily login failure"):
+  1. @supabase/ssr ≥0.5 prefixes auth-cookie values with literal
+     "base64-" before the base64 payload. Existing parsers in
+     auth-bridge.js, auth.js, auth-core.js called
+     JSON.parse(decodeURIComponent(raw)) then JSON.parse(atob(raw)) —
+     both fail on "base64-eyJ…" because it is neither URL-decoded JSON
+     nor valid base64 (the literal prefix breaks atob).
+     Symptom: "[AUTH-BRIDGE] Could not parse session cookie" ×2 in log.
+  2. Commit 70de477 (Phase 1a) stripped refresh_token from
+     /api/extension/session response body. Once the extension's
+     access_token expired AND cookie capture path was broken (bug 1),
+     refreshToken() threw "Missing refresh credentials" → forced
+     re-login. Daily cadence = access_token TTL.
+
+FIX:
+  [x] app/api/extension/session/route.ts — re-add refresh_token to
+      response body, gated on Origin: chrome-extension://*. Browsers
+      forbid script-origin spoofing, so same-origin XSS on
+      aletheia.live cannot impersonate the extension. Web app uses
+      Supabase SSR cookies for refresh and never needs refresh_token
+      in a body.
+  [x] ascendia-extension/content/auth-bridge.js —
+      reassembleAuthCookieValue() sorts numbered chunks numerically
+      (handles .10 > .2); parseSupabaseSessionValue() strips "base64-"
+      prefix before atob; URL-decode + JSON fallback retained.
+  [x] ascendia-extension/background/auth.js — same chunked-reassembly
+      + base64- prefix handling in chrome.cookies.getAll fallback.
+  [x] ascendia-extension/background/auth-core.js parseChunkedCookies
+      — same fix, pure function for unit tests.
+
+TESTS:
+  [x] app/api/extension/session/route.test.ts — happy path split into
+      "web origin → no refresh_token" + "chrome-extension origin →
+      refresh_token present" cases.
+  [x] ascendia-extension/background/auth-core.test.ts — 3 new cases:
+      base64- prefix, chunked base64- prefix, numeric chunk sort
+      (.10 not lexicographically before .2).
+  [x] All passing: 80 web extension API tests, 47 extension-side
+      auth-core tests, 97 total extension-side tests.
+
+THREAT MODEL DELTA:
+  - Refresh_token now returned to chrome-extension:// origins only.
+  - Same-origin XSS on aletheia.live cannot read refresh_token from
+    session endpoint (origin guard) and never could (browser sends
+    real Origin header, not authored).
+  - Extension session lifetime now matches Supabase refresh_token TTL
+    (~7 days rolling) instead of access_token TTL (1 hour).
+
+VERIFIED (live prod):
+  [x] Playwright headless on www.aletheia.live — landing page renders
+      correctly. Hero, h1, WebGL2 canvas, footer all present. Body
+      text matches DOM. Zero page errors. cf-cache-status: DYNAMIC.
+      CSP nonce matches across header + 30 inline scripts.
+      → Earlier user-reported "landing not loading" is a USER-
+        ENVIRONMENT issue (NordVPN Threat Protection Pro blocking
+        aletheia.live as phishing, possibly browser extensions).
+        Not a prod bug. No code change for Issue 4.
+
+--------------------------------------------------------------------------------
+
 KNOWN LOCAL-LOAD GOTCHA (logged for later cleanup, not blocking)
 --------------------------------------------------------------------------------
 public/ascendia-extension.zip is currently BROKEN — esbuild bundles
