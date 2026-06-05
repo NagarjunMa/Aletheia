@@ -219,13 +219,54 @@ export async function POST(request: NextRequest) {
       acceptedExamples,
     } = validatedData;
 
+    // Hydrate resume + jd from the user's profile when the request body
+    // does not carry them. Extension popup stores its own copies in
+    // chrome.storage.local, but those silos drift out of sync with the
+    // resume the user uploaded on the web app. Falling back to the DB
+    // means a single source of truth and removes "Don't have my background
+    // here" misfires when the local copy is empty.
+    let resumeFromBody = resume || "";
+    let jdFromBody = jd || "";
+    if (!resumeFromBody.trim() || !jdFromBody.trim()) {
+      try {
+        const { data: profile } = await getSupabaseService()
+          .from("profiles")
+          .select("resume, target_job_description")
+          .eq("id", authResult.userId)
+          .maybeSingle();
+        if (profile) {
+          if (!resumeFromBody.trim() && profile.resume) {
+            resumeFromBody = profile.resume;
+            log.debug(
+              { userId: authResult.userId.substring(0, 12) },
+              "Hydrated resume from profile DB",
+            );
+          }
+          if (!jdFromBody.trim() && profile.target_job_description) {
+            jdFromBody = profile.target_job_description;
+            log.debug(
+              { userId: authResult.userId.substring(0, 12) },
+              "Hydrated jd from profile DB",
+            );
+          }
+        }
+      } catch (err) {
+        log.warn(
+          { err, userId: authResult.userId.substring(0, 12) },
+          "Failed to hydrate resume/jd from profile DB",
+        );
+      }
+    }
+
     // Sanitize user-provided strings to strip unpaired Unicode surrogates
     // that cause JSON serialization failures with the Anthropic API
     const cleanMarkdown = stripSurrogates(profileMarkdown);
-    const sanitizedResume = resume
-      ? stripSurrogates(resume).slice(0, 8000)
-      : resume;
-    const sanitizedJd = jd ? stripSurrogates(jd).slice(0, 4000) : jd;
+    const sanitizedResume = resumeFromBody
+      ? stripSurrogates(resumeFromBody).slice(0, 8000)
+      : resumeFromBody;
+    const sanitizedJd = jdFromBody
+      ? stripSurrogates(jdFromBody).slice(0, 4000)
+      : jdFromBody;
     const sanitizedExamples = acceptedExamples?.map((e) => stripSurrogates(e));
 
     // Indirect prompt-injection defense: profileMarkdown comes from the

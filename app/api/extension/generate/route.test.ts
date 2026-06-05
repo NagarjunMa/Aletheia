@@ -647,6 +647,149 @@ I build distributed systems. Previously at BigCo.`;
     });
   });
 
+  describe("profile DB hydration of resume + jd", () => {
+    const STORED_RESUME =
+      "Nagarjun — Senior Engineer at Acme. Built distributed systems at BigCo. Loves Python.";
+    const STORED_JD =
+      "Looking for AI/ML platform roles at growth-stage startups.";
+
+    it("hydrates resume from profiles when body omits it", async () => {
+      // 1st maybeSingle call = user_preferences (no style)
+      mockMaybeSingle.mockResolvedValueOnce({ data: null, error: null });
+      // 2nd call = profiles (has resume)
+      mockMaybeSingle.mockResolvedValueOnce({
+        data: { resume: STORED_RESUME, target_job_description: STORED_JD },
+        error: null,
+      });
+
+      mockAnthropicCreate.mockResolvedValueOnce({
+        content: [{ type: "text", text: "Hi Jane, great to connect." }],
+        usage: { input_tokens: 10, output_tokens: 5 },
+      });
+
+      const res = await POST(
+        makeRequest({
+          method: "POST",
+          headers: { authorization: "Bearer test" },
+          body: { ...validPayload, resume: "", jd: "" },
+        }),
+      );
+
+      expect(res.status).toBe(200);
+      const userPrompt =
+        mockAnthropicCreate.mock.calls[0]?.[0]?.messages?.[0]?.content ?? "";
+      expect(userPrompt).toContain("Senior Engineer at Acme");
+      expect(userPrompt).toContain(STORED_JD);
+
+      const fromCalls = mockFrom.mock.calls.map((c: unknown[]) => c[0]);
+      expect(fromCalls).toContain("user_preferences");
+      expect(fromCalls).toContain("profiles");
+    });
+
+    it("does NOT hydrate when body already carries resume + jd", async () => {
+      mockMaybeSingle.mockResolvedValueOnce({ data: null, error: null });
+
+      mockAnthropicCreate.mockResolvedValueOnce({
+        content: [{ type: "text", text: "Hi Jane, great to connect." }],
+        usage: { input_tokens: 10, output_tokens: 5 },
+      });
+
+      const res = await POST(
+        makeRequest({
+          method: "POST",
+          headers: { authorization: "Bearer test" },
+          body: {
+            ...validPayload,
+            resume: "BODY_RESUME_WINS",
+            jd: "BODY_JD_WINS",
+          },
+        }),
+      );
+
+      expect(res.status).toBe(200);
+      const userPrompt =
+        mockAnthropicCreate.mock.calls[0]?.[0]?.messages?.[0]?.content ?? "";
+      expect(userPrompt).toContain("BODY_RESUME_WINS");
+      expect(userPrompt).toContain("BODY_JD_WINS");
+      expect(userPrompt).not.toContain("Senior Engineer at Acme");
+
+      const fromCalls = mockFrom.mock.calls.map((c: unknown[]) => c[0]);
+      expect(fromCalls).not.toContain("profiles");
+    });
+
+    it("hydrates only the missing field (body resume + DB jd)", async () => {
+      mockMaybeSingle.mockResolvedValueOnce({ data: null, error: null });
+      mockMaybeSingle.mockResolvedValueOnce({
+        data: { resume: STORED_RESUME, target_job_description: STORED_JD },
+        error: null,
+      });
+
+      mockAnthropicCreate.mockResolvedValueOnce({
+        content: [{ type: "text", text: "Hi Jane, great to connect." }],
+        usage: { input_tokens: 10, output_tokens: 5 },
+      });
+
+      const res = await POST(
+        makeRequest({
+          method: "POST",
+          headers: { authorization: "Bearer test" },
+          body: { ...validPayload, resume: "BODY_RESUME_WINS", jd: "" },
+        }),
+      );
+
+      expect(res.status).toBe(200);
+      const userPrompt =
+        mockAnthropicCreate.mock.calls[0]?.[0]?.messages?.[0]?.content ?? "";
+      expect(userPrompt).toContain("BODY_RESUME_WINS");
+      expect(userPrompt).not.toContain("Senior Engineer at Acme");
+      expect(userPrompt).toContain(STORED_JD);
+    });
+
+    it("tolerates DB failure without crashing the request", async () => {
+      mockMaybeSingle.mockResolvedValueOnce({ data: null, error: null });
+      mockMaybeSingle.mockRejectedValueOnce(new Error("DB down"));
+
+      mockAnthropicCreate.mockResolvedValueOnce({
+        content: [{ type: "text", text: "Hi Jane, great to connect." }],
+        usage: { input_tokens: 10, output_tokens: 5 },
+      });
+
+      const res = await POST(
+        makeRequest({
+          method: "POST",
+          headers: { authorization: "Bearer test" },
+          body: { ...validPayload, resume: "", jd: "" },
+        }),
+      );
+
+      expect(res.status).toBe(200);
+    });
+
+    it("skips hydration when profile row missing (new user)", async () => {
+      mockMaybeSingle.mockResolvedValueOnce({ data: null, error: null });
+      mockMaybeSingle.mockResolvedValueOnce({ data: null, error: null });
+
+      mockAnthropicCreate.mockResolvedValueOnce({
+        content: [{ type: "text", text: "Hi Jane, great to connect." }],
+        usage: { input_tokens: 10, output_tokens: 5 },
+      });
+
+      const res = await POST(
+        makeRequest({
+          method: "POST",
+          headers: { authorization: "Bearer test" },
+          body: { ...validPayload, resume: "", jd: "" },
+        }),
+      );
+
+      expect(res.status).toBe(200);
+      const userPrompt =
+        mockAnthropicCreate.mock.calls[0]?.[0]?.messages?.[0]?.content ?? "";
+      // Empty-resume branch in prompt template should kick in
+      expect(userPrompt).toContain("No resume provided");
+    });
+  });
+
   describe("rate-limit refund on failure (TM-4)", () => {
     it("refunds rate-limit slot when Claude returns empty content", async () => {
       mockAnthropicCreate.mockResolvedValueOnce({
