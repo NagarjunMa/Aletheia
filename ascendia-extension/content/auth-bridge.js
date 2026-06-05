@@ -109,26 +109,77 @@
     return getSupabaseSession() || getSupabaseSessionFromStorage();
   }
 
+  // Returns true when this content script still has a live connection to
+  // its extension. When the user reloads / updates / disables the
+  // extension, `chrome.runtime` becomes undefined in orphaned content
+  // scripts but the script keeps running until the page navigates away,
+  // and any setInterval still firing will throw a TypeError on
+  // `chrome.runtime.sendMessage`.
+  function isExtensionContextValid() {
+    try {
+      return typeof chrome !== 'undefined' && !!chrome.runtime && !!chrome.runtime.id;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // Timer registry — `cleanup()` clears every interval/timeout so an
+  // orphaned context goes idle instead of firing TypeError on every tick.
+  const timers = { intervals: new Set(), timeouts: new Set() };
+  let cleanedUp = false;
+
+  function registerInterval(id) { timers.intervals.add(id); return id; }
+  function registerTimeout(id) { timers.timeouts.add(id); return id; }
+
+  function cleanup(reason) {
+    if (cleanedUp) return;
+    cleanedUp = true;
+    if (reason) console.log('[AUTH-BRIDGE] cleanup:', reason);
+    for (const id of timers.intervals) clearInterval(id);
+    for (const id of timers.timeouts) clearTimeout(id);
+    timers.intervals.clear();
+    timers.timeouts.clear();
+  }
+
   function sendSessionToExtension(session) {
     if (!session || !session.access_token) return false;
+    if (!isExtensionContextValid()) {
+      cleanup('extension context invalid');
+      return false;
+    }
 
     console.log('[AUTH-BRIDGE] Found session for:', session.user?.email || 'unknown');
 
-    chrome.runtime.sendMessage({
-      action: 'authBridgeSession',
-      session: {
-        access_token: session.access_token,
-        refresh_token: session.refresh_token,
-        expires_at: session.expires_at,
-        user: session.user ? {
-          id: session.user.id,
-          email: session.user.email,
-          full_name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0],
-        } : null,
+    try {
+      const sendPromise = chrome.runtime.sendMessage({
+        action: 'authBridgeSession',
+        session: {
+          access_token: session.access_token,
+          refresh_token: session.refresh_token,
+          expires_at: session.expires_at,
+          user: session.user ? {
+            id: session.user.id,
+            email: session.user.email,
+            full_name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0],
+          } : null,
+        }
+      });
+      // MV3 sendMessage returns a Promise — catch async failures.
+      if (sendPromise && typeof sendPromise.catch === 'function') {
+        sendPromise.catch(err => {
+          // "Extension context invalidated" lands here on async paths.
+          if (/context invalidated/i.test(err?.message || '')) {
+            cleanup('async sendMessage: context invalidated');
+          } else {
+            console.warn('[AUTH-BRIDGE] Could not send session:', err.message);
+          }
+        });
       }
-    }).catch(err => {
-      console.warn('[AUTH-BRIDGE] Could not send session:', err.message);
-    });
+    } catch (err) {
+      // Synchronous TypeError when chrome.runtime disappears mid-tick.
+      cleanup('sendMessage threw: ' + (err && err.message));
+      return false;
+    }
 
     return true;
   }
@@ -142,36 +193,43 @@
   // Also poll periodically (user may be logging in)
   let attempts = 0;
   const MAX_ATTEMPTS = 120; // 120 * 2s = 4 minutes
-  const pollInterval = setInterval(() => {
+  const pollInterval = registerInterval(setInterval(() => {
+    if (!isExtensionContextValid()) { cleanup('poll tick: context invalid'); return; }
     attempts++;
     if (attempts > MAX_ATTEMPTS) {
       clearInterval(pollInterval);
+      timers.intervals.delete(pollInterval);
       return;
     }
     const s = findSession();
     if (s && s.access_token) {
       sendSessionToExtension(s);
       clearInterval(pollInterval);
+      timers.intervals.delete(pollInterval);
     }
-  }, 2000);
+  }, 2000));
 
   // Listen for auth state changes via Supabase's storage events
   window.addEventListener('storage', (event) => {
+    if (!isExtensionContextValid()) { cleanup('storage event: context invalid'); return; }
     if (event.key && event.key.startsWith('sb-') && event.key.includes('-auth-token')) {
       console.log('[AUTH-BRIDGE] Storage event detected for:', event.key);
-      setTimeout(() => {
+      registerTimeout(setTimeout(() => {
+        if (!isExtensionContextValid()) { cleanup('storage debounce: context invalid'); return; }
         const s = findSession();
         if (s && s.access_token) {
           sendSessionToExtension(s);
           clearInterval(pollInterval);
+          timers.intervals.delete(pollInterval);
         }
-      }, 500);
+      }, 500));
     }
   });
 
   // Also watch for cookie changes via polling (document.cookie doesn't have events)
   let lastCookieString = document.cookie;
-  const cookieWatcher = setInterval(() => {
+  const cookieWatcher = registerInterval(setInterval(() => {
+    if (!isExtensionContextValid()) { cleanup('cookie watcher: context invalid'); return; }
     if (document.cookie !== lastCookieString) {
       lastCookieString = document.cookie;
       const s = findSession();
@@ -180,14 +238,17 @@
         sendSessionToExtension(s);
         clearInterval(cookieWatcher);
         clearInterval(pollInterval);
+        timers.intervals.delete(cookieWatcher);
+        timers.intervals.delete(pollInterval);
       }
     }
-  }, 1000);
+  }, 1000));
 
-  // Cleanup after 5 minutes
-  setTimeout(() => {
-    clearInterval(pollInterval);
-    clearInterval(cookieWatcher);
-  }, 5 * 60 * 1000);
+  // Hard timeout — clear everything after 5 minutes regardless.
+  registerTimeout(setTimeout(() => cleanup('hard 5-minute timeout'), 5 * 60 * 1000));
+
+  // Page unload — stop any pending work so the next navigation does not
+  // inherit dangling timers in a partially-torn-down context.
+  window.addEventListener('pagehide', () => cleanup('pagehide'));
 
 })();
