@@ -174,15 +174,22 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    log.info({ userId: user.id.substring(0, 8) }, "Returning session");
-    // Note: refresh_token is intentionally NOT returned. Token refresh
-    // happens by re-calling this endpoint — the cookie-bound flow refreshes
-    // server-side via Supabase SSR. Returning the refresh_token in the
-    // response body exposes it to any same-origin XSS that can read the
-    // session response.
+    // refresh_token is returned ONLY for chrome-extension:// origins.
+    // Browsers set the Origin header automatically and forbid script-origin
+    // spoofing, so a same-origin XSS on aletheia.live cannot impersonate
+    // chrome-extension://<id>. The web app itself uses Supabase SSR cookies
+    // for refresh and never needs refresh_token in a response body.
+    const origin = request.headers.get("origin") || "";
+    const isChromeExtension = origin.startsWith("chrome-extension://");
+
+    log.info(
+      { userId: user.id.substring(0, 8), isChromeExtension },
+      "Returning session",
+    );
     return NextResponse.json(
       {
         access_token: session.access_token,
+        ...(isChromeExtension && { refresh_token: session.refresh_token }),
         expires_at: session.expires_at,
         user: {
           id: user.id,

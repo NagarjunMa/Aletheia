@@ -151,15 +151,14 @@ describe("GET /api/extension/session", () => {
   });
 
   describe("Happy Path", () => {
-    it("returns 200 with access_token, user info, and supabase credentials but NEVER refresh_token", async () => {
+    it("returns 200 with access_token + user info for web origin; NO refresh_token", async () => {
+      // Web origin (localhost) → no refresh_token. Web app uses Supabase SSR
+      // cookies for refresh, never needs refresh_token in response body.
       const res = await GET(makeRequest());
       expect(res.status).toBe(200);
 
       const body = await res.json();
       expect(body.access_token).toBe("test-access");
-      // refresh_token must NOT be in response body — extension refreshes
-      // by re-calling this endpoint via cookie-bound flow. Returning it
-      // exposes it to same-origin XSS.
       expect(body.refresh_token).toBeUndefined();
       expect(body.user.id).toBe("test-user-id");
       expect(body.user.full_name).toBe("Test User");
@@ -167,6 +166,20 @@ describe("GET /api/extension/session", () => {
       expect(body.supabase_anon_key).toBe(
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
       );
+    });
+
+    it("returns refresh_token to chrome-extension:// origin", async () => {
+      // Browser-enforced Origin header — same-origin XSS on aletheia.live
+      // cannot spoof chrome-extension://<id>. Safe to ship refresh_token
+      // back to the extension service worker.
+      const res = await GET(
+        makeRequest({ origin: "chrome-extension://abcdefghij" }),
+      );
+      expect(res.status).toBe(200);
+
+      const body = await res.json();
+      expect(body.access_token).toBe("test-access");
+      expect(body.refresh_token).toBe("test-refresh");
     });
   });
 

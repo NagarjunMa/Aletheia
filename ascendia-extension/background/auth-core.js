@@ -24,25 +24,40 @@ export function needsRefresh(auth, bufferMs = TOKEN_REFRESH_BUFFER_MS) {
 
 export function parseChunkedCookies(cookies) {
   const authCookies = cookies
-    .filter(c => c.name.startsWith('sb-') && c.name.includes('-auth-token'))
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .filter(c => c.name.startsWith('sb-') && c.name.includes('-auth-token'));
 
   if (authCookies.length === 0) return null;
 
-  const baseCookie = authCookies.find(c => /sb-.*-auth-token$/.test(c.name));
-  const rawValue = baseCookie
-    ? baseCookie.value
-    : authCookies.map(c => c.value).join('');
-
-  try {
-    return JSON.parse(decodeURIComponent(rawValue));
-  } catch {
-    try {
-      return JSON.parse(atob(rawValue));
-    } catch {
-      return null;
-    }
+  // Single base cookie (`sb-<ref>-auth-token`) takes precedence. Otherwise
+  // reassemble numbered chunks (@supabase/ssr ≥0.5 splits sessions across
+  // `.0`, `.1`, ... above ~3180 bytes).
+  const baseCookie = authCookies.find(c => /^sb-[^.]+-auth-token$/.test(c.name));
+  let rawValue;
+  if (baseCookie) {
+    rawValue = baseCookie.value;
+  } else {
+    const chunks = authCookies
+      .filter(c => /\.\d+$/.test(c.name))
+      .sort((a, b) => {
+        const ai = parseInt(a.name.split('.').pop(), 10);
+        const bi = parseInt(b.name.split('.').pop(), 10);
+        return ai - bi;
+      });
+    rawValue = chunks.map(c => c.value).join('');
   }
+
+  if (!rawValue) return null;
+
+  let candidate = rawValue;
+  try { candidate = decodeURIComponent(rawValue); } catch { /* not URL-encoded */ }
+
+  // Modern @supabase/ssr prefixes the value with literal "base64-".
+  if (candidate.startsWith('base64-')) {
+    try { return JSON.parse(atob(candidate.slice(7))); } catch { return null; }
+  }
+
+  try { return JSON.parse(candidate); } catch { /* try base64 fallback */ }
+  try { return JSON.parse(atob(candidate)); } catch { return null; }
 }
 
 export function normalizeUser(user) {

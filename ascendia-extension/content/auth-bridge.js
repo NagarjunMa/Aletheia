@@ -16,34 +16,61 @@
     const allCookies = document.cookie;
     if (!allCookies) return null;
 
-    // Find sb-<ref>-auth-token cookies
     const cookiePairs = allCookies.split(';').map(c => c.trim());
     const authCookies = cookiePairs
-      .filter(c => c.startsWith('sb-') && c.includes('-auth-token'))
-      .sort();
+      .filter(c => c.startsWith('sb-') && c.includes('-auth-token'));
 
     if (authCookies.length === 0) return null;
 
-    // Find base cookie or concatenate chunks
-    let rawValue;
-    const basePair = authCookies.find(c => /^sb-.*-auth-token=/.test(c));
-    if (basePair) {
-      rawValue = basePair.split('=').slice(1).join('=');
-    } else {
-      rawValue = authCookies.map(c => c.split('=').slice(1).join('=')).join('');
-    }
+    const rawValue = reassembleAuthCookieValue(authCookies);
+    if (!rawValue) return null;
+    return parseSupabaseSessionValue(rawValue);
+  }
 
+  // Reassemble chunked Supabase auth cookie from name=value pairs.
+  // @supabase/ssr ≥0.5 splits the session across `sb-<ref>-auth-token.0`,
+  // `.1`, ... when it exceeds the per-cookie size limit (~3180 bytes).
+  function reassembleAuthCookieValue(cookiePairs) {
+    const parsed = cookiePairs.map(c => {
+      const eq = c.indexOf('=');
+      if (eq < 0) return null;
+      return { name: c.slice(0, eq), value: c.slice(eq + 1) };
+    }).filter(Boolean);
+
+    const base = parsed.find(c => /^sb-[^.=]+-auth-token$/.test(c.name));
+    if (base) return base.value;
+
+    const chunks = parsed
+      .filter(c => /\.\d+$/.test(c.name))
+      .sort((a, b) => {
+        const ai = parseInt(a.name.split('.').pop(), 10);
+        const bi = parseInt(b.name.split('.').pop(), 10);
+        return ai - bi;
+      });
+    return chunks.map(c => c.value).join('');
+  }
+
+  // Parse a Supabase session cookie value. Modern @supabase/ssr prefixes
+  // the value with the literal string "base64-" before the base64 payload.
+  function parseSupabaseSessionValue(rawValue) {
     if (!rawValue) return null;
 
-    try {
-      return JSON.parse(decodeURIComponent(rawValue));
-    } catch (e) {
+    let candidate = rawValue;
+    try { candidate = decodeURIComponent(rawValue); } catch (e) { /* not URL-encoded */ }
+
+    if (candidate.startsWith('base64-')) {
       try {
-        return JSON.parse(atob(rawValue));
-      } catch (e2) {
-        console.warn('[AUTH-BRIDGE] Could not parse session cookie');
+        return JSON.parse(atob(candidate.slice(7)));
+      } catch (e) {
+        console.warn('[AUTH-BRIDGE] base64- prefixed value failed to decode');
         return null;
       }
+    }
+
+    try { return JSON.parse(candidate); } catch (e) { /* try base64 fallback */ }
+    try { return JSON.parse(atob(candidate)); } catch (e) {
+      console.warn('[AUTH-BRIDGE] Could not parse session cookie');
+      return null;
     }
   }
 
