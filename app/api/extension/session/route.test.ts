@@ -75,6 +75,19 @@ describe("GET /api/extension/session", () => {
       const body = await res.json();
       expect(body.error).toBe("Origin not allowed");
     });
+
+    it("sets Access-Control-Allow-Credentials: true for chrome-extension origin", async () => {
+      // Without this header, the SW fetch (credentials: 'include') has
+      // its cookies stripped by the browser, the route sees no session,
+      // and returns 401. Regression guard for Bug 3.
+      const res = await GET(
+        makeRequest({ origin: "chrome-extension://abcdefghij" }),
+      );
+      expect(res.headers.get("Access-Control-Allow-Credentials")).toBe("true");
+      expect(res.headers.get("Access-Control-Allow-Origin")).toBe(
+        "chrome-extension://abcdefghij",
+      );
+    });
   });
 
   describe("Session Retrieval (Step 1)", () => {
@@ -200,5 +213,20 @@ describe("OPTIONS /api/extension/session", () => {
     const res = await OPTIONS(makeRequest({ method: "OPTIONS" }));
     expect(res.status).toBe(200);
     // Implicit assertion: getting 200 means the endpoint didn't throw
+  });
+
+  it("preflight carries Access-Control-Allow-Credentials: true for chrome-extension", async () => {
+    // Preflight must mirror the credential header the actual GET will
+    // carry, or the browser fails the preflight and never sends GET.
+    const res = await OPTIONS(
+      makeRequest({
+        method: "OPTIONS",
+        origin: "chrome-extension://abcdefghij",
+      }),
+    );
+    expect(res.headers.get("Access-Control-Allow-Credentials")).toBe("true");
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe(
+      "chrome-extension://abcdefghij",
+    );
   });
 });
