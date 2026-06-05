@@ -40,7 +40,10 @@ setInterval(() => {
 export async function OPTIONS(request: NextRequest) {
   return new Response(null, {
     status: 200,
-    headers: getCorsHeaders(request, { methods: "GET, OPTIONS" }),
+    headers: getCorsHeaders(request, {
+      methods: "GET, OPTIONS",
+      allowCredentials: true,
+    }),
   });
 }
 
@@ -52,7 +55,14 @@ export async function GET(request: NextRequest) {
     { origin: request.headers.get("origin") },
     "GET /api/extension/session",
   );
-  const corsHeaders = getCorsHeaders(request, { methods: "GET, OPTIONS" });
+  // The SW fetches with credentials: 'include'. Browsers strip the cookies
+  // before sending unless the response carries Access-Control-Allow-
+  // Credentials: true on BOTH the preflight and the GET. Without this
+  // the route sees zero `sb-*-auth-token` cookies and returns 401.
+  const corsHeaders = getCorsHeaders(request, {
+    methods: "GET, OPTIONS",
+    allowCredentials: true,
+  });
 
   // Rate limit by IP — 20 req/min
   const clientIp =
