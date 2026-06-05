@@ -23,8 +23,11 @@ export function needsRefresh(auth, bufferMs = TOKEN_REFRESH_BUFFER_MS) {
 // ─── Cookie parsing (pure) ───
 
 export function parseChunkedCookies(cookies) {
+  // Match `sb-<ref>-auth-token` and its `.0`/`.1` chunks only. PKCE OAuth
+  // verifiers (`sb-<ref>-auth-token-code-verifier`) share the substring
+  // but carry a random string, not a session payload.
   const authCookies = cookies
-    .filter(c => c.name.startsWith('sb-') && c.name.includes('-auth-token'));
+    .filter(c => /^sb-[^=]+-auth-token(?:\.\d+)?$/.test(c.name));
 
   if (authCookies.length === 0) return null;
 

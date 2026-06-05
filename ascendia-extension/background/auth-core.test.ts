@@ -162,6 +162,28 @@ describe("parseChunkedCookies", () => {
     expect(result).toEqual(session);
   });
 
+  it("ignores PKCE code-verifier cookies (sb-<ref>-auth-token-code-verifier)", () => {
+    // Code-verifier value is a plain random string — not JSON, not base64.
+    // Including it sent the parser to its noisy final fallback.
+    const result = parseChunkedCookies([
+      {
+        name: "sb-xyz-auth-token-code-verifier",
+        value: "random-pkce-verifier-string-abcdef",
+      },
+    ]);
+    expect(result).toBeNull();
+  });
+
+  it("parses real session even when code-verifier cookie is present", () => {
+    const session = { access_token: "real-session", refresh_token: "rt" };
+    const value = "base64-" + btoa(JSON.stringify(session));
+    const result = parseChunkedCookies([
+      { name: "sb-xyz-auth-token-code-verifier", value: "pkce-noise" },
+      { name: "sb-xyz-auth-token", value },
+    ]);
+    expect(result).toEqual(session);
+  });
+
   it("sorts chunks numerically not lexicographically (handles .10 correctly)", () => {
     // Lexicographic sort would put .10 before .2 — must use numeric.
     const session = { access_token: "tok-many-chunks" };

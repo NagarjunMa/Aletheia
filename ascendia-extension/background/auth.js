@@ -128,8 +128,11 @@ async function _doFetchSessionFromWebApp(apiUrl) {
   const cookies = await chrome.cookies.getAll({ url: apiUrl });
   console.log('[AUTH] All cookies for', apiUrl, ':', cookies.map(c => `${c.name}=${c.value.substring(0, 20)}...`).join(', ') || '(none)');
 
+  // Match only `sb-<ref>-auth-token` and its `.0`/`.1` chunks. PKCE OAuth
+  // verifiers (`sb-<ref>-auth-token-code-verifier`) share the substring
+  // but carry a random string, not a session payload.
   const authCookies = cookies
-    .filter(c => c.name.startsWith('sb-') && c.name.includes('-auth-token'));
+    .filter(c => /^sb-[^=]+-auth-token(?:\.\d+)?$/.test(c.name));
 
   console.log('[AUTH] Auth cookies found:', authCookies.map(c => c.name).join(', ') || '(none)');
 
