@@ -265,23 +265,31 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // from earlier prod fallback) from routing requests to disallowed
 // origins after manifest narrowing.
 const ALLOWED_API_HOSTS = ['aletheia.live', 'www.aletheia.live'];
+function normalizeApiUrl(value) {
+  let normalized = String(value || '').trim();
+  while (normalized.endsWith('/') && !normalized.endsWith('://')) {
+    normalized = normalized.slice(0, -1);
+  }
+  return normalized;
+}
 function isAllowedApiUrl(value) {
-  if (!value) return false;
+  const normalized = normalizeApiUrl(value);
+  if (!normalized) return false;
   try {
-    return ALLOWED_API_HOSTS.includes(new URL(value).hostname);
+    return ALLOWED_API_HOSTS.includes(new URL(normalized).hostname);
   } catch {
     return false;
   }
 }
 async function getEffectiveApiUrl() {
   const { apiBaseUrl } = await chrome.storage.sync.get('apiBaseUrl');
-  if (isAllowedApiUrl(apiBaseUrl)) return apiBaseUrl;
+  if (isAllowedApiUrl(apiBaseUrl)) return normalizeApiUrl(apiBaseUrl);
   if (apiBaseUrl) {
     await chrome.storage.sync.remove('apiBaseUrl');
     console.log('[SW] Wiped stale apiBaseUrl from sync storage');
   }
   const { apiUrl } = await chrome.storage.local.get('apiUrl');
-  if (isAllowedApiUrl(apiUrl)) return apiUrl;
+  if (isAllowedApiUrl(apiUrl)) return normalizeApiUrl(apiUrl);
   if (apiUrl) {
     await chrome.storage.local.remove('apiUrl');
     console.log('[SW] Wiped stale apiUrl from local storage');
@@ -292,7 +300,7 @@ async function getEffectiveApiUrl() {
 async function initializeDefaultSettings() {
   // Check if user has a saved API URL in sync storage (shared across devices)
   const { apiBaseUrl } = await chrome.storage.sync.get('apiBaseUrl');
-  const apiUrl = apiBaseUrl || CONFIG.DEFAULT_API_URL;
+  const apiUrl = normalizeApiUrl(apiBaseUrl || CONFIG.DEFAULT_API_URL);
 
   const defaults = {
     apiUrl,

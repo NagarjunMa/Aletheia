@@ -5,6 +5,14 @@
 export const AUTH_STORAGE_KEY = 'aletheia_auth';
 export const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000; // 5 minutes before expiry
 
+export function normalizeApiUrl(apiUrl) {
+  let value = String(apiUrl || '').trim();
+  while (value.endsWith('/') && !value.endsWith('://')) {
+    value = value.slice(0, -1);
+  }
+  return value;
+}
+
 // ─── Token validation (pure) ───
 
 export function isTokenValid(auth) {
@@ -100,7 +108,8 @@ export async function clearAuth(storage) {
 // ─── Session fetching ───
 
 export async function fetchSessionFromServer(apiUrl, fetcher) {
-  const response = await fetcher(`${apiUrl}/api/extension/session`, {
+  const baseUrl = normalizeApiUrl(apiUrl);
+  const response = await fetcher(`${baseUrl}/api/extension/session`, {
     method: 'GET',
     credentials: 'include',
     headers: { 'X-Extension-Source': 'aletheia-extension' },
@@ -135,8 +144,9 @@ export async function fetchSessionFromServer(apiUrl, fetcher) {
 }
 
 export async function fetchSupabaseConfig(apiUrl, fetcher) {
+  const baseUrl = normalizeApiUrl(apiUrl);
   try {
-    const response = await fetcher(`${apiUrl}/api/extension/config`, {
+    const response = await fetcher(`${baseUrl}/api/extension/config`, {
       headers: { 'X-Extension-Source': 'aletheia-extension' },
     });
     if (response.ok) {
@@ -157,7 +167,7 @@ export async function doRefreshToken(auth, fetcher) {
   }
 
   const response = await fetcher(
-    `${auth.supabase_url}/auth/v1/token?grant_type=refresh_token`,
+    `${normalizeApiUrl(auth.supabase_url)}/auth/v1/token?grant_type=refresh_token`,
     {
       method: 'POST',
       headers: {

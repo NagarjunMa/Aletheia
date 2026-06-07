@@ -4,6 +4,14 @@
 const AUTH_STORAGE_KEY = 'aletheia_auth';
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000; // 5 minutes before expiry
 
+function normalizeApiUrl(apiUrl) {
+  let value = String(apiUrl || '').trim();
+  while (value.endsWith('/') && !value.endsWith('://')) {
+    value = value.slice(0, -1);
+  }
+  return value;
+}
+
 // ─── Storage helpers ───
 
 async function getStoredAuth() {
@@ -70,11 +78,12 @@ async function fetchSessionFromWebApp(apiUrl) {
 }
 
 async function _doFetchSessionFromWebApp(apiUrl) {
-  console.log('[AUTH] fetchSessionFromWebApp: calling', apiUrl + '/api/extension/session');
+  const baseUrl = normalizeApiUrl(apiUrl);
+  console.log('[AUTH] fetchSessionFromWebApp: calling', baseUrl + '/api/extension/session');
 
   // Method 1: Server endpoint (reliable — middleware handles cookie validation)
   try {
-    const response = await fetch(`${apiUrl}/api/extension/session`, {
+    const response = await fetch(`${baseUrl}/api/extension/session`, {
       method: 'GET',
       credentials: 'include',
       headers: {
@@ -125,8 +134,8 @@ async function _doFetchSessionFromWebApp(apiUrl) {
 
   // Method 2: Fallback — read cookies directly via chrome.cookies API
   console.log('[AUTH] Falling back to chrome.cookies.getAll...');
-  const cookies = await chrome.cookies.getAll({ url: apiUrl });
-  console.log('[AUTH] All cookies for', apiUrl, ':', cookies.map(c => `${c.name}=${c.value.substring(0, 20)}...`).join(', ') || '(none)');
+  const cookies = await chrome.cookies.getAll({ url: baseUrl });
+  console.log('[AUTH] All cookies for', baseUrl, ':', cookies.map(c => `${c.name}=${c.value.substring(0, 20)}...`).join(', ') || '(none)');
 
   // Match only `sb-<ref>-auth-token` and its `.0`/`.1` chunks. PKCE OAuth
   // verifiers (`sb-<ref>-auth-token-code-verifier`) share the substring
@@ -180,7 +189,7 @@ async function _doFetchSessionFromWebApp(apiUrl) {
   // Fetch Supabase config for token refresh
   let supabaseUrl, supabaseAnonKey;
   try {
-    const configResp = await fetch(`${apiUrl}/api/extension/config`, {
+    const configResp = await fetch(`${baseUrl}/api/extension/config`, {
       headers: { 'X-Extension-Source': 'aletheia-extension' }
     });
     if (configResp.ok) {
@@ -235,7 +244,7 @@ async function _doRefreshToken(auth) {
       try {
         const { apiBaseUrl } = await chrome.storage.sync.get('apiBaseUrl');
         const { apiUrl } = await chrome.storage.local.get('apiUrl');
-        const url = apiBaseUrl || apiUrl || 'https://www.aletheia.live';
+        const url = normalizeApiUrl(apiBaseUrl || apiUrl || 'https://www.aletheia.live');
         const configResp = await fetch(`${url}/api/extension/config`, {
           headers: { 'X-Extension-Source': 'aletheia-extension' }
         });
@@ -303,6 +312,7 @@ async function _doRefreshToken(auth) {
 // ─── Main entry point ───
 
 async function getValidAccessToken(apiUrl) {
+  apiUrl = normalizeApiUrl(apiUrl);
   console.log('[AUTH] getValidAccessToken for', apiUrl);
   let auth = await getStoredAuth();
 
@@ -375,6 +385,7 @@ let _loginResolve = null;
 let _loginReject = null;
 
 async function waitForLogin(apiUrl) {
+  apiUrl = normalizeApiUrl(apiUrl);
   const LOGIN_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
   console.log('[AUTH] waitForLogin: opening login tab for', apiUrl);
@@ -433,7 +444,7 @@ function handleAuthBridgeSession(sessionData) {
     chrome.storage.sync.get('apiBaseUrl'),
     chrome.storage.local.get('apiUrl'),
   ]).then(async ([{ apiBaseUrl }, { apiUrl }]) => {
-    const url = apiBaseUrl || apiUrl || 'https://www.aletheia.live';
+    const url = normalizeApiUrl(apiBaseUrl || apiUrl || 'https://www.aletheia.live');
     let supabaseUrl, supabaseAnonKey;
     try {
       const configResp = await fetch(`${url}/api/extension/config`, {
@@ -587,6 +598,7 @@ function pollUntilSession(apiUrl, tabId, timeoutAt) {
 // ─── Clear auth and fetch fresh session ───
 
 async function clearAuthAndFetchFresh(apiUrl) {
+  apiUrl = normalizeApiUrl(apiUrl);
   console.log('[AUTH] clearAuthAndFetchFresh: clearing stored auth and fetching fresh session');
   await clearAuth();
   const sessionData = await fetchSessionFromWebApp(apiUrl);
@@ -598,6 +610,7 @@ async function clearAuthAndFetchFresh(apiUrl) {
 // ─── Proactive refresh (called by alarm) ───
 
 async function proactiveRefresh(apiUrl) {
+  apiUrl = normalizeApiUrl(apiUrl);
   const auth = await getStoredAuth();
   if (!auth) return;
 
