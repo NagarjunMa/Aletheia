@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { getCorsHeaders } from "./cors";
 
+const EXTENSION_ID = "abcdefghijklmnopabcdefghijklmnop";
+
 // Duck-typed mock request — satisfies the headers.get() interface used by getCorsHeaders
 function mockRequest(opts: {
   origin?: string | null;
@@ -20,6 +22,8 @@ function mockRequest(opts: {
 describe("getCorsHeaders", () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    delete process.env.CHROME_EXTENSION_ID;
+    delete process.env.CHROME_EXTENSION_IDS;
   });
 
   describe("localhost origins", () => {
@@ -50,12 +54,47 @@ describe("getCorsHeaders", () => {
   });
 
   describe("chrome extension origins", () => {
-    it("allows chrome-extension:// origin", () => {
+    it("allows the configured chrome-extension:// origin", () => {
+      process.env.CHROME_EXTENSION_ID = EXTENSION_ID;
+
       const headers = getCorsHeaders(
-        mockRequest({ origin: "chrome-extension://abcdefghij" }),
+        mockRequest({ origin: `chrome-extension://${EXTENSION_ID}` }),
       );
       expect(headers["Access-Control-Allow-Origin"]).toBe(
-        "chrome-extension://abcdefghij",
+        `chrome-extension://${EXTENSION_ID}`,
+      );
+    });
+
+    it("rejects unconfigured chrome-extension:// origins", () => {
+      process.env.CHROME_EXTENSION_ID = EXTENSION_ID;
+
+      const headers = getCorsHeaders(
+        mockRequest({
+          origin: "chrome-extension://badbadbadbadbadbadbadbadbadbadba",
+        }),
+      );
+
+      expect(headers["Access-Control-Allow-Origin"]).toBe("");
+    });
+
+    it("rejects all chrome-extension:// origins when no extension ID is configured", () => {
+      const headers = getCorsHeaders(
+        mockRequest({ origin: `chrome-extension://${EXTENSION_ID}` }),
+      );
+
+      expect(headers["Access-Control-Allow-Origin"]).toBe("");
+    });
+
+    it("allows comma-separated configured chrome-extension IDs", () => {
+      const secondId = "ponmlkjihgfedcbaponmlkjihgfedcba";
+      process.env.CHROME_EXTENSION_IDS = `${EXTENSION_ID},${secondId}`;
+
+      const headers = getCorsHeaders(
+        mockRequest({ origin: `chrome-extension://${secondId}` }),
+      );
+
+      expect(headers["Access-Control-Allow-Origin"]).toBe(
+        `chrome-extension://${secondId}`,
       );
     });
 

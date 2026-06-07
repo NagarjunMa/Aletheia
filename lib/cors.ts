@@ -2,19 +2,44 @@ import { NextRequest } from "next/server";
 
 const ALLOWED_APP_URL = process.env.NEXT_PUBLIC_APP_URL;
 
+function normalizeExtensionOrigin(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const origin = trimmed.startsWith("chrome-extension://")
+    ? trimmed
+    : `chrome-extension://${trimmed}`;
+
+  return origin.replace(/\/+$/, "");
+}
+
+export function getAllowedExtensionOrigins(): string[] {
+  const raw =
+    process.env.CHROME_EXTENSION_IDS ?? process.env.CHROME_EXTENSION_ID ?? "";
+
+  return raw
+    .split(",")
+    .map(normalizeExtensionOrigin)
+    .filter((origin): origin is string => Boolean(origin));
+}
+
+export function isAllowedExtensionOrigin(origin: string | null): boolean {
+  if (!origin) return false;
+  return getAllowedExtensionOrigins().includes(origin.replace(/\/+$/, ""));
+}
+
 function buildAllowedPatterns(): RegExp[] {
-  const patterns: RegExp[] = [
-    /^chrome-extension:\/\//,
-    /^https?:\/\/localhost(:\d+)?$/,
-  ];
+  const patterns: RegExp[] = [/^https?:\/\/localhost(:\d+)?$/];
   if (ALLOWED_APP_URL) {
     const escaped = ALLOWED_APP_URL.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     patterns.push(new RegExp(`^${escaped}$`));
   }
+  for (const extensionOrigin of getAllowedExtensionOrigins()) {
+    const escaped = extensionOrigin.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    patterns.push(new RegExp(`^${escaped}$`));
+  }
   return patterns;
 }
-
-const ALLOWED_PATTERNS = buildAllowedPatterns();
 
 export function getCorsHeaders(
   request: NextRequest,
@@ -22,7 +47,7 @@ export function getCorsHeaders(
 ): Record<string, string> {
   const origin = request.headers.get("origin");
   const isAllowedOrigin = origin
-    ? ALLOWED_PATTERNS.some((p) => p.test(origin))
+    ? buildAllowedPatterns().some((p) => p.test(origin))
     : false;
 
   // Only set ACAO for requests with a recognized origin.
