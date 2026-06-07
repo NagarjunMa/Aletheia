@@ -8,6 +8,29 @@ import { createLogger } from "@/lib/logger.edge";
 
 const log = createLogger("middleware");
 
+function getRequiredEnv(name: string) {
+  const value = process.env[name];
+  if (!value) throw new Error(`${name} environment variable is not set`);
+  return value;
+}
+
+function createForwardedResponse(requestHeaders: Headers, requestId: string) {
+  const response = NextResponse.next({
+    request: {
+      headers: requestHeaders,
+    },
+  });
+  response.headers.set("x-request-id", requestId);
+  return response;
+}
+
+function createNonce() {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const isAuthRelated =
@@ -26,16 +49,11 @@ export async function middleware(request: NextRequest) {
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-request-id", requestId);
 
-  let response = NextResponse.next({
-    request: {
-      headers: requestHeaders,
-    },
-  });
-  response.headers.set("x-request-id", requestId);
+  let response = createForwardedResponse(requestHeaders, requestId);
 
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    getRequiredEnv("NEXT_PUBLIC_SUPABASE_URL"),
+    getRequiredEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
     {
       cookies: {
         get(name: string) {
@@ -47,11 +65,7 @@ export async function middleware(request: NextRequest) {
             value,
             ...options,
           });
-          response = NextResponse.next({
-            request: {
-              headers: request.headers,
-            },
-          });
+          response = createForwardedResponse(requestHeaders, requestId);
           response.cookies.set({
             name,
             value,
@@ -64,11 +78,7 @@ export async function middleware(request: NextRequest) {
             value: "",
             ...options,
           });
-          response = NextResponse.next({
-            request: {
-              headers: request.headers,
-            },
-          });
+          response = createForwardedResponse(requestHeaders, requestId);
           response.cookies.set({
             name,
             value: "",
@@ -196,7 +206,7 @@ export async function middleware(request: NextRequest) {
   // 'strict-dynamic' allows scripts loaded by nonced scripts (Next.js chunks).
   // 'unsafe-inline' kept for style-src only — Tailwind/CSS-in-JS requires it,
   // and style injection is low-risk compared to script injection.
-  const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
+  const nonce = createNonce();
   response.headers.set("x-nonce", nonce);
 
   const isDev = process.env.NODE_ENV === "development";

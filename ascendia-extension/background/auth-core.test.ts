@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   isTokenValid,
   needsRefresh,
+  normalizeApiUrl,
   parseChunkedCookies,
   normalizeUser,
   getStoredAuth,
@@ -17,6 +18,24 @@ import {
   AUTH_STORAGE_KEY,
   TOKEN_REFRESH_BUFFER_MS,
 } from "./auth-core.js";
+
+// ─── normalizeApiUrl ───
+
+describe("normalizeApiUrl", () => {
+  it("trims whitespace and trailing slashes", () => {
+    expect(normalizeApiUrl(" https://www.aletheia.live/// ")).toBe(
+      "https://www.aletheia.live",
+    );
+  });
+
+  it("returns an empty string for empty input", () => {
+    expect(normalizeApiUrl(undefined)).toBe("");
+  });
+
+  it("preserves a protocol marker while a custom URL is being typed", () => {
+    expect(normalizeApiUrl("https://")).toBe("https://");
+  });
+});
 
 // ─── isTokenValid ───
 
@@ -299,6 +318,24 @@ describe("fetchSessionFromServer", () => {
     expect(fetcher).toHaveBeenCalledWith(
       "https://app.com/api/extension/session",
       expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+  });
+
+  it("normalizes trailing slash before building the session endpoint URL", async () => {
+    const fetcher = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          access_token: "tok",
+          expires_at: 999,
+        }),
+    });
+
+    await fetchSessionFromServer("https://app.com/", fetcher);
+
+    expect(fetcher).toHaveBeenCalledWith(
+      "https://app.com/api/extension/session",
+      expect.any(Object),
     );
   });
 

@@ -12,6 +12,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 // Production default — used when no custom URL has been saved
 const DEFAULT_API_URL = 'https://www.aletheia.live'
 
+function normalizeApiUrl(apiUrl) {
+  let value = String(apiUrl || '').trim()
+  while (value.endsWith('/') && !value.endsWith('://')) {
+    value = value.slice(0, -1)
+  }
+  return value
+}
+
 // Global state
 let currentSettings = {
   apiUrl: DEFAULT_API_URL,
@@ -37,7 +45,7 @@ async function initializeSettings() {
     ...stored,
     ...stored.settings,
     // Prefer sync storage, then local, then default
-    apiUrl: apiBaseUrl || stored.apiUrl || DEFAULT_API_URL
+    apiUrl: normalizeApiUrl(apiBaseUrl || stored.apiUrl || DEFAULT_API_URL)
   }
 
   updateStatusIndicators()
@@ -280,10 +288,10 @@ function handleApiUrlSelectChange(e) {
   if (value === 'custom') {
     customInput.classList.remove('hidden')
     customInput.focus()
-    currentSettings.apiUrl = customInput.value.trim() || DEFAULT_API_URL
+    currentSettings.apiUrl = normalizeApiUrl(customInput.value || DEFAULT_API_URL)
   } else {
     customInput.classList.add('hidden')
-    currentSettings.apiUrl = value
+    currentSettings.apiUrl = normalizeApiUrl(value)
   }
 
   // Keep the hidden legacy input in sync
@@ -291,12 +299,12 @@ function handleApiUrlSelectChange(e) {
 }
 
 function handleApiUrlCustomChange(e) {
-  currentSettings.apiUrl = e.target.value.trim()
+  currentSettings.apiUrl = normalizeApiUrl(e.target.value)
   document.getElementById('apiUrlInput').value = currentSettings.apiUrl
 }
 
 function handleApiUrlChange(e) {
-  currentSettings.apiUrl = e.target.value.trim()
+  currentSettings.apiUrl = normalizeApiUrl(e.target.value)
 }
 
 async function testConnection() {
@@ -619,10 +627,12 @@ async function saveAllSettings() {
     }
 
     // Persist the API base URL in sync storage (shared across devices)
-    await chrome.storage.sync.set({ apiBaseUrl: currentSettings.apiUrl })
+    const apiUrl = normalizeApiUrl(currentSettings.apiUrl)
+    currentSettings.apiUrl = apiUrl
+    await chrome.storage.sync.set({ apiBaseUrl: apiUrl })
 
     await chrome.storage.local.set({
-      apiUrl: currentSettings.apiUrl,
+      apiUrl,
       resume: currentSettings.resume,
       resumeFile: currentSettings.resumeFile,
       personalInfo: currentSettings.personalInfo,
@@ -712,9 +722,11 @@ function autoSave() {
   clearTimeout(saveTimeout)
   saveTimeout = setTimeout(async () => {
     try {
-      await chrome.storage.sync.set({ apiBaseUrl: currentSettings.apiUrl })
+      const apiUrl = normalizeApiUrl(currentSettings.apiUrl)
+      currentSettings.apiUrl = apiUrl
+      await chrome.storage.sync.set({ apiBaseUrl: apiUrl })
       await chrome.storage.local.set({
-        apiUrl: currentSettings.apiUrl,
+        apiUrl,
         resume: currentSettings.resume,
         resumeFile: currentSettings.resumeFile,
         personalInfo: currentSettings.personalInfo,
