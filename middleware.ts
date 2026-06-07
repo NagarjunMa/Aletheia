@@ -8,6 +8,14 @@ import { createLogger } from "@/lib/logger.edge";
 
 const log = createLogger("middleware");
 
+const AUTH_BYPASS_PATHS = new Set([
+  "/api/health",
+  "/healthz",
+  "/robots.txt",
+  "/sitemap.xml",
+  "/api/extension/session",
+]);
+
 function getRequiredEnv(name: string) {
   const value = process.env[name];
   if (!value) throw new Error(`${name} environment variable is not set`);
@@ -22,6 +30,13 @@ function createForwardedResponse(requestHeaders: Headers, requestId: string) {
   });
   response.headers.set("x-request-id", requestId);
   return response;
+}
+
+function addBasicSecurityHeaders(response: NextResponse) {
+  response.headers.set("X-Frame-Options", "DENY");
+  response.headers.set("X-Content-Type-Options", "nosniff");
+  response.headers.set("X-XSS-Protection", "1; mode=block");
+  response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
 }
 
 function createNonce() {
@@ -50,6 +65,14 @@ export async function middleware(request: NextRequest) {
   requestHeaders.set("x-request-id", requestId);
 
   let response = createForwardedResponse(requestHeaders, requestId);
+
+  // These routes must be able to respond without auth provider configuration.
+  // In CI smoke tests and external uptime checks, /api/health should still work
+  // even when Supabase env vars are intentionally absent.
+  if (AUTH_BYPASS_PATHS.has(pathname)) {
+    addBasicSecurityHeaders(response);
+    return response;
+  }
 
   const supabase = createServerClient(
     getRequiredEnv("NEXT_PUBLIC_SUPABASE_URL"),
@@ -88,18 +111,6 @@ export async function middleware(request: NextRequest) {
       },
     },
   );
-
-  // Skip auth for extension session endpoint — it does its own full auth check.
-  // Running getUser() here AND in the endpoint creates a token refresh race condition
-  // where concurrent requests cause "refresh_token_already_used" errors.
-  if (pathname === "/api/extension/session") {
-    // Still apply security headers
-    response.headers.set("X-Frame-Options", "DENY");
-    response.headers.set("X-Content-Type-Options", "nosniff");
-    response.headers.set("X-XSS-Protection", "1; mode=block");
-    response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-    return response;
-  }
 
   // Refresh session if expired - required for Server Components
   const {
@@ -194,11 +205,7 @@ export async function middleware(request: NextRequest) {
     log.debug({ user: user?.email }, "Extension login: allowing auth page");
   }
 
-  // Add security headers
-  response.headers.set("X-Frame-Options", "DENY");
-  response.headers.set("X-Content-Type-Options", "nosniff");
-  response.headers.set("X-XSS-Protection", "1; mode=block");
-  response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  addBasicSecurityHeaders(response);
 
   // Nonce-based Content Security Policy.
   // Generate a per-request nonce to replace 'unsafe-inline' for scripts.
