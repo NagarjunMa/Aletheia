@@ -4,7 +4,7 @@ export interface MakeRequestOptions {
   method?: string;
   body?: object | null;
   headers?: Record<string, string>;
-  origin?: string;
+  origin?: string | null;
   /** Automatically sets `Authorization: Bearer <token>` */
   bearerToken?: string;
   /** Simulates `request.cookies.get()` used by session route */
@@ -30,9 +30,11 @@ export function makeRequest(opts: MakeRequestOptions = {}): NextRequest {
 
   const headers = new Headers({
     "Content-Type": "application/json",
-    origin,
     ...extraHeaders,
   });
+  if (origin !== null) {
+    headers.set("origin", origin);
+  }
 
   if (bearerToken) {
     headers.set("Authorization", `Bearer ${bearerToken}`);

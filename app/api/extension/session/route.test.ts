@@ -1,6 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { makeRequest } from "@/__tests__/helpers/request";
 import { getCorsHeaders } from "@/lib/cors";
+
+const EXTENSION_ID = "abcdefghijklmnopabcdefghijklmnop";
 
 // ─── Hoisted mocks ────────────────────────────────────────────────────────────
 const mockGetSession = vi.hoisted(() => vi.fn());
@@ -30,6 +32,7 @@ import { GET, OPTIONS } from "./route";
 
 // ─── Setup ────────────────────────────────────────────────────────────────────
 beforeEach(() => {
+  process.env.CHROME_EXTENSION_ID = EXTENSION_ID;
   mockGetSession.mockReset();
   mockGetUser.mockReset();
   vi.mocked(getCorsHeaders).mockClear();
@@ -59,6 +62,11 @@ beforeEach(() => {
   });
 });
 
+afterEach(() => {
+  delete process.env.CHROME_EXTENSION_ID;
+  delete process.env.CHROME_EXTENSION_IDS;
+});
+
 // ─── Tests ────────────────────────────────────────────────────────────────────
 describe("GET /api/extension/session", () => {
   describe("CORS Security", () => {
@@ -72,17 +80,42 @@ describe("GET /api/extension/session", () => {
       expect(body.error).toBe("Origin not allowed");
     });
 
-    it("sets Access-Control-Allow-Credentials: true for chrome-extension origin", async () => {
+    it("sets Access-Control-Allow-Credentials: true for the configured chrome-extension origin", async () => {
       // Without this header, the SW fetch (credentials: 'include') has
       // its cookies stripped by the browser, the route sees no session,
       // and returns 401. Regression guard for Bug 3.
       const res = await GET(
-        makeRequest({ origin: "chrome-extension://abcdefghij" }),
+        makeRequest({ origin: `chrome-extension://${EXTENSION_ID}` }),
       );
       expect(res.headers.get("Access-Control-Allow-Credentials")).toBe("true");
       expect(res.headers.get("Access-Control-Allow-Origin")).toBe(
-        "chrome-extension://abcdefghij",
+        `chrome-extension://${EXTENSION_ID}`,
       );
+    });
+
+    it("returns 403 for an unconfigured chrome-extension origin", async () => {
+      const res = await GET(
+        makeRequest({
+          origin: "chrome-extension://badbadbadbadbadbadbadbadbadbadba",
+        }),
+      );
+
+      expect(res.status).toBe(403);
+      const body = await res.json();
+      expect(body.error).toBe("Origin not allowed");
+    });
+
+    it("returns 403 for null-origin requests even with the extension source header", async () => {
+      const res = await GET(
+        makeRequest({
+          origin: null,
+          headers: { "X-Extension-Source": "aletheia-extension" },
+        }),
+      );
+
+      expect(res.status).toBe(403);
+      const body = await res.json();
+      expect(body.error).toBe("Origin not allowed");
     });
   });
 
@@ -160,35 +193,37 @@ describe("GET /api/extension/session", () => {
   });
 
   describe("Happy Path", () => {
-    it("returns 200 with access_token + user info for web origin; NO refresh_token", async () => {
-      // Web origin (localhost) → no refresh_token. Web app uses Supabase SSR
-      // cookies for refresh, never needs refresh_token in response body.
+    it("returns 200 with user info for web origin but no bearer tokens", async () => {
+      // Web origin uses Supabase SSR cookies and never needs bearer tokens in
+      // a JSON response body. This keeps XSS blast radius smaller.
       const res = await GET(makeRequest());
       expect(res.status).toBe(200);
 
       const body = await res.json();
-      expect(body.access_token).toBe("test-access");
+      expect(body.access_token).toBeUndefined();
       expect(body.refresh_token).toBeUndefined();
       expect(body.user.id).toBe("test-user-id");
       expect(body.user.full_name).toBe("Test User");
-      expect(body.supabase_url).toBe(process.env.NEXT_PUBLIC_SUPABASE_URL);
-      expect(body.supabase_anon_key).toBe(
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-      );
+      expect(body.supabase_url).toBeUndefined();
+      expect(body.supabase_anon_key).toBeUndefined();
     });
 
-    it("returns refresh_token to chrome-extension:// origin", async () => {
+    it("returns tokens to the configured chrome-extension:// origin", async () => {
       // Browser-enforced Origin header — same-origin XSS on aletheia.live
-      // cannot spoof chrome-extension://<id>. Safe to ship refresh_token
+      // cannot spoof the configured chrome-extension://<id>. Safe to ship refresh_token
       // back to the extension service worker.
       const res = await GET(
-        makeRequest({ origin: "chrome-extension://abcdefghij" }),
+        makeRequest({ origin: `chrome-extension://${EXTENSION_ID}` }),
       );
       expect(res.status).toBe(200);
 
       const body = await res.json();
       expect(body.access_token).toBe("test-access");
       expect(body.refresh_token).toBe("test-refresh");
+      expect(body.supabase_url).toBe(process.env.NEXT_PUBLIC_SUPABASE_URL);
+      expect(body.supabase_anon_key).toBe(
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+      );
     });
   });
 
@@ -217,12 +252,12 @@ describe("OPTIONS /api/extension/session", () => {
     const res = await OPTIONS(
       makeRequest({
         method: "OPTIONS",
-        origin: "chrome-extension://abcdefghij",
+        origin: `chrome-extension://${EXTENSION_ID}`,
       }),
     );
     expect(res.headers.get("Access-Control-Allow-Credentials")).toBe("true");
     expect(res.headers.get("Access-Control-Allow-Origin")).toBe(
-      "chrome-extension://abcdefghij",
+      `chrome-extension://${EXTENSION_ID}`,
     );
   });
 });

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { createLogger } from "@/lib/logger";
-import { getCorsHeaders } from "@/lib/cors";
+import { getCorsHeaders, isAllowedExtensionOrigin } from "@/lib/cors";
 
 const log = createLogger("extension-session");
 
@@ -71,16 +71,11 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // Session endpoint allows:
-  // 1. Requests with a recognized CORS origin (chrome-extension://, localhost, app URL)
-  // 2. Null-origin requests with x-extension-source header (service worker fetches)
-  // Service worker fetch() with credentials:'include' sends no origin header,
-  // but does send the custom header we set.
+  // Session endpoint requires a recognized CORS origin. Extension token
+  // exchange is limited further below to the exact configured extension ID.
   const hasAllowedOrigin = !!corsHeaders["Access-Control-Allow-Origin"];
-  const isExtensionSource =
-    request.headers.get("x-extension-source") === "aletheia-extension";
 
-  if (!hasAllowedOrigin && !isExtensionSource) {
+  if (!hasAllowedOrigin) {
     log.info("Origin not allowed");
     return NextResponse.json(
       { error: "Origin not allowed" },
@@ -179,30 +174,27 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // refresh_token is returned ONLY for chrome-extension:// origins.
-    // Browsers set the Origin header automatically and forbid script-origin
-    // spoofing, so a same-origin XSS on aletheia.live cannot impersonate
-    // chrome-extension://<id>. The web app itself uses Supabase SSR cookies
-    // for refresh and never needs refresh_token in a response body.
     const origin = request.headers.get("origin") || "";
-    const isChromeExtension = origin.startsWith("chrome-extension://");
+    const isApprovedExtension = isAllowedExtensionOrigin(origin);
 
     log.info(
-      { userId: user.id.substring(0, 8), isChromeExtension },
+      { userId: user.id.substring(0, 8), isApprovedExtension },
       "Returning session",
     );
     return NextResponse.json(
       {
-        access_token: session.access_token,
-        ...(isChromeExtension && { refresh_token: session.refresh_token }),
+        ...(isApprovedExtension && {
+          access_token: session.access_token,
+          refresh_token: session.refresh_token,
+          supabase_url: process.env.NEXT_PUBLIC_SUPABASE_URL,
+          supabase_anon_key: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+        }),
         expires_at: session.expires_at,
         user: {
           id: user.id,
           email: user.email,
           full_name: user.user_metadata?.full_name || user.email?.split("@")[0],
         },
-        supabase_url: process.env.NEXT_PUBLIC_SUPABASE_URL,
-        supabase_anon_key: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
       },
       {
         headers: corsHeaders,

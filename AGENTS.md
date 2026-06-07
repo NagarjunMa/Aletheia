@@ -125,6 +125,7 @@ supabase/migrations/
 | Variable | Purpose |
 |----------|---------|
 | `NEXT_PUBLIC_APP_URL` | Canonical app URL (CORS whitelist) |
+| `CHROME_EXTENSION_ID` | Exact Chrome extension ID allowed to exchange web sessions for extension tokens |
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase public key |
 | `SUPABASE_SERVICE_ROLE_KEY` | Admin operations (server only) |
