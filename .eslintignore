@@ -1,7 +1,0 @@
-# Supabase-generated types — do not lint
-lib/database/types.ts
-
-# Build output and cache
-.next/
-node_modules/
-coverage/

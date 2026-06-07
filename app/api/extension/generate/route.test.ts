@@ -460,7 +460,7 @@ describe("POST /api/extension/generate", () => {
     const Anthropic = (await import("@anthropic-ai/sdk")).default;
     // Mock class accepts string; real type expects { message?: string } — cast for type-check
     const TimeoutErr = Anthropic.APIConnectionTimeoutError as unknown as new (
-      m: string,
+      _m: string,
     ) => Error;
     mockAnthropicCreate.mockRejectedValueOnce(
       new TimeoutErr("Request took longer than 30s"),

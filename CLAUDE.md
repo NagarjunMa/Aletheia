@@ -25,7 +25,7 @@ Chrome Extension (MV3)              Next.js Web App
          │ Bearer token                      │ Cookie auth
          ▼                                   ▼
          Next.js Server (Vercel)
-           ├─ middleware.ts      — auth refresh, security headers
+           ├─ proxy.ts           — auth refresh, security headers
            ├─ /api/extension/*   — generate, feedback, config, session
            ├─ /api/auth/me       — user info + usage
            ├─ /api/feedback      — general feedback
@@ -59,7 +59,7 @@ Chrome Extension (MV3)              Next.js Web App
 
 | Layer | Technology | Notes |
 |-------|-----------|-------|
-| Framework | Next.js 14 (App Router) | SSR, API routes, middleware, Vercel edge |
+| Framework | Next.js 16 (App Router) | SSR, API routes, proxy, Vercel |
 | UI | React 18, Tailwind CSS, Radix UI, shadcn/ui | Dark mode via class strategy |
 | Forms | React Hook Form + Zod | Validation at API boundary |
 | Database | Supabase (PostgreSQL + Auth + RLS) | `createClient()` for browser, `createServiceClient()` for admin |
@@ -110,10 +110,10 @@ lib/
   supabase/{client.ts,server.ts}
   database/types.ts
   logger.ts            ← Pino logger (Node.js runtime only) — JSON to stdout (Vercel logs)
-  logger.edge.ts       ← Edge-compatible console logger — used ONLY by middleware.ts
+  logger.edge.ts       ← Proxy-compatible console logger — used ONLY by proxy.ts
   cors.ts
 
-middleware.ts          ← auth session refresh + security headers (imports logger.edge.ts)
+proxy.ts               ← auth session refresh + security headers (imports logger.edge.ts)
 next.config.js         ← Sentry, CSP, webpack, cache control
 supabase/migrations/
 ```
@@ -159,12 +159,12 @@ Copy `.env.local.example` → `.env.local` for local dev. Never commit secrets.
 - Use `createClient()` (browser) and `createServiceClient()` (server/admin) — never mix
 - Validate all API inputs with Zod at the route boundary — use `.trim()` before `.min()` on string fields
 - Use `createLogger('module')` from `lib/logger.ts` for structured logging in API routes — no `console.log`
-- Use `createLogger('module')` from `lib/logger.edge.ts` in `middleware.ts` — Edge Runtime safe (pino uses Node streams)
+- Use `createLogger('module')` from `lib/logger.edge.ts` in `proxy.ts` — proxy-safe logger for the network boundary
 - Use lazy factory functions for SDK clients — validate env vars exist at call time with clear error messages
 - Keep sanitizer and fingerprint detector in `lib/ai/` — don't inline AI post-processing in routes
 - Use `check_and_increment_rate_limit` RPC for extension rate limiting — don't reimplement
 - Return errors with structured JSON `{ error: string, code?: string, details?: Array }` and correct HTTP status — include field-level Zod details on 400s
-- Add security headers via middleware — don't add them ad hoc in individual routes
+- Add security headers via proxy — don't add them ad hoc in individual routes
 - Use Supabase RLS — never bypass it with service role for user-facing operations
 - Reference only user-provided data in prompts — never invent metrics, projects, or achievements
 - Use atomic RPCs for concurrent data operations (style merge, counters) — fall back to upsert only if RPC unavailable
@@ -177,7 +177,7 @@ Copy `.env.local.example` → `.env.local` for local dev. Never commit secrets.
 
 ### DON'T
 - Don't import `lib/supabase/server.ts` in client components
-- Don't import `lib/logger.ts` in `middleware.ts` — it uses Node.js streams which crash the Edge Runtime; use `lib/logger.edge.ts` instead
+- Don't import `lib/logger.ts` in `proxy.ts`; use `lib/logger.edge.ts` instead
 - Don't use `console.log` — use the Pino logger (`lib/logger.ts`) or edge logger (`lib/logger.edge.ts`)
 - Don't skip Zod validation on any API input
 - Don't add new Claude API calls without going through the sanitization pipeline
@@ -187,7 +187,7 @@ Copy `.env.local.example` → `.env.local` for local dev. Never commit secrets.
 - Don't commit `.env.local` or any file containing secrets
 - Don't bypass RLS using service role key for user queries (only for admin/background jobs)
 - Don't add module-level SDK instantiation (breaks Vercel edge cold starts)
-- Don't install pino transports that use Node.js streams in middleware — middleware runs on Edge Runtime
+- Don't install pino transports in proxy — keep proxy logging lightweight and runtime-safe
 - Don't inject user-supplied content into prompt XML tags without escaping — always use `escapeForXmlTag()` from `lib/ai/prompts/linkedin-connection.ts`
 - Don't make rate limiting fail-open — if the rate limit check fails, deny the request (fail-closed) to prevent unlimited API spend during outages
 - Don't use non-null assertions (`!`) on environment variables — always validate with an explicit check and throw a clear error

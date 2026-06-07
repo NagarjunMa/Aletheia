@@ -2,13 +2,16 @@
   "name": "aletheia",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": "24.x"
+  },
   "scripts": {
     "dev": "next dev -p 3000",
     "prebuild": "node scripts/build-extension-zip.mjs",
     "build": "next build",
     "build:extension": "node scripts/build-extension-zip.mjs",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint app components lib proxy.ts next.config.js instrumentation.ts instrumentation-client.ts sentry.client.config.ts sentry.edge.config.ts sentry.server.config.ts",
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:watch": "vitest --watch",
@@ -21,7 +24,7 @@
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:debug": "playwright test --debug",
     "analyze": "ANALYZE=true npm run build",
-    "type-check": "tsc --noEmit",
+    "type-check": "next typegen && tsc --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test:supabase": "tsx scripts/test-supabase-connection.ts",
@@ -45,19 +48,19 @@
     "@radix-ui/react-separator": "^1.1.8",
     "@radix-ui/react-slot": "^1.2.4",
     "@radix-ui/react-toast": "^1.2.15",
-    "@sentry/nextjs": "^10.29.0",
-    "@supabase/ssr": "^0.8.0",
-    "@supabase/supabase-js": "^2.45.4",
+    "@sentry/nextjs": "^10.56.0",
+    "@supabase/ssr": "^0.10.3",
+    "@supabase/supabase-js": "^2.107.0",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "framer-motion": "^12.26.2",
     "gsap": "^3.15.0",
     "lucide-react": "^0.562.0",
-    "next": "^14.2.35",
+    "next": "^16.2.7",
     "next-themes": "^0.4.6",
     "pino": "^8.21.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
     "react-hook-form": "^7.68.0",
     "react-intersection-observer": "^10.0.0",
     "tailwind-merge": "^2.5.2",
@@ -66,21 +69,21 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@next/bundle-analyzer": "^16.0.7",
+    "@next/bundle-analyzer": "^16.2.7",
     "@playwright/test": "^1.57.0",
-    "@svgr/webpack": "^8.1.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^14.6.1",
-    "@types/node": "^20.16.5",
-    "@types/react": "^18.3.8",
-    "@types/react-dom": "^18.3.0",
-    "@vitejs/plugin-react": "^4.3.1",
-    "@vitest/coverage-v8": "^2.1.9",
+    "@types/node": "^24.13.1",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.2.0",
+    "@vitest/coverage-v8": "^4.1.8",
     "autoprefixer": "^10.4.20",
+    "babel-plugin-react-compiler": "^1.0.0",
     "dotenv": "^17.2.3",
-    "eslint": "^8.57.1",
-    "eslint-config-next": "14.2.5",
+    "eslint": "^9.39.4",
+    "eslint-config-next": "^16.2.7",
     "husky": "^9.1.7",
     "jsdom": "^25.0.1",
     "jszip": "^3.10.1",
@@ -90,6 +93,27 @@
     "tailwindcss": "^3.4.12",
     "tsx": "^4.21.0",
     "typescript": "^5.6.2",
-    "vitest": "^2.1.1"
+    "vitest": "^4.1.8"
+  },
+  "overrides": {
+    "anymatch": {
+      "picomatch": "2.3.2"
+    },
+    "micromatch": {
+      "picomatch": "2.3.2"
+    },
+    "postcss": "$postcss",
+    "readdirp": {
+      "picomatch": "2.3.2"
+    }
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,css,md}": [
+      "prettier --write"
+    ]
   }
 }

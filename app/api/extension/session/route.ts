@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
-import { headers } from "next/headers";
 import { createLogger } from "@/lib/logger";
 import { getCorsHeaders } from "@/lib/cors";
 
@@ -48,9 +47,6 @@ export async function OPTIONS(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
-  // Call headers() to forcefully opt out of Next.js static generation caching
-  headers();
-
   log.info(
     { origin: request.headers.get("origin") },
     "GET /api/extension/session",
@@ -102,11 +98,10 @@ export async function GET(request: NextRequest) {
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         cookies: {
-          get(name: string) {
-            return request.cookies.get(name)?.value;
+          getAll() {
+            return request.cookies.getAll();
           },
-          set() {},
-          remove() {},
+          setAll() {},
         },
       },
     );

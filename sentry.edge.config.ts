@@ -16,7 +16,7 @@ if (isErrorReportingEnabled && SENTRY_DSN) {
     tracesSampleRate: process.env.NODE_ENV === "development" ? 1.0 : 0.1,
 
     // Defense-in-depth: scrub auth headers / tokens / PII fields from every
-    // event and breadcrumb before they leave middleware.
+    // event and breadcrumb before they leave the proxy boundary.
     beforeSend: sentryBeforeSend,
     beforeBreadcrumb: sentryBeforeBreadcrumb,
   });

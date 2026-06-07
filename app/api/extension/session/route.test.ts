@@ -16,10 +16,6 @@ vi.mock("@supabase/ssr", () => ({
   })),
 }));
 
-vi.mock("next/headers", () => ({
-  headers: vi.fn(() => new Map()),
-}));
-
 // We need to mock getCorsHeaders to assert security behavior without testing cors.ts itself
 vi.mock("@/lib/cors", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/cors")>();

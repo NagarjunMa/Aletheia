@@ -60,7 +60,7 @@ function needsRefresh(auth) {
 }
 
 // ─── Session fetching via server endpoint ───
-// Uses /api/extension/session which validates cookies server-side via Supabase middleware.
+// Uses /api/extension/session which validates cookies server-side via Supabase proxy.
 // This avoids the problem of chrome.cookies.getAll() not seeing Supabase client-side cookies
 // (createBrowserClient may store sessions in localStorage or set cookies that the chrome.cookies
 // API cannot read due to domain/SameSite/partitioning issues).
@@ -81,7 +81,7 @@ async function _doFetchSessionFromWebApp(apiUrl) {
   const baseUrl = normalizeApiUrl(apiUrl);
   console.log('[AUTH] fetchSessionFromWebApp: calling', baseUrl + '/api/extension/session');
 
-  // Method 1: Server endpoint (reliable — middleware handles cookie validation)
+  // Method 1: Server endpoint (reliable — proxy handles cookie validation)
   try {
     const response = await fetch(`${baseUrl}/api/extension/session`, {
       method: 'GET',

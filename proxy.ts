@@ -1,12 +1,12 @@
-// Next.js Middleware for Authentication
+// Next.js Proxy for Authentication
 // Created: December 7, 2024
 // Purpose: Handle authentication, session management, and security
 
-import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { createLogger } from "@/lib/logger.edge";
 
-const log = createLogger("middleware");
+const log = createLogger("proxy");
 
 const AUTH_BYPASS_PATHS = new Set([
   "/api/health",
@@ -46,7 +46,7 @@ function createNonce() {
   return btoa(binary);
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const isAuthRelated =
     pathname.startsWith("/auth") || pathname.startsWith("/api/extension");
@@ -79,33 +79,16 @@ export async function middleware(request: NextRequest) {
     getRequiredEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
     {
       cookies: {
-        get(name: string) {
-          return request.cookies.get(name)?.value;
+        getAll() {
+          return request.cookies.getAll();
         },
-        set(name: string, value: string, options: CookieOptions) {
-          request.cookies.set({
-            name,
-            value,
-            ...options,
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) => {
+            request.cookies.set(name, value);
           });
           response = createForwardedResponse(requestHeaders, requestId);
-          response.cookies.set({
-            name,
-            value,
-            ...options,
-          });
-        },
-        remove(name: string, options: CookieOptions) {
-          request.cookies.set({
-            name,
-            value: "",
-            ...options,
-          });
-          response = createForwardedResponse(requestHeaders, requestId);
-          response.cookies.set({
-            name,
-            value: "",
-            ...options,
+          cookiesToSet.forEach(({ name, value, options }) => {
+            response.cookies.set(name, value, options);
           });
         },
       },

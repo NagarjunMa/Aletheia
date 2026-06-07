@@ -35,7 +35,7 @@ export async function updateProfile(
     };
   }
 
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
     error: authErr,

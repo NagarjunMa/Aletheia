@@ -12,7 +12,7 @@ export async function PATCH(request: NextRequest) {
     methods: "GET, PATCH, OPTIONS",
   });
 
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
     error: authError,
@@ -72,7 +72,6 @@ export async function PATCH(request: NextRequest) {
 
   const { data, error } = await supabase
     .from("user_preferences")
-    // eslint-disable-next-line
     .upsert(upsertData as never, { onConflict: "user_id" })
     .select()
     .single();
@@ -101,7 +100,7 @@ export async function GET(request: NextRequest) {
     methods: "GET, PATCH, OPTIONS",
   });
 
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
     error: authError,
