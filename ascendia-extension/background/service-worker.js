@@ -68,7 +68,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   // Inject content scripts into already-open LinkedIn tabs
   // (Chrome does NOT auto-inject on install/update)
   try {
-    const tabs = await chrome.tabs.query({ url: 'https://www.linkedin.com/*' });
+    const tabs = await chrome.tabs.query({ url: 'https://www.linkedin.com/in/*' });
     for (const tab of tabs) {
       if (tab.id) {
         chrome.scripting.executeScript({
