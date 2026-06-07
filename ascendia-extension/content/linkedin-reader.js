@@ -5,8 +5,17 @@
 (function() {
   'use strict';
 
+  if (window.__aletheiaLinkedInReaderInitialized) {
+    console.debug('LinkedIn Reader: Already initialized, skipping duplicate injection');
+    return;
+  }
+  window.__aletheiaLinkedInReaderInitialized = true;
+
   let lastExtractedProfile = null;
   let extractionTimeout = null;
+  let profileObserver = null;
+  let navigationInterval = null;
+  let cleanedUp = false;
 
   // Initialize when page loads
   if (document.readyState === 'loading') {
@@ -17,6 +26,11 @@
 
   function initializeProfileReader() {
     console.log('LinkedIn Reader: Initializing on page:', window.location.href);
+
+    if (!isExtensionContextValid()) {
+      cleanup('initialize: context invalid');
+      return;
+    }
 
     if (!isLinkedInProfilePage()) {
       console.log('LinkedIn Reader: Not a LinkedIn profile page, exiting');
@@ -30,7 +44,8 @@
     extractAndNotifyProfile();
 
     observeProfileChanges();
-    chrome.runtime.onMessage.addListener(handleMessage);
+    registerMessageListener();
+    startNavigationWatcher();
 
     console.log('LinkedIn Reader: Setup complete');
   }
@@ -81,21 +96,23 @@
   }
 
   function extractAndNotifyProfile() {
+    if (cleanedUp) return;
+
     if (extractionTimeout) {
       clearTimeout(extractionTimeout);
     }
 
     extractionTimeout = setTimeout(() => {
+      if (cleanedUp) return;
+
       const profile = extractLinkedInProfile();
 
       if (profile && (!lastExtractedProfile || hasProfileChanged(profile, lastExtractedProfile))) {
         lastExtractedProfile = profile;
 
-        chrome.runtime.sendMessage({
+        sendRuntimeMessage({
           action: 'profileUpdated',
           profile
-        }).catch(error => {
-          console.debug('Could not send profile to popup:', error);
         });
       }
     }, 500);
@@ -109,7 +126,7 @@
   }
 
   function observeProfileChanges() {
-    const observer = new MutationObserver((mutations) => {
+    profileObserver = new MutationObserver((mutations) => {
       let shouldReextract = false;
 
       for (const mutation of mutations) {
@@ -131,9 +148,89 @@
       }
     });
 
-    observer.observe(document.body, { childList: true, subtree: true });
+    profileObserver.observe(document.body, { childList: true, subtree: true });
+  }
 
-    window.addEventListener('beforeunload', () => { observer.disconnect(); });
+  function isExtensionContextValid() {
+    try {
+      return typeof chrome !== 'undefined' && !!chrome.runtime && !!chrome.runtime.id;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function cleanup(reason) {
+    if (cleanedUp) return;
+    cleanedUp = true;
+    if (reason) console.debug('LinkedIn Reader: cleanup:', reason);
+
+    if (extractionTimeout) {
+      clearTimeout(extractionTimeout);
+      extractionTimeout = null;
+    }
+    if (navigationInterval) {
+      clearInterval(navigationInterval);
+      navigationInterval = null;
+    }
+    if (profileObserver) {
+      profileObserver.disconnect();
+      profileObserver = null;
+    }
+
+    try {
+      if (isExtensionContextValid()) {
+        chrome.runtime.onMessage.removeListener(handleMessage);
+      }
+    } catch (error) {
+      // The extension context is already invalid; nothing else to clean up.
+    }
+
+    window.__aletheiaLinkedInReaderInitialized = false;
+  }
+
+  function sendRuntimeMessage(message) {
+    if (!isExtensionContextValid()) {
+      cleanup('extension context invalid');
+      return false;
+    }
+
+    try {
+      const sendPromise = chrome.runtime.sendMessage(message);
+      if (sendPromise && typeof sendPromise.catch === 'function') {
+        sendPromise.catch(error => {
+          if (/context invalidated/i.test(error?.message || '')) {
+            cleanup('async sendMessage: context invalidated');
+          } else {
+            console.debug('LinkedIn Reader: Could not send runtime message:', error);
+          }
+        });
+      }
+      return true;
+    } catch (error) {
+      if (/context invalidated/i.test(error?.message || '')) {
+        cleanup('sendMessage threw: context invalidated');
+      } else {
+        console.debug('LinkedIn Reader: Could not send runtime message:', error);
+      }
+      return false;
+    }
+  }
+
+  function registerMessageListener() {
+    if (!isExtensionContextValid()) {
+      cleanup('register listener: context invalid');
+      return;
+    }
+
+    try {
+      chrome.runtime.onMessage.addListener(handleMessage);
+    } catch (error) {
+      if (/context invalidated/i.test(error?.message || '')) {
+        cleanup('addListener threw: context invalidated');
+      } else {
+        console.debug('LinkedIn Reader: Could not register message listener:', error);
+      }
+    }
   }
 
   function handleMessage(message, sender, sendResponse) {
@@ -158,23 +255,32 @@
     return true;
   }
 
-  // SPA navigation watcher
-  let lastUrl = window.location.href;
+  function startNavigationWatcher() {
+    // SPA navigation watcher. Only started after we know this script is on a
+    // profile page; manual injection on /feed/ should stay inert.
+    let lastUrl = window.location.href;
 
-  const checkForNavigation = () => {
-    if (window.location.href !== lastUrl) {
-      lastUrl = window.location.href;
-
-      if (isLinkedInProfilePage()) {
-        setTimeout(extractAndNotifyProfile, 1500);
-      } else {
-        lastExtractedProfile = null;
-        chrome.runtime.sendMessage({ action: 'profileUpdated', profile: null }).catch(() => {});
+    navigationInterval = setInterval(() => {
+      if (!isExtensionContextValid()) {
+        cleanup('navigation watcher: context invalid');
+        return;
       }
-    }
-  };
 
-  setInterval(checkForNavigation, 1000);
+      if (window.location.href !== lastUrl) {
+        lastUrl = window.location.href;
+
+        if (isLinkedInProfilePage()) {
+          setTimeout(extractAndNotifyProfile, 1500);
+        } else {
+          lastExtractedProfile = null;
+          sendRuntimeMessage({ action: 'profileUpdated', profile: null });
+        }
+      }
+    }, 1000);
+  }
+
+  window.addEventListener('pagehide', () => cleanup('pagehide'));
+  window.addEventListener('beforeunload', () => cleanup('beforeunload'));
 
   console.log('Aletheia LinkedIn Profile Reader (Turndown) initialized');
 
