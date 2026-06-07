@@ -1,5 +1,5 @@
 // Edge Runtime-compatible logger — console only, no pino, no Node.js streams.
-// Used exclusively by middleware.ts which runs on the Edge Runtime.
+// Used exclusively by proxy.ts at the Next.js network boundary.
 // API routes use lib/logger.ts (Node.js runtime, pino + Loki).
 
 type LogObj = Record<string, unknown>;

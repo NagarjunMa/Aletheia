@@ -1,19 +1,23 @@
+const path = require('path')
 const { withSentryConfig } = require('@sentry/nextjs')
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // React configuration
   reactStrictMode: true,
+  reactCompiler: true,
   poweredByHeader: false,
+  serverExternalPackages: ['@anthropic-ai/sdk'],
+  turbopack: {
+    root: path.resolve(__dirname)
+  },
 
   // Experimental features
   experimental: {
     optimizePackageImports: [
       'lucide-react',
       '@radix-ui/react-icons'
-    ],
-    serverComponentsExternalPackages: ['@anthropic-ai/sdk'],
-    esmExternals: 'loose'
+    ]
   },
 
   // Image optimization
@@ -33,44 +37,6 @@ const nextConfig = {
         pathname: '/storage/v1/object/public/**'
       }
     ]
-  },
-
-  // Enhanced Webpack configuration with dependency conflict resolution
-  webpack: (config, { isServer, dev, webpack }) => {
-    // SVG handling
-    config.module.rules.push({
-      test: /\.svg$/i,
-      issuer: /\.[jt]sx?$/,
-      use: ['@svgr/webpack']
-    })
-
-    // Node.js module fallbacks for client bundle (Sentry needs some of these)
-    config.resolve.fallback = {
-      ...config.resolve.fallback,
-      fs: false,
-      net: false,
-      tls: false,
-      vm: false,
-      worker_threads: false,
-      child_process: false,
-    }
-
-    config.resolve.extensionAlias = {
-      '.js': ['.js', '.ts'],
-      '.jsx': ['.jsx', '.tsx']
-    }
-
-    // Development-only optimizations
-    if (dev) {
-      // Faster builds in development by skipping some optimizations
-      config.optimization = {
-        ...config.optimization,
-        removeAvailableModules: false,
-        removeEmptyChunks: false,
-      }
-    }
-
-    return config
   },
 
   // Compiler options (let SWC handle optimizations)
@@ -145,7 +111,7 @@ const nextConfig = {
       }
     ]
 
-    // CSP header for production static responses (middleware handles dynamic ones with nonces).
+    // CSP header for production static responses (proxy handles dynamic ones with nonces).
     // Static responses can't have nonces, so we use 'strict-dynamic' only.
     // Middleware-served pages get the nonce-based CSP which is stronger.
     if (process.env.NODE_ENV === 'production') {
@@ -209,12 +175,6 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: false,
     tsconfigPath: './tsconfig.json'
-  },
-
-  // ESLint configuration
-  eslint: {
-    ignoreDuringBuilds: false,
-    dirs: ['components', 'lib', 'app']
   },
 
   // Logging

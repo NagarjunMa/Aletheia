@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
     methods: "POST, OPTIONS",
   });
 
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
     error: authError,

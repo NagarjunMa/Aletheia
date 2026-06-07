@@ -6,7 +6,7 @@ import ShaderBackground from "@/components/ShaderBackground";
 import ProfileForm from "./ProfileForm";
 
 export default async function ProfilePage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
     error: authError,

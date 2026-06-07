@@ -33,7 +33,7 @@ Chrome Extension (MV3)                  Next.js Web App
          │ Bearer token                          │ Cookie auth
          ▼                                       ▼
          Next.js Server (Vercel)
-           middleware.ts         ← auth refresh, security headers, CSP
+           proxy.ts              ← auth refresh, security headers, CSP
            app/api/extension/
              generate/           ← POST  core generation endpoint
              feedback/           ← POST  approval/rejection + style learning
@@ -95,11 +95,11 @@ aletheia/
 │   ├── supabase/{client.ts,server.ts}
 │   ├── database/types.ts        ← generated Supabase types
 │   ├── logger.ts                ← Pino → stdout (Vercel logs)
-│   ├── logger.edge.ts           ← Edge-compatible console logger (middleware only)
+│   ├── logger.edge.ts           ← Proxy-compatible console logger (proxy only)
 │   └── cors.ts
 │
 ├── supabase/migrations/         ← SQL migrations (YYYYMMDD_NNN_description.sql)
-├── middleware.ts                 ← auth session refresh + security headers + CSP nonce
+├── proxy.ts                      ← auth session refresh + security headers + CSP nonce
 ├── next.config.js
 ├── vitest.config.ts
 ├── vitest.guardrails.config.ts
@@ -375,7 +375,7 @@ Full conventions in `CLAUDE.md`.
 
 | Measure | Implementation | File |
 |---------|---------------|------|
-| **Nonce-based CSP** | `'nonce-{nonce}' 'strict-dynamic'` per request via `x-nonce` header. | `middleware.ts`, `layout.tsx` |
+| **Nonce-based CSP** | `'nonce-{nonce}' 'strict-dynamic'` per request via `x-nonce` header. | `proxy.ts`, `layout.tsx` |
 | **Anthropic 401 → 502** | Upstream auth failure returns 502 Bad Gateway. | `route.ts` |
 | **Context-aware email redaction** | Emails preserved in cold email, redacted on LinkedIn. | `sanitizer.ts` |
 
@@ -447,7 +447,7 @@ Single visual language across landing, auth, dashboard, profile, settings, priva
 | Style learning / analytics | Fire-and-forget. Never `await` in generate response path. |
 | Logging | `createLogger('module')` from `lib/logger.ts`. No `console.log`. Middleware uses `lib/logger.edge.ts`. |
 | API errors | Return `{ error: string, code?: string, details?: Array }` with correct HTTP status. |
-| Security headers | Via `middleware.ts` only — not ad-hoc in routes. |
+| Security headers | Via `proxy.ts` only — not ad-hoc in routes. |
 | RLS | Never bypass with service role for user-facing queries. |
 
 ---

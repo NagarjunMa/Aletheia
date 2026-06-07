@@ -1,11 +1,13 @@
-'use client'
+"use client";
+
+import Link from "next/link";
 
 export default function Error({
   error,
   reset,
 }: {
-  error: Error & { digest?: string }
-  reset: () => void
+  error: Error & { digest?: string };
+  reset: () => void;
 }) {
   return (
     <div className="min-h-screen flex items-center justify-center px-4">
@@ -28,9 +30,11 @@ export default function Error({
           </div>
         </div>
 
-        <h1 className="text-2xl font-bold text-white mb-2">Something went wrong</h1>
+        <h1 className="text-2xl font-bold text-white mb-2">
+          Something went wrong
+        </h1>
         <p className="text-sm text-[hsl(var(--muted-foreground))] mb-6">
-          {error.message || 'An unexpected error occurred. Please try again.'}
+          {error.message || "An unexpected error occurred. Please try again."}
         </p>
 
         <div className="flex items-center justify-center gap-3">
@@ -40,14 +44,14 @@ export default function Error({
           >
             Try again
           </button>
-          <a
+          <Link
             href="/"
             className="rounded-lg border border-[hsl(var(--border))] px-6 py-2.5 text-sm font-medium text-white hover:bg-[hsl(var(--accent))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] focus:ring-offset-2 focus:ring-offset-[hsl(var(--background))] transition-all"
           >
             Go home
-          </a>
+          </Link>
         </div>
       </div>
     </div>
-  )
+  );
 }

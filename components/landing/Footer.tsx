@@ -23,7 +23,7 @@ export default function Footer() {
   const scrollTo = (href: string) => {
     if (typeof window === "undefined") return;
     if (window.location.pathname !== "/") {
-      window.location.href = `/${href}`;
+      window.location.assign(`/${href}`);
       return;
     }
     document.querySelector(href)?.scrollIntoView({ behavior: "smooth" });

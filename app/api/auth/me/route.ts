@@ -105,7 +105,7 @@ export async function GET(request: NextRequest) {
 
     // Method 2: Cookie-based session (fallback)
     if (!userId) {
-      const supabase = createClient();
+      const supabase = await createClient();
       const {
         data: { user },
         error,

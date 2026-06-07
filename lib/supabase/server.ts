@@ -2,7 +2,7 @@
 // Created: December 7, 2024
 // Purpose: Server-side Supabase client for Server Actions and SSR
 
-import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import { createServerClient } from "@supabase/ssr";
 import { createClient as createSupabaseJsClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import type { User } from "@supabase/supabase-js";
@@ -11,32 +11,25 @@ import { createLogger } from "@/lib/logger";
 
 const log = createLogger("supabase-server");
 
-export function createClient() {
-  const cookieStore = cookies();
+export async function createClient() {
+  const cookieStore = await cookies();
 
   return createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value;
+        getAll() {
+          return cookieStore.getAll();
         },
-        set(name: string, value: string, options: CookieOptions) {
+        setAll(cookiesToSet) {
           try {
-            cookieStore.set({ name, value, ...options });
+            cookiesToSet.forEach(({ name, value, options }) => {
+              cookieStore.set(name, value, options);
+            });
           } catch {
-            // The `set` method was called from a Server Component.
-            // This can be ignored if you have middleware refreshing
-            // user sessions.
-          }
-        },
-        remove(name: string, options: CookieOptions) {
-          try {
-            cookieStore.set({ name, value: "", ...options });
-          } catch {
-            // The `delete` method was called from a Server Component.
-            // This can be ignored if you have middleware refreshing
+            // The `setAll` method was called from a Server Component.
+            // This can be ignored if you have proxy refreshing
             // user sessions.
           }
         },
@@ -47,7 +40,7 @@ export function createClient() {
 
 // Service Role client for admin operations (use carefully!)
 // The service role key is read once and never logged or exposed.
-export function createServiceClient() {
+export async function createServiceClient() {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!serviceRoleKey) {
     throw new Error(
@@ -58,25 +51,20 @@ export function createServiceClient() {
   if (!supabaseUrl) {
     throw new Error("NEXT_PUBLIC_SUPABASE_URL environment variable is not set");
   }
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
 
   return createServerClient<Database>(supabaseUrl, serviceRoleKey, {
     cookies: {
-      get(name: string) {
-        return cookieStore.get(name)?.value;
+      getAll() {
+        return cookieStore.getAll();
       },
-      set(name: string, value: string, options: CookieOptions) {
+      setAll(cookiesToSet) {
         try {
-          cookieStore.set({ name, value, ...options });
+          cookiesToSet.forEach(({ name, value, options }) => {
+            cookieStore.set(name, value, options);
+          });
         } catch {
-          // Handle cookie setting errors
-        }
-      },
-      remove(name: string, options: CookieOptions) {
-        try {
-          cookieStore.set({ name, value: "", ...options });
-        } catch {
-          // Handle cookie removal errors
+          // Handle cookie setting errors.
         }
       },
     },
@@ -131,7 +119,7 @@ export function createBearerAuthClient() {
 
 // Helper function to get authenticated user
 export async function getUser() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
     error,
@@ -147,7 +135,7 @@ export async function getUser() {
 
 // Helper function to get user profile
 export async function getUserProfile(userId?: string) {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   let targetUserId = userId;
   if (!targetUserId) {
@@ -172,7 +160,7 @@ export async function getUserProfile(userId?: string) {
 
 // Helper function to check if user exists and create profile if needed
 export async function ensureUserProfile(user: User) {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   // Check if profile exists
   const { data: existingProfile } = await supabase
@@ -219,8 +207,8 @@ export async function ensureUserProfile(user: User) {
 }
 
 // Type-safe table access helpers for server
-export function getServerTables() {
-  const supabase = createClient();
+export async function getServerTables() {
+  const supabase = await createClient();
 
   return {
     profiles: () => supabase.from("profiles"),
@@ -232,8 +220,8 @@ export function getServerTables() {
 }
 
 // Service role table access (admin operations only)
-export function getServiceTables() {
-  const supabase = createServiceClient();
+export async function getServiceTables() {
+  const supabase = await createServiceClient();
 
   return {
     profiles: () => supabase.from("profiles"),

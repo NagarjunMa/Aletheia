@@ -5,7 +5,7 @@ import { ensureUserProfile } from "@/lib/supabase/server";
 import { createClient } from "@/lib/supabase/server";
 
 export async function ensureProfileAction() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
     error,
@@ -18,13 +18,13 @@ export async function ensureProfileAction() {
   try {
     await ensureUserProfile(user);
     return { success: true };
-  } catch (err) {
+  } catch {
     return { error: "Failed to create profile" };
   }
 }
 
 export async function signOutAction() {
-  const supabase = createClient();
+  const supabase = await createClient();
   await supabase.auth.signOut();
   redirect("/auth/login");
 }
