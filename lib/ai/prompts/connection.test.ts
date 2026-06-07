@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  PROMPT_VERSION,
   sanitize,
   buildPrompt,
   getSystemPrompt,
@@ -319,6 +320,62 @@ describe("getSystemPrompt", () => {
     expect(LINKEDIN_CONNECTION_PROMPT.length).toBeGreaterThan(0);
     expect(COLD_EMAIL_PROMPT.length).toBeGreaterThan(0);
     expect(LINKEDIN_INMAIL_PROMPT.length).toBeGreaterThan(0);
+  });
+});
+
+describe("COLD_EMAIL_PROMPT subject line policy", () => {
+  const approvedTemplates = [
+    "Interest in {Role} Role",
+    "{Role} Opportunity",
+    "{Role} Referral Inquiry",
+    "Regarding {Company} Engineering Roles",
+    "{Company} Engineering Interest",
+    "{Role} Candidate Inquiry",
+    "Interested in {Team/Product} Engineering",
+    "{Role} Introduction",
+  ];
+
+  it("tracks the prompt behavior change with a new version", () => {
+    expect(PROMPT_VERSION).toBe("1.2.0");
+  });
+
+  it("contains every approved cold-email subject template exactly", () => {
+    for (const template of approvedTemplates) {
+      expect(COLD_EMAIL_PROMPT).toContain(template);
+    }
+  });
+
+  it("requires exact template selection instead of freeform subject hooks", () => {
+    expect(COLD_EMAIL_PROMPT).toContain(
+      "Choose exactly one template below, fill placeholders, and do not add extra words before or after it.",
+    );
+    expect(COLD_EMAIL_PROMPT).toContain(
+      "Subject line: must match exactly one approved template below",
+    );
+    expect(COLD_EMAIL_PROMPT).toContain(
+      'Bad: "Quick question about the platform eng work at Stripe"',
+    );
+  });
+
+  it("documents JD-first role selection with profile and company fallback", () => {
+    expect(COLD_EMAIL_PROMPT).toContain(
+      "Prefer {Role} from JOB_DESCRIPTION first",
+    );
+    expect(COLD_EMAIL_PROMPT).toContain(
+      "infer {Role} from TARGET_PROFILE, current company, team/product context, and INTENT together",
+    );
+    expect(COLD_EMAIL_PROMPT).toContain(
+      "Software Engineering, Full-Stack Engineering, Backend Engineering, or SRE",
+    );
+  });
+
+  it("allows only the approved role introduction template", () => {
+    expect(COLD_EMAIL_PROMPT).toContain(
+      'generic "Introduction" is banned, but "{Role} Introduction" is allowed only when it exactly matches the approved template.',
+    );
+    expect(COLD_EMAIL_PROMPT).not.toContain(
+      'Subject: "Referral Request", "Seeking Opportunity", "Job Inquiry", "Would Love to", "Exciting", "Following Up", "Introduction"',
+    );
   });
 });
 
