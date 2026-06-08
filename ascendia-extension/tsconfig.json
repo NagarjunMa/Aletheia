@@ -15,7 +15,7 @@
     "outDir": "./dist",
     "rootDir": "./",
     "sourceMap": true,
-    "types": ["chrome"],
+    "types": ["chrome", "node"],
 
     // Strict type checking
     "noImplicitAny": true,
