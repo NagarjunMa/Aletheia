@@ -7,8 +7,8 @@
     "build": "tsc",
     "build:watch": "tsc --watch",
     "build:production": "tsc --sourceMap false",
-    "lint": "eslint . --ext .ts,.tsx",
-    "lint:fix": "eslint . --ext .ts,.tsx --fix",
+    "lint": "eslint \"**/*.{ts,tsx}\"",
+    "lint:fix": "eslint \"**/*.{ts,tsx}\" --fix",
     "type-check": "tsc --noEmit",
     "clean": "rm -rf dist",
     "prebuild": "npm run clean",
@@ -18,13 +18,14 @@
     "build:ext": "node build.mjs"
   },
   "devDependencies": {
-    "@types/chrome": "^0.0.260",
-    "@typescript-eslint/eslint-plugin": "^6.0.0",
-    "@typescript-eslint/parser": "^6.0.0",
+    "@types/chrome": "^0.1.43",
+    "@types/node": "^24.13.1",
+    "@typescript-eslint/eslint-plugin": "^8.60.1",
+    "@typescript-eslint/parser": "^8.60.1",
     "esbuild": "^0.28.0",
-    "eslint": "^8.57.0",
+    "eslint": "^9.39.4",
     "typescript": "^5.3.3",
-    "vitest": "^2.1.9"
+    "vitest": "^4.1.8"
   },
   "keywords": [
     "chrome-extension",
@@ -37,7 +38,7 @@
   "author": "Aletheia Team",
   "license": "MIT",
   "engines": {
-    "node": ">=18.0.0"
+    "node": "24.x"
   },
   "browserslist": [
     "last 2 Chrome versions"
@@ -46,8 +47,5 @@
     "audit": {
       "level": "moderate"
     }
-  },
-  "dependencies": {
-    "pdfjs-dist": "^3.11.174"
   }
 }

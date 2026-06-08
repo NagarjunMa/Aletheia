@@ -30,22 +30,13 @@
   },
   "content_scripts": [
     {
-      "matches": [
-        "https://www.linkedin.com/in/*"
-      ],
-      "js": [
-        "content/linkedin-reader.js"
-      ],
+      "matches": ["https://www.linkedin.com/in/*"],
+      "js": ["content/linkedin-reader.js"],
       "run_at": "document_idle"
     },
     {
-      "matches": [
-        "https://www.linkedin.com/*",
-        "https://app.apollo.io/*"
-      ],
-      "js": [
-        "content/auto-filler.js"
-      ],
+      "matches": ["https://www.linkedin.com/*", "https://app.apollo.io/*"],
+      "js": ["content/auto-filler.js"],
       "run_at": "document_idle"
     }
   ],
@@ -57,11 +48,5 @@
     "48": "icons/icon-48.png",
     "128": "icons/icon-128.png"
   },
-  "options_page": "settings/settings.html",
-  "web_accessible_resources": [
-    {
-      "resources": ["lib/pdf.min.js", "lib/pdf.worker.min.js"],
-      "matches": ["https://www.linkedin.com/*", "https://app.apollo.io/*"]
-    }
-  ]
+  "options_page": "settings/settings.html"
 }
