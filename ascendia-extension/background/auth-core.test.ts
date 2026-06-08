@@ -16,7 +16,6 @@ import {
   logUsageData,
   filterAcceptedExamples,
   AUTH_STORAGE_KEY,
-  TOKEN_REFRESH_BUFFER_MS,
 } from "./auth-core.js";
 
 // ─── normalizeApiUrl ───

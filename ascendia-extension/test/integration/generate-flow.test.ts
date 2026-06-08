@@ -12,7 +12,6 @@ import {
   checkUsageLimit,
   logUsageData,
   filterAcceptedExamples,
-  AUTH_STORAGE_KEY,
 } from "../../background/auth-core.js";
 import {
   buildGeneratePayload,
