@@ -128,6 +128,20 @@ describe("buildPrompt", () => {
     expect(prompt).toContain("networking");
   });
 
+  it("includes EMAIL_MODE for email categories", () => {
+    const prompt = buildPrompt({
+      ...baseInput,
+      category: "cold_email",
+      emailMode: "role_fit_summary",
+    });
+    expect(prompt).toContain("EMAIL_MODE: role_fit_summary");
+  });
+
+  it("omits EMAIL_MODE for LinkedIn connection requests", () => {
+    const prompt = buildPrompt(baseInput);
+    expect(prompt).not.toContain("EMAIL_MODE");
+  });
+
   it("wraps user inputs in <user_input> tags", () => {
     const prompt = buildPrompt(baseInput);
     expect(prompt).toContain("<user_input>");
@@ -336,7 +350,15 @@ describe("COLD_EMAIL_PROMPT subject line policy", () => {
   ];
 
   it("tracks the prompt behavior change with a new version", () => {
-    expect(PROMPT_VERSION).toBe("1.2.0");
+    expect(PROMPT_VERSION).toBe("1.3.0");
+  });
+
+  it("documents scenario-specific email modes", () => {
+    expect(COLD_EMAIL_PROMPT).toContain("EMAIL_MODE = role_fit_summary");
+    expect(COLD_EMAIL_PROMPT).toContain(
+      "Write a concise clarification or role-fit summary, not a full cold outreach email.",
+    );
+    expect(COLD_EMAIL_PROMPT).toContain("initial_outreach: 100-150 words");
   });
 
   it("contains every approved cold-email subject template exactly", () => {

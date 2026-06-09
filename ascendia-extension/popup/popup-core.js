@@ -67,7 +67,15 @@ export function calculateCharCount(text, category) {
 /**
  * Build generate request payload.
  */
-export function buildGeneratePayload(profile, resume, jd, category, intent, acceptedExamples) {
+export function buildGeneratePayload(
+  profile,
+  resume,
+  jd,
+  category,
+  intent,
+  acceptedExamples,
+  emailMode = 'initial_outreach',
+) {
   return {
     profileMarkdown: profile.profileMarkdown,
     profileUrl: profile.profileUrl,
@@ -75,6 +83,7 @@ export function buildGeneratePayload(profile, resume, jd, category, intent, acce
     jd: jd || '',
     category,
     intent,
+    emailMode,
     acceptedExamples: acceptedExamples || [],
   };
 }

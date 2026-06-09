@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { EMAIL_MODES } from "@/lib/ai/email-formatter";
 
 export const evalMetadataSchema = z
   .object({
@@ -7,6 +8,7 @@ export const evalMetadataSchema = z
     temperature: z.number(),
     category: z.enum(["linkedin_connection", "cold_email", "linkedin_inmail"]),
     intent: z.string().max(50),
+    emailMode: z.enum(EMAIL_MODES).optional(),
     generationTimeMs: z.number().int().nonnegative(),
     inputTokens: z.number().int().nonnegative(),
     outputTokens: z.number().int().nonnegative(),

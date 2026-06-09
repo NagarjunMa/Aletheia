@@ -15,6 +15,10 @@ import {
 } from "@/lib/ai/sanitizer";
 import { scanForInjection } from "@/lib/ai/prompts/injection-heuristic";
 import {
+  formatGeneratedEmailBody,
+  getEmailWordLimit,
+} from "@/lib/ai/email-formatter";
+import {
   createBearerAuthClient,
   createBearerServiceClient,
 } from "@/lib/supabase/server";
@@ -216,6 +220,7 @@ export async function POST(request: NextRequest) {
       jd,
       category,
       intent,
+      emailMode,
       acceptedExamples,
     } = validatedData;
 
@@ -301,6 +306,7 @@ export async function POST(request: NextRequest) {
       jd: jdForPrompt,
       category,
       intent: intent || "networking",
+      emailMode,
       acceptedExamples: sanitizedExamples || [],
     };
     if (styleProfile) {
@@ -355,6 +361,7 @@ export async function POST(request: NextRequest) {
       temperature: 0.8,
       category,
       intent: intent ?? "networking",
+      emailMode,
       generationTimeMs: processingTime,
       inputTokens: tokenUsage.input_tokens,
       outputTokens: tokenUsage.output_tokens,
@@ -410,17 +417,19 @@ export async function POST(request: NextRequest) {
             );
           }
 
-          const wordCount = parsed.word_count || countWords(sanitizedBody);
-
-          const maxWords = category === "cold_email" ? 150 : 120;
-
-          let finalBody = sanitizedBody;
+          let finalBody = formatGeneratedEmailBody(sanitizedBody, {
+            category,
+            mode: emailMode,
+          });
+          let wordCount = countWords(finalBody);
+          const { max: maxWords } = getEmailWordLimit(category, emailMode);
           if (wordCount > maxWords) {
             log.warn(
               { category, wordCount, maxWords },
               "Category exceeds word limit",
             );
-            finalBody = truncateToWordLimit(sanitizedBody, maxWords);
+            finalBody = truncateToWordLimit(finalBody, maxWords);
+            wordCount = countWords(finalBody);
           }
 
           // Mark slot consumed — successful response, no refund needed.
@@ -431,7 +440,7 @@ export async function POST(request: NextRequest) {
               subject_line: sanitizedSubject,
               body: finalBody,
               category,
-              word_count: countWords(finalBody),
+              word_count: wordCount,
               character_count: finalBody.length,
               usage: tokenUsage,
               processingTime,

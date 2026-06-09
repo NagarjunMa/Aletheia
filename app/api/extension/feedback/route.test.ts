@@ -140,6 +140,7 @@ describe("feedbackSchema", () => {
         temperature: 0.8,
         category: "linkedin_connection",
         intent: "networking",
+        emailMode: "initial_outreach",
         generationTimeMs: 1234,
         inputTokens: 500,
         outputTokens: 200,

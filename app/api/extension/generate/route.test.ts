@@ -133,9 +133,27 @@ describe("generateRequestSchema", () => {
       jd: "Job description here.",
       category: "cold_email",
       intent: "referral",
+      emailMode: "role_fit_summary",
       acceptedExamples: ["Example message 1"],
     });
     expect(result.success).toBe(true);
+  });
+
+  it("defaults emailMode to initial_outreach", () => {
+    const result = generateRequestSchema.parse({
+      ...validPayload,
+      category: "cold_email",
+    });
+    expect(result.emailMode).toBe("initial_outreach");
+  });
+
+  it("fails when emailMode is invalid", () => {
+    const result = generateRequestSchema.safeParse({
+      ...validPayload,
+      category: "cold_email",
+      emailMode: "essay",
+    });
+    expect(result.success).toBe(false);
   });
 
   it("fails when profileMarkdown is too short (min 10 chars)", () => {
@@ -339,6 +357,43 @@ describe("POST /api/extension/generate", () => {
     const body = await res.json();
     expect(body.subject_line).toBe("Mock Subject");
     expect(body.body).toBe("Mock Body");
+  });
+
+  it("formats cold email bodies and returns emailMode in eval metadata", async () => {
+    mockAnthropicCreate.mockResolvedValueOnce({
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            subject_line: "Backend Engineering Interest",
+            body: "Hi Megan, I'm Nagarjun - backend/ML engineer based in NYC. Found you through Bountiful's YC listing. On the technical side, I've built RAG-based AI systems with Python and FastAPI. interested in a quick chat, or happy to share more context first? Thanks either way. Nagarjun",
+            word_count: 43,
+          }),
+        },
+      ],
+      usage: { input_tokens: 100, output_tokens: 80 },
+    });
+
+    const res = await POST(
+      makeRequest({
+        method: "POST",
+        headers: { authorization: "Bearer test" },
+        body: {
+          ...validPayload,
+          category: "cold_email",
+          emailMode: "initial_outreach",
+        },
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.body).toContain("Hi Megan,\n\n");
+    expect(body.body).toContain("I'm Nagarjun, backend/ML engineer");
+    expect(body.body).toContain("\n\nOn the technical side,");
+    expect(body.body).toContain("\n\nInterested in a quick chat");
+    expect(body.body).toContain("Thanks either way,\nNagarjun");
+    expect(body.evalMetadata.emailMode).toBe("initial_outreach");
   });
 
   it("handles linkedin_connection and truncates long text", async () => {

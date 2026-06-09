@@ -350,6 +350,7 @@ async function generateMessage() {
     const jd = document.getElementById('jdInput').value.trim();
     const category = document.getElementById('category').value;
     const intent = document.getElementById('intent').value;
+    const emailMode = document.getElementById('emailMode')?.value || 'initial_outreach';
 
     const { resume, accepted = [] } = await chrome.storage.local.get(['resume', 'accepted']);
 
@@ -367,6 +368,7 @@ async function generateMessage() {
         jd,
         category,
         intent,
+        emailMode,
         acceptedExamples: relevantExamples
       }
     });
@@ -714,6 +716,7 @@ async function saveAcceptedMessage() {
 
 function updateUIForCategory() {
   const category = document.getElementById('category').value;
+  const emailModeGroup = document.getElementById('emailModeGroup');
 
   const buttonText = {
     'linkedin_connection': 'Generate Connection Request',
@@ -722,6 +725,9 @@ function updateUIForCategory() {
   };
 
   document.getElementById('generateText').textContent = buttonText[category] || 'Generate Message';
+  if (emailModeGroup) {
+    emailModeGroup.classList.toggle('hidden', category === 'linkedin_connection');
+  }
 }
 
 function setupCharacterCounter() {
@@ -1016,7 +1022,8 @@ async function storeGeneration(output) {
       inputs: {
         jd: document.getElementById('jdInput').value.trim(),
         category: document.getElementById('category').value,
-        intent: document.getElementById('intent').value
+        intent: document.getElementById('intent').value,
+        emailMode: document.getElementById('emailMode')?.value || 'initial_outreach'
       }
     };
 
@@ -1042,6 +1049,10 @@ async function restoreLastGeneration() {
       document.getElementById('jdInput').value = lastGeneration.inputs.jd || '';
       document.getElementById('category').value = lastGeneration.inputs.category || 'linkedin_connection';
       document.getElementById('intent').value = lastGeneration.inputs.intent || 'networking';
+      const emailMode = document.getElementById('emailMode');
+      if (emailMode) {
+        emailMode.value = lastGeneration.inputs.emailMode || 'initial_outreach';
+      }
 
       updateCharacterCount();
       updateUIForCategory();
