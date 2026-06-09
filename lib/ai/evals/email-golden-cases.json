@@ -1,0 +1,47 @@
+[
+  {
+    "id": "yc-ceo-bountiful-initial-outreach-001",
+    "category": "cold_email",
+    "emailMode": "initial_outreach",
+    "intent": "networking",
+    "problemTags": [
+      "wall_of_text",
+      "hyphen_overuse",
+      "paragraphing",
+      "cta_capitalization",
+      "signature_formatting"
+    ],
+    "generated": "Hi Megan, I'm Nagarjun - backend/ML engineer based in NYC. Found you through Bountiful's YC listing. Your recent posts on almond yield forecasting caught my attention - building ML models that reconcile conflicting agronomic signals (canopy vigor vs. GDD vs. orchard age) is exactly the kind of messy, high-stakes data problem I find most interesting. On the technical side, I've built RAG-based AI systems on AWS Bedrock using Python and FastAPI, and I'm currently exploring OCR digitization for legacy documents using Mistral AI and CNN models - which feels relevant to Bountiful's data digitization work. I've also worked with PostgreSQL, Docker, and Terraform-managed cloud infrastructure across production environments. interested in a quick chat, or happy to share more context first? Thanks either way. Nagarjun\nlinkedin.com/in/nagarjun-mallesh",
+    "preferred": "Hi Megan,\n\nI’m Nagarjun, a backend/ML engineer based in NYC. I found you through Bountiful’s YC listing. Your recent posts on almond yield forecasting caught my attention. Building ML models that reconcile conflicting agronomic signals, like canopy vigor, GDD, and orchard age, is exactly the kind of messy, high-stakes data problem I find most interesting.\n\nOn the technical side, I’ve built RAG-based AI systems on AWS Bedrock using Python and FastAPI. I’m also exploring OCR digitization for legacy documents using Mistral AI and CNN models, which feels relevant to Bountiful’s data digitization work. I’ve worked with PostgreSQL, Docker, and Terraform-managed cloud infrastructure across production environments.\n\nInterested in a quick chat, or happy to share more context first?\n\nThanks either way,\nNagarjun\nlinkedin.com/in/nagarjun-mallesh",
+    "expectedRules": [
+      "has_greeting_blank_line",
+      "has_2_to_5_paragraphs",
+      "not_wall_of_text",
+      "limited_hyphen_connectors",
+      "cta_is_capitalized",
+      "signature_on_own_line",
+      "word_count_within_mode_limit"
+    ]
+  },
+  {
+    "id": "startup-role-fit-clarification-001",
+    "category": "cold_email",
+    "emailMode": "role_fit_summary",
+    "intent": "job_inquiry",
+    "problemTags": [
+      "overexpanded_intent",
+      "missing_paragraph_break",
+      "role_fit_summary"
+    ],
+    "generated": "Hi Rob,\nThat being said, I wanted to clarify my role.\nWorking in a startup environment meant I wore multiple hats across the entire product lifecycle. While I did handle the initial phases, analyzing customer requirements, building spec docs, and iterating on prototypes until we had customer approval, my responsibilities didn't end with a handoff.\nI was responsible for building the end-to-end product. Once the customer approved the prototype, I was actively involved in engineering the production-scale application.\nI am highly comfortable managing this full pipeline: gathering the initial requirements, prototyping the solution, and actually building the final production system. I am targeting opportunities where I can apply this end-to-end engineering knowledge and drive the product forward.\n\nBest,\nNagarjun Mallesh",
+    "preferred": "Hi Rob,\n\nHaving said that, working in a startup has given me experience across all touchpoints. I have experience in end-to-end product delivery, from requirements gathering and prototyping to QA testing, scaling, and product launches, and I am comfortable executing these cycles independently.\n\nPlease advise me on available roles. I look forward to making an impactful contribution.\n\nBest,\nNagarjun Mallesh",
+    "expectedRules": [
+      "has_greeting_blank_line",
+      "has_2_to_5_paragraphs",
+      "not_wall_of_text",
+      "limited_hyphen_connectors",
+      "signature_on_own_line",
+      "word_count_within_mode_limit"
+    ]
+  }
+]

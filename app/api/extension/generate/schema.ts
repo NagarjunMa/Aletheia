@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { EMAIL_MODES } from "@/lib/ai/email-formatter";
 
 export const generateRequestSchema = z.object({
   profileMarkdown: z.string().trim().min(10).max(10000),
@@ -10,5 +11,9 @@ export const generateRequestSchema = z.object({
     .enum(["networking", "referral", "mentorship", "job_inquiry"])
     .nullish()
     .default("networking"),
+  emailMode: z
+    .enum(EMAIL_MODES)
+    .nullish()
+    .transform((value) => value ?? "initial_outreach"),
   acceptedExamples: z.array(z.string().max(5000)).max(5).nullish().default([]),
 });

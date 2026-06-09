@@ -128,6 +128,7 @@ describe("buildGeneratePayload", () => {
       "cold_email",
       "networking",
       ["ex1"],
+      "role_fit_summary",
     );
     expect(result).toEqual({
       profileMarkdown: "md",
@@ -136,6 +137,7 @@ describe("buildGeneratePayload", () => {
       jd: "job desc",
       category: "cold_email",
       intent: "networking",
+      emailMode: "role_fit_summary",
       acceptedExamples: ["ex1"],
     });
   });
@@ -152,6 +154,7 @@ describe("buildGeneratePayload", () => {
     );
     expect(result.resume).toBe("");
     expect(result.jd).toBe("");
+    expect(result.emailMode).toBe("initial_outreach");
     expect(result.acceptedExamples).toEqual([]);
   });
 });

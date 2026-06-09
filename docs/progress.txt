@@ -1,0 +1,119 @@
+# Progress Tracker
+
+Purpose: daily implementation and decision log for product-quality, security, migration, and feature work.
+
+Update this file whenever meaningful progress is made. Keep entries short but specific enough that a future reviewer can understand what changed, why it changed, how it was tested, and what remains uncertain.
+
+## Entry Template
+
+```txt
+Date:
+Branch:
+Area:
+Problem:
+Decision:
+Files changed:
+Tests/checks:
+Result:
+Follow-up:
+```
+
+## Entries
+
+### 2026-06-09
+
+Branch: `test/email-generation-golden-evals`
+
+Area: Email generation quality
+
+Problem: Cold email generation is producing useful technical substance but inconsistent final communication quality. Initial outreach can become dense and underformatted, while concise clarification/role-fit intent can be over-expanded into a full cold outreach structure.
+
+Decision: Plan a layered fix instead of immediately adding a second AI rewrite pass. The preferred implementation path is scenario-aware `emailMode`, deterministic email formatting, golden before/after eval fixtures, and regression tests. A second AI editor pass remains optional if the first layers do not meet quality goals.
+
+Files changed:
+
+- `docs/superpowers/plans/2026-06-09-email-generation-quality.md`
+- `docs/progress.txt`
+
+Tests/checks:
+
+- Documentation-only change. No runtime tests required.
+
+Result: Created an implementation plan with problem statement, phases, test gates, decision log, and progress tracking process.
+
+Follow-up:
+
+- Add golden eval cases from user-provided before/after examples.
+- Implement deterministic email formatter.
+- Add optional `emailMode` API field and mode-specific prompt rules.
+
+### 2026-06-09
+
+Branch: `test/email-generation-golden-evals`
+
+Area: Email generation quality
+
+Problem: The plan needed an executable first checkpoint before changing prompts or adding post-processing. Without golden fixtures, quality improvements would be hard to compare against the user-provided before/after examples.
+
+Decision: Add a deterministic email-quality eval module and seed it with the two current golden examples: YC CEO initial outreach and startup role-fit clarification. The rules check paragraphing, wall-of-text behavior, connector hyphen overuse, CTA capitalization, signature placement, and mode-specific word count.
+
+Files changed:
+
+- `lib/ai/evals/email-golden-cases.json`
+- `lib/ai/evals/email-quality.ts`
+- `lib/ai/evals/email-quality.test.ts`
+
+Tests/checks:
+
+- `source ~/.nvm/nvm.sh && nvm use 24 >/dev/null && npm run test -- lib/ai/evals/email-quality.test.ts --run`
+- `source ~/.nvm/nvm.sh && nvm use 24 >/dev/null && npm run lint`
+- `source ~/.nvm/nvm.sh && nvm use 24 >/dev/null && npm run type-check`
+- `source ~/.nvm/nvm.sh && nvm use 24 >/dev/null && npm run test:guardrails -- --run`
+- `source ~/.nvm/nvm.sh && nvm use 24 >/dev/null && npm run test -- --run`
+- `source ~/.nvm/nvm.sh && nvm use 24 >/dev/null && npm run build`
+
+Result: Targeted eval test suite passed: 1 file, 8 tests. Lint, type-check, guardrails, full unit suite, and production build also passed on Node 24.
+
+Follow-up:
+
+- Use passing evals as the gate before implementing formatter or prompt changes.
+
+### 2026-06-09
+
+Branch: `test/email-generation-golden-evals`
+
+Area: Email generation quality
+
+Problem: The API and extension needed a way to distinguish full initial outreach from concise follow-up, clarification, and role-fit summary scenarios. The post-sanitization path also needed deterministic formatting so usable content does not leave the app as one dense paragraph with inline signatures or lowercase CTAs.
+
+Decision: Add optional `emailMode` support to the generate request, prompt builder, eval metadata, feedback metadata, and extension popup. Default old clients to `initial_outreach`. Add a deterministic formatter for cold email/InMail bodies after sanitization and before word-limit enforcement. Bump `PROMPT_VERSION` to `1.3.0` for the scenario-aware prompt change.
+
+Files changed:
+
+- `app/api/extension/generate/schema.ts`
+- `app/api/extension/generate/route.ts`
+- `app/api/extension/feedback/schema.ts`
+- `ascendia-extension/popup/popup.html`
+- `ascendia-extension/popup/popup.js`
+- `ascendia-extension/popup/popup-core.js`
+- `lib/ai/email-formatter.ts`
+- `lib/ai/prompts/linkedin-connection.ts`
+- related unit and integration tests
+
+Tests/checks:
+
+- `source ~/.nvm/nvm.sh && nvm use 24 >/dev/null && npm run test -- lib/ai/email-formatter.test.ts lib/ai/evals/email-quality.test.ts lib/ai/prompts/connection.test.ts app/api/extension/generate/route.test.ts app/api/extension/feedback/route.test.ts --run`
+- `source ~/.nvm/nvm.sh && nvm use 24 >/dev/null && npm --prefix ascendia-extension run test`
+- `source ~/.nvm/nvm.sh && nvm use 24 >/dev/null && npm run lint`
+- `source ~/.nvm/nvm.sh && nvm use 24 >/dev/null && npm run type-check`
+- `source ~/.nvm/nvm.sh && nvm use 24 >/dev/null && npm run test:guardrails -- --run`
+- `source ~/.nvm/nvm.sh && nvm use 24 >/dev/null && npm run test -- --run`
+- `source ~/.nvm/nvm.sh && nvm use 24 >/dev/null && npm run build`
+
+Result: Implemented the first behavior layer. Focused tests passed: 5 files, 127 tests. Extension tests passed: 5 files, 107 tests. Full app tests passed: 22 files, 391 tests. Lint, type-check, guardrails, and production build passed on Node 24.
+
+Follow-up:
+
+- Collect more accepted/rejected before-after examples for the golden dataset.
+- Add mode-specific client copy or usage guidance only if users still choose the wrong scenario.
+- Evaluate whether a second AI editor pass is needed after observing real generated outputs under `emailMode`.
