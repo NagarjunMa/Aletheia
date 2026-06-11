@@ -45,8 +45,8 @@ export function calculateCharCount(text, category) {
 
   switch (category) {
     case 'linkedin_connection':
-      isOverLimit = count > 280;
-      isNearLimit = !isOverLimit && count > 250;
+      isOverLimit = count > 300;
+      isNearLimit = !isOverLimit && count > 270;
       displayText = `${count}/300`;
       break;
     case 'linkedin_inmail':
@@ -70,17 +70,19 @@ export function calculateCharCount(text, category) {
 export function buildGeneratePayload(
   profile,
   resume,
-  jd,
+  contextValue,
   category,
   intent,
   acceptedExamples,
   emailMode = 'initial_outreach',
 ) {
+  const isFollowUp = emailMode === 'follow_up';
   return {
     profileMarkdown: profile.profileMarkdown,
     profileUrl: profile.profileUrl,
     resume: resume || '',
-    jd: jd || '',
+    jd: isFollowUp ? '' : contextValue || '',
+    conversationContext: isFollowUp ? contextValue || '' : '',
     category,
     intent,
     emailMode,

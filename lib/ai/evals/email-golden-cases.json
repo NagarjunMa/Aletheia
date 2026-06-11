@@ -43,5 +43,49 @@
       "signature_on_own_line",
       "word_count_within_mode_limit"
     ]
+  },
+  {
+    "id": "virio-founder-ceo-outreach-001",
+    "category": "cold_email",
+    "emailMode": "founder_ceo_outreach",
+    "intent": "job_inquiry",
+    "problemTags": [
+      "broken_period_token",
+      "founder_outreach_structure",
+      "missing_proof_points",
+      "damaged_signature"
+    ],
+    "generated": "Hi Eric,\n\nI'm Nagarjun, backend and infra engineer with 4+ years of experience. Saw your hiring post and wanted to reach out directly. Virio's CTO Emmett's note about hiring engineers with judgment built before AI hit close to home, I've been doing infra and backend work long enough to know when AI output actually meets the bar. On the infra side, I've built Terraform-managed cloud environments across AWS and GCP, set up CloudWatch monitoring pipelines with automated alerting, and reduced environment onboarding from hours to minutes at my current role.\n\njs APIs, so I can sit comfortably across the stack when needed. Would love to apply formally or chat briefly if that's easier. Happy to share more context either way. Thanks for taking a look. com/in/nagarjun-mallesh",
+    "preferred": "Hi Eric,\n\nEmmett's note about needing engineers with judgment built before AI hit close to home. I've been building backend systems and infrastructure long enough to know when an AI output actually meets the bar.\n\nA quick look at my background:\nCloud & Infrastructure: Built and scaled Terraform-managed AWS environments with CI/CD and CloudWatch monitoring pipelines.\nAutomation: Reduced a multi-day manual infrastructure setup workflow to minutes through deployment scripts.\nFull-Stack Context: Worked across Python, TypeScript, and production AI/RAG pipelines at ML Tech.\n\nI'd like to bring that execution velocity, ownership, and infrastructure judgment to the Founding Infra Engineer role at Virio.\n\nLet me know if you are open to a brief chat, or I can share more context asynchronously.\n\nBest,\nNagarjun Mallesh\nlinkedin.com/in/nagarjun-mallesh",
+    "expectedRules": [
+      "has_greeting_blank_line",
+      "not_wall_of_text",
+      "signature_on_own_line",
+      "word_count_within_mode_limit",
+      "has_structured_proof_points",
+      "preserves_period_tokens",
+      "no_orphan_fragments",
+      "has_specific_low_friction_ask"
+    ]
+  },
+  {
+    "id": "virio-founder-follow-up-001",
+    "category": "cold_email",
+    "emailMode": "follow_up",
+    "intent": "job_inquiry",
+    "problemTags": [
+      "follow_up_context",
+      "missing_low_friction_ask"
+    ],
+    "generated": "Hi Eric, I wanted to follow up on my previous message about Virio. I am still interested in the role and think my background could be useful. Please let me know.",
+    "preferred": "Hi Eric,\n\nFollowing up on my note about the Founding Infra Engineer role at Virio. I know your schedule is packed, so I will keep this brief.\n\nA quick look at the conversation so far:\nInfra Fit: My background maps to Terraform-managed AWS/GCP environments and monitoring pipelines.\nExecution Speed: I have reduced manual infrastructure setup work from days to minutes.\n\nI remain interested in the role and would be glad to share more context.\n\nLet me know if a brief chat would be useful.\n\nBest,\nNagarjun Mallesh\nlinkedin.com/in/nagarjun-mallesh",
+    "expectedRules": [
+      "has_greeting_blank_line",
+      "not_wall_of_text",
+      "signature_on_own_line",
+      "word_count_within_mode_limit",
+      "has_structured_proof_points",
+      "has_specific_low_friction_ask"
+    ]
   }
 ]

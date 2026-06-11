@@ -218,6 +218,7 @@ export async function POST(request: NextRequest) {
       profileUrl,
       resume,
       jd,
+      conversationContext,
       category,
       intent,
       emailMode,
@@ -272,6 +273,9 @@ export async function POST(request: NextRequest) {
     const sanitizedJd = jdFromBody
       ? stripSurrogates(jdFromBody).slice(0, 4000)
       : jdFromBody;
+    const sanitizedConversationContext = conversationContext
+      ? stripSurrogates(conversationContext).slice(0, 12000)
+      : "";
     const sanitizedExamples = acceptedExamples?.map((e) => stripSurrogates(e));
 
     // Indirect prompt-injection defense: profileMarkdown comes from the
@@ -304,6 +308,7 @@ export async function POST(request: NextRequest) {
       profileUrl,
       resume: resumeForPrompt,
       jd: jdForPrompt,
+      conversationContext: sanitizedConversationContext,
       category,
       intent: intent || "networking",
       emailMode,

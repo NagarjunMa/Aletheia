@@ -106,6 +106,7 @@ function setupEventListeners() {
 
   // Category change handler
   document.getElementById('category')?.addEventListener('change', updateUIForCategory);
+  document.getElementById('emailMode')?.addEventListener('change', updateUIForCategory);
 
   // JD input change handler
   document.getElementById('jdInput')?.addEventListener('input', updateCharacterCount);
@@ -347,10 +348,13 @@ async function generateMessage() {
   try {
     setGeneratingState(true);
 
-    const jd = document.getElementById('jdInput').value.trim();
     const category = document.getElementById('category').value;
     const intent = document.getElementById('intent').value;
     const emailMode = document.getElementById('emailMode')?.value || 'initial_outreach';
+    const contextValue = document.getElementById('jdInput').value.trim();
+    const isFollowUp = emailMode === 'follow_up';
+    const jd = isFollowUp ? '' : contextValue;
+    const conversationContext = isFollowUp ? contextValue : '';
 
     const { resume, accepted = [] } = await chrome.storage.local.get(['resume', 'accepted']);
 
@@ -366,6 +370,7 @@ async function generateMessage() {
         profileUrl: currentProfile.profileUrl,
         resume: resume || '',
         jd,
+        conversationContext,
         category,
         intent,
         emailMode,
@@ -716,7 +721,11 @@ async function saveAcceptedMessage() {
 
 function updateUIForCategory() {
   const category = document.getElementById('category').value;
+  const emailMode = document.getElementById('emailMode')?.value || 'initial_outreach';
   const emailModeGroup = document.getElementById('emailModeGroup');
+  const contextInputLabel = document.getElementById('contextInputLabel');
+  const contextInput = document.getElementById('jdInput');
+  const contextMaxCount = document.getElementById('contextMaxCount');
 
   const buttonText = {
     'linkedin_connection': 'Generate Connection Request',
@@ -727,6 +736,18 @@ function updateUIForCategory() {
   document.getElementById('generateText').textContent = buttonText[category] || 'Generate Message';
   if (emailModeGroup) {
     emailModeGroup.classList.toggle('hidden', category === 'linkedin_connection');
+  }
+  if (contextInputLabel && contextInput && contextMaxCount) {
+    const isFollowUp = category !== 'linkedin_connection' && emailMode === 'follow_up';
+    contextInputLabel.textContent = isFollowUp
+      ? 'Previous Conversation (Optional)'
+      : 'Job Description (Optional)';
+    contextInput.placeholder = isFollowUp
+      ? 'Paste prior emails or replies for follow-up context...'
+      : 'Paste job description to create more targeted messages...';
+    contextInput.rows = isFollowUp ? 4 : 3;
+    contextMaxCount.textContent = isFollowUp ? '12000' : '2000';
+    updateCharacterCount();
   }
 }
 
@@ -747,6 +768,7 @@ function setupCharacterCounter() {
 function updateCharacterCount() {
   const jdInput = document.getElementById('jdInput');
   const charCount = document.getElementById('jdCharCount');
+  if (!jdInput || !charCount) return;
   charCount.textContent = jdInput.value.length;
 }
 
@@ -888,11 +910,11 @@ function displayValidationFeedback(output) {
 
   if (category === 'linkedin_connection') {
     const charCount = output.character_count || 0;
-    const isWithinLimit = charCount <= 280;
+    const isWithinLimit = charCount <= 300;
 
     feedbackItems.push({
       icon: isWithinLimit ? '✅' : '⚠️',
-      text: `${charCount}/280 characters`,
+      text: `${charCount}/300 characters`,
       status: isWithinLimit ? 'success' : 'warning',
       details: isWithinLimit ? 'Within LinkedIn limit' : 'Exceeds LinkedIn character limit'
     });
@@ -909,8 +931,18 @@ function displayValidationFeedback(output) {
 
   if (category === 'cold_email' || category === 'linkedin_inmail') {
     const wordCount = output.word_count || 0;
-    const maxWords = category === 'cold_email' ? 150 : 120;
-    const minWords = category === 'cold_email' ? 100 : 80;
+    const mode = output.evalMetadata?.emailMode || document.getElementById('emailMode')?.value || 'initial_outreach';
+    const limits = {
+      initial_outreach: { min: 80, max: 150 },
+      founder_ceo_outreach: { min: 120, max: 190 },
+      follow_up: { min: 30, max: 90 },
+      clarification: { min: 40, max: 90 },
+      role_fit_summary: { min: 40, max: 110 },
+      referral_request: { min: 70, max: 130 }
+    };
+    const selectedLimit = limits[mode] || limits.initial_outreach;
+    const maxWords = category === 'linkedin_inmail' ? Math.min(selectedLimit.max, 120) : selectedLimit.max;
+    const minWords = category === 'linkedin_inmail' ? Math.min(selectedLimit.min, 80) : selectedLimit.min;
     const isWithinRange = wordCount >= minWords && wordCount <= maxWords;
 
     feedbackItems.push({
@@ -1020,7 +1052,7 @@ async function storeGeneration(output) {
       timestamp: Date.now(),
       profile: currentProfile,
       inputs: {
-        jd: document.getElementById('jdInput').value.trim(),
+        contextValue: document.getElementById('jdInput').value.trim(),
         category: document.getElementById('category').value,
         intent: document.getElementById('intent').value,
         emailMode: document.getElementById('emailMode')?.value || 'initial_outreach'
@@ -1046,13 +1078,19 @@ async function restoreLastGeneration() {
     }
 
     if (lastGeneration.inputs) {
-      document.getElementById('jdInput').value = lastGeneration.inputs.jd || '';
       document.getElementById('category').value = lastGeneration.inputs.category || 'linkedin_connection';
       document.getElementById('intent').value = lastGeneration.inputs.intent || 'networking';
       const emailMode = document.getElementById('emailMode');
       if (emailMode) {
         emailMode.value = lastGeneration.inputs.emailMode || 'initial_outreach';
       }
+      const restoredContext =
+        lastGeneration.inputs.contextValue ??
+        (lastGeneration.inputs.emailMode === 'follow_up'
+          ? lastGeneration.inputs.conversationContext
+          : lastGeneration.inputs.jd) ??
+        '';
+      document.getElementById('jdInput').value = restoredContext;
 
       updateCharacterCount();
       updateUIForCategory();
