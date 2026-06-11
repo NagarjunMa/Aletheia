@@ -1,11 +1,25 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const mockAuthGetUser = vi.hoisted(() => vi.fn());
+const mockAuthGetUser = vi.hoisted(() =>
+  vi.fn(async () => ({
+    data: { user: { id: "test-user-id" } },
+    error: null,
+  })),
+);
+const mockBearerAuthGetUser = vi.hoisted(() =>
+  vi.fn(async () => ({
+    data: { user: { id: "test-user-id" } },
+    error: null,
+  })),
+);
 const mockExtractText = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(() => ({
     auth: { getUser: mockAuthGetUser },
+  })),
+  createBearerAuthClient: vi.fn(() => ({
+    auth: { getUser: mockBearerAuthGetUser },
   })),
 }));
 
@@ -47,19 +61,16 @@ function makeMultipartRequest(opts: {
 
 describe("POST /api/profile/parse-resume", () => {
   beforeEach(() => {
-    mockAuthGetUser.mockReset();
+    mockAuthGetUser.mockClear();
+    mockBearerAuthGetUser.mockClear();
     mockExtractText.mockReset();
-    mockAuthGetUser.mockResolvedValue({
-      data: { user: { id: "test-user-id" } },
-      error: null,
-    });
   });
 
   it("returns 401 when unauthenticated", async () => {
     mockAuthGetUser.mockResolvedValueOnce({
       data: { user: null },
       error: null,
-    });
+    } as never);
     const res = await POST(
       makeMultipartRequest({
         file: { name: "x.pdf", type: "application/pdf", size: 100 },
@@ -118,6 +129,31 @@ describe("POST /api/profile/parse-resume", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.text).toBe("Page 1 content. Page 2 content.");
+  });
+
+  it("accepts extension bearer auth for valid PDF", async () => {
+    mockExtractText.mockResolvedValueOnce({
+      text: ["Bearer PDF content."],
+      totalPages: 1,
+    });
+
+    const res = await POST(
+      makeMultipartRequest({
+        bearer: true,
+        file: {
+          name: "resume.pdf",
+          type: "application/pdf",
+          size: 1024,
+          bytes: new Uint8Array([0x25, 0x50, 0x44, 0x46]),
+        },
+      }) as never,
+    );
+
+    expect(res.status).toBe(200);
+    expect(mockBearerAuthGetUser).toHaveBeenCalledWith("test");
+    expect(mockAuthGetUser).not.toHaveBeenCalled();
+    const body = await res.json();
+    expect(body.text).toBe("Bearer PDF content.");
   });
 
   it("returns 200 with raw text for .txt upload", async () => {

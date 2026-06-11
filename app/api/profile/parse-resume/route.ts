@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { extractText } from "unpdf";
-import { createClient } from "@/lib/supabase/server";
+import { createBearerAuthClient, createClient } from "@/lib/supabase/server";
 import { createLogger } from "@/lib/logger";
 import { getCorsHeaders } from "@/lib/cors";
 
@@ -11,17 +11,26 @@ const MAX_TEXT_LEN = 50_000;
 
 const ACCEPTED_MIME = new Set(["application/pdf", "text/plain"]);
 
+async function authenticateRequest(request: NextRequest) {
+  const authHeader = request.headers.get("authorization");
+  if (authHeader?.startsWith("Bearer ")) {
+    const accessToken = authHeader.slice(7);
+    return createBearerAuthClient().auth.getUser(accessToken);
+  }
+
+  const supabase = await createClient();
+  return supabase.auth.getUser();
+}
+
 export async function POST(request: NextRequest) {
   const corsHeaders = getCorsHeaders(request, {
     allowCredentials: true,
     methods: "POST, OPTIONS",
   });
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
+  const authResult = await authenticateRequest(request);
+  const user = authResult?.data?.user ?? null;
+  const authError = authResult?.error;
 
   if (authError || !user) {
     return NextResponse.json(
