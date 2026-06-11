@@ -20,6 +20,41 @@ Follow-up:
 
 ## Entries
 
+### 2026-06-11
+
+Branch: `fix/extension-resume-pdf-parser`
+
+Area: Extension resume parsing
+
+Problem: PDF resume uploads in the Chrome extension failed with `Failed to load local PDF.js library` because the dependency-security cleanup removed `ascendia-extension/lib/pdf.min.js` and `pdf.worker.min.js`, while `settings.js` still attempted to load them.
+
+Decision: Keep TXT parsing local, but route PDF parsing through the existing `/api/profile/parse-resume` server endpoint. Add Bearer-token auth support to that endpoint so extension uploads can authenticate with the stored access token. Do not restore local PDF.js assets.
+
+Files changed:
+
+- `ascendia-extension/settings/resume-parser-core.js`
+- `ascendia-extension/settings/settings.js`
+- `ascendia-extension/settings/settings.html`
+- `app/api/profile/parse-resume/route.ts`
+- `scripts/build-extension-zip.mjs`
+- related tests
+
+Tests/checks:
+
+- `source ~/.nvm/nvm.sh && nvm use 24 >/dev/null && npm --prefix ascendia-extension run test`
+- `source ~/.nvm/nvm.sh && nvm use 24 >/dev/null && npm run test -- app/api/profile/parse-resume/route.test.ts --run`
+- `source ~/.nvm/nvm.sh && nvm use 24 >/dev/null && npm run lint`
+- `source ~/.nvm/nvm.sh && nvm use 24 >/dev/null && npm run type-check`
+- `source ~/.nvm/nvm.sh && nvm use 24 >/dev/null && npm run test -- --run`
+- `source ~/.nvm/nvm.sh && nvm use 24 >/dev/null && npm run test:guardrails -- --run`
+- `source ~/.nvm/nvm.sh && nvm use 24 >/dev/null && npm run build`
+
+Result: PDF resume parsing no longer depends on missing local PDF.js files. Extension tests passed: 6 files, 111 tests. Full app tests passed: 22 files, 392 tests. Lint, type-check, guardrails, and production build passed on Node 24. The extension zip build now includes `settings/resume-parser-core.js` and no longer warns about missing `lib/`.
+
+Follow-up:
+
+- After PR merge, reload the unpacked extension from `ascendia-extension/`, reconnect if needed, and verify `NagarjunMallesh.pdf` shows extracted text in the settings preview.
+
 ### 2026-06-09
 
 Branch: `test/email-generation-golden-evals`

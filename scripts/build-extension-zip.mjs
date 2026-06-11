@@ -34,7 +34,6 @@ const STATIC_INCLUDES = [
   'popup/',
   'settings/',
   'icons/',
-  'lib/',
 ]
 
 // Source files that are leftover from the gated Phase 0 refactor and not

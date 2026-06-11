@@ -397,86 +397,15 @@ async function processResumeFile(file) {
 }
 
 async function readFileContent(file) {
-  return new Promise(async (resolve, reject) => {
-    const reader = new FileReader()
-
-    reader.onload = async (e) => {
-      try {
-        if (file.type === 'text/plain') {
-          resolve(e.target.result)
-        } else if (file.type === 'application/pdf') {
-          const extractedText = await extractPDFText(e.target.result)
-          resolve(extractedText)
-        } else {
-          resolve(`Please convert your resume to PDF format or plain text.
-
-Current file type (${file.type}) cannot be processed.
-
-To use your resume:
-1. Save your resume as PDF
-2. Or copy/paste your resume text directly in the text area below`)
-        }
-      } catch (error) {
-        reject(new Error(`Failed to extract content from ${file.name}: ${error.message}`))
-      }
-    }
-
-    reader.onerror = () => reject(new Error('Failed to read file'))
-
-    if (file.type === 'text/plain') {
-      reader.readAsText(file)
-    } else {
-      reader.readAsArrayBuffer(file)
-    }
-  })
-}
-
-async function extractPDFText(arrayBuffer) {
   try {
-    if (typeof pdfjsLib === 'undefined') {
-      await loadPDFJS()
-    }
-
-    const uint8Array = new Uint8Array(arrayBuffer)
-    const pdf = await pdfjsLib.getDocument({ data: uint8Array }).promise
-
-    let fullText = ''
-
-    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-      const page = await pdf.getPage(pageNum)
-      const textContent = await page.getTextContent()
-      const pageText = textContent.items.map(item => item.str).join(' ')
-      fullText += pageText + '\n'
-    }
-
-    if (fullText.trim().length === 0) {
-      throw new Error('No text content found in PDF. The PDF might be image-based.')
-    }
-
-    return fullText.trim()
-
+    return await AletheiaResumeParser.readFileContent(file, {
+      apiUrl: currentSettings.apiUrl,
+      chromeApi: chrome,
+      fetcher: fetch
+    })
   } catch (error) {
-    console.error('PDF extraction error:', error)
-    throw new Error(`PDF text extraction failed: ${error.message}. Please try converting to text format.`)
+    throw new Error(`Failed to extract content from ${file.name}: ${error.message}`)
   }
-}
-
-function loadPDFJS() {
-  return new Promise((resolve, reject) => {
-    if (typeof pdfjsLib !== 'undefined') {
-      resolve()
-      return
-    }
-
-    const script = document.createElement('script')
-    script.src = chrome.runtime.getURL('lib/pdf.min.js')
-    script.onload = () => {
-      pdfjsLib.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('lib/pdf.worker.min.js')
-      resolve()
-    }
-    script.onerror = () => reject(new Error('Failed to load local PDF.js library'))
-    document.head.appendChild(script)
-  })
 }
 
 function showResumePreview(fileInfo, content) {
