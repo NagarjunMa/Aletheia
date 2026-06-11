@@ -70,16 +70,6 @@
 
     <!-- Main Content -->
     <div id="mainContent" class="main-content hidden">
-      <!-- Job Description Input (Optional) -->
-      <div class="input-group">
-        <label for="jdInput">Job Description (Optional)</label>
-        <textarea id="jdInput" placeholder="Paste job description to create more targeted messages..." rows="3"
-          maxlength="2000"></textarea>
-        <div class="char-count">
-          <span id="jdCharCount">0</span>/2000
-        </div>
-      </div>
-
       <!-- Message Category -->
       <div class="input-group">
         <label for="category">Message Type</label>
@@ -106,11 +96,22 @@
         <label for="emailMode">Email Scenario</label>
         <select id="emailMode" class="select-input">
           <option value="initial_outreach">Initial Outreach</option>
+          <option value="founder_ceo_outreach">Founder/CEO Outreach</option>
           <option value="role_fit_summary">Role-Fit Summary</option>
           <option value="clarification">Clarification</option>
           <option value="follow_up">Follow-Up</option>
           <option value="referral_request">Referral Request</option>
         </select>
+      </div>
+
+      <!-- Context Input (Optional) -->
+      <div class="input-group">
+        <label id="contextInputLabel" for="jdInput">Job Description (Optional)</label>
+        <textarea id="jdInput" placeholder="Paste job description to create more targeted messages..." rows="3"
+          maxlength="12000"></textarea>
+        <div class="char-count">
+          <span id="jdCharCount">0</span>/<span id="contextMaxCount">2000</span>
+        </div>
       </div>
 
       <!-- Generate Button -->

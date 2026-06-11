@@ -1,0 +1,14 @@
+[
+  {
+    "id": "virio-founder-connection-001",
+    "generated": "Founding Infra Eng role at Virio caught my eye. I'm a backend/cloud engineer with 4 years building on AWS, Terraform, and Docker across startup and enterprise. Would love to explore if there's a fit on your team.",
+    "preferred": "Hi Eric, the Founding Infra Eng role at Virio caught my eye. I’m a backend/cloud engineer with 4 years of experience building on AWS, using Terraform and Docker, across startups and enterprises. I'd like to explore whether there’s a fit on your team.",
+    "expectedRules": [
+      "has_greeting",
+      "under_300_chars",
+      "complete_grammar",
+      "has_specific_context",
+      "has_polished_ask"
+    ]
+  }
+]

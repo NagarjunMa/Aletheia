@@ -6,6 +6,7 @@ export const generateRequestSchema = z.object({
   profileUrl: z.string().url().max(2048),
   resume: z.string().max(50000).nullish().default(""),
   jd: z.string().max(20000).nullish().default(""),
+  conversationContext: z.string().max(12000).nullish().default(""),
   category: z.enum(["linkedin_connection", "cold_email", "linkedin_inmail"]),
   intent: z
     .enum(["networking", "referral", "mentorship", "job_inquiry"])

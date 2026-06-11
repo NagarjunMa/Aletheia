@@ -1,5 +1,6 @@
 export const EMAIL_MODES = [
   "initial_outreach",
+  "founder_ceo_outreach",
   "follow_up",
   "clarification",
   "role_fit_summary",
@@ -13,6 +14,7 @@ export const EMAIL_MODE_WORD_LIMITS: Record<
   { min: number; max: number }
 > = {
   initial_outreach: { min: 80, max: 150 },
+  founder_ceo_outreach: { min: 120, max: 190 },
   follow_up: { min: 30, max: 90 },
   clarification: { min: 40, max: 90 },
   role_fit_summary: { min: 40, max: 110 },
@@ -78,12 +80,55 @@ function countWords(text: string): number {
     .filter((word) => word.length > 0).length;
 }
 
+const PERIOD_PLACEHOLDER = "__ALET_PERIOD__";
+
+const PERIOD_SENSITIVE_TOKEN =
+  /\b(?:https?:\/\/\S+|[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}|(?:[\w-]+\.)+[A-Za-z]{2,}(?:\/\S*)?|(?:Next|Node|React|Vue|Express|Deno)\.js|U\.S\.|U\.K\.|e\.g\.|i\.e\.|Mr\.|Mrs\.|Ms\.|Dr\.|Prof\.|Sr\.|Jr\.|Inc\.|Ltd\.|Co\.)\b/gi;
+
+function protectPeriodSensitiveTokens(text: string): string {
+  return text.replace(PERIOD_SENSITIVE_TOKEN, (token) =>
+    token.replace(/\./g, PERIOD_PLACEHOLDER),
+  );
+}
+
+function restorePeriodSensitiveTokens(text: string): string {
+  return text.replaceAll(PERIOD_PLACEHOLDER, ".");
+}
+
 function splitSentences(paragraph: string): string[] {
+  const protectedParagraph = protectPeriodSensitiveTokens(paragraph);
   return (
-    paragraph
+    protectedParagraph
       .match(/[^.!?]+[.!?]+(?:\s+|$)|[^.!?]+$/g)
-      ?.map((sentence) => sentence.trim()) ?? [paragraph.trim()]
+      ?.map((sentence) => restorePeriodSensitiveTokens(sentence.trim())) ?? [
+      paragraph.trim(),
+    ]
   ).filter(Boolean);
+}
+
+function isStructuredProofLine(line: string): boolean {
+  return /^[A-Z][A-Za-z0-9 &/+.-]{1,60}:\s+\S/.test(line.trim());
+}
+
+function containsStructuredProofLines(paragraph: string): boolean {
+  return paragraph.split("\n").some((line) => isStructuredProofLine(line));
+}
+
+function normalizeParagraphLineBreaks(paragraph: string): string {
+  const lines = paragraph
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (!lines.length) {
+    return "";
+  }
+
+  if (lines.some(isStructuredProofLine)) {
+    return lines.join("\n");
+  }
+
+  return lines.join(" ");
 }
 
 function splitLongParagraph(paragraph: string, maxWords = 90): string[] {
@@ -122,18 +167,20 @@ function normalizeBodyParagraphs(body: string, mode: EmailMode): string {
 
   let remainder = bodyAfterGreeting.trim();
 
-  const closingMatch = remainder.match(
-    /\n\n((?:Thanks(?: either way)?|Best|Regards|Sincerely|Appreciate it either way),?\nNagarjun(?: Mallesh)?(?:\n(?:https?:\/\/\S+|[\w.-]+\.[a-z]{2,}\/\S+))?)$/i,
-  );
+  const contactLinePattern =
+    "(?:https?:\\/\\/\\S+|[\\w.-]+\\.[a-z]{2,}\\/\\S+|[\\w.+-]+@[\\w.-]+\\.[a-z]{2,}|\\+?[0-9()\\-\\s]{7,})";
+  const closingPattern = `(?:Thanks(?: either way)?|Best|Regards|Sincerely|Appreciate it either way),?\\nNagarjun(?: Mallesh)?(?:\\n${contactLinePattern})*`;
+  const closingRegex = new RegExp(`\\n\\n(${closingPattern})$`, "i");
+  const inlineClosingRegex = new RegExp(`\\s+(${closingPattern})$`, "i");
+
+  const closingMatch = remainder.match(closingRegex);
   let closing = closingMatch?.[1];
   const closingIndex = closingMatch?.index;
   if (closing && closingIndex !== undefined) {
     remainder = remainder.slice(0, closingIndex).trim();
   }
   if (!closing) {
-    const inlineClosingMatch = remainder.match(
-      /\s+((?:Thanks(?: either way)?|Best|Regards|Sincerely|Appreciate it either way),?\nNagarjun(?: Mallesh)?(?:\n(?:https?:\/\/\S+|[\w.-]+\.[a-z]{2,}\/\S+))?)$/i,
-    );
+    const inlineClosingMatch = remainder.match(inlineClosingRegex);
     closing = inlineClosingMatch?.[1];
     const inlineClosingIndex = inlineClosingMatch?.index;
     if (closing && inlineClosingIndex !== undefined) {
@@ -142,10 +189,14 @@ function normalizeBodyParagraphs(body: string, mode: EmailMode): string {
   }
 
   remainder = remainder
-    .replace(/\n+/g, " ")
+    .split(/\n{2,}/)
+    .map(normalizeParagraphLineBreaks)
+    .filter(Boolean)
+    .join("\n\n")
     .replace(/\s+(On the technical side,)/gi, "\n\n$1")
     .replace(/\s+(Technically,)/gi, "\n\n$1")
     .replace(/\s+(In terms of\b)/gi, "\n\n$1")
+    .replace(/\s+(A quick look at my background:)/gi, "\n\n$1")
     .replace(/\s+(Interested in\b|Would you\b|If this\b)/gi, "\n\n$1")
     .replace(/\s+(Please advise\b)/gi, "\n\n$1");
 
@@ -154,7 +205,11 @@ function normalizeBodyParagraphs(body: string, mode: EmailMode): string {
     .split(/\n{2,}/)
     .map((paragraph) => paragraph.trim())
     .filter(Boolean)
-    .flatMap((paragraph) => splitLongParagraph(paragraph, targetParagraphMax));
+    .flatMap((paragraph) =>
+      containsStructuredProofLines(paragraph)
+        ? [paragraph]
+        : splitLongParagraph(paragraph, targetParagraphMax),
+    );
 
   return [greeting, ...paragraphs, closing]
     .filter((part): part is string => Boolean(part))

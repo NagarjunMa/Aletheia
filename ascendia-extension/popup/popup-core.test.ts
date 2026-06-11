@@ -83,14 +83,14 @@ describe("calculateCharCount", () => {
     expect(result.displayText).toBe("200/300");
   });
 
-  it("linkedin_connection: near limit (251-280)", () => {
-    const result = calculateCharCount("x".repeat(260), "linkedin_connection");
+  it("linkedin_connection: near limit (271-300)", () => {
+    const result = calculateCharCount("x".repeat(280), "linkedin_connection");
     expect(result.isNearLimit).toBe(true);
     expect(result.isOverLimit).toBe(false);
   });
 
-  it("linkedin_connection: over limit (>280)", () => {
-    const result = calculateCharCount("x".repeat(290), "linkedin_connection");
+  it("linkedin_connection: over limit (>300)", () => {
+    const result = calculateCharCount("x".repeat(301), "linkedin_connection");
     expect(result.isOverLimit).toBe(true);
     expect(result.isNearLimit).toBe(false);
   });
@@ -135,11 +135,31 @@ describe("buildGeneratePayload", () => {
       profileUrl: "https://li.com/in/test",
       resume: "resume text",
       jd: "job desc",
+      conversationContext: "",
       category: "cold_email",
       intent: "networking",
       emailMode: "role_fit_summary",
       acceptedExamples: ["ex1"],
     });
+  });
+
+  it("uses the shared context textarea as conversationContext for follow-ups", () => {
+    const profile = {
+      profileMarkdown: "md",
+      profileUrl: "https://li.com/in/test",
+    };
+    const result = buildGeneratePayload(
+      profile,
+      "resume text",
+      "Previous thread",
+      "cold_email",
+      "networking",
+      [],
+      "follow_up",
+    );
+
+    expect(result.jd).toBe("");
+    expect(result.conversationContext).toBe("Previous thread");
   });
 
   it("defaults empty strings for missing optional fields", () => {
@@ -154,6 +174,7 @@ describe("buildGeneratePayload", () => {
     );
     expect(result.resume).toBe("");
     expect(result.jd).toBe("");
+    expect(result.conversationContext).toBe("");
     expect(result.emailMode).toBe("initial_outreach");
     expect(result.acceptedExamples).toEqual([]);
   });

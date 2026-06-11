@@ -131,12 +131,18 @@ describe("generateRequestSchema", () => {
       profileUrl: "https://linkedin.com/in/janedoe",
       resume: "My resume content here.",
       jd: "Job description here.",
+      conversationContext: "Previous thread here.",
       category: "cold_email",
       intent: "referral",
-      emailMode: "role_fit_summary",
+      emailMode: "founder_ceo_outreach",
       acceptedExamples: ["Example message 1"],
     });
     expect(result.success).toBe(true);
+  });
+
+  it("defaults conversationContext to an empty string", () => {
+    const result = generateRequestSchema.parse(validPayload);
+    expect(result.conversationContext).toBe("");
   });
 
   it("defaults emailMode to initial_outreach", () => {

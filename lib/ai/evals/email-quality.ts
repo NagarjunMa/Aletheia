@@ -10,7 +10,11 @@ export type EmailQualityRule =
   | "limited_hyphen_connectors"
   | "cta_is_capitalized"
   | "signature_on_own_line"
-  | "word_count_within_mode_limit";
+  | "word_count_within_mode_limit"
+  | "has_structured_proof_points"
+  | "preserves_period_tokens"
+  | "no_orphan_fragments"
+  | "has_specific_low_friction_ask";
 
 export interface GoldenEmailCase {
   id: string;
@@ -129,6 +133,50 @@ function checkRule(body: string, mode: EmailMode, rule: EmailQualityRule) {
             rule,
             `Expected ${limit.min}-${limit.max} words for ${mode}, got ${count}.`,
           );
+    }
+
+    case "has_structured_proof_points": {
+      const proofLines = normalized
+        .split("\n")
+        .filter((line) =>
+          /^[A-Z][A-Za-z0-9 &/+.-]{1,60}:\s+\S/.test(line.trim()),
+        );
+      return proofLines.length >= 2
+        ? pass(rule)
+        : fail(rule, "Expected at least 2 labeled proof-point lines.");
+    }
+
+    case "preserves_period_tokens": {
+      const hasBrokenTechToken =
+        /(^|\n\n|\.\s+)(?:js APIs|js services|js apps)\b/i.test(normalized);
+      const hasBrokenDomain =
+        /(^|\n\n|\.\s+)(?:com\/in\/|com\/[A-Za-z0-9_-])/i.test(normalized);
+      return !hasBrokenTechToken && !hasBrokenDomain
+        ? pass(rule)
+        : fail(rule, "Period-sensitive technical tokens or URLs were damaged.");
+    }
+
+    case "no_orphan_fragments": {
+      const hasOrphanFragment =
+        /(^|\n\n|\.\s+)(?:js APIs|js services|js apps|com\/in\/|com\/[A-Za-z0-9_-])/i.test(
+          normalized,
+        );
+      return !hasOrphanFragment
+        ? pass(rule)
+        : fail(
+            rule,
+            "Email contains an orphaned fragment from token splitting.",
+          );
+    }
+
+    case "has_specific_low_friction_ask": {
+      const hasAsk =
+        /\b(?:brief chat|quick chat|share more context|open to|would you be open|let me know|happy to send|happy to share)\b/i.test(
+          normalized,
+        );
+      return hasAsk
+        ? pass(rule)
+        : fail(rule, "Expected a clear, low-friction ask.");
     }
   }
 }
