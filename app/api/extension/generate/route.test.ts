@@ -846,8 +846,8 @@ I build distributed systems. Previously at BigCo.`;
       expect(res.status).toBe(200);
       const userPrompt =
         mockAnthropicCreate.mock.calls[0]?.[0]?.messages?.[0]?.content ?? "";
-      // Empty-resume branch in prompt template should kick in
-      expect(userPrompt).toContain("No resume provided");
+      // Empty-background branch in prompt template should kick in
+      expect(userPrompt).toContain("No candidate background details");
     });
   });
 

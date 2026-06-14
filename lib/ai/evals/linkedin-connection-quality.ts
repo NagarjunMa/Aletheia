@@ -47,14 +47,19 @@ function checkRule(text: string, rule: LinkedInConnectionQualityRule) {
         : fail(rule, "Connection note has clipped or incomplete grammar.");
 
     case "has_specific_context":
-      return /\b(?:role|post|note|Virio|team|company)\b/i.test(normalized)
+      return /\b(?:role|post|note|Virio|Amazon|extension|team|company)\b/i.test(
+        normalized,
+      )
         ? pass(rule)
         : fail(rule, "Expected a concrete target-specific context hook.");
 
     case "has_polished_ask":
-      return /\b(?:I'd like to explore whether|open to a brief chat|glad to share more context|if helpful)\b/i.test(
+      return /\b(?:I'd like to explore whether|open to a brief chat|glad to share more context|if helpful|whether (?:you're|you’re) open to discussing referrals)\b/i.test(
         normalized,
-      )
+      ) &&
+        !/\bwhether\s+referrals\s+are\s+something\s+(?:you're|you’re)\s+open\s+to\s+discussing\b/i.test(
+          normalized,
+        )
         ? pass(rule)
         : fail(rule, "Expected a polished, low-friction ask.");
   }

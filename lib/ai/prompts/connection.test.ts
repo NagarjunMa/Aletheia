@@ -112,7 +112,10 @@ describe("buildPrompt", () => {
   it("includes USER_BACKGROUND fallback when no resume provided", () => {
     const prompt = buildPrompt({ ...baseInput, resume: "" });
     expect(prompt).toContain("USER_BACKGROUND");
-    expect(prompt).toContain("No resume provided");
+    expect(prompt).toContain("No candidate background details are available");
+    expect(prompt).toContain(
+      "Do NOT mention missing resume, missing background, or attachment status.",
+    );
   });
 
   it("always includes TARGET_PROFILE section with the Markdown content", () => {
@@ -361,14 +364,20 @@ describe("COLD_EMAIL_PROMPT subject line policy", () => {
   ];
 
   it("tracks the prompt behavior change with a new version", () => {
-    expect(PROMPT_VERSION).toBe("1.4.0");
+    expect(PROMPT_VERSION).toBe("1.5.0");
   });
 
   it("documents scenario-specific email modes", () => {
     expect(COLD_EMAIL_PROMPT).toContain("EMAIL_MODE = founder_ceo_outreach");
     expect(COLD_EMAIL_PROMPT).toContain("EMAIL_MODE = role_fit_summary");
     expect(COLD_EMAIL_PROMPT).toContain(
-      "Write a concise clarification or role-fit summary, not a full cold outreach email.",
+      "Use this when the user is answering a recruiter, hiring manager, or contact who asks for a brief explanation of relevant experience.",
+    );
+    expect(COLD_EMAIL_PROMPT).toContain(
+      "First identify the user's latest/current role, company, or most recent experience from USER_BACKGROUND.",
+    );
+    expect(COLD_EMAIL_PROMPT).toContain(
+      "Do not list generic skillsets. Convert skills into specific experience",
     );
     expect(COLD_EMAIL_PROMPT).toContain("founder_ceo_outreach: 120-190 words");
     expect(COLD_EMAIL_PROMPT).toContain("initial_outreach: 100-150 words");
@@ -380,6 +389,12 @@ describe("COLD_EMAIL_PROMPT subject line policy", () => {
     expect(LINKEDIN_CONNECTION_PROMPT).toContain("Use complete grammar");
     expect(LINKEDIN_CONNECTION_PROMPT).toContain(
       "I'd like to explore whether there's a fit on your team.",
+    );
+    expect(LINKEDIN_CONNECTION_PROMPT).toContain(
+      "whether you're open to discussing referrals.",
+    );
+    expect(LINKEDIN_CONNECTION_PROMPT).toContain(
+      "whether referrals are something you're open to discussing.",
     );
   });
 
@@ -410,6 +425,18 @@ describe("COLD_EMAIL_PROMPT subject line policy", () => {
     );
     expect(COLD_EMAIL_PROMPT).toContain(
       "Software Engineering, Full-Stack Engineering, Backend Engineering, or SRE",
+    );
+  });
+
+  it("forbids resume attachment status claims in email prompts", () => {
+    expect(COLD_EMAIL_PROMPT).toContain(
+      "USER_BACKGROUND is parsed resume/profile context for drafting only. It is NOT proof that a resume file is attached to the outgoing email.",
+    );
+    expect(COLD_EMAIL_PROMPT).toContain(
+      'NEVER say or imply that a resume/CV is attached, not attached, missing, unavailable, or "not attached here".',
+    );
+    expect(LINKEDIN_INMAIL_PROMPT).toContain(
+      "Never mention whether a resume/CV is attached, not attached, missing, or unavailable.",
     );
   });
 

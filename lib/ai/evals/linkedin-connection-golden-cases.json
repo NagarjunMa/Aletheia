@@ -10,5 +10,17 @@
       "has_specific_context",
       "has_polished_ask"
     ]
+  },
+  {
+    "id": "subham-amazon-referral-connection-001",
+    "generated": "Hi Subham, your LeetCode Contest Tracker extension is a neat build. I don't have a background to share, but I'd love to hear about your experience at Amazon and whether referrals are something you're open to discussing.",
+    "preferred": "Hi Subham, your LeetCode Contest Tracker extension is a neat build. I don’t have a background to share, but I’d love to hear about your experience at Amazon and whether you’re open to discussing referrals.",
+    "expectedRules": [
+      "has_greeting",
+      "under_300_chars",
+      "complete_grammar",
+      "has_specific_context",
+      "has_polished_ask"
+    ]
   }
 ]
