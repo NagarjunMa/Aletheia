@@ -45,6 +45,28 @@
     ]
   },
   {
+    "id": "akamai-role-fit-latest-experience-001",
+    "category": "cold_email",
+    "emailMode": "role_fit_summary",
+    "intent": "job_inquiry",
+    "problemTags": [
+      "generic_role_fit_summary",
+      "missing_latest_experience",
+      "missing_resume_specificity"
+    ],
+    "generated": "Hi Dhiraj,\n\nI came across your post about the two AI Engineer openings on your team at Akamai. The work on agent orchestration, MCP servers, and model routing caught my attention immediately. I don't have a resume attached here, but I'd genuinely like to learn more about what you're building and where I might fit.\n\nThe infrastructure layer your team owns, running production agents at scale across Dev, QA, and SRE, is exactly the kind of work I want to be closer to.\n\nPlease advise me on next steps or the best way to share more context with you.",
+    "preferred": "Hi Dhiraj,\n\nMy latest experience is as a backend and infrastructure engineer working on production cloud and AI systems. I have built Terraform-managed AWS/GCP environments with monitoring and deployment automation, and I have worked across Python, TypeScript, and RAG/AI application pipelines.\n\nThat background maps well to the AI Engineer opening because I can contribute to backend agent infrastructure while staying close to production reliability.\n\nPlease let me know if sharing more context or applying formally would be the best next step.\n\nBest,\nNagarjun Mallesh",
+    "expectedRules": [
+      "has_greeting_blank_line",
+      "has_2_to_5_paragraphs",
+      "not_wall_of_text",
+      "signature_on_own_line",
+      "word_count_within_mode_limit",
+      "has_latest_experience_reference",
+      "has_specific_low_friction_ask"
+    ]
+  },
+  {
     "id": "virio-founder-ceo-outreach-001",
     "category": "cold_email",
     "emailMode": "founder_ceo_outreach",

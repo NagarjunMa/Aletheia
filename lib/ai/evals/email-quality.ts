@@ -14,7 +14,8 @@ export type EmailQualityRule =
   | "has_structured_proof_points"
   | "preserves_period_tokens"
   | "no_orphan_fragments"
-  | "has_specific_low_friction_ask";
+  | "has_specific_low_friction_ask"
+  | "has_latest_experience_reference";
 
 export interface GoldenEmailCase {
   id: string;
@@ -177,6 +178,21 @@ function checkRule(body: string, mode: EmailMode, rule: EmailQualityRule) {
       return hasAsk
         ? pass(rule)
         : fail(rule, "Expected a clear, low-friction ask.");
+    }
+
+    case "has_latest_experience_reference": {
+      const hasRecencySignal =
+        /\b(?:latest|current|currently|recent|most recent)\b/i.test(normalized);
+      const hasConcreteExperience =
+        /\b(?:AWS|GCP|Terraform|Docker|CloudWatch|Python|TypeScript|FastAPI|RAG|AI|backend|infrastructure|automation|deployment|monitoring|production)\b/i.test(
+          normalized,
+        );
+      return hasRecencySignal && hasConcreteExperience
+        ? pass(rule)
+        : fail(
+            rule,
+            "Expected latest/current experience with a concrete proof point.",
+          );
     }
   }
 }

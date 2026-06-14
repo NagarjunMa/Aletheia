@@ -86,6 +86,34 @@ describe("formatGeneratedEmailBody", () => {
     expect(formatted).toContain("\nFull-Stack Context:");
   });
 
+  it("removes misleading resume attachment status while preserving the ask", () => {
+    const body =
+      "Hi Dhiraj,\n\nI came across your post about AI Engineer openings. I don't have a resume attached here, but I'd genuinely like to learn more about what you're building and where I might fit.\n\nBest,\nNagarjun Mallesh";
+
+    const formatted = formatGeneratedEmailBody(body, {
+      category: "cold_email",
+      mode: "initial_outreach",
+    });
+
+    expect(formatted).toContain("I'd genuinely like to learn more");
+    expect(formatted).not.toMatch(/resume|cv/i);
+    expect(formatted).not.toMatch(/attached/i);
+  });
+
+  it("removes positive resume attachment claims because the app drafts copy only", () => {
+    const body =
+      "Hi Maya,\n\nPlease find my resume attached. I noticed your platform engineering work and would be glad to share more context.\n\nBest,\nNagarjun Mallesh";
+
+    const formatted = formatGeneratedEmailBody(body, {
+      category: "cold_email",
+      mode: "initial_outreach",
+    });
+
+    expect(formatted).toContain("I noticed your platform engineering work");
+    expect(formatted).not.toMatch(/resume|cv/i);
+    expect(formatted).not.toMatch(/attached/i);
+  });
+
   it("uses stricter word limits for concise email modes", () => {
     const expectations: Array<[EmailMode, number]> = [
       ["initial_outreach", 150],

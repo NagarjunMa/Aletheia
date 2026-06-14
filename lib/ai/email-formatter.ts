@@ -73,6 +73,29 @@ function capitalizeCtaStarts(body: string): string {
   );
 }
 
+function removeResumeAttachmentClaims(body: string): string {
+  return body
+    .replace(
+      /\bI\s+(?:do\s+not|don't)\s+have\s+(?:a\s+)?(?:resume|cv)\s+attached(?:\s+here)?\s*,?\s*but\s+/gi,
+      "",
+    )
+    .replace(
+      /\bI\s+(?:do\s+not|don't)\s+have\s+(?:a\s+)?(?:resume|cv)\s+attached(?:\s+here)?\.?\s*/gi,
+      "",
+    )
+    .replace(
+      /\b(?:please\s+find\s+)?(?:my\s+)?(?:resume|cv)\s+(?:is\s+|'s\s+)?attached(?:\s+here)?\.?\s*/gi,
+      "",
+    )
+    .replace(
+      /\b(?:I(?:'ve| have)\s+)?attached\s+(?:my\s+)?(?:resume|cv)\.?\s*/gi,
+      "",
+    )
+    .replace(/[ \t]+([,.!?])/g, "$1")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 function countWords(text: string): number {
   return text
     .trim()
@@ -238,7 +261,9 @@ export function formatGeneratedEmailBody(
     capitalizeCtaStarts(
       normalizeInlineSignature(
         normalizeConnectorHyphens(
-          normalizeGreeting(normalizeLineEndings(body)),
+          normalizeGreeting(
+            removeResumeAttachmentClaims(normalizeLineEndings(body)),
+          ),
         ),
       ),
     ),
