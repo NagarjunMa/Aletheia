@@ -292,9 +292,11 @@ PARAGRAPH STRUCTURE — mandatory for readability:
 - Vary sentence lengths: mix short (5-8 words) with longer (15-20 words) for human-like rhythm
 - Each paragraph should feel conversational and focused on one main idea
 
-OUTPUT FORMAT — JSON only, no markdown, no backticks, no preamble:
-{"subject_line": "...", "body": "...", "word_count": <number>}
-First character of the response must be "{". Last character must be "}". No "Counting...", no "Here is...", no commentary before or after the JSON.
+OUTPUT FORMAT — TOOL ONLY:
+Submit the final answer with the submit_outreach_message tool exactly once.
+Do NOT write JSON in a text response.
+Do NOT include the email body outside the tool call.
+The tool body field may contain normal paragraph breaks and proof-point lines.
 
 If word_count exceeds the EMAIL_MODE limit you have failed. Regenerate shorter.
 If ACCEPTED_EXAMPLES exist, match their sentence length and formality.`;
@@ -337,9 +339,10 @@ GROUNDING RULES (same as cold email):
 - NEVER invent metrics, numbers, companies, or achievements
 - If the resume is thin, write a shorter message rather than padding with fabricated details
 
-OUTPUT FORMAT — JSON only, no preamble, no commentary:
-{"subject_line": "...", "body": "...", "word_count": <number>}
-First character of the response must be "{". Last character must be "}". No "Counting...", "Here is...", or any text outside the JSON object.`;
+OUTPUT FORMAT — TOOL ONLY:
+Submit the final answer with the submit_outreach_message tool exactly once.
+Do NOT write JSON in a text response.
+Do NOT include the InMail body outside the tool call.`;
 
 // ============================================
 // NEGATIVE LEXICON — SANITIZATION SAFETY NET

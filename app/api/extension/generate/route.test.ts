@@ -118,6 +118,19 @@ const validPayload = {
   category: "linkedin_connection",
 };
 
+function toolUseOutput(input: {
+  subject_line: string;
+  body: string;
+  word_count: number;
+}) {
+  return {
+    type: "tool_use",
+    id: "toolu_test",
+    name: "submit_outreach_message",
+    input,
+  };
+}
+
 describe("generateRequestSchema", () => {
   it("parses a minimal valid payload", () => {
     const result = generateRequestSchema.safeParse(validPayload);
@@ -340,13 +353,14 @@ describe("POST /api/extension/generate", () => {
     expect(body.error).toBe("Failed to generate content");
   });
 
-  it("correctly parses markdown json wrapped in fences", async () => {
+  it("extracts cold email output from Anthropic tool use", async () => {
     mockAnthropicCreate.mockResolvedValueOnce({
       content: [
-        {
-          type: "text",
-          text: '```json\n{"subject_line":"Mock Subject","body":"Mock Body"}\n```',
-        },
+        toolUseOutput({
+          subject_line: "Mock Subject",
+          body: "Mock Body",
+          word_count: 2,
+        }),
       ],
       usage: { input_tokens: 10, output_tokens: 20 },
     });
@@ -363,19 +377,63 @@ describe("POST /api/extension/generate", () => {
     const body = await res.json();
     expect(body.subject_line).toBe("Mock Subject");
     expect(body.body).toBe("Mock Body");
+    expect(mockAnthropicCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tools: [
+          expect.objectContaining({
+            name: "submit_outreach_message",
+          }),
+        ],
+        tool_choice: {
+          type: "tool",
+          name: "submit_outreach_message",
+        },
+      }),
+      { timeout: 30_000 },
+    );
+  });
+
+  it("accepts tool body strings with real newlines and quoted hooks", async () => {
+    mockAnthropicCreate.mockResolvedValueOnce({
+      content: [
+        toolUseOutput({
+          subject_line: "Virio Engineering Interest",
+          body: 'Hi Eric,\n\nEmmett’s note about needing engineers with "judgment built before AI" hit close to home.\n\nA quick look at my background:\nCloud & Infrastructure: Built Terraform-managed AWS environments.\nAutomation: Reduced setup work from days to minutes.\n\nLet me know if you are open to a brief chat.\n\nBest,\nNagarjun Mallesh\nlinkedin.com/in/nagarjun-mallesh',
+          word_count: 54,
+        }),
+      ],
+      usage: { input_tokens: 100, output_tokens: 80 },
+    });
+
+    const res = await POST(
+      makeRequest({
+        method: "POST",
+        headers: { authorization: "Bearer test" },
+        body: {
+          ...validPayload,
+          category: "cold_email",
+          emailMode: "founder_ceo_outreach",
+        },
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.subject_line).toBe("Virio Engineering Interest");
+    expect(body.body).toContain('"judgment built before AI"');
+    expect(body.body).toContain(
+      "A quick look at my background:\nCloud & Infrastructure:",
+    );
   });
 
   it("formats cold email bodies and returns emailMode in eval metadata", async () => {
     mockAnthropicCreate.mockResolvedValueOnce({
       content: [
-        {
-          type: "text",
-          text: JSON.stringify({
-            subject_line: "Backend Engineering Interest",
-            body: "Hi Megan, I'm Nagarjun - backend/ML engineer based in NYC. Found you through Bountiful's YC listing. On the technical side, I've built RAG-based AI systems with Python and FastAPI. interested in a quick chat, or happy to share more context first? Thanks either way. Nagarjun",
-            word_count: 43,
-          }),
-        },
+        toolUseOutput({
+          subject_line: "Backend Engineering Interest",
+          body: "Hi Megan, I'm Nagarjun - backend/ML engineer based in NYC. Found you through Bountiful's YC listing. On the technical side, I've built RAG-based AI systems with Python and FastAPI. interested in a quick chat, or happy to share more context first? Thanks either way. Nagarjun",
+          word_count: 43,
+        }),
       ],
       usage: { input_tokens: 100, output_tokens: 80 },
     });
@@ -422,6 +480,12 @@ describe("POST /api/extension/generate", () => {
 
     expect(body.body.length).toBeLessThanOrEqual(300);
     expect(body.body.endsWith(".")).toBe(true);
+    expect(mockAnthropicCreate).toHaveBeenCalledWith(
+      expect.not.objectContaining({
+        tools: expect.anything(),
+      }),
+      { timeout: 30_000 },
+    );
   });
 
   it("returns 400 on Zod validation failure with field details", async () => {
@@ -491,10 +555,11 @@ describe("POST /api/extension/generate", () => {
   it("returns 200 with subject_line + body + word_count for linkedin_inmail", async () => {
     mockAnthropicCreate.mockResolvedValueOnce({
       content: [
-        {
-          type: "text",
-          text: '{"subject_line":"Quick question about sparse attention","body":"Hi Priya — read your NeurIPS talk and the edge-deploy point matched what we saw in fraud-detection inference.","word_count":24}',
-        },
+        toolUseOutput({
+          subject_line: "Quick question about sparse attention",
+          body: "Hi Priya — read your NeurIPS talk and the edge-deploy point matched what we saw in fraud-detection inference.",
+          word_count: 24,
+        }),
       ],
       usage: { input_tokens: 100, output_tokens: 80 },
     });
@@ -539,8 +604,8 @@ describe("POST /api/extension/generate", () => {
     expect(body.error).toBeTruthy();
   });
 
-  // T6 — 502 JSON parse failure for cold_email
-  it("returns 502 when Claude returns malformed JSON for cold_email", async () => {
+  // T6 — 502 missing structured tool output for cold_email
+  it("returns 502 when Claude omits required tool output for cold_email", async () => {
     mockAnthropicCreate.mockResolvedValueOnce({
       content: [
         {
@@ -561,7 +626,56 @@ describe("POST /api/extension/generate", () => {
     );
     expect(res.status).toBe(502);
     const body = await res.json();
-    expect(body.error).toBeTruthy();
+    expect(body.code).toBe("TOOL_OUTPUT_MISSING");
+  });
+
+  it("returns 502 when Claude tool input fails validation", async () => {
+    mockAnthropicCreate.mockResolvedValueOnce({
+      content: [
+        toolUseOutput({
+          subject_line: "",
+          body: "Body exists",
+          word_count: 2,
+        }),
+      ],
+      usage: { input_tokens: 100, output_tokens: 30 },
+    });
+
+    const testPayload = { ...validPayload, category: "cold_email" };
+    const res = await POST(
+      makeRequest({
+        method: "POST",
+        headers: { authorization: "Bearer test" },
+        body: testPayload,
+      }),
+    );
+    expect(res.status).toBe(502);
+    const body = await res.json();
+    expect(body.code).toBe("TOOL_OUTPUT_INVALID");
+  });
+
+  it("returns 502 when Claude returns multiple outreach tool outputs", async () => {
+    const output = {
+      subject_line: "Backend Engineering Interest",
+      body: "Hi Jane, brief note.",
+      word_count: 4,
+    };
+    mockAnthropicCreate.mockResolvedValueOnce({
+      content: [toolUseOutput(output), toolUseOutput(output)],
+      usage: { input_tokens: 100, output_tokens: 30 },
+    });
+
+    const testPayload = { ...validPayload, category: "cold_email" };
+    const res = await POST(
+      makeRequest({
+        method: "POST",
+        headers: { authorization: "Bearer test" },
+        body: testPayload,
+      }),
+    );
+    expect(res.status).toBe(502);
+    const body = await res.json();
+    expect(body.code).toBe("TOOL_OUTPUT_INVALID");
   });
 
   // T7 — 401 invalid bearer (Supabase rejects token)

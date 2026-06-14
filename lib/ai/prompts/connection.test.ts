@@ -374,6 +374,16 @@ describe("COLD_EMAIL_PROMPT subject line policy", () => {
     expect(COLD_EMAIL_PROMPT).toContain("initial_outreach: 100-150 words");
   });
 
+  it("requires structured tool output for cold email and InMail", () => {
+    expect(COLD_EMAIL_PROMPT).toContain("submit_outreach_message tool");
+    expect(COLD_EMAIL_PROMPT).toContain("Do NOT write JSON in a text response");
+    expect(COLD_EMAIL_PROMPT).not.toContain('{"subject_line": "..."');
+    expect(LINKEDIN_INMAIL_PROMPT).toContain("submit_outreach_message tool");
+    expect(LINKEDIN_INMAIL_PROMPT).toContain(
+      "Do NOT write JSON in a text response",
+    );
+  });
+
   it("documents LinkedIn connection note polish rules", () => {
     expect(LINKEDIN_CONNECTION_PROMPT).toContain("HARD LIMIT: 300 characters");
     expect(LINKEDIN_CONNECTION_PROMPT).toContain("Hi [FirstName],");

@@ -25,11 +25,7 @@ import {
 import { z } from "zod";
 import { getCorsHeaders } from "@/lib/cors";
 import { createLogger } from "@/lib/logger";
-import {
-  countWords,
-  truncateToWordLimit,
-  stripMarkdownCodeFences,
-} from "./utils";
+import { countWords, truncateToWordLimit } from "./utils";
 import { generateRequestSchema } from "./schema";
 
 const log = createLogger("generate-route");
@@ -53,6 +49,139 @@ function getSupabaseAuth() {
 
 const DAILY_LIMIT = Number(process.env.EXTENSION_DAILY_LIMIT) || 30;
 const CLAUDE_MODEL = "claude-sonnet-4-6";
+const OUTREACH_OUTPUT_TOOL_NAME = "submit_outreach_message";
+
+const emailToolOutputSchema = z
+  .object({
+    subject_line: z.string().trim().min(1).max(120),
+    body: z.string().trim().min(1).max(5000),
+    word_count: z.number().int().positive().max(250),
+  })
+  .strict();
+
+type EmailToolOutput = z.infer<typeof emailToolOutputSchema>;
+
+type MessageContentBlock = {
+  type: string;
+  text?: string;
+  name?: string;
+  input?: unknown;
+};
+
+class GenerationFormatError extends Error {
+  code: "TOOL_OUTPUT_MISSING" | "TOOL_OUTPUT_INVALID";
+  validationFields: string[];
+
+  constructor(
+    message: string,
+    code: "TOOL_OUTPUT_MISSING" | "TOOL_OUTPUT_INVALID",
+    validationFields: string[] = [],
+  ) {
+    super(message);
+    this.name = "GenerationFormatError";
+    this.code = code;
+    this.validationFields = validationFields;
+  }
+}
+
+const EMAIL_OUTPUT_TOOL = {
+  name: OUTREACH_OUTPUT_TOOL_NAME,
+  description:
+    "Submit the final generated outreach message. Use this exactly once for cold email and LinkedIn InMail outputs. Do not write JSON in text.",
+  input_schema: {
+    type: "object" as const,
+    additionalProperties: false,
+    required: ["subject_line", "body", "word_count"],
+    properties: {
+      subject_line: {
+        type: "string",
+        minLength: 1,
+        maxLength: 120,
+        description:
+          "Formal subject line selected from the approved template policy.",
+      },
+      body: {
+        type: "string",
+        minLength: 1,
+        maxLength: 5000,
+        description:
+          "Final outreach body. It may contain normal newline characters and proof-point lines.",
+      },
+      word_count: {
+        type: "integer",
+        minimum: 1,
+        maximum: 250,
+        description:
+          "Approximate word count of the body before server-side formatting.",
+      },
+    },
+  },
+};
+
+function isEmailCategory(
+  category: string,
+): category is "cold_email" | "linkedin_inmail" {
+  return category === "cold_email" || category === "linkedin_inmail";
+}
+
+function extractTextContent(response: { content: MessageContentBlock[] }) {
+  const textBlock = response.content.find(
+    (block) => block.type === "text" && typeof block.text === "string",
+  );
+  if (!textBlock?.text) {
+    log.error(
+      { contentTypes: response.content.map((block) => block.type) },
+      "Claude returned no text content block",
+    );
+    throw new Error("No text content in Claude response");
+  }
+  return textBlock.text;
+}
+
+function extractOutreachToolInput(response: {
+  content: MessageContentBlock[];
+}): EmailToolOutput {
+  const toolBlocks = response.content.filter(
+    (block) =>
+      block.type === "tool_use" &&
+      block.name === OUTREACH_OUTPUT_TOOL_NAME &&
+      "input" in block,
+  );
+
+  if (toolBlocks.length === 0) {
+    throw new GenerationFormatError(
+      "Claude did not return the required outreach tool output",
+      "TOOL_OUTPUT_MISSING",
+    );
+  }
+
+  if (toolBlocks.length > 1) {
+    throw new GenerationFormatError(
+      "Claude returned multiple outreach tool outputs",
+      "TOOL_OUTPUT_INVALID",
+      ["tool_use_count"],
+    );
+  }
+
+  const toolBlock = toolBlocks[0];
+  if (!toolBlock) {
+    throw new GenerationFormatError(
+      "Claude did not return the required outreach tool output",
+      "TOOL_OUTPUT_MISSING",
+    );
+  }
+
+  const parsed = emailToolOutputSchema.safeParse(toolBlock.input);
+  if (!parsed.success) {
+    throw new GenerationFormatError(
+      "Claude returned invalid outreach tool input",
+      "TOOL_OUTPUT_INVALID",
+      parsed.error.errors.map((issue) => issue.path.join(".") || "root"),
+    );
+  }
+
+  return parsed.data;
+}
 
 // ─── Auth helper ───
 
@@ -318,30 +447,30 @@ export async function POST(request: NextRequest) {
       promptInput.styleProfile = styleProfile;
     }
     const userPrompt = buildPrompt(promptInput);
+    const shouldUseOutreachTool = isEmailCategory(category);
 
     const startTime = Date.now();
     const response = await getAnthropic().messages.create(
       {
         model: CLAUDE_MODEL,
-        max_tokens: 600,
+        max_tokens: shouldUseOutreachTool ? 800 : 600,
         temperature: 0.8,
         system: systemPrompt,
         messages: [{ role: "user", content: userPrompt }],
+        ...(shouldUseOutreachTool
+          ? {
+              tools: [EMAIL_OUTPUT_TOOL],
+              tool_choice: {
+                type: "tool" as const,
+                name: OUTREACH_OUTPUT_TOOL_NAME,
+              },
+            }
+          : {}),
       },
       { timeout: 30_000 },
     );
 
     const processingTime = Date.now() - startTime;
-    const textBlock = response.content.find((block) => block.type === "text");
-    if (!textBlock || textBlock.type !== "text" || !textBlock.text) {
-      log.error(
-        { contentTypes: response.content.map((b) => b.type) },
-        "Claude returned no text content block",
-      );
-      throw new Error("No text content in Claude response");
-    }
-    const rawContent = textBlock.text;
-
     const tokenUsage = response.usage;
     const totalTokens = tokenUsage.input_tokens + tokenUsage.output_tokens;
 
@@ -354,6 +483,7 @@ export async function POST(request: NextRequest) {
         processingTime,
         category,
         promptVersion: PROMPT_VERSION,
+        contentTypes: response.content.map((block) => block.type),
       },
       "Generation completed",
     );
@@ -379,92 +509,99 @@ export async function POST(request: NextRequest) {
     };
 
     // Parse response based on category with validation
-    if (category === "cold_email" || category === "linkedin_inmail") {
+    if (shouldUseOutreachTool) {
       try {
-        const cleanedContent = stripMarkdownCodeFences(rawContent);
-        const parsed = JSON.parse(cleanedContent);
-
-        if (parsed.subject_line && parsed.body) {
-          const basicSubjectSanitization = sanitize(
-            stripModelPreambleAndSuffix(parsed.subject_line),
-          );
-          const basicBodySanitization = sanitize(
-            stripModelPreambleAndSuffix(parsed.body),
-          );
-
-          const enhancedSubjectSanitization = await sanitizeForLinkedIn(
-            basicSubjectSanitization,
-          );
-          const enhancedBodySanitization = await sanitizeForLinkedIn(
-            basicBodySanitization,
-          );
-
-          const sanitizedSubject = enhancedSubjectSanitization.success
-            ? enhancedSubjectSanitization.sanitizedContent
-            : basicSubjectSanitization;
-          const sanitizedBody = enhancedBodySanitization.success
-            ? enhancedBodySanitization.sanitizedContent
-            : basicBodySanitization;
-
-          const subjectPatterns =
-            enhancedSubjectSanitization.aiFingerprints?.detectedPatterns ?? [];
-          const bodyPatterns =
-            enhancedBodySanitization.aiFingerprints?.detectedPatterns ?? [];
-
-          if (subjectPatterns.length || bodyPatterns.length) {
-            log.info(
-              {
-                subjectPatterns,
-                bodyPatterns,
-                category: validatedData.category,
-              },
-              "AI fingerprints stripped in Chrome extension generation",
-            );
-          }
-
-          let finalBody = formatGeneratedEmailBody(sanitizedBody, {
-            category,
-            mode: emailMode,
-          });
-          let wordCount = countWords(finalBody);
-          const { max: maxWords } = getEmailWordLimit(category, emailMode);
-          if (wordCount > maxWords) {
-            log.warn(
-              { category, wordCount, maxWords },
-              "Category exceeds word limit",
-            );
-            finalBody = truncateToWordLimit(finalBody, maxWords);
-            wordCount = countWords(finalBody);
-          }
-
-          // Mark slot consumed — successful response, no refund needed.
-          reservedUserId = undefined;
-          return NextResponse.json(
-            {
-              success: true,
-              subject_line: sanitizedSubject,
-              body: finalBody,
-              category,
-              word_count: wordCount,
-              character_count: finalBody.length,
-              usage: tokenUsage,
-              processingTime,
-              evalMetadata,
-            },
-            {
-              headers: { ...corsHeaders, ...rateLimitHeaders },
-            },
-          );
-        }
-      } catch (parseError) {
-        log.warn(
-          { err: parseError },
-          "Failed to parse JSON response, attempting fallback",
+        const parsed = extractOutreachToolInput(response);
+        const basicSubjectSanitization = sanitize(
+          stripModelPreambleAndSuffix(parsed.subject_line),
+        );
+        const basicBodySanitization = sanitize(
+          stripModelPreambleAndSuffix(parsed.body),
         );
 
+        const enhancedSubjectSanitization = await sanitizeForLinkedIn(
+          basicSubjectSanitization,
+        );
+        const enhancedBodySanitization = await sanitizeForLinkedIn(
+          basicBodySanitization,
+        );
+
+        const sanitizedSubject = enhancedSubjectSanitization.success
+          ? enhancedSubjectSanitization.sanitizedContent
+          : basicSubjectSanitization;
+        const sanitizedBody = enhancedBodySanitization.success
+          ? enhancedBodySanitization.sanitizedContent
+          : basicBodySanitization;
+
+        const subjectPatterns =
+          enhancedSubjectSanitization.aiFingerprints?.detectedPatterns ?? [];
+        const bodyPatterns =
+          enhancedBodySanitization.aiFingerprints?.detectedPatterns ?? [];
+
+        if (subjectPatterns.length || bodyPatterns.length) {
+          log.info(
+            {
+              subjectPatterns,
+              bodyPatterns,
+              category: validatedData.category,
+            },
+            "AI fingerprints stripped in Chrome extension generation",
+          );
+        }
+
+        let finalBody = formatGeneratedEmailBody(sanitizedBody, {
+          category,
+          mode: emailMode,
+        });
+        let wordCount = countWords(finalBody);
+        const { max: maxWords } = getEmailWordLimit(category, emailMode);
+        if (wordCount > maxWords) {
+          log.warn(
+            { category, wordCount, maxWords },
+            "Category exceeds word limit",
+          );
+          finalBody = truncateToWordLimit(finalBody, maxWords);
+          wordCount = countWords(finalBody);
+        }
+
+        // Mark slot consumed — successful response, no refund needed.
+        reservedUserId = undefined;
+        return NextResponse.json(
+          {
+            success: true,
+            subject_line: sanitizedSubject,
+            body: finalBody,
+            category,
+            word_count: wordCount,
+            character_count: finalBody.length,
+            usage: tokenUsage,
+            processingTime,
+            evalMetadata,
+          },
+          {
+            headers: { ...corsHeaders, ...rateLimitHeaders },
+          },
+        );
+      } catch (formatError) {
+        const code =
+          formatError instanceof GenerationFormatError
+            ? formatError.code
+            : "TOOL_OUTPUT_INVALID";
         log.warn(
-          { category: validatedData.category },
-          "JSON parse failed for cold_email — returning 502",
+          {
+            err:
+              formatError instanceof Error
+                ? formatError.message
+                : String(formatError),
+            code,
+            validationFields:
+              formatError instanceof GenerationFormatError
+                ? formatError.validationFields
+                : [],
+            category: validatedData.category,
+            contentTypes: response.content.map((block) => block.type),
+          },
+          "Structured outreach tool output invalid — returning 502",
         );
         // Refund the rate-limit slot: user paid for a call that produced
         // no usable output. Quota was already incremented before Claude
@@ -474,7 +611,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           {
             error: "Generation format error, please retry",
-            code: "PARSE_FAILED",
+            code,
           },
           { status: 502, headers: { ...corsHeaders, ...rateLimitHeaders } },
         );
@@ -482,6 +619,7 @@ export async function POST(request: NextRequest) {
     }
 
     // For LinkedIn connections - apply AI fingerprint detection and sanitization
+    const rawContent = extractTextContent(response);
     const basicSanitization = sanitize(stripModelPreambleAndSuffix(rawContent));
     const enhancedSanitization = await sanitizeForLinkedIn(basicSanitization);
     const sanitizedContent = enhancedSanitization.success
