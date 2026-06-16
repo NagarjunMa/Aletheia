@@ -216,6 +216,48 @@ export type Database = {
           },
         ];
       };
+      user_resumes: {
+        Row: {
+          created_at: string;
+          file_mime: string;
+          file_name: string;
+          file_size: number;
+          id: string;
+          is_primary: boolean;
+          label: string;
+          parsed_text: string;
+          storage_path: string | null;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          file_mime: string;
+          file_name: string;
+          file_size: number;
+          id?: string;
+          is_primary?: boolean;
+          label: string;
+          parsed_text: string;
+          storage_path?: string | null;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          file_mime?: string;
+          file_name?: string;
+          file_size?: number;
+          id?: string;
+          is_primary?: boolean;
+          label?: string;
+          parsed_text?: string;
+          storage_path?: string | null;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
       user_preferences: {
         Row: {
           approved_message_count: number | null;

@@ -13,20 +13,9 @@ describe("updateProfile", () => {
     vi.clearAllMocks();
   });
 
-  it("rejects when resume exceeds 50000 chars", async () => {
-    const result = await updateProfile({
-      full_name: "Test",
-      resume: "x".repeat(50_001),
-      target_job_description: "",
-    });
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error).toMatch(/resume/i);
-  });
-
   it("rejects when target_job_description exceeds 20000 chars", async () => {
     const result = await updateProfile({
       full_name: "Test",
-      resume: "ok",
       target_job_description: "x".repeat(20_001),
     });
     expect(result.ok).toBe(false);
@@ -43,7 +32,6 @@ describe("updateProfile", () => {
     });
     const result = await updateProfile({
       full_name: "Test",
-      resume: "",
       target_job_description: "",
     });
     expect(result.ok).toBe(false);
@@ -72,7 +60,6 @@ describe("updateProfile", () => {
     });
     const result = await updateProfile({
       full_name: "Test",
-      resume: "ok",
       target_job_description: "ok",
     });
     expect(result.ok).toBe(false);
@@ -102,14 +89,12 @@ describe("updateProfile", () => {
     });
     const result = await updateProfile({
       full_name: "Nagarjun",
-      resume: "MS CS Boston University",
       target_job_description: "ML infra eng",
     });
     expect(result.ok).toBe(true);
     expect(updateMock).toHaveBeenCalledWith(
       expect.objectContaining({
         full_name: "Nagarjun",
-        resume: "MS CS Boston University",
         target_job_description: "ML infra eng",
       }),
     );

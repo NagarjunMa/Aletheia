@@ -304,7 +304,6 @@ async function initializeDefaultSettings() {
 
   const defaults = {
     apiUrl,
-    resume: '',
     accepted: [],
     dailyUsage: {},
     settings: {

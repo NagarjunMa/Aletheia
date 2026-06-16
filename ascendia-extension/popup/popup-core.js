@@ -69,7 +69,7 @@ export function calculateCharCount(text, category) {
  */
 export function buildGeneratePayload(
   profile,
-  resume,
+  _resume,
   contextValue,
   category,
   intent,
@@ -80,7 +80,6 @@ export function buildGeneratePayload(
   return {
     profileMarkdown: profile.profileMarkdown,
     profileUrl: profile.profileUrl,
-    resume: resume || '',
     jd: isFollowUp ? '' : contextValue || '',
     conversationContext: isFollowUp ? contextValue || '' : '',
     category,

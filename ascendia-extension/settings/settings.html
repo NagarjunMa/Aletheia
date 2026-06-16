@@ -87,7 +87,7 @@
           Account Connection
         </h2>
         <div class="info-card" style="margin-bottom: 16px;">
-          <div class="info-icon">ℹ️</div>
+          <div class="info-icon">i</div>
           <div class="info-content">
             <p>The extension connects to your Aletheia account automatically. Log in to the web app first, then click
               "Connect" below.</p>
@@ -123,56 +123,20 @@
         </button>
       </div>
 
-      <!-- Resume Upload -->
+      <!-- Resume Source -->
       <div class="section">
-        <h2>Resume & Profile</h2>
+        <h2>Resume Source</h2>
 
-        <div class="form-group">
-          <label for="resumeUpload">
-            <strong>Upload Resume</strong>
-            <span class="required">*</span>
-          </label>
-          <div class="upload-area" id="uploadArea">
-            <div class="upload-content">
-              <div class="upload-icon">📁</div>
-              <div class="upload-text">
-                <strong>Drop your resume here</strong>
-                <span>or <button type="button" id="browseBtn" class="link-btn">browse files</button></span>
-              </div>
-              <div class="upload-formats">
-                Supports: PDF, DOC, DOCX, TXT (Max 5MB)
-              </div>
-            </div>
-            <input type="file" id="resumeUpload" accept=".pdf,.doc,.docx,.txt" hidden />
+        <div class="info-card">
+          <div class="info-icon">i</div>
+          <div class="info-content">
+            <p>Resumes are managed in your Aletheia dashboard and stored securely in your account. The extension no
+              longer stores resume files or parsed resume text.</p>
           </div>
         </div>
-
-        <div id="resumePreview" class="resume-preview hidden">
-          <div class="preview-header">
-            <h3>Current Resume</h3>
-            <button id="removeResume" class="remove-btn" title="Remove resume">
-              ✖️
-            </button>
-          </div>
-          <div class="preview-content">
-            <div id="resumeFileName" class="file-name"></div>
-            <div id="resumeSize" class="file-size"></div>
-            <div id="resumeContent" class="resume-text"></div>
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label for="personalInfo">
-            <strong>Additional Personal Info</strong>
-            <span class="optional">(Optional)</span>
-          </label>
-          <textarea id="personalInfo"
-            placeholder="Add any additional information about yourself that would help generate better messages (skills, interests, goals, etc.)"
-            rows="4" class="text-input"></textarea>
-          <div class="char-count">
-            <span id="personalInfoCount">0</span>/1000
-          </div>
-        </div>
+        <button id="manageResumesBtn" class="action-btn secondary" style="margin-top: 16px;">
+          Manage Resumes in Dashboard
+        </button>
       </div>
 
       <!-- Usage Preferences -->
@@ -224,15 +188,15 @@
         <h2>Data & Privacy</h2>
 
         <div class="info-card">
-          <div class="info-icon">ℹ️</div>
+          <div class="info-icon">i</div>
           <div class="info-content">
             <h3>Your Privacy Matters</h3>
             <ul>
-              <li>Your resume and profile data are stored locally in your browser</li>
+              <li>Your default resume is stored in your Aletheia account</li>
               <li>Authentication uses your existing Aletheia web app session</li>
-              <li>No API keys are stored — your account session is used securely</li>
+              <li>No API keys are stored; your account session is used securely</li>
               <li>LinkedIn profile data is read temporarily and not permanently stored</li>
-              <li>No data is shared with third parties</li>
+              <li>Generated message history for style learning stays local to this extension</li>
             </ul>
           </div>
         </div>
@@ -242,7 +206,7 @@
             Clear All Data
           </button>
           <div class="help-text">
-            This will remove your session, resume, settings, and usage history
+            This will remove your local session, settings, and usage history
           </div>
         </div>
 
@@ -272,19 +236,18 @@
     <!-- Status Messages -->
     <div id="statusMessage" class="status-message hidden">
       <span id="statusText">Settings saved successfully!</span>
-      <button id="closeStatus" class="close-btn">✖️</button>
+      <button id="closeStatus" class="close-btn">x</button>
     </div>
 
     <!-- Loading Overlay -->
     <div id="loadingOverlay" class="loading-overlay hidden">
       <div class="loading-content">
-        <div class="loading-spinner">⏳</div>
+        <div class="loading-spinner">...</div>
         <div id="loadingText">Processing...</div>
       </div>
     </div>
   </div>
 
-  <script src="resume-parser-core.js"></script>
   <script src="settings.js"></script>
 </body>
 

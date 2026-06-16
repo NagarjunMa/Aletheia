@@ -4,6 +4,8 @@ import Link from "next/link";
 import Image from "next/image";
 import ShaderBackground from "@/components/ShaderBackground";
 import ProfileForm from "./ProfileForm";
+import ResumeManager from "./ResumeManager";
+import { listUserResumes, MAX_RESUMES_PER_USER } from "@/lib/resumes/service";
 
 export default async function ProfilePage() {
   const supabase = await createClient();
@@ -21,6 +23,7 @@ export default async function ProfilePage() {
     .select("*")
     .eq("id", user.id)
     .single();
+  const resumes = await listUserResumes(supabase, user.id).catch(() => []);
 
   const displayName = profile?.full_name || user.email?.split("@")[0] || "User";
   const email = profile?.email || user.email || "";
@@ -113,8 +116,12 @@ export default async function ProfilePage() {
 
         <ProfileForm
           initialFullName={profile?.full_name ?? ""}
-          initialResume={profile?.resume ?? ""}
           initialTargetJobDescription={profile?.target_job_description ?? ""}
+        />
+
+        <ResumeManager
+          initialResumes={resumes}
+          maxResumes={MAX_RESUMES_PER_USER}
         />
       </div>
     </div>
