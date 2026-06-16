@@ -116,8 +116,8 @@ describe("formatGeneratedEmailBody", () => {
 
   it("uses stricter word limits for concise email modes", () => {
     const expectations: Array<[EmailMode, number]> = [
-      ["initial_outreach", 150],
-      ["founder_ceo_outreach", 190],
+      ["initial_outreach", 130],
+      ["founder_ceo_outreach", 155],
       ["role_fit_summary", 110],
       ["clarification", 90],
       ["follow_up", 90],

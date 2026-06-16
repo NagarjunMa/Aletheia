@@ -364,7 +364,7 @@ describe("COLD_EMAIL_PROMPT subject line policy", () => {
   ];
 
   it("tracks the prompt behavior change with a new version", () => {
-    expect(PROMPT_VERSION).toBe("1.5.0");
+    expect(PROMPT_VERSION).toBe("1.6.0");
   });
 
   it("documents scenario-specific email modes", () => {
@@ -379,8 +379,15 @@ describe("COLD_EMAIL_PROMPT subject line policy", () => {
     expect(COLD_EMAIL_PROMPT).toContain(
       "Do not list generic skillsets. Convert skills into specific experience",
     );
-    expect(COLD_EMAIL_PROMPT).toContain("founder_ceo_outreach: 120-190 words");
-    expect(COLD_EMAIL_PROMPT).toContain("initial_outreach: 100-150 words");
+    expect(COLD_EMAIL_PROMPT).toContain("founder_ceo_outreach: 105-155 words");
+    expect(COLD_EMAIL_PROMPT).toContain("initial_outreach: 85-130 words");
+    expect(COLD_EMAIL_PROMPT).toContain("Prefer context density over length");
+    expect(COLD_EMAIL_PROMPT).toContain(
+      "Do not spend more words praising the company than proving candidate relevance.",
+    );
+    expect(COLD_EMAIL_PROMPT).toContain(
+      'avoid "huge congratulations", "massive", "immediately caught my eye"',
+    );
   });
 
   it("documents LinkedIn connection note polish rules", () => {

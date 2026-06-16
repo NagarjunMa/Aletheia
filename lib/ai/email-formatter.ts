@@ -13,8 +13,8 @@ export const EMAIL_MODE_WORD_LIMITS: Record<
   EmailMode,
   { min: number; max: number }
 > = {
-  initial_outreach: { min: 80, max: 150 },
-  founder_ceo_outreach: { min: 120, max: 190 },
+  initial_outreach: { min: 85, max: 130 },
+  founder_ceo_outreach: { min: 105, max: 155 },
   follow_up: { min: 30, max: 90 },
   clarification: { min: 40, max: 90 },
   role_fit_summary: { min: 40, max: 110 },
