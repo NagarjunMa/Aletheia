@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import Image from "next/image";
+import Link from "next/link";
 import { Menu, X } from "lucide-react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
@@ -252,6 +253,13 @@ export default function Navbar() {
 
         {/* Right side: CTA */}
         <div className="hidden md:flex items-center gap-3">
+          <Link
+            href="/dashboard"
+            className="btn-secondary"
+            style={{ fontSize: "0.68rem", padding: "0.65rem 1.1rem" }}
+          >
+            Open Dashboard
+          </Link>
           <a
             href={CHROME_WEB_STORE_URL}
             target={
@@ -325,6 +333,19 @@ export default function Navbar() {
           );
         })}
         <div data-mobile-item className="mt-5">
+          <Link
+            href="/dashboard"
+            onClick={() => setMobileOpen(false)}
+            className="btn-secondary"
+            style={{
+              width: "100%",
+              display: "flex",
+              justifyContent: "center",
+              marginBottom: "0.75rem",
+            }}
+          >
+            Open Dashboard
+          </Link>
           <a
             href={CHROME_WEB_STORE_URL}
             target={
