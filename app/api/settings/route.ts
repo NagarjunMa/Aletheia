@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createLogger } from "@/lib/logger";
 import { getCorsHeaders } from "@/lib/cors";
 import { settingsSchema } from "./schema";
+import { listUserResumes } from "@/lib/resumes/service";
 
 const log = createLogger("settings-api");
 
@@ -116,17 +117,27 @@ export async function GET(request: NextRequest) {
 
   log.debug(
     { userId: user.id.substring(0, 8) },
-    "GET /api/settings — fetching profile resume/JD",
+    "GET /api/settings - fetching profile settings",
   );
 
   const { data, error } = await supabase
     .from("profiles")
-    .select("resume, target_job_description, resume_updated_at")
+    .select("target_job_description, resume_updated_at")
     .eq("id", user.id)
     .single();
 
+  let resumes: Awaited<ReturnType<typeof listUserResumes>> = [];
+  try {
+    resumes = await listUserResumes(supabase, user.id);
+  } catch (resumeError) {
+    log.warn(
+      { err: resumeError, userId: user.id.substring(0, 8) },
+      "Failed to fetch resume metadata",
+    );
+  }
+
   if (error) {
-    log.error({ err: error.message }, "Failed to fetch profile resume/JD");
+    log.error({ err: error.message }, "Failed to fetch profile settings");
     return NextResponse.json(
       { error: "Failed to fetch settings" },
       { status: 500, headers: corsHeaders },
@@ -135,9 +146,10 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json(
     {
-      resume: data?.resume ?? null,
       target_job_description: data?.target_job_description ?? null,
       resume_updated_at: data?.resume_updated_at ?? null,
+      primary_resume: resumes.find((resume) => resume.is_primary) ?? null,
+      resume_count: resumes.length,
     },
     { headers: corsHeaders },
   );

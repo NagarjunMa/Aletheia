@@ -133,7 +133,6 @@ describe("buildGeneratePayload", () => {
     expect(result).toEqual({
       profileMarkdown: "md",
       profileUrl: "https://li.com/in/test",
-      resume: "resume text",
       jd: "job desc",
       conversationContext: "",
       category: "cold_email",
@@ -160,6 +159,7 @@ describe("buildGeneratePayload", () => {
 
     expect(result.jd).toBe("");
     expect(result.conversationContext).toBe("Previous thread");
+    expect(result).not.toHaveProperty("resume");
   });
 
   it("defaults empty strings for missing optional fields", () => {
@@ -172,7 +172,6 @@ describe("buildGeneratePayload", () => {
       "referral",
       null,
     );
-    expect(result.resume).toBe("");
     expect(result.jd).toBe("");
     expect(result.conversationContext).toBe("");
     expect(result.emailMode).toBe("initial_outreach");

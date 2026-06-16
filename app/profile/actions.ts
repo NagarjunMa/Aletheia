@@ -8,10 +8,6 @@ const log = createLogger("profile-actions");
 
 const ProfileUpdateSchema = z.object({
   full_name: z.string().trim().max(120).optional().default(""),
-  resume: z
-    .string()
-    .max(50_000, { message: "resume must be 50000 chars or fewer" })
-    .default(""),
   target_job_description: z
     .string()
     .max(20_000, {
@@ -48,9 +44,7 @@ export async function updateProfile(
     .from("profiles")
     .update({
       full_name: parsed.data.full_name || null,
-      resume: parsed.data.resume || null,
       target_job_description: parsed.data.target_job_description || null,
-      resume_updated_at: new Date().toISOString(),
     })
     .eq("id", user.id);
 

@@ -15,7 +15,7 @@ const faqs = [
   },
   {
     q: "How does the resume integration work?",
-    a: "The extension includes a resume field where you paste your background. When generating messages, the AI uses your resume to ground the self-introduction — referencing your actual role, company, and relevant experience instead of inventing credentials. If the resume field is empty, the AI focuses on curiosity about the recipient rather than fabricating your background.",
+    a: "You upload resumes in your Aletheia dashboard and choose one primary resume for generation. When drafting, the AI uses that resume to ground the self-introduction - referencing your actual role, company, and relevant experience instead of inventing credentials. If no primary resume exists, the AI focuses on curiosity about the recipient rather than fabricating your background.",
   },
   {
     q: "Can I try it before paying?",
@@ -31,7 +31,7 @@ const faqs = [
   },
   {
     q: "What data does Aletheia send to its servers?",
-    a: "When you generate a draft, Aletheia sends the recipient's public LinkedIn profile data (name, headline, experience, posts, skills) and your draft preferences (intent, format, resume) to its API. HTML is stripped and injection patterns are blocked before the data leaves your browser. The API passes the sanitized data to the Anthropic Claude model that produces the draft. No LinkedIn credentials are ever transmitted. Drafts you keep are stored locally in the extension to inform future drafts — they are not sent to any server.",
+    a: "When you generate a draft, Aletheia sends the recipient's public LinkedIn profile data (name, headline, experience, posts, skills) and your draft preferences (intent and format) to its API. Your primary resume is loaded from your Aletheia account on the server. HTML is stripped and injection patterns are blocked before the data reaches the model. No LinkedIn credentials are ever transmitted. Drafts you keep are stored locally in the extension to inform future drafts.",
   },
 ];
 

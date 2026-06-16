@@ -9,12 +9,17 @@ const mockSelect = vi.hoisted(() => vi.fn());
 const mockUpsert = vi.hoisted(() => vi.fn());
 const mockFrom = vi.hoisted(() => vi.fn());
 const mockEq = vi.hoisted(() => vi.fn());
+const mockListUserResumes = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(() => ({
     auth: { getUser: mockGetUser },
     from: mockFrom,
   })),
+}));
+
+vi.mock("@/lib/resumes/service", () => ({
+  listUserResumes: mockListUserResumes,
 }));
 
 // ─── Route handler ────────────────────────────────────────────────────────────
@@ -37,6 +42,7 @@ beforeEach(() => {
   mockSelect.mockReset();
   mockFrom.mockReset();
   mockEq.mockReset();
+  mockListUserResumes.mockReset();
 
   // Re-establish upsert chain: from().upsert().select().single()
   mockSelect.mockReturnValue({ single: mockSingle, eq: mockEq });
@@ -252,9 +258,14 @@ describe("PATCH /api/settings", () => {
 // ─── GET /api/settings ────────────────────────────────────────────────────────
 describe("GET /api/settings", () => {
   const MOCK_PROFILE = {
-    resume: "Software engineer with 5 years experience",
     target_job_description: "Looking for senior roles",
     resume_updated_at: "2026-05-01T12:00:00Z",
+  };
+  const MOCK_RESUME = {
+    id: "resume-1",
+    label: "Primary",
+    is_primary: true,
+    parsed_text_chars: 3913,
   };
 
   describe("authentication guard", () => {
@@ -284,25 +295,28 @@ describe("GET /api/settings", () => {
   describe("happy path", () => {
     beforeEach(() => {
       mockGetUser.mockResolvedValue({ data: { user: MOCK_USER }, error: null });
+      mockListUserResumes.mockResolvedValue([MOCK_RESUME]);
     });
 
-    it("returns 200 with resume, target_job_description, and resume_updated_at", async () => {
+    it("returns 200 with target_job_description and primary resume metadata", async () => {
       mockSingle.mockResolvedValue({ data: MOCK_PROFILE, error: null });
 
       const res = await GET(makeRequest({ method: "GET" }));
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.resume).toBe(MOCK_PROFILE.resume);
+      expect(body.resume).toBeUndefined();
       expect(body.target_job_description).toBe(
         MOCK_PROFILE.target_job_description,
       );
       expect(body.resume_updated_at).toBe(MOCK_PROFILE.resume_updated_at);
+      expect(body.primary_resume).toEqual(MOCK_RESUME);
+      expect(body.resume_count).toBe(1);
     });
 
-    it("returns null fields when profile has no resume or JD", async () => {
+    it("returns null fields when profile has no JD or primary resume", async () => {
+      mockListUserResumes.mockResolvedValue([]);
       mockSingle.mockResolvedValue({
         data: {
-          resume: null,
           target_job_description: null,
           resume_updated_at: null,
         },
@@ -312,9 +326,10 @@ describe("GET /api/settings", () => {
       const res = await GET(makeRequest({ method: "GET" }));
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.resume).toBeNull();
       expect(body.target_job_description).toBeNull();
       expect(body.resume_updated_at).toBeNull();
+      expect(body.primary_resume).toBeNull();
+      expect(body.resume_count).toBe(0);
     });
 
     it("queries profiles table with correct user id", async () => {

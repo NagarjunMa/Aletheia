@@ -19,8 +19,8 @@ export default function EmptyState() {
           and load it unpacked at chrome://extensions.
         </li>
         <li>
-          <span className="font-semibold text-white">2.</span> Paste your resume
-          into{" "}
+          <span className="font-semibold text-white">2.</span> Upload a primary
+          resume in{" "}
           <Link href="/profile" className="underline text-white">
             your profile
           </Link>{" "}

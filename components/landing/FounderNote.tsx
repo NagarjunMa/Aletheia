@@ -97,9 +97,9 @@ export default function FounderNote() {
 
           <p>
             Aletheia is the in-between I wanted. It reads the profile I have
-            open and the resume I already pasted in, then puts together a short
-            note in my voice that I review before I send. Same care, none of the
-            tab-juggling.
+            open and the primary resume in my account, then puts together a
+            short note in my voice that I review before I send. Same care, none
+            of the tab-juggling.
           </p>
 
           <p style={{ color: "var(--l-text)" }}>

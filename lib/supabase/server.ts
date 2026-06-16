@@ -215,6 +215,7 @@ export async function getServerTables() {
     generated_drafts: () => supabase.from("generated_drafts"),
     user_feedback: () => supabase.from("user_feedback"),
     user_preferences: () => supabase.from("user_preferences"),
+    user_resumes: () => supabase.from("user_resumes"),
     extension_rate_limits: () => supabase.from("extension_rate_limits"),
   };
 }
@@ -228,6 +229,7 @@ export async function getServiceTables() {
     generated_drafts: () => supabase.from("generated_drafts"),
     user_feedback: () => supabase.from("user_feedback"),
     user_preferences: () => supabase.from("user_preferences"),
+    user_resumes: () => supabase.from("user_resumes"),
     extension_rate_limits: () => supabase.from("extension_rate_limits"),
   };
 }

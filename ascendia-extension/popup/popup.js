@@ -356,7 +356,7 @@ async function generateMessage() {
     const jd = isFollowUp ? '' : contextValue;
     const conversationContext = isFollowUp ? contextValue : '';
 
-    const { resume, accepted = [] } = await chrome.storage.local.get(['resume', 'accepted']);
+    const { accepted = [] } = await chrome.storage.local.get(['accepted']);
 
     const relevantExamples = accepted
       .filter(item => item.category === category)
@@ -368,7 +368,6 @@ async function generateMessage() {
       payload: {
         profileMarkdown: currentProfile.profileMarkdown,
         profileUrl: currentProfile.profileUrl,
-        resume: resume || '',
         jd,
         conversationContext,
         category,

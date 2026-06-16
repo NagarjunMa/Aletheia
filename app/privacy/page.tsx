@@ -162,9 +162,10 @@ export default function PrivacyPage() {
           </p>
           <p>
             The Chrome extension uses <code>chrome.storage.local</code> to
-            remember your sign-in token, your saved resume, and your
-            accepted-message history on your own device. This data does not
-            leave your machine unless you make a generate request.
+            remember your sign-in token, extension preferences, and
+            accepted-message history on your own device. Your uploaded resumes
+            are stored in your Aletheia account rather than in Chrome local
+            storage.
           </p>
         </Section>
 

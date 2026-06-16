@@ -71,6 +71,7 @@ describe("generate flow integration", () => {
     expect(payload.profileMarkdown).toContain("Jane");
     expect(payload.emailMode).toBe("initial_outreach");
     expect(payload.acceptedExamples).toHaveLength(1);
+    expect(payload).not.toHaveProperty("resume");
 
     // 4. Parse response
     const apiResponse = {

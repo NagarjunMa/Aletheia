@@ -1,5 +1,5 @@
 // Aletheia Extension Settings JavaScript
-// Manages extension configuration, resume storage, and preferences
+// Manages extension configuration, account connection, and preferences
 
 // Initialize when DOM loads
 document.addEventListener('DOMContentLoaded', async () => {
@@ -9,7 +9,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   await checkConnectionStatus()
 })
 
-// Production default — used when no custom URL has been saved
+// Production default - used when no custom URL has been saved
 const DEFAULT_API_URL = 'https://www.aletheia.live'
 
 function normalizeApiUrl(apiUrl) {
@@ -23,9 +23,6 @@ function normalizeApiUrl(apiUrl) {
 // Global state
 let currentSettings = {
   apiUrl: DEFAULT_API_URL,
-  resume: '',
-  resumeFile: null,
-  personalInfo: '',
   autoFillEnabled: true,
   showNotifications: true,
   maxDailyUsage: 50
@@ -36,7 +33,7 @@ async function initializeSettings() {
   const { apiBaseUrl } = await chrome.storage.sync.get('apiBaseUrl')
 
   const stored = await chrome.storage.local.get([
-    'apiUrl', 'resume', 'resumeFile', 'personalInfo',
+    'apiUrl',
     'settings'
   ])
 
@@ -52,7 +49,7 @@ async function initializeSettings() {
 }
 
 function setupEventListeners() {
-  // API URL — select dropdown + custom text input + hidden legacy input
+  // API URL - select dropdown + custom text input + hidden legacy input
   document.getElementById('apiUrlSelect').addEventListener('change', handleApiUrlSelectChange)
   document.getElementById('apiUrlCustom').addEventListener('input', handleApiUrlCustomChange)
   document.getElementById('apiUrlInput').addEventListener('input', handleApiUrlChange)
@@ -62,26 +59,7 @@ function setupEventListeners() {
   document.getElementById('connectBtn')?.addEventListener('click', handleConnect)
   document.getElementById('disconnectBtn')?.addEventListener('click', handleDisconnect)
 
-  // Resume Upload
-  const uploadArea = document.getElementById('uploadArea')
-  const fileInput = document.getElementById('resumeUpload')
-  const browseBtn = document.getElementById('browseBtn')
-
-  uploadArea.addEventListener('click', () => fileInput.click())
-  uploadArea.addEventListener('dragover', handleDragOver)
-  uploadArea.addEventListener('drop', handleFileDrop)
-  uploadArea.addEventListener('dragleave', handleDragLeave)
-
-  browseBtn.addEventListener('click', (e) => {
-    e.stopPropagation()
-    fileInput.click()
-  })
-
-  fileInput.addEventListener('change', handleFileSelect)
-  document.getElementById('removeResume')?.addEventListener('click', removeResume)
-
-  // Personal Info
-  document.getElementById('personalInfo').addEventListener('input', handlePersonalInfoChange)
+  document.getElementById('manageResumesBtn')?.addEventListener('click', openResumeDashboard)
 
   // Usage Preferences
   document.getElementById('autoFillEnabled').addEventListener('change', handleAutoFillToggle)
@@ -118,8 +96,6 @@ async function loadUserSettings() {
   }
 
   document.getElementById('apiUrlInput').value = currentUrl
-  document.getElementById('personalInfo').value = currentSettings.personalInfo || ''
-
   // Checkboxes
   document.getElementById('autoFillEnabled').checked = currentSettings.autoFillEnabled !== false
   document.getElementById('showNotifications').checked = currentSettings.showNotifications !== false
@@ -130,12 +106,7 @@ async function loadUserSettings() {
   dailyUsageSlider.value = currentSettings.maxDailyUsage || 50
   dailyUsageValue.textContent = dailyUsageSlider.value
 
-  // Resume preview
-  if (currentSettings.resume || currentSettings.resumeFile) {
-    showResumePreview(currentSettings.resumeFile, currentSettings.resume)
-  }
-
-  updatePersonalInfoCharCount()
+  await removeLegacyResumeIfServerReady()
 }
 
 async function updateStatusIndicators() {
@@ -171,17 +142,11 @@ async function updateStatusIndicators() {
   const resumeStatus = document.getElementById('resumeStatus')
   const resumeStatusText = document.getElementById('resumeStatusText')
 
-  if (currentSettings.resume || currentSettings.resumeFile) {
-    resumeStatus.classList.add('success')
-    resumeStatus.classList.remove('error')
-    resumeStatusText.textContent = 'Uploaded'
-    resumeStatusText.classList.add('success')
-  } else {
-    resumeStatus.classList.add('warning')
-    resumeStatus.classList.remove('success')
-    resumeStatusText.textContent = 'Not uploaded'
-    resumeStatusText.classList.add('warning')
-  }
+  resumeStatus.classList.add('warning')
+  resumeStatus.classList.remove('success', 'error')
+  resumeStatusText.textContent = 'Checking server'
+  resumeStatusText.classList.add('warning')
+  resumeStatusText.classList.remove('success', 'error')
 }
 
 async function checkConnectionStatus() {
@@ -197,6 +162,13 @@ async function checkConnectionStatus() {
     connectionStatus.classList.add('error')
     connectionStatusText.textContent = 'Not connected'
     connectionStatusText.classList.add('error')
+    const resumeStatus = document.getElementById('resumeStatus')
+    const resumeStatusText = document.getElementById('resumeStatusText')
+    resumeStatus.classList.add('warning')
+    resumeStatus.classList.remove('success', 'error')
+    resumeStatusText.textContent = 'Connect first'
+    resumeStatusText.classList.add('warning')
+    resumeStatusText.classList.remove('success', 'error')
     return
   }
 
@@ -213,6 +185,7 @@ async function checkConnectionStatus() {
       connectionStatusText.textContent = 'Connected'
       connectionStatusText.classList.add('success')
       connectionStatusText.classList.remove('error', 'warning')
+      await updateResumeStatus(result.data?.resume)
     } else {
       throw new Error(result?.error || 'Connection failed')
     }
@@ -225,7 +198,47 @@ async function checkConnectionStatus() {
     connectionStatusText.classList.add('error')
     connectionStatusText.classList.remove('success', 'warning')
     connectionStatusText.textContent = error.message || 'Connection failed'
+    await updateResumeStatus(null)
   }
+}
+
+async function updateResumeStatus(resume) {
+  const resumeStatus = document.getElementById('resumeStatus')
+  const resumeStatusText = document.getElementById('resumeStatusText')
+
+  if (resume?.has_primary) {
+    resumeStatus.classList.add('success')
+    resumeStatus.classList.remove('warning', 'error')
+    resumeStatusText.textContent = `${resume.parsed_text_chars || 0} chars ready`
+    resumeStatusText.classList.add('success')
+    resumeStatusText.classList.remove('warning', 'error')
+    await chrome.storage.local.remove(['resume', 'resumeFile'])
+    return
+  }
+
+  resumeStatus.classList.add('warning')
+  resumeStatus.classList.remove('success', 'error')
+  resumeStatusText.textContent = 'Dashboard setup required'
+  resumeStatusText.classList.add('warning')
+  resumeStatusText.classList.remove('success', 'error')
+}
+
+async function removeLegacyResumeIfServerReady() {
+  try {
+    const result = await new Promise((resolve) => {
+      chrome.runtime.sendMessage({ action: 'healthCheck' }, resolve)
+    })
+    if (result?.success) {
+      await updateResumeStatus(result.data?.resume)
+    }
+  } catch (error) {
+    console.warn('Resume status check failed:', error)
+  }
+}
+
+async function openResumeDashboard() {
+  const apiUrl = normalizeApiUrl(currentSettings.apiUrl || DEFAULT_API_URL)
+  await chrome.tabs.create({ url: `${apiUrl}/profile` })
 }
 
 async function handleConnect() {
@@ -244,16 +257,16 @@ async function handleConnect() {
     })
 
     if (result && result.success) {
-      console.log('[SETTINGS] ✓ Connected:', result.user?.email)
+      console.log('[SETTINGS] Connected:', result.user?.email)
       showStatusMessage('Connected to Aletheia!', 'success')
       await updateStatusIndicators()
       await checkConnectionStatus()
     } else {
-      console.error('[SETTINGS] ✗ Failed:', result?.error)
+      console.error('[SETTINGS] Failed:', result?.error)
       showStatusMessage(result?.error || 'Connection failed. Make sure you are logged in to the Aletheia web app.', 'error')
     }
   } catch (error) {
-    console.error('[SETTINGS] ✗ authenticate threw:', error)
+    console.error('[SETTINGS] authenticate threw:', error)
     showStatusMessage('Connection failed: ' + error.message, 'error')
   } finally {
     btn.textContent = originalText
@@ -325,140 +338,6 @@ async function testConnection() {
   }
 }
 
-function handleDragOver(e) {
-  e.preventDefault()
-  e.stopPropagation()
-  document.getElementById('uploadArea').classList.add('drag-over')
-}
-
-function handleDragLeave(e) {
-  e.preventDefault()
-  e.stopPropagation()
-  document.getElementById('uploadArea').classList.remove('drag-over')
-}
-
-function handleFileDrop(e) {
-  e.preventDefault()
-  e.stopPropagation()
-  document.getElementById('uploadArea').classList.remove('drag-over')
-
-  const files = e.dataTransfer.files
-  if (files.length > 0) {
-    processResumeFile(files[0])
-  }
-}
-
-function handleFileSelect(e) {
-  const file = e.target.files[0]
-  if (file) {
-    processResumeFile(file)
-  }
-}
-
-async function processResumeFile(file) {
-  const allowedTypes = ['application/pdf', 'application/msword',
-                       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                       'text/plain']
-  const maxSize = 5 * 1024 * 1024
-
-  if (!allowedTypes.includes(file.type)) {
-    showStatusMessage('Please upload a PDF, DOC, DOCX, or TXT file', 'error')
-    return
-  }
-
-  if (file.size > maxSize) {
-    showStatusMessage('File size must be less than 5MB', 'error')
-    return
-  }
-
-  try {
-    showLoadingOverlay('Processing resume...')
-
-    const content = await readFileContent(file)
-
-    currentSettings.resumeFile = {
-      name: file.name,
-      size: file.size,
-      type: file.type,
-      lastModified: file.lastModified
-    }
-    currentSettings.resume = content
-
-    showResumePreview(currentSettings.resumeFile, content)
-    updateStatusIndicators()
-
-    showStatusMessage('Resume uploaded successfully!', 'success')
-
-  } catch (error) {
-    showStatusMessage('Failed to process resume: ' + error.message, 'error')
-  } finally {
-    hideLoadingOverlay()
-  }
-}
-
-async function readFileContent(file) {
-  try {
-    return await AletheiaResumeParser.readFileContent(file, {
-      apiUrl: currentSettings.apiUrl,
-      chromeApi: chrome,
-      fetcher: fetch
-    })
-  } catch (error) {
-    throw new Error(`Failed to extract content from ${file.name}: ${error.message}`)
-  }
-}
-
-function showResumePreview(fileInfo, content) {
-  const preview = document.getElementById('resumePreview')
-  const fileName = document.getElementById('resumeFileName')
-  const fileSize = document.getElementById('resumeSize')
-  const resumeContent = document.getElementById('resumeContent')
-
-  if (fileInfo) {
-    fileName.textContent = fileInfo.name
-    fileSize.textContent = `${(fileInfo.size / 1024).toFixed(1)} KB`
-  }
-
-  resumeContent.textContent = content.substring(0, 500) + (content.length > 500 ? '...' : '')
-
-  preview.classList.remove('hidden')
-  document.getElementById('uploadArea').style.display = 'none'
-}
-
-function removeResume() {
-  if (confirm('Are you sure you want to remove your resume?')) {
-    currentSettings.resume = ''
-    currentSettings.resumeFile = null
-
-    document.getElementById('resumePreview').classList.add('hidden')
-    document.getElementById('uploadArea').style.display = 'block'
-    document.getElementById('resumeUpload').value = ''
-
-    updateStatusIndicators()
-    showStatusMessage('Resume removed', 'success')
-  }
-}
-
-function handlePersonalInfoChange(e) {
-  currentSettings.personalInfo = e.target.value
-  updatePersonalInfoCharCount()
-}
-
-function updatePersonalInfoCharCount() {
-  const textarea = document.getElementById('personalInfo')
-  const counter = document.getElementById('personalInfoCount')
-  const length = textarea.value.length
-
-  counter.textContent = length
-
-  if (length > 1000) {
-    counter.style.color = '#ef4444'
-    textarea.value = textarea.value.substring(0, 1000)
-  } else {
-    counter.style.color = '#6b7280'
-  }
-}
-
 function handleAutoFillToggle(e) {
   currentSettings.autoFillEnabled = e.target.checked
 }
@@ -487,9 +366,6 @@ async function clearAllData() {
 
     currentSettings = {
       apiUrl: DEFAULT_API_URL,
-      resume: '',
-      resumeFile: null,
-      personalInfo: '',
       autoFillEnabled: true,
       showNotifications: true,
       maxDailyUsage: 50
@@ -562,9 +438,6 @@ async function saveAllSettings() {
 
     await chrome.storage.local.set({
       apiUrl,
-      resume: currentSettings.resume,
-      resumeFile: currentSettings.resumeFile,
-      personalInfo: currentSettings.personalInfo,
       settings: {
         autoFillEnabled: currentSettings.autoFillEnabled,
         showNotifications: currentSettings.showNotifications,
@@ -591,23 +464,18 @@ async function resetToDefaults() {
     document.getElementById('apiUrlInput').value = DEFAULT_API_URL
     document.getElementById('apiUrlSelect').value = DEFAULT_API_URL
     document.getElementById('apiUrlCustom').classList.add('hidden')
-    document.getElementById('personalInfo').value = ''
     document.getElementById('autoFillEnabled').checked = true
     document.getElementById('showNotifications').checked = true
     document.getElementById('maxDailyUsage').value = 50
     document.getElementById('dailyUsageValue').textContent = '50'
 
-    const { resume, resumeFile } = currentSettings
     currentSettings = {
-      resume, resumeFile,
       apiUrl: DEFAULT_API_URL,
-      personalInfo: '',
       autoFillEnabled: true,
       showNotifications: true,
       maxDailyUsage: 50
     }
 
-    updatePersonalInfoCharCount()
     showStatusMessage('Settings reset to defaults', 'success')
 
   } catch (error) {
@@ -656,9 +524,6 @@ function autoSave() {
       await chrome.storage.sync.set({ apiBaseUrl: apiUrl })
       await chrome.storage.local.set({
         apiUrl,
-        resume: currentSettings.resume,
-        resumeFile: currentSettings.resumeFile,
-        personalInfo: currentSettings.personalInfo,
         settings: {
           autoFillEnabled: currentSettings.autoFillEnabled,
           showNotifications: currentSettings.showNotifications,
