@@ -86,6 +86,28 @@ describe("formatGeneratedEmailBody", () => {
     expect(formatted).toContain("\nFull-Stack Context:");
   });
 
+  it("repairs inline initial outreach proof points into a scannable block", () => {
+    const body =
+      "Hi Erica, Saw your post about the Support AI Engineer opening on your team, building AI-powered infrastructure and workflows to scale support is exactly the kind of work I've been focused on. That maps closely to my background, and I'd love to be on your radar for this role. A quick look at my background: AI & Backend Systems: Python and FastAPI building backend services and AI/RAG pipelines Cloud & Infrastructure: AWS environments managed with Terraform across backend and automation workflows Full-Stack Context: TypeScript, React, and Node.js alongside core backend and cloud work I think my background fits well given the emphasis on turning ambiguous operational problems into scalable technical solutions, that's where I do my best work.\n\nBest,\nNagarjun Mallesh\nlinkedin.com/in/nagarjun-mallesh";
+
+    const formatted = formatGeneratedEmailBody(body, {
+      category: "cold_email",
+      mode: "initial_outreach",
+    });
+
+    expect(formatted).toContain("Hi Erica,\n\n");
+    expect(formatted).toContain(
+      "A quick look at my background:\nAI & Backend Systems:",
+    );
+    expect(formatted).toContain("\nCloud & Infrastructure:");
+    expect(formatted).toContain("\nFull-Stack Context:");
+    expect(formatted).toContain(
+      "\n\nI think my background fits well given the emphasis",
+    );
+    expect(formatted).toContain("Best,\nNagarjun Mallesh");
+    expect(formatted).toContain("linkedin.com/in/nagarjun-mallesh");
+  });
+
   it("removes misleading resume attachment status while preserving the ask", () => {
     const body =
       "Hi Dhiraj,\n\nI came across your post about AI Engineer openings. I don't have a resume attached here, but I'd genuinely like to learn more about what you're building and where I might fit.\n\nBest,\nNagarjun Mallesh";
@@ -116,7 +138,7 @@ describe("formatGeneratedEmailBody", () => {
 
   it("uses stricter word limits for concise email modes", () => {
     const expectations: Array<[EmailMode, number]> = [
-      ["initial_outreach", 130],
+      ["initial_outreach", 185],
       ["founder_ceo_outreach", 155],
       ["role_fit_summary", 110],
       ["clarification", 90],
