@@ -13,7 +13,7 @@ export const EMAIL_MODE_WORD_LIMITS: Record<
   EmailMode,
   { min: number; max: number }
 > = {
-  initial_outreach: { min: 85, max: 130 },
+  initial_outreach: { min: 120, max: 185 },
   founder_ceo_outreach: { min: 105, max: 155 },
   follow_up: { min: 30, max: 90 },
   clarification: { min: 40, max: 90 },
@@ -129,8 +129,78 @@ function splitSentences(paragraph: string): string[] {
   ).filter(Boolean);
 }
 
+const STRUCTURED_PROOF_LABEL =
+  "[A-Z][A-Za-z0-9.+/-]*(?:\\s+(?:&\\s+)?[A-Z][A-Za-z0-9.+/-]*){0,4}";
+
+const STRUCTURED_PROOF_LINE = new RegExp(`^${STRUCTURED_PROOF_LABEL}:\\s+\\S`);
+
 function isStructuredProofLine(line: string): boolean {
-  return /^[A-Z][A-Za-z0-9 &/+.-]{1,60}:\s+\S/.test(line.trim());
+  return STRUCTURED_PROOF_LINE.test(line.trim());
+}
+
+const INLINE_PROOF_LABEL = new RegExp(
+  `\\s+(${STRUCTURED_PROOF_LABEL}:\\s+(?=[A-Z0-9]))`,
+  "g",
+);
+
+const POST_PROOF_SENTENCE_START =
+  /\s+((?:I think|I can|I would|I’d|I'd|That|This|Given|My background|Would you|Are you|Happy to|Please|Let me)\b[\s\S]*)$/;
+
+function repairStructuredProofBlocks(body: string): string {
+  return body.replace(
+    /(A quick look at my background:)([\s\S]*?)(?=(?:\n\n(?:Best|Thanks|Regards|Sincerely|Appreciate it either way),?\n)|$)/gi,
+    (_match, heading: string, content: string) => {
+      const normalizedContent = String(content)
+        .trim()
+        .replace(/^/, " ")
+        .replace(INLINE_PROOF_LABEL, "\n$1")
+        .replace(/^\n+/, "");
+
+      if (!normalizedContent) {
+        return heading;
+      }
+
+      const lines = normalizedContent
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean);
+
+      const repairedLines: string[] = [];
+      let trailingParagraph = "";
+
+      for (const line of lines) {
+        if (!isStructuredProofLine(line)) {
+          trailingParagraph = trailingParagraph
+            ? `${trailingParagraph} ${line}`
+            : line;
+          continue;
+        }
+
+        const trailingMatch = line.match(POST_PROOF_SENTENCE_START);
+        const trailingSentence = trailingMatch?.[1]?.trim();
+        if (
+          trailingMatch?.index &&
+          trailingMatch.index > 0 &&
+          trailingSentence
+        ) {
+          repairedLines.push(line.slice(0, trailingMatch.index).trim());
+          trailingParagraph = trailingParagraph
+            ? `${trailingParagraph} ${trailingSentence}`
+            : trailingSentence;
+        } else {
+          repairedLines.push(line);
+        }
+      }
+
+      return [
+        heading,
+        repairedLines.join("\n"),
+        trailingParagraph ? `\n\n${trailingParagraph}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n");
+    },
+  );
 }
 
 function containsStructuredProofLines(paragraph: string): boolean {
@@ -222,6 +292,8 @@ function normalizeBodyParagraphs(body: string, mode: EmailMode): string {
     .replace(/\s+(A quick look at my background:)/gi, "\n\n$1")
     .replace(/\s+(Interested in\b|Would you\b|If this\b)/gi, "\n\n$1")
     .replace(/\s+(Please advise\b)/gi, "\n\n$1");
+
+  remainder = repairStructuredProofBlocks(remainder);
 
   const targetParagraphMax = mode === "role_fit_summary" ? 75 : 90;
   const paragraphs = remainder

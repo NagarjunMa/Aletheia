@@ -364,7 +364,7 @@ describe("COLD_EMAIL_PROMPT subject line policy", () => {
   ];
 
   it("tracks the prompt behavior change with a new version", () => {
-    expect(PROMPT_VERSION).toBe("1.6.0");
+    expect(PROMPT_VERSION).toBe("1.7.0");
   });
 
   it("documents scenario-specific email modes", () => {
@@ -380,13 +380,22 @@ describe("COLD_EMAIL_PROMPT subject line policy", () => {
       "Do not list generic skillsets. Convert skills into specific experience",
     );
     expect(COLD_EMAIL_PROMPT).toContain("founder_ceo_outreach: 105-155 words");
-    expect(COLD_EMAIL_PROMPT).toContain("initial_outreach: 85-130 words");
+    expect(COLD_EMAIL_PROMPT).toContain("initial_outreach: 120-185 words");
     expect(COLD_EMAIL_PROMPT).toContain("Prefer context density over length");
     expect(COLD_EMAIL_PROMPT).toContain(
       "Do not spend more words praising the company than proving candidate relevance.",
     );
     expect(COLD_EMAIL_PROMPT).toContain(
+      "Never inline proof points into a paragraph",
+    );
+    expect(COLD_EMAIL_PROMPT).toContain(
+      "The simple ask and signature are mandatory.",
+    );
+    expect(COLD_EMAIL_PROMPT).toContain(
       'avoid "huge congratulations", "massive", "immediately caught my eye"',
+    );
+    expect(COLD_EMAIL_PROMPT).toContain(
+      "Proof points must stay visually scannable",
     );
   });
 
