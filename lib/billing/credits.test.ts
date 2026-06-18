@@ -6,6 +6,7 @@ import {
   getGenerationCreditCost,
   grantTrialCreditsOnce,
   isBillableGenerationCategory,
+  isUnlimitedCreditUser,
   reserveGenerationCredits,
   refundGenerationCredits,
   TRIAL_CREDITS,
@@ -52,6 +53,13 @@ describe("credit billing rules", () => {
     expect(getGenerationCreditCost("linkedin_connection")).toBe(2);
     expect(getGenerationCreditCost("cold_email")).toBe(4);
     expect(getGenerationCreditCost("linkedin_inmail")).toBe(4);
+  });
+
+  it("marks the development account as unlimited credit access", () => {
+    expect(isUnlimitedCreditUser("nagarjunmallesh@gmail.com")).toBe(true);
+    expect(isUnlimitedCreditUser("NagarjunMallesh@gmail.com")).toBe(true);
+    expect(isUnlimitedCreditUser("user@example.com")).toBe(false);
+    expect(isUnlimitedCreditUser(null)).toBe(false);
   });
 });
 

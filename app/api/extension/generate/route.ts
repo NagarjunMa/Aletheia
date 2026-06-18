@@ -24,6 +24,7 @@ import {
   CREDIT_BILLING_ENABLED,
   grantTrialCreditsOnce,
   isBillableGenerationCategory,
+  isUnlimitedCreditUser,
   refundGenerationCredits,
   reserveGenerationCredits,
 } from "@/lib/billing/credits";
@@ -190,7 +191,8 @@ export async function POST(request: NextRequest) {
   let reservedUserId: string | undefined;
   let reservedCredit: ReservedCredit | undefined;
   let creditCost: number | undefined;
-  let creditsRemaining: number | undefined;
+  let creditsRemaining: number | null | undefined;
+  let billingMode: "credits" | "unlimited_developer" | undefined;
 
   try {
     // 1. Auth check FIRST (before rate limiting)
@@ -267,48 +269,61 @@ export async function POST(request: NextRequest) {
       acceptedExamples,
     } = validatedData;
 
+    const unlimitedCreditUser = isUnlimitedCreditUser(authResult.email);
+
     if (CREDIT_BILLING_ENABLED && isBillableGenerationCategory(category)) {
-      const billingClient = getSupabaseService();
-      await grantTrialCreditsOnce(billingClient, authResult.userId);
-      const reservation = await reserveGenerationCredits(
-        billingClient,
-        authResult.userId,
-        category,
-      );
-      creditCost = reservation.cost;
-      creditsRemaining = reservation.balanceAfter;
-
-      if (!reservation.allowed || !reservation.reservationId) {
-        await releaseRateLimitReservation(authResult.userId);
-        reservedUserId = undefined;
-        return NextResponse.json(
-          {
-            success: false,
-            error: "Insufficient credits",
-            code: "INSUFFICIENT_CREDITS",
-            message:
-              "You are out of credits. Buy more credits in the Aletheia dashboard.",
-            billingMode: "credits",
-            creditCost,
-            creditsRemaining,
-          },
-          {
-            status: 402,
-            headers: {
-              ...corsHeaders,
-              "X-RateLimit-Limit": String(DAILY_LIMIT),
-              "X-RateLimit-Remaining": String(rateCheck.remainingRequests),
-              "X-RateLimit-Reset": String(rateCheck.resetTime),
-            },
-          },
+      if (unlimitedCreditUser) {
+        creditCost = 0;
+        creditsRemaining = null;
+        billingMode = "unlimited_developer";
+        log.info(
+          { userId: authResult.userId.substring(0, 12), category },
+          "Unlimited developer credits applied",
         );
-      }
+      } else {
+        const billingClient = getSupabaseService();
+        await grantTrialCreditsOnce(billingClient, authResult.userId);
+        const reservation = await reserveGenerationCredits(
+          billingClient,
+          authResult.userId,
+          category,
+        );
+        creditCost = reservation.cost;
+        creditsRemaining = reservation.balanceAfter;
+        billingMode = "credits";
 
-      reservedCredit = {
-        userId: authResult.userId,
-        reservationId: reservation.reservationId,
-        amount: reservation.cost,
-      };
+        if (!reservation.allowed || !reservation.reservationId) {
+          await releaseRateLimitReservation(authResult.userId);
+          reservedUserId = undefined;
+          return NextResponse.json(
+            {
+              success: false,
+              error: "Insufficient credits",
+              code: "INSUFFICIENT_CREDITS",
+              message:
+                "You are out of credits. Buy more credits in the Aletheia dashboard.",
+              billingMode: "credits",
+              creditCost,
+              creditsRemaining,
+            },
+            {
+              status: 402,
+              headers: {
+                ...corsHeaders,
+                "X-RateLimit-Limit": String(DAILY_LIMIT),
+                "X-RateLimit-Remaining": String(rateCheck.remainingRequests),
+                "X-RateLimit-Reset": String(rateCheck.resetTime),
+              },
+            },
+          );
+        }
+
+        reservedCredit = {
+          userId: authResult.userId,
+          reservationId: reservation.reservationId,
+          amount: reservation.cost,
+        };
+      }
     }
 
     // Server-owned resume context is now the source of truth. The request-body
@@ -581,9 +596,10 @@ export async function POST(request: NextRequest) {
               evalMetadata,
               ...(CREDIT_BILLING_ENABLED
                 ? {
-                    billingMode: "credits",
+                    billingMode,
                     creditCost,
                     creditsRemaining,
+                    unlimitedCredits: unlimitedCreditUser,
                   }
                 : {}),
             },
@@ -675,9 +691,10 @@ export async function POST(request: NextRequest) {
         evalMetadata,
         ...(CREDIT_BILLING_ENABLED
           ? {
-              billingMode: "credits",
+              billingMode,
               creditCost,
               creditsRemaining,
+              unlimitedCredits: unlimitedCreditUser,
             }
           : {}),
       },

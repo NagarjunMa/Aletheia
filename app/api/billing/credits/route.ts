@@ -4,6 +4,7 @@ import {
   CREDIT_PACKS,
   ensureCreditAccount,
   grantTrialCreditsOnce,
+  isUnlimitedCreditUser,
 } from "@/lib/billing/credits";
 import { createLogger } from "@/lib/logger";
 
@@ -19,6 +20,20 @@ export async function GET() {
 
     if (authError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    if (isUnlimitedCreditUser(user.email)) {
+      return NextResponse.json({
+        billingMode: "unlimited_developer",
+        unlimitedCredits: true,
+        balance: null,
+        lifetimeCreditsPurchased: 0,
+        lifetimeCreditsUsed: 0,
+        trialCreditsGrantedAt: null,
+        creditExpiry: null,
+        packs: Object.values(CREDIT_PACKS),
+        ledger: [],
+      });
     }
 
     const service = await createServiceClient();

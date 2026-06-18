@@ -133,6 +133,8 @@ supabase/migrations/
 | `SENTRY_DSN` | Error tracking |
 | `LOG_LEVEL` | Pino log level — `debug` (dev default) / `info` (prod default) |
 | `EXTENSION_DAILY_LIMIT` | Max generation requests per user per day (default: 30) |
+| `CREDIT_BILLING_ENABLED` | Enables credit debit enforcement for generation |
+| `CREDIT_BILLING_UNLIMITED_EMAILS` | Comma-separated verified-auth emails that bypass credit debits for development/testing |
 
 Copy `.env.local.example` → `.env.local` for local dev. Never commit secrets.
 

@@ -4,6 +4,8 @@ import type { Database, Json } from "@/lib/database/types";
 export const CREDIT_BILLING_ENABLED =
   process.env.CREDIT_BILLING_ENABLED === "true";
 
+const DEFAULT_UNLIMITED_CREDIT_EMAILS = ["nagarjunmallesh@gmail.com"];
+
 export const TRIAL_CREDITS = 40;
 
 export const GENERATION_CREDIT_COSTS = {
@@ -51,6 +53,15 @@ export type CreditReservation = {
   cost: number;
 };
 
+function parseUnlimitedCreditEmails(): Set<string> {
+  const configuredEmails = (process.env.CREDIT_BILLING_UNLIMITED_EMAILS ?? "")
+    .split(",")
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean);
+
+  return new Set([...DEFAULT_UNLIMITED_CREDIT_EMAILS, ...configuredEmails]);
+}
+
 type BillingSupabaseClient = Pick<SupabaseClient<Database>, "rpc" | "from">;
 
 function firstRow<T>(rows: T[] | null | undefined): T | null {
@@ -82,6 +93,11 @@ export function isBillableGenerationCategory(
   category: string,
 ): category is BillableGenerationCategory {
   return category in GENERATION_CREDIT_COSTS;
+}
+
+export function isUnlimitedCreditUser(email: string | null | undefined) {
+  if (!email) return false;
+  return parseUnlimitedCreditEmails().has(email.trim().toLowerCase());
 }
 
 export async function ensureCreditAccount(
