@@ -172,6 +172,41 @@ describe("POST /api/extension/generate with credit billing enabled", () => {
     );
   });
 
+  it("does not reserve or debit credits for the development account", async () => {
+    mockAuthGetUser.mockResolvedValue({
+      data: {
+        user: {
+          id: "dev-user-id",
+          email: "nagarjunmallesh@gmail.com",
+        },
+      },
+      error: null,
+    });
+    const { POST } = await importRouteWithBillingEnabled();
+
+    const res = await POST(
+      makeRequest({
+        method: "POST",
+        headers: { authorization: "Bearer test" },
+        body: validPayload,
+      }),
+    );
+    const body = await res.json();
+    const rpcCalls = mockRpc.mock.calls.map((call) => call[0]);
+
+    expect(res.status).toBe(200);
+    expect(body).toMatchObject({
+      billingMode: "unlimited_developer",
+      creditCost: 0,
+      creditsRemaining: null,
+      unlimitedCredits: true,
+    });
+    expect(rpcCalls).toContain("check_and_increment_rate_limit");
+    expect(rpcCalls).not.toContain("grant_trial_credits_once");
+    expect(rpcCalls).not.toContain("reserve_generation_credits");
+    expect(rpcCalls).not.toContain("refund_generation_credits");
+  });
+
   it("returns 402 and releases the daily slot when credits are insufficient", async () => {
     mockRpc.mockImplementation(async (name: string) => {
       if (name === "check_and_increment_rate_limit") {

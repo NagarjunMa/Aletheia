@@ -20,7 +20,9 @@ type LedgerRow = {
 };
 
 type CreditSummary = {
-  balance: number;
+  billingMode?: "credits" | "unlimited_developer";
+  unlimitedCredits?: boolean;
+  balance: number | null;
   lifetimeCreditsPurchased: number;
   lifetimeCreditsUsed: number;
   creditExpiry: null;
@@ -87,14 +89,19 @@ export default function CreditsPanel() {
           </div>
           <div className="mt-5">
             <p className="text-4xl font-bold leading-none text-white">
-              {isLoading ? "..." : (summary?.balance ?? 0).toLocaleString()}
+              {isLoading
+                ? "..."
+                : summary?.unlimitedCredits
+                  ? "Unlimited"
+                  : (summary?.balance ?? 0).toLocaleString()}
               <span className="ml-2 text-base font-normal text-[#CBEFEB]/62">
-                available
+                {summary?.unlimitedCredits ? "developer access" : "available"}
               </span>
             </p>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-[#CBEFEB]/70">
-              LinkedIn connections use 2 credits. Emails and InMails use 4.
-              Credits do not expire; daily limits still protect the app.
+              {summary?.unlimitedCredits
+                ? "This development account bypasses credit debits for testing. Daily limits still protect the app."
+                : "LinkedIn connections use 2 credits. Emails and InMails use 4. Credits do not expire; daily limits still protect the app."}
             </p>
             {error && (
               <p className="mt-3 text-sm font-semibold text-rose-200">

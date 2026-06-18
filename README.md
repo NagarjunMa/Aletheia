@@ -131,6 +131,8 @@ Copy `.env.local.example` to `.env.local`.
 | `NEXT_PUBLIC_SENTRY_DSN` | — | Sentry client errors |
 | `SENTRY_DSN` | — | Sentry server/edge errors |
 | `EXTENSION_DAILY_LIMIT` | `30` | Max generation requests per user per day |
+| `CREDIT_BILLING_ENABLED` | `false` | Enable credit debit enforcement for generation |
+| `CREDIT_BILLING_UNLIMITED_EMAILS` | `nagarjunmallesh@gmail.com` | Comma-separated verified-auth emails that bypass credit debits for development/testing |
 | `NEXT_TELEMETRY_DISABLED` | — | Set `1` to opt out of Next.js telemetry |
 
 ---

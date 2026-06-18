@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mockGetUser = vi.hoisted(() => vi.fn());
 const mockGrantTrialCreditsOnce = vi.hoisted(() => vi.fn());
 const mockEnsureCreditAccount = vi.hoisted(() => vi.fn());
+const mockIsUnlimitedCreditUser = vi.hoisted(() => vi.fn());
 const mockFrom = vi.hoisted(() => vi.fn());
 const mockSelect = vi.hoisted(() => vi.fn());
 const mockEq = vi.hoisted(() => vi.fn());
@@ -26,6 +27,7 @@ vi.mock("@/lib/billing/credits", () => ({
   },
   ensureCreditAccount: mockEnsureCreditAccount,
   grantTrialCreditsOnce: mockGrantTrialCreditsOnce,
+  isUnlimitedCreditUser: mockIsUnlimitedCreditUser,
 }));
 
 import { GET } from "./route";
@@ -39,6 +41,7 @@ beforeEach(() => {
   mockGetUser.mockReset();
   mockGrantTrialCreditsOnce.mockReset();
   mockEnsureCreditAccount.mockReset();
+  mockIsUnlimitedCreditUser.mockReset();
   mockFrom.mockReset();
   mockSelect.mockReset();
   mockEq.mockReset();
@@ -46,6 +49,7 @@ beforeEach(() => {
   mockLimit.mockReset();
 
   mockGetUser.mockResolvedValue({ data: { user: MOCK_USER }, error: null });
+  mockIsUnlimitedCreditUser.mockReturnValue(false);
   mockGrantTrialCreditsOnce.mockResolvedValue({ granted: true, balance: 40 });
   mockEnsureCreditAccount.mockResolvedValue({
     balance: 40,
@@ -114,6 +118,31 @@ describe("GET /api/billing/credits", () => {
       ],
     });
     expect(body.ledger).toHaveLength(1);
+  });
+
+  it("returns unlimited developer access without mutating credit rows", async () => {
+    mockGetUser.mockResolvedValue({
+      data: {
+        user: { ...MOCK_USER, email: "nagarjunmallesh@gmail.com" },
+      },
+      error: null,
+    });
+    mockIsUnlimitedCreditUser.mockReturnValue(true);
+
+    const res = await GET();
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body).toMatchObject({
+      billingMode: "unlimited_developer",
+      unlimitedCredits: true,
+      balance: null,
+      creditExpiry: null,
+      ledger: [],
+    });
+    expect(mockGrantTrialCreditsOnce).not.toHaveBeenCalled();
+    expect(mockEnsureCreditAccount).not.toHaveBeenCalled();
+    expect(mockFrom).not.toHaveBeenCalled();
   });
 
   it("returns 500 when the ledger query fails", async () => {
