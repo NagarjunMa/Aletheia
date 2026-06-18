@@ -222,7 +222,7 @@ export default function Hero() {
           animate={{ opacity: 1 }}
           transition={{ duration: 0.5, delay: 1.05 }}
         >
-          Available for Chrome · Free · 30 drafts/day
+          Available for Chrome · 40 free credits · Daily abuse limits
         </motion.p>
 
         <motion.p

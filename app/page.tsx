@@ -16,7 +16,7 @@ export const metadata: Metadata = {
   title:
     "Aletheia — LinkedIn outreach drafted from their profile and your resume",
   description:
-    "Chrome extension that drafts personal LinkedIn connection requests, cold emails, and InMails from the recipient's profile and your resume. Review every draft before you send. Free tier: 30 drafts/day.",
+    "Chrome extension that drafts personal LinkedIn connection requests, cold emails, and InMails from the recipient's profile and your resume. Start with 40 free credits and review every draft before you send.",
   keywords: [
     "LinkedIn outreach",
     "LinkedIn drafting tool",
@@ -33,7 +33,7 @@ export const metadata: Metadata = {
     title:
       "Aletheia — personal LinkedIn outreach, drafted from their profile and your resume",
     description:
-      "Chrome extension that drafts personal LinkedIn connection requests, cold emails, and InMails from the recipient's profile and your resume. Review every draft before you send. Free tier: 30 drafts/day.",
+      "Chrome extension that drafts personal LinkedIn connection requests, cold emails, and InMails from the recipient's profile and your resume. Start with 40 free credits and review every draft before you send.",
     type: "website",
     images: [{ url: "/Aletheia.svg", width: 1200, height: 630 }],
   },
@@ -42,7 +42,7 @@ export const metadata: Metadata = {
     title:
       "Aletheia — personal LinkedIn outreach, drafted from their profile and your resume",
     description:
-      "Chrome extension that drafts personal LinkedIn connection requests, cold emails, and InMails from the recipient's profile and your resume. Review every draft before you send. Free tier: 30 drafts/day.",
+      "Chrome extension that drafts personal LinkedIn connection requests, cold emails, and InMails from the recipient's profile and your resume. Start with 40 free credits and review every draft before you send.",
   },
 };
 

@@ -15,46 +15,75 @@ type Tier = {
   features: string[];
 };
 
-// TODO(stripe): Re-enable Pro tier (commented below) once Stripe is wired and
-// payments are live. The "RECOMMENDED" badge has replaced the old "MOST POPULAR"
-// label, since RECOMMENDED is editorial and does not falsely imply user volume.
+// TODO(stripe): Wire these dashboard CTAs to Stripe Checkout once the webhook
+// is ready to apply purchased credits through apply_credit_purchase().
 const tiers: Tier[] = [
   {
-    name: "Free",
+    name: "Trial",
     monthlyPrice: 0,
-    period: "/mo",
+    period: "/trial",
     description:
-      "30 drafts per day. Reads the profile you have open and your resume. Short, on-purpose notes — every time.",
+      "40 credits to test resume-aware generation across LinkedIn notes, cold emails, and InMails.",
     cta: "Download Extension",
     ctaHref: "/install",
     download: false,
     highlighted: false,
     features: [
-      "30 drafts/day — connections, cold emails, InMails",
-      "Profile + resume grounded",
-      "Sounds like you wrote it",
-      "Review before you send",
+      "40 credits with no expiry",
+      "2 credits per LinkedIn connection",
+      "4 credits per email or InMail",
+      "Daily limits still protect the app",
     ],
   },
-  // Pro tier — hidden until Stripe is wired.
-  // {
-  //     name: 'Pro',
-  //     monthlyPrice: 19,
-  //     annualPrice: 15,
-  //     period: '/mo',
-  //     description: 'Unlimited messages. Resume grounding weaves your real background into every message. Adaptive learning from accepted messages matches your proven writing style.',
-  //     cta: 'Get Pro',
-  //     ctaHref: '#cta',
-  //     download: false,
-  //     highlighted: true,
-  //     badge: 'RECOMMENDED',
-  //     features: [
-  //         'Unlimited messages across all 3 formats',
-  //         'Resume-grounded self-introduction',
-  //         'Adaptive style learning (3 accepted examples)',
-  //         'Priority support',
-  //     ],
-  // },
+  {
+    name: "Starter",
+    monthlyPrice: 5,
+    period: "one-time",
+    description: "A small refill for focused outreach runs.",
+    cta: "View Credits",
+    ctaHref: "/dashboard",
+    download: false,
+    highlighted: false,
+    features: [
+      "60 credits",
+      "Up to 30 LinkedIn connection notes",
+      "Up to 15 emails or InMails",
+      "Credits never expire",
+    ],
+  },
+  {
+    name: "Plus",
+    monthlyPrice: 7,
+    period: "one-time",
+    description: "The best fit for weekly outreach without a subscription.",
+    cta: "View Credits",
+    ctaHref: "/dashboard",
+    download: false,
+    highlighted: true,
+    badge: "RECOMMENDED",
+    features: [
+      "100 credits",
+      "Up to 50 LinkedIn connection notes",
+      "Up to 25 emails or InMails",
+      "Sounds like you wrote it",
+    ],
+  },
+  {
+    name: "Pro",
+    monthlyPrice: 20,
+    period: "one-time",
+    description: "Larger batch capacity for heavier search cycles.",
+    cta: "View Credits",
+    ctaHref: "/dashboard",
+    download: false,
+    highlighted: false,
+    features: [
+      "500 credits",
+      "Up to 250 LinkedIn connection notes",
+      "Up to 125 emails or InMails",
+      "No credit expiry",
+    ],
+  },
 ];
 
 export default function Pricing() {
@@ -91,16 +120,14 @@ export default function Pricing() {
               letterSpacing: "-0.02em",
             }}
           >
-            Free while we&apos;re in beta.{" "}
-            <em style={{ fontStyle: "italic" }}>
-              Paid tiers when you ask for them.
-            </em>
+            Start with 40 credits.{" "}
+            <em style={{ fontStyle: "italic" }}>Refill when you need to.</em>
           </h2>
         </motion.div>
 
         {/* Pricing cards */}
         <div
-          className="grid gap-px mx-auto max-w-md"
+          className="grid gap-px mx-auto max-w-5xl md:grid-cols-2 lg:grid-cols-4"
           style={{ background: "var(--l-border)" }}
         >
           {tiers.map((tier, i) => {
@@ -184,22 +211,12 @@ export default function Pricing() {
                   >
                     {displayPrice}
                   </motion.span>
-                  {tier.period &&
-                    tier.monthlyPrice !== 0 &&
-                    tier.monthlyPrice !== null && (
-                      <span
-                        className="mb-2 text-xs"
-                        style={{ color: "var(--l-text-dim)" }}
-                      >
-                        {tier.period}
-                      </span>
-                    )}
-                  {tier.monthlyPrice === 0 && (
+                  {tier.period && (
                     <span
                       className="mb-2 text-xs"
                       style={{ color: "var(--l-text-dim)" }}
                     >
-                      /forever
+                      {tier.period}
                     </span>
                   )}
                 </div>

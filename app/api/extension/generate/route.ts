@@ -21,6 +21,13 @@ import {
 } from "@/lib/ai/email-formatter";
 import { getPrimaryResumeText } from "@/lib/resumes/service";
 import {
+  CREDIT_BILLING_ENABLED,
+  grantTrialCreditsOnce,
+  isBillableGenerationCategory,
+  refundGenerationCredits,
+  reserveGenerationCredits,
+} from "@/lib/billing/credits";
+import {
   createBearerAuthClient,
   createBearerServiceClient,
 } from "@/lib/supabase/server";
@@ -55,6 +62,12 @@ function getSupabaseAuth() {
 
 const DAILY_LIMIT = Number(process.env.EXTENSION_DAILY_LIMIT) || 30;
 const CLAUDE_MODEL = "claude-sonnet-4-6";
+
+type ReservedCredit = {
+  userId: string;
+  reservationId: string;
+  amount: number;
+};
 
 // ─── Auth helper ───
 
@@ -111,6 +124,30 @@ async function releaseRateLimitReservation(userId: string): Promise<void> {
   }
 }
 
+async function refundCreditReservation(
+  reservedCredit: ReservedCredit,
+  reason: string,
+): Promise<void> {
+  try {
+    await refundGenerationCredits(
+      getSupabaseService(),
+      reservedCredit.userId,
+      reservedCredit.reservationId,
+      reservedCredit.amount,
+      { reason },
+    );
+  } catch (err) {
+    log.warn(
+      {
+        userId: reservedCredit.userId.substring(0, 12),
+        reservationId: reservedCredit.reservationId,
+        err,
+      },
+      "refund_generation_credits threw",
+    );
+  }
+}
+
 async function checkRateLimit(
   userId: string,
 ): Promise<{ allowed: boolean; remainingRequests: number; resetTime: number }> {
@@ -151,6 +188,9 @@ export async function POST(request: NextRequest) {
   // after a successful checkRateLimit. Used by the catch block to refund
   // the slot on any failure between reservation and successful response.
   let reservedUserId: string | undefined;
+  let reservedCredit: ReservedCredit | undefined;
+  let creditCost: number | undefined;
+  let creditsRemaining: number | undefined;
 
   try {
     // 1. Auth check FIRST (before rate limiting)
@@ -226,6 +266,50 @@ export async function POST(request: NextRequest) {
       emailMode,
       acceptedExamples,
     } = validatedData;
+
+    if (CREDIT_BILLING_ENABLED && isBillableGenerationCategory(category)) {
+      const billingClient = getSupabaseService();
+      await grantTrialCreditsOnce(billingClient, authResult.userId);
+      const reservation = await reserveGenerationCredits(
+        billingClient,
+        authResult.userId,
+        category,
+      );
+      creditCost = reservation.cost;
+      creditsRemaining = reservation.balanceAfter;
+
+      if (!reservation.allowed || !reservation.reservationId) {
+        await releaseRateLimitReservation(authResult.userId);
+        reservedUserId = undefined;
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Insufficient credits",
+            code: "INSUFFICIENT_CREDITS",
+            message:
+              "You are out of credits. Buy more credits in the Aletheia dashboard.",
+            billingMode: "credits",
+            creditCost,
+            creditsRemaining,
+          },
+          {
+            status: 402,
+            headers: {
+              ...corsHeaders,
+              "X-RateLimit-Limit": String(DAILY_LIMIT),
+              "X-RateLimit-Remaining": String(rateCheck.remainingRequests),
+              "X-RateLimit-Reset": String(rateCheck.resetTime),
+            },
+          },
+        );
+      }
+
+      reservedCredit = {
+        userId: authResult.userId,
+        reservationId: reservation.reservationId,
+        amount: reservation.cost,
+      };
+    }
 
     // Server-owned resume context is now the source of truth. The request-body
     // resume is retained only as a legacy fallback for older extension builds.
@@ -483,6 +567,7 @@ export async function POST(request: NextRequest) {
 
           // Mark slot consumed — successful response, no refund needed.
           reservedUserId = undefined;
+          reservedCredit = undefined;
           return NextResponse.json(
             {
               success: true,
@@ -494,6 +579,13 @@ export async function POST(request: NextRequest) {
               usage: tokenUsage,
               processingTime,
               evalMetadata,
+              ...(CREDIT_BILLING_ENABLED
+                ? {
+                    billingMode: "credits",
+                    creditCost,
+                    creditsRemaining,
+                  }
+                : {}),
             },
             {
               headers: { ...corsHeaders, ...rateLimitHeaders },
@@ -513,6 +605,10 @@ export async function POST(request: NextRequest) {
         // Refund the rate-limit slot: user paid for a call that produced
         // no usable output. Quota was already incremented before Claude
         // ran; without this the user loses 1/30 on every upstream error.
+        if (reservedCredit) {
+          await refundCreditReservation(reservedCredit, "parse_failed");
+          reservedCredit = undefined;
+        }
         await releaseRateLimitReservation(authResult.userId);
         reservedUserId = undefined;
         return NextResponse.json(
@@ -567,6 +663,7 @@ export async function POST(request: NextRequest) {
 
     // Mark slot consumed — successful response, no refund needed.
     reservedUserId = undefined;
+    reservedCredit = undefined;
     return NextResponse.json(
       {
         success: true,
@@ -576,6 +673,13 @@ export async function POST(request: NextRequest) {
         usage: tokenUsage,
         processingTime,
         evalMetadata,
+        ...(CREDIT_BILLING_ENABLED
+          ? {
+              billingMode: "credits",
+              creditCost,
+              creditsRemaining,
+            }
+          : {}),
       },
       {
         headers: { ...corsHeaders, ...rateLimitHeaders },
@@ -583,6 +687,14 @@ export async function POST(request: NextRequest) {
     );
   } catch (error) {
     log.error({ err: error }, "Extension generation error");
+
+    if (reservedCredit) {
+      await refundCreditReservation(
+        reservedCredit,
+        error instanceof Error ? error.name : "unknown_error",
+      );
+      reservedCredit = undefined;
+    }
 
     // If a rate-limit slot was reserved but we never returned a successful
     // response, refund it. Otherwise an Anthropic 5xx or Zod validation

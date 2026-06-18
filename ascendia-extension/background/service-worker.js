@@ -413,6 +413,9 @@ async function handleGenerateRequest(payload) {
 
       if (!isAuthError) {
         // Non-auth errors: don't retry, surface immediately
+        if (error.status === 402 || error.code === 'INSUFFICIENT_CREDITS' || error.message.includes('402')) {
+          throw new Error(error.message || 'You are out of credits. Buy more credits in the Aletheia dashboard.');
+        }
         if (error.message.includes('429') || error.message.includes('Rate limit') || error.message.includes('Daily limit')) {
           throw new Error('Rate limit exceeded. Please try again later.');
         }
@@ -477,7 +480,22 @@ async function makeAPIRequest(endpoint, options = {}, baseUrl = null) {
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        let errorBody = null;
+        try {
+          errorBody = await response.json();
+        } catch (_jsonError) {
+          errorBody = null;
+        }
+
+        const apiMessage =
+          errorBody?.message ||
+          errorBody?.error ||
+          response.statusText ||
+          'API request failed';
+        const apiError = new Error(`HTTP ${response.status}: ${apiMessage}`);
+        apiError.status = response.status;
+        apiError.code = errorBody?.code;
+        throw apiError;
       }
 
       const data = await response.json();
@@ -491,6 +509,14 @@ async function makeAPIRequest(endpoint, options = {}, baseUrl = null) {
 
       if (error.name === 'AbortError') {
         throw new Error('Request timeout. Please try again.');
+      }
+
+      if (
+        error.status === 402 ||
+        error.code === 'INSUFFICIENT_CREDITS' ||
+        error.message.includes('402')
+      ) {
+        throw error;
       }
 
       if (error.message.includes('401') || error.message.includes('403')) {

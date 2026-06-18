@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import ShaderBackground from "@/components/ShaderBackground";
 import SignOutButton from "@/components/SignOutButton";
+import CreditsPanel from "./CreditsPanel";
 import {
   listUserResumes,
   MAX_RESUMES_PER_USER,
@@ -243,6 +244,10 @@ export default async function DashboardPage() {
               </div>
             </div>
           </BentoCard>
+
+          <div className="md:col-span-6 xl:col-span-12">
+            <CreditsPanel />
+          </div>
 
           <BentoCard className="md:col-span-6 xl:col-span-6 xl:row-span-2">
             <div className="flex h-full flex-col">
