@@ -40,12 +40,12 @@ export default function CTA() {
             >
               Aletheia ships as a Chrome extension. While we await Chrome Web
               Store approval, download the .zip and load it unpacked — full
-              install guide on the next page. Free tier includes 30 drafts per
-              day.
+              install guide on the next page. The trial includes 40 credits with
+              no expiry.
             </p>
 
             <p className="mt-6 text-xs" style={{ color: "var(--l-text-dim)" }}>
-              Free at launch · 30 drafts/day · Connections, cold emails, InMails
+              40 free credits · 2 per connection · 4 per email or InMail
             </p>
           </div>
 

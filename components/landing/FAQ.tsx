@@ -19,7 +19,7 @@ const faqs = [
   },
   {
     q: "Can I try it before paying?",
-    a: "Absolutely. The Free tier gives you 30 messages per day, forever — no credit card required. That's usually enough to evaluate whether Aletheia is right for you.",
+    a: "Absolutely. The trial gives you 40 credits with no expiry and no credit card required. LinkedIn connections use 2 credits; emails and InMails use 4.",
   },
   {
     q: "Does it work on LinkedIn Recruiter?",

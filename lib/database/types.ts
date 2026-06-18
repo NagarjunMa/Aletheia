@@ -123,6 +123,63 @@ export type Database = {
           },
         ];
       };
+      credit_ledger: {
+        Row: {
+          balance_after: number;
+          category: string | null;
+          created_at: string;
+          delta: number;
+          generation_id: string | null;
+          id: string;
+          metadata: Json;
+          reason: string;
+          related_ledger_id: string | null;
+          stripe_checkout_session_id: string | null;
+          user_id: string;
+        };
+        Insert: {
+          balance_after: number;
+          category?: string | null;
+          created_at?: string;
+          delta: number;
+          generation_id?: string | null;
+          id?: string;
+          metadata?: Json;
+          reason: string;
+          related_ledger_id?: string | null;
+          stripe_checkout_session_id?: string | null;
+          user_id: string;
+        };
+        Update: {
+          balance_after?: number;
+          category?: string | null;
+          created_at?: string;
+          delta?: number;
+          generation_id?: string | null;
+          id?: string;
+          metadata?: Json;
+          reason?: string;
+          related_ledger_id?: string | null;
+          stripe_checkout_session_id?: string | null;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "credit_ledger_related_ledger_id_fkey";
+            columns: ["related_ledger_id"];
+            isOneToOne: false;
+            referencedRelation: "credit_ledger";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "credit_ledger_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       profiles: {
         Row: {
           avatar_url: string | null;
@@ -212,6 +269,44 @@ export type Database = {
             columns: ["draft_id"];
             isOneToOne: false;
             referencedRelation: "generated_drafts";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      user_credit_accounts: {
+        Row: {
+          balance: number;
+          created_at: string;
+          lifetime_credits_purchased: number;
+          lifetime_credits_used: number;
+          trial_credits_granted_at: string | null;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          balance?: number;
+          created_at?: string;
+          lifetime_credits_purchased?: number;
+          lifetime_credits_used?: number;
+          trial_credits_granted_at?: string | null;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          balance?: number;
+          created_at?: string;
+          lifetime_credits_purchased?: number;
+          lifetime_credits_used?: number;
+          trial_credits_granted_at?: string | null;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "user_credit_accounts_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: true;
+            referencedRelation: "profiles";
             referencedColumns: ["id"];
           },
         ];
@@ -356,7 +451,35 @@ export type Database = {
           reset_time: string;
         }[];
       };
+      apply_credit_purchase: {
+        Args: {
+          p_credits: number;
+          p_metadata?: Json;
+          p_stripe_checkout_session_id: string;
+          p_user_id: string;
+        };
+        Returns: {
+          applied: boolean;
+          balance: number;
+        }[];
+      };
       cleanup_old_security_violations: { Args: never; Returns: undefined };
+      ensure_credit_account: {
+        Args: { p_user_id: string };
+        Returns: {
+          balance: number;
+          lifetime_credits_purchased: number;
+          lifetime_credits_used: number;
+          trial_credits_granted_at: string | null;
+        }[];
+      };
+      grant_trial_credits_once: {
+        Args: { p_amount?: number; p_user_id: string };
+        Returns: {
+          balance: number;
+          granted: boolean;
+        }[];
+      };
       find_similar_style_vectors:
         | {
             Args: {
@@ -480,6 +603,26 @@ export type Database = {
               similarity: number;
             }[];
           };
+      refund_generation_credits: {
+        Args: {
+          p_amount: number;
+          p_metadata?: Json;
+          p_reservation_id: string;
+          p_user_id: string;
+        };
+        Returns: {
+          balance: number;
+          refunded: boolean;
+        }[];
+      };
+      reserve_generation_credits: {
+        Args: { p_category: string; p_cost: number; p_user_id: string };
+        Returns: {
+          allowed: boolean;
+          balance_after: number;
+          reservation_id: string | null;
+        }[];
+      };
       schedule_security_cleanup: { Args: never; Returns: undefined };
       update_vector_retrieval_stats: {
         Args: { vector_ids: string[] };
