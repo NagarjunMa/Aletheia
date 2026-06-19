@@ -21,20 +21,24 @@ function mockRequest(opts: {
 
 describe("getCorsHeaders", () => {
   afterEach(() => {
+    vi.unstubAllEnvs();
     vi.restoreAllMocks();
     delete process.env.CHROME_EXTENSION_ID;
     delete process.env.CHROME_EXTENSION_IDS;
+    delete process.env.ALLOW_LOCALHOST_CORS;
   });
 
   describe("localhost origins", () => {
-    it("allows http://localhost origin", () => {
+    it("allows http://localhost origin outside production", () => {
+      vi.stubEnv("NODE_ENV", "test");
       const headers = getCorsHeaders(
         mockRequest({ origin: "http://localhost" }),
       );
       expect(headers["Access-Control-Allow-Origin"]).toBe("http://localhost");
     });
 
-    it("allows http://localhost:3000 origin", () => {
+    it("allows http://localhost:3000 origin outside production", () => {
+      vi.stubEnv("NODE_ENV", "test");
       const headers = getCorsHeaders(
         mockRequest({ origin: "http://localhost:3000" }),
       );
@@ -43,13 +47,39 @@ describe("getCorsHeaders", () => {
       );
     });
 
-    it("allows https://localhost:443 origin", () => {
+    it("allows https://localhost:443 origin outside production", () => {
+      vi.stubEnv("NODE_ENV", "test");
       const headers = getCorsHeaders(
         mockRequest({ origin: "https://localhost:443" }),
       );
       expect(headers["Access-Control-Allow-Origin"]).toBe(
         "https://localhost:443",
       );
+    });
+
+    it("rejects localhost in production by default", () => {
+      vi.stubEnv("VERCEL_ENV", "production");
+      vi.stubEnv("ALLOW_LOCALHOST_CORS", "false");
+      vi.stubEnv("NEXT_PUBLIC_APP_URL", "http://localhost:3000");
+      const headers = getCorsHeaders(
+        mockRequest({ origin: "http://localhost:3000" }),
+        { allowCredentials: true },
+      );
+      expect(headers["Access-Control-Allow-Origin"]).toBe("");
+      expect(headers["Access-Control-Allow-Credentials"]).toBe("");
+    });
+
+    it("allows localhost in production only when explicitly enabled", () => {
+      vi.stubEnv("VERCEL_ENV", "production");
+      vi.stubEnv("ALLOW_LOCALHOST_CORS", "true");
+      const headers = getCorsHeaders(
+        mockRequest({ origin: "http://localhost:3000" }),
+        { allowCredentials: true },
+      );
+      expect(headers["Access-Control-Allow-Origin"]).toBe(
+        "http://localhost:3000",
+      );
+      expect(headers["Access-Control-Allow-Credentials"]).toBe("true");
     });
   });
 
@@ -129,6 +159,7 @@ describe("getCorsHeaders", () => {
 
   describe("standard headers", () => {
     it("always includes Access-Control-Allow-Methods", () => {
+      vi.stubEnv("NODE_ENV", "test");
       const headers = getCorsHeaders(
         mockRequest({ origin: "http://localhost:3000" }),
       );
@@ -136,6 +167,7 @@ describe("getCorsHeaders", () => {
     });
 
     it('uses default methods "GET, OPTIONS" when not specified', () => {
+      vi.stubEnv("NODE_ENV", "test");
       const headers = getCorsHeaders(
         mockRequest({ origin: "http://localhost:3000" }),
       );
@@ -143,6 +175,7 @@ describe("getCorsHeaders", () => {
     });
 
     it("uses provided methods option", () => {
+      vi.stubEnv("NODE_ENV", "test");
       const headers = getCorsHeaders(
         mockRequest({ origin: "http://localhost:3000" }),
         { methods: "POST, GET, OPTIONS" },
@@ -153,6 +186,7 @@ describe("getCorsHeaders", () => {
     });
 
     it("always includes Access-Control-Allow-Headers with required values", () => {
+      vi.stubEnv("NODE_ENV", "test");
       const headers = getCorsHeaders(
         mockRequest({ origin: "http://localhost:3000" }),
       );
@@ -163,6 +197,7 @@ describe("getCorsHeaders", () => {
     });
 
     it("always includes Vary: Origin header", () => {
+      vi.stubEnv("NODE_ENV", "test");
       const headers = getCorsHeaders(
         mockRequest({ origin: "http://localhost:3000" }),
       );
@@ -172,6 +207,7 @@ describe("getCorsHeaders", () => {
 
   describe("credentials handling", () => {
     it('sets Allow-Credentials to "true" for allowed origin when allowCredentials is true', () => {
+      vi.stubEnv("NODE_ENV", "test");
       const headers = getCorsHeaders(
         mockRequest({ origin: "http://localhost:3000" }),
         { allowCredentials: true },
@@ -196,6 +232,7 @@ describe("getCorsHeaders", () => {
     });
 
     it("does not set credentials when allowCredentials is false (default)", () => {
+      vi.stubEnv("NODE_ENV", "test");
       const headers = getCorsHeaders(
         mockRequest({ origin: "http://localhost:3000" }),
       );
@@ -205,15 +242,13 @@ describe("getCorsHeaders", () => {
 
   describe("APP_URL environment variable", () => {
     it("allows the configured APP_URL as origin", () => {
-      // Temporarily stub the env var — module caches ALLOWED_PATTERNS at load time,
-      // so we verify the localhost fallback behavior (which is always in the list)
-      // and document that APP_URL support requires module reload.
+      vi.stubEnv("VERCEL_ENV", "production");
+      vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://www.aletheia.live");
       const headers = getCorsHeaders(
-        mockRequest({ origin: "http://localhost:3000" }),
+        mockRequest({ origin: "https://www.aletheia.live" }),
       );
-      // localhost is always allowed regardless of APP_URL
       expect(headers["Access-Control-Allow-Origin"]).toBe(
-        "http://localhost:3000",
+        "https://www.aletheia.live",
       );
     });
   });

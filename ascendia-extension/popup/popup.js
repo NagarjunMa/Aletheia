@@ -123,16 +123,39 @@ function showUserBadge(user) {
   const badge = document.createElement('div');
   badge.id = 'userBadge';
   badge.className = 'user-badge';
-  badge.innerHTML = `
-    <span class="user-email">${user?.email || user?.full_name || 'Connected'}</span>
-    <button id="disconnectBtn" class="disconnect-btn" title="Disconnect">
-      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-        <polyline points="16,17 21,12 16,7"/>
-        <line x1="21" y1="12" x2="9" y2="12"/>
-      </svg>
-    </button>
-  `;
+
+  const email = document.createElement('span');
+  email.className = 'user-email';
+  email.textContent = user?.email || user?.full_name || 'Connected';
+
+  const disconnect = document.createElement('button');
+  disconnect.id = 'disconnectBtn';
+  disconnect.className = 'disconnect-btn';
+  disconnect.title = 'Disconnect';
+
+  const svgNs = 'http://www.w3.org/2000/svg';
+  const icon = document.createElementNS(svgNs, 'svg');
+  icon.setAttribute('class', 'icon');
+  icon.setAttribute('viewBox', '0 0 24 24');
+  icon.setAttribute('fill', 'none');
+  icon.setAttribute('stroke', 'currentColor');
+  icon.setAttribute('stroke-width', '2');
+  icon.setAttribute('width', '14');
+  icon.setAttribute('height', '14');
+
+  const path = document.createElementNS(svgNs, 'path');
+  path.setAttribute('d', 'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4');
+  const polyline = document.createElementNS(svgNs, 'polyline');
+  polyline.setAttribute('points', '16,17 21,12 16,7');
+  const line = document.createElementNS(svgNs, 'line');
+  line.setAttribute('x1', '21');
+  line.setAttribute('y1', '12');
+  line.setAttribute('x2', '9');
+  line.setAttribute('y2', '12');
+
+  icon.append(path, polyline, line);
+  disconnect.appendChild(icon);
+  badge.append(email, disconnect);
 
   footer.insertBefore(badge, footer.firstChild);
 
@@ -148,18 +171,39 @@ function showUserBadge(user) {
 
 function showAuthRequired(authStatus) {
   // Show auth prompt instead of main content
-  document.getElementById('mainContent').innerHTML = `
-    <div class="setup-required">
-      <h3>Connect to Aletheia</h3>
-      <p>Log in to the Aletheia web app, then click the button below to connect this extension to your account.</p>
-      <button id="connectBtn" class="action-btn primary">Connect to Aletheia</button>
-      <button id="openSettingsBtn" class="action-btn secondary" style="margin-top: 8px;">Open Settings</button>
-      <div id="authError" class="error-message hidden" style="margin-top: 8px;">
-        <span id="authErrorText"></span>
-      </div>
-    </div>
-  `;
-  document.getElementById('mainContent').classList.remove('hidden');
+  const mainContent = document.getElementById('mainContent');
+  const setup = document.createElement('div');
+  setup.className = 'setup-required';
+
+  const heading = document.createElement('h3');
+  heading.textContent = 'Connect to Aletheia';
+
+  const description = document.createElement('p');
+  description.textContent = 'Log in to the Aletheia web app, then click the button below to connect this extension to your account.';
+
+  const connect = document.createElement('button');
+  connect.id = 'connectBtn';
+  connect.className = 'action-btn primary';
+  connect.textContent = 'Connect to Aletheia';
+
+  const settings = document.createElement('button');
+  settings.id = 'openSettingsBtn';
+  settings.className = 'action-btn secondary';
+  settings.style.marginTop = '8px';
+  settings.textContent = 'Open Settings';
+
+  const authError = document.createElement('div');
+  authError.id = 'authError';
+  authError.className = 'error-message hidden';
+  authError.style.marginTop = '8px';
+
+  const authErrorText = document.createElement('span');
+  authErrorText.id = 'authErrorText';
+  authError.appendChild(authErrorText);
+
+  setup.append(heading, description, connect, settings, authError);
+  mainContent.replaceChildren(setup);
+  mainContent.classList.remove('hidden');
 
   document.getElementById('connectBtn').addEventListener('click', async () => {
     const btn = document.getElementById('connectBtn');
@@ -589,7 +633,7 @@ async function copyToClipboardWithFeedback(text, buttonElement, successMessage) 
 }
 
 function showCopySuccess(buttonElement, message) {
-  const originalText = buttonElement.textContent || buttonElement.innerHTML;
+  const originalNodes = Array.from(buttonElement.childNodes).map(node => node.cloneNode(true));
   const originalIcon = buttonElement.querySelector('.copy-icon');
 
   buttonElement.classList.add('copy-success');
@@ -598,7 +642,7 @@ function showCopySuccess(buttonElement, message) {
   }
 
   const successIcon = document.createElement('span');
-  successIcon.innerHTML = '✓';
+  successIcon.textContent = '✓';
   successIcon.style.color = 'var(--success-400)';
   buttonElement.appendChild(successIcon);
 
@@ -619,9 +663,9 @@ function showCopySuccess(buttonElement, message) {
     }
 
     if (textElement && textElement.nodeType === 3) {
-      textElement.textContent = originalText;
+      buttonElement.replaceChildren(...originalNodes.map(node => node.cloneNode(true)));
     } else {
-      buttonElement.innerHTML = originalText;
+      buttonElement.replaceChildren(...originalNodes.map(node => node.cloneNode(true)));
     }
   }, 1500);
 }
@@ -754,7 +798,7 @@ function setupCharacterCounter() {
   const jdInput = document.getElementById('jdInput');
   const charCount = document.getElementById('jdCharCount');
 
-  // After showAuthRequired() wipes mainContent.innerHTML the original
+  // After showAuthRequired() replaces #mainContent children, the original
   // #jdInput is gone. If initializePopup() re-runs on a storage event
   // before the user reloads, these elements are null. Bail safely.
   if (!jdInput || !charCount) return;
@@ -849,7 +893,7 @@ function showAuthError(message) {
   // Strip the AUTH_FAILED: prefix for display
   const displayMsg = message.replace(/^AUTH_FAILED:\s*/, '');
 
-  errorText.innerHTML = '';
+  errorText.textContent = '';
   errorText.textContent = displayMsg + ' ';
 
   const reauthBtn = document.createElement('button');
