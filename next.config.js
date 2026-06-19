@@ -166,11 +166,6 @@ const nextConfig = {
   // Output configuration
   output: process.env.BUILD_STANDALONE === 'true' ? 'standalone' : undefined,
 
-  // Environment variables
-  env: {
-    CUSTOM_KEY: process.env.CUSTOM_KEY,
-  },
-
   // TypeScript configuration
   typescript: {
     ignoreBuildErrors: false,

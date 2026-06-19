@@ -1,7 +1,5 @@
 import { NextRequest } from "next/server";
 
-const ALLOWED_APP_URL = process.env.NEXT_PUBLIC_APP_URL;
-
 function normalizeExtensionOrigin(value: string): string | null {
   const trimmed = value.trim();
   if (!trimmed) return null;
@@ -29,10 +27,31 @@ export function isAllowedExtensionOrigin(origin: string | null): boolean {
 }
 
 function buildAllowedPatterns(): RegExp[] {
-  const patterns: RegExp[] = [/^https?:\/\/localhost(:\d+)?$/];
-  if (ALLOWED_APP_URL) {
-    const escaped = ALLOWED_APP_URL.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    patterns.push(new RegExp(`^${escaped}$`));
+  const patterns: RegExp[] = [];
+  const deploymentEnv = process.env.VERCEL_ENV ?? process.env.NODE_ENV;
+  const allowLocalhost =
+    deploymentEnv !== "production" ||
+    process.env.ALLOW_LOCALHOST_CORS === "true";
+
+  if (allowLocalhost) {
+    patterns.push(/^https?:\/\/localhost(:\d+)?$/);
+  }
+
+  const allowedAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  if (allowedAppUrl) {
+    let shouldAllowAppUrl = true;
+    try {
+      const parsedAppUrl = new URL(allowedAppUrl);
+      shouldAllowAppUrl =
+        parsedAppUrl.hostname !== "localhost" || allowLocalhost;
+    } catch {
+      shouldAllowAppUrl = false;
+    }
+
+    if (shouldAllowAppUrl) {
+      const escaped = allowedAppUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      patterns.push(new RegExp(`^${escaped}$`));
+    }
   }
   for (const extensionOrigin of getAllowedExtensionOrigins()) {
     const escaped = extensionOrigin.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

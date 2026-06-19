@@ -179,7 +179,7 @@
         element.focus()
 
         // Clear existing content
-        element.innerHTML = ''
+        element.replaceChildren()
 
         // Insert new content
         if (element.getAttribute('data-placeholder')) {
@@ -246,16 +246,26 @@
     // Create temporary notification
     const notification = document.createElement('div')
     notification.className = 'aletheia-fill-notification'
-    notification.innerHTML = `
-      <div class="aletheia-notification-content">
-        <div class="aletheia-icon">✓</div>
-        <div class="aletheia-text">
-          <strong>Message Filled!</strong>
-          <br>
-          <small>${result.filled.length} field(s) completed</small>
-        </div>
-      </div>
-    `
+
+    const content = document.createElement('div')
+    content.className = 'aletheia-notification-content'
+
+    const icon = document.createElement('div')
+    icon.className = 'aletheia-icon'
+    icon.textContent = '✓'
+
+    const text = document.createElement('div')
+    text.className = 'aletheia-text'
+
+    const title = document.createElement('strong')
+    title.textContent = 'Message Filled!'
+
+    const count = document.createElement('small')
+    count.textContent = `${result.filled.length} field(s) completed`
+
+    text.append(title, document.createElement('br'), count)
+    content.append(icon, text)
+    notification.appendChild(content)
 
     document.body.appendChild(notification)
 
@@ -409,7 +419,14 @@
       element.dispatchEvent(new Event('change', { bubbles: true }))
     } else if (element.contentEditable === 'true') {
       // For contenteditable elements, we need to handle it differently
-      element.innerHTML = content.replace(/\n/g, '<br>')
+      element.replaceChildren()
+      const lines = String(content).split('\n')
+      lines.forEach((line, index) => {
+        if (index > 0) {
+          element.appendChild(document.createElement('br'))
+        }
+        element.appendChild(document.createTextNode(line))
+      })
 
       // Trigger the appropriate events
       element.dispatchEvent(new Event('input', { bubbles: true }))
