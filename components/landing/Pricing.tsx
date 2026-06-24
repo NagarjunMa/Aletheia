@@ -1,7 +1,3 @@
-"use client";
-
-import { motion } from "framer-motion";
-
 type Tier = {
   name: string;
   monthlyPrice: number | null;
@@ -97,13 +93,7 @@ export default function Pricing() {
 
       <div className="mx-auto max-w-7xl pt-20">
         {/* Header */}
-        <motion.div
-          className="mb-14 text-center"
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-60px" }}
-          transition={{ duration: 0.6 }}
-        >
+        <div className="landing-section-reveal mb-14 text-center">
           <span
             className="section-label mb-5 block mx-auto"
             style={{ width: "fit-content" }}
@@ -123,7 +113,7 @@ export default function Pricing() {
             Start with 40 credits.{" "}
             <em style={{ fontStyle: "italic" }}>Refill when you need to.</em>
           </h2>
-        </motion.div>
+        </div>
 
         {/* Pricing cards */}
         <div
@@ -139,21 +129,14 @@ export default function Pricing() {
                   : `$${tier.monthlyPrice}`;
 
             return (
-              <motion.div
+              <div
                 key={tier.name}
-                className="relative flex flex-col p-10"
+                className="landing-section-reveal relative flex flex-col p-10"
                 style={{
                   background: tier.highlighted
                     ? "var(--l-surface-2)"
                     : "var(--l-surface)",
-                }}
-                initial={{ opacity: 0, y: 24 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-60px" }}
-                transition={{
-                  duration: 0.65,
-                  delay: i * 0.1,
-                  ease: [0.22, 1, 0.36, 1],
+                  animationDelay: `${i * 0.08}s`,
                 }}
               >
                 {/* Badge */}
@@ -194,11 +177,7 @@ export default function Pricing() {
 
                 {/* Price */}
                 <div className="flex items-end gap-1 mb-5">
-                  <motion.span
-                    key={tier.name}
-                    initial={{ opacity: 0, y: -6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.2 }}
+                  <span
                     style={{
                       fontFamily:
                         "var(--font-flaviotte), Playfair Display, serif",
@@ -210,7 +189,7 @@ export default function Pricing() {
                     }}
                   >
                     {displayPrice}
-                  </motion.span>
+                  </span>
                   {tier.period && (
                     <span
                       className="mb-2 text-xs"
@@ -253,38 +232,13 @@ export default function Pricing() {
                 {/* CTA */}
                 <a
                   href={tier.ctaHref}
-                  className="flex items-center justify-center gap-2 py-3.5 transition-all duration-200 cursor-pointer"
-                  style={{
-                    fontSize: "0.68rem",
-                    fontWeight: 800,
-                    letterSpacing: "0.15em",
-                    textTransform: "uppercase",
-                    textDecoration: "none",
-                    background: tier.highlighted
-                      ? "var(--l-blue)"
-                      : "transparent",
-                    color: tier.highlighted ? "var(--l-bg)" : "var(--l-text)",
-                    border: tier.highlighted
-                      ? "2px solid var(--l-blue)"
-                      : "2px solid var(--l-text)",
-                    borderRadius: "var(--l-radius, 0)",
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!tier.highlighted) {
-                      e.currentTarget.style.background = "var(--l-text)";
-                      e.currentTarget.style.color = "var(--l-bg)";
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!tier.highlighted) {
-                      e.currentTarget.style.background = "transparent";
-                      e.currentTarget.style.color = "var(--l-text)";
-                    }
-                  }}
+                  className={`landing-pricing-cta flex items-center justify-center gap-2 py-3.5 transition-all duration-200 cursor-pointer ${
+                    tier.highlighted ? "is-highlighted" : ""
+                  }`}
                 >
                   {tier.cta}
                 </a>
-              </motion.div>
+              </div>
             );
           })}
         </div>

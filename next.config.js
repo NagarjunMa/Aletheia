@@ -1,5 +1,8 @@
 const path = require('path')
 const { withSentryConfig } = require('@sentry/nextjs')
+const withBundleAnalyzer = require('@next/bundle-analyzer')({
+  enabled: process.env.ANALYZE === 'true'
+})
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -195,7 +198,7 @@ const nextConfig = {
   }
 }
 
-module.exports = withSentryConfig(nextConfig, {
+const sentryConfig = withSentryConfig(nextConfig, {
   org: process.env.SENTRY_ORG,
   project: process.env.SENTRY_PROJECT,
   authToken: process.env.SENTRY_AUTH_TOKEN,
@@ -207,3 +210,5 @@ module.exports = withSentryConfig(nextConfig, {
   disableServerWebpackPlugin: !process.env.SENTRY_AUTH_TOKEN,
   disableClientWebpackPlugin: !process.env.SENTRY_AUTH_TOKEN,
 })
+
+module.exports = withBundleAnalyzer(sentryConfig)

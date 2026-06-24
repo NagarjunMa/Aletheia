@@ -1,14 +1,4 @@
-"use client";
-
-import { useRef } from "react";
-import { gsap } from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
-import { useGSAP } from "@gsap/react";
 import { Clock, Bot, Sparkles } from "lucide-react";
-
-if (typeof window !== "undefined") {
-  gsap.registerPlugin(ScrollTrigger, useGSAP);
-}
 
 type Card = {
   icon: typeof Clock;
@@ -43,45 +33,8 @@ const cards: Card[] = [
 ];
 
 export default function WhyAletheia() {
-  const container = useRef<HTMLElement>(null);
-
-  useGSAP(
-    () => {
-      gsap.set(".why-card", { opacity: 0, y: 60 });
-      gsap.set(".why-header > *", { opacity: 0, y: 30 });
-
-      ScrollTrigger.batch(".why-header > *", {
-        onEnter: (els) =>
-          gsap.to(els, {
-            opacity: 1,
-            y: 0,
-            duration: 0.7,
-            stagger: 0.1,
-            ease: "power3.out",
-          }),
-        start: "top 85%",
-        once: true,
-      });
-
-      ScrollTrigger.batch(".why-card", {
-        onEnter: (els) =>
-          gsap.to(els, {
-            opacity: 1,
-            y: 0,
-            duration: 0.9,
-            stagger: 0.14,
-            ease: "power3.out",
-          }),
-        start: "top 85%",
-        once: true,
-      });
-    },
-    { scope: container },
-  );
-
   return (
     <section
-      ref={container}
       id="features"
       className="relative px-8 py-32"
       style={{ background: "var(--l-bg)" }}
@@ -90,7 +43,7 @@ export default function WhyAletheia() {
 
       <div className="mx-auto max-w-7xl pt-24">
         {/* Header */}
-        <div className="why-header mb-20 grid gap-12 md:grid-cols-2 md:items-end">
+        <div className="landing-section-reveal mb-20 grid gap-12 md:grid-cols-2 md:items-end">
           <div>
             <span className="section-label mb-5 block">Why Aletheia</span>
             <h2
@@ -128,7 +81,7 @@ export default function WhyAletheia() {
             return (
               <article
                 key={card.tag}
-                className="why-card relative flex flex-col p-8"
+                className="landing-section-reveal why-card relative flex flex-col p-8"
                 style={{
                   background: "var(--l-surface-dark)",
                   backdropFilter: "blur(6px)",

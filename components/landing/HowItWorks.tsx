@@ -1,7 +1,3 @@
-"use client";
-
-import { motion } from "framer-motion";
-
 const steps = [
   {
     num: "01",
@@ -173,12 +169,7 @@ export default function HowItWorks() {
         <div className="grid gap-10 md:gap-16 md:grid-cols-2 md:items-start">
           {/* Left: heading + steps */}
           <div>
-            <motion.div
-              initial={{ opacity: 0, y: 24 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: "-60px" }}
-              transition={{ duration: 0.7 }}
-            >
+            <div className="landing-section-reveal">
               <span className="section-label mb-6 block">Under the Hood</span>
               <h2
                 style={{
@@ -197,21 +188,14 @@ export default function HowItWorks() {
                   AI and inbox.
                 </em>
               </h2>
-            </motion.div>
+            </div>
 
             <div className="mt-14 flex flex-col">
               {steps.map((step, i) => (
-                <motion.div
+                <div
                   key={step.num}
-                  className="relative flex gap-8 pb-12"
-                  initial={{ opacity: 0, x: -24 }}
-                  whileInView={{ opacity: 1, x: 0 }}
-                  viewport={{ once: true, margin: "-60px" }}
-                  transition={{
-                    duration: 0.6,
-                    delay: i * 0.12,
-                    ease: [0.22, 1, 0.36, 1],
-                  }}
+                  className="landing-section-reveal relative flex gap-8 pb-12"
+                  style={{ animationDelay: `${i * 0.08}s` }}
                 >
                   {/* Vertical line connector */}
                   {i < steps.length - 1 && (
@@ -268,21 +252,15 @@ export default function HowItWorks() {
                       {step.body}
                     </p>
                   </div>
-                </motion.div>
+                </div>
               ))}
             </div>
           </div>
 
           {/* Right: UI mockup — P1 fix: visible on ALL screen sizes, stacks below steps on mobile */}
-          <motion.div
-            className="flex items-start justify-center md:justify-end"
-            initial={{ opacity: 0, y: 32 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-60px" }}
-            transition={{ duration: 0.8, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
-          >
+          <div className="landing-section-reveal flex items-start justify-center md:justify-end">
             <MockupCard />
-          </motion.div>
+          </div>
         </div>
       </div>
     </section>
