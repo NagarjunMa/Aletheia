@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
 import { Plus, Minus } from "lucide-react";
 
 const faqs = [
@@ -49,12 +48,7 @@ export default function FAQ() {
       <div className="mx-auto max-w-7xl pt-20">
         {/* Header */}
         <div className="mb-16 grid md:grid-cols-2 gap-8 md:gap-12 items-end">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-60px" }}
-            transition={{ duration: 0.6 }}
-          >
+          <div className="landing-section-reveal">
             <span className="section-label mb-5 block">FAQ</span>
             <h2
               style={{
@@ -68,15 +62,11 @@ export default function FAQ() {
             >
               Honest <em style={{ fontStyle: "italic" }}>answers.</em>
             </h2>
-          </motion.div>
+          </div>
 
-          <motion.p
-            className="text-sm leading-relaxed"
+          <p
+            className="landing-section-reveal text-sm leading-relaxed"
             style={{ color: "var(--l-text-muted)" }}
-            initial={{ opacity: 0, y: 14 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-60px" }}
-            transition={{ duration: 0.5, delay: 0.1 }}
           >
             Can&apos;t find the answer you&apos;re looking for?{" "}
             <a
@@ -89,16 +79,11 @@ export default function FAQ() {
             >
               Email us →
             </a>
-          </motion.p>
+          </p>
         </div>
 
         {/* Accordion */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          whileInView={{ opacity: 1 }}
-          viewport={{ once: true, margin: "-60px" }}
-          transition={{ duration: 0.5 }}
-        >
+        <div className="landing-section-reveal">
           {faqs.map((faq, i) => (
             <div key={i}>
               <div className="divider" />
@@ -122,33 +107,26 @@ export default function FAQ() {
                 </span>
               </button>
 
-              <AnimatePresence initial={false}>
-                {open === i && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: "auto", opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.26, ease: "easeInOut" }}
-                    style={{ overflow: "hidden" }}
-                  >
-                    <p
-                      className="pb-8 text-sm leading-relaxed"
-                      style={{
-                        color: "var(--l-text-muted)",
-                        background: "var(--l-surface-dark)",
-                        backdropFilter: "blur(6px)",
-                        padding: "1rem 1.25rem 2rem",
-                      }}
-                    >
-                      {faq.a}
-                    </p>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              <div
+                className={`landing-faq-panel ${open === i ? "open" : ""}`}
+                aria-hidden={open !== i}
+              >
+                <p
+                  className="pb-8 text-sm leading-relaxed"
+                  style={{
+                    color: "var(--l-text-muted)",
+                    background: "var(--l-surface-dark)",
+                    backdropFilter: "blur(6px)",
+                    padding: "1rem 1.25rem 2rem",
+                  }}
+                >
+                  {faq.a}
+                </p>
+              </div>
             </div>
           ))}
           <div className="divider" />
-        </motion.div>
+        </div>
       </div>
     </section>
   );

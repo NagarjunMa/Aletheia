@@ -1,14 +1,3 @@
-"use client";
-
-import { useRef } from "react";
-import { gsap } from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
-import { useGSAP } from "@gsap/react";
-
-if (typeof window !== "undefined") {
-  gsap.registerPlugin(ScrollTrigger, useGSAP);
-}
-
 // TODO(founder-photo): drop a real headshot at /public/founder.jpg and
 // replace the initials avatar below with a <Image> tag.
 const FOUNDER_NAME = "Nagarjun Mallesh";
@@ -16,30 +5,8 @@ const FOUNDER_LOCATION = "Boston, Massachusetts";
 const FOUNDER_INITIALS = "NM";
 
 export default function FounderNote() {
-  const container = useRef<HTMLElement>(null);
-
-  useGSAP(
-    () => {
-      gsap.set(".founder-reveal", { opacity: 0, y: 40 });
-      ScrollTrigger.batch(".founder-reveal", {
-        onEnter: (els) =>
-          gsap.to(els, {
-            opacity: 1,
-            y: 0,
-            duration: 0.9,
-            stagger: 0.12,
-            ease: "power3.out",
-          }),
-        start: "top 85%",
-        once: true,
-      });
-    },
-    { scope: container },
-  );
-
   return (
     <section
-      ref={container}
       id="founder"
       className="relative px-8 py-32"
       style={{ background: "var(--l-bg)" }}
@@ -47,14 +14,14 @@ export default function FounderNote() {
       <div className="divider" />
 
       <div className="mx-auto max-w-3xl pt-20">
-        <div className="founder-reveal">
+        <div className="landing-section-reveal">
           <span className="section-label mb-6 block">
             A note from the maker
           </span>
         </div>
 
         <h2
-          className="founder-reveal mb-12"
+          className="landing-section-reveal mb-12"
           style={{
             fontFamily: "var(--font-flaviotte), Playfair Display, serif",
             fontWeight: 800,
@@ -69,7 +36,7 @@ export default function FounderNote() {
         </h2>
 
         <div
-          className="founder-reveal space-y-6 text-base leading-relaxed"
+          className="landing-section-reveal space-y-6 text-base leading-relaxed"
           style={{
             color: "var(--l-text-muted)",
             background: "var(--l-surface-dark)",
@@ -110,7 +77,7 @@ export default function FounderNote() {
 
         {/* Signature */}
         <div
-          className="founder-reveal mt-12 flex items-center gap-4 pt-8"
+          className="landing-section-reveal mt-12 flex items-center gap-4 pt-8"
           style={{ borderTop: "1px solid var(--l-border)" }}
         >
           <div

@@ -1,6 +1,3 @@
-"use client";
-
-import { motion } from "framer-motion";
 import Link from "next/link";
 
 export default function CTA() {
@@ -13,13 +10,7 @@ export default function CTA() {
       <div className="divider" />
 
       <div className="mx-auto max-w-5xl pt-24">
-        <motion.div
-          className="grid md:grid-cols-2 gap-10 md:gap-16 items-center"
-          initial={{ opacity: 0, y: 24 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-60px" }}
-          transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-        >
+        <div className="landing-section-reveal grid md:grid-cols-2 gap-10 md:gap-16 items-center">
           <div>
             <span className="section-label mb-6 block">Get the extension</span>
             <h2
@@ -92,7 +83,7 @@ export default function CTA() {
               </Link>
             </div>
           </div>
-        </motion.div>
+        </div>
       </div>
     </section>
   );

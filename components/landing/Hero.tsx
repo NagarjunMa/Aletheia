@@ -1,7 +1,4 @@
-"use client";
-
-import { motion } from "framer-motion";
-import { useState, useEffect, useRef } from "react";
+import { Fragment } from "react";
 
 const stats = [
   { value: "Seconds", label: "Per draft" },
@@ -17,15 +14,13 @@ const headlineLines: Array<{ words: string[]; italic?: boolean }> = [
   { words: ["No", "tabs", "to", "juggle."], italic: true },
 ];
 
-const ease: [number, number, number, number] = [0.22, 1, 0.36, 1];
-
 /**
- * Brush-stroke SVG underline on "human" — drawn with pathLength animation.
+ * Brush-stroke SVG underline on "One click." — drawn with CSS stroke animation.
  * Forest-green theme: stroke is sage #8EB69B.
  */
 function AccentUnderline({ delay = 0 }: { delay?: number }) {
   return (
-    <motion.svg
+    <svg
       viewBox="0 0 160 12"
       width="100%"
       height="12"
@@ -39,34 +34,22 @@ function AccentUnderline({ delay = 0 }: { delay?: number }) {
       }}
       aria-hidden
     >
-      <motion.path
+      <path
+        className="landing-hero-underline-path"
         d="M4 8 Q40 4 80 8 Q120 12 156 6"
         fill="none"
         stroke="#8EB69B"
         strokeWidth="2.5"
         strokeLinecap="round"
-        initial={{ pathLength: 0, opacity: 0 }}
-        animate={{ pathLength: 1, opacity: 1 }}
-        transition={{ duration: 0.9, delay, ease }}
+        style={{ animationDelay: `${delay}s` }}
       />
-    </motion.svg>
+    </svg>
   );
 }
 
 export default function Hero() {
-  const [scrolledPast, setScrolledPast] = useState(false);
-  const sectionRef = useRef<HTMLElement>(null);
-
-  useEffect(() => {
-    const threshold = window.innerHeight * 0.4;
-    const handler = () => setScrolledPast(window.scrollY > threshold);
-    window.addEventListener("scroll", handler, { passive: true });
-    return () => window.removeEventListener("scroll", handler);
-  }, []);
-
   return (
     <section
-      ref={sectionRef}
       id="hero"
       className="relative flex flex-col items-center justify-center px-5 sm:px-8 pt-28 pb-16"
       style={{
@@ -124,17 +107,13 @@ export default function Hero() {
         style={{ zIndex: 2 }}
       >
         {/* Eyebrow badge */}
-        <motion.div
-          className="mb-10 flex justify-center"
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.1, ease }}
-        >
+        <div className="landing-hero-reveal mb-10 flex justify-center">
           <span className="section-label">LinkedIn outreach, made easier</span>
-        </motion.div>
+        </div>
 
         {/* ── Headline — word-by-word stagger ── */}
         <h1
+          aria-label="Their profile, your resume. One draft. One click. No tabs to juggle."
           style={{
             fontFamily:
               "var(--font-flaviotte), Playfair Display, Georgia, serif",
@@ -162,22 +141,20 @@ export default function Hero() {
                   const wDelay = lineDelay + wordIdx * 0.07;
 
                   return (
-                    <motion.span
-                      key={wordIdx}
-                      style={{
-                        display: "inline-block",
-                        marginRight:
-                          wordIdx < line.words.length - 1 ? "0.3em" : 0,
-                        position: "relative",
-                      }}
-                      initial={{ opacity: 0, y: 28 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.65, delay: wDelay, ease }}
-                    >
-                      {/* Sage underline on "human" */}
-                      {isHuman && <AccentUnderline delay={wDelay + 0.5} />}
-                      {word}
-                    </motion.span>
+                    <Fragment key={wordIdx}>
+                      <span
+                        className="landing-hero-word"
+                        style={{
+                          display: "inline-block",
+                          position: "relative",
+                          animationDelay: `${wDelay}s`,
+                        }}
+                      >
+                        {isHuman && <AccentUnderline delay={wDelay + 0.5} />}
+                        {word}
+                      </span>
+                      {wordIdx < line.words.length - 1 ? " " : null}
+                    </Fragment>
                   );
                 })}
               </span>
@@ -186,62 +163,45 @@ export default function Hero() {
         </h1>
 
         {/* Subheadline */}
-        <motion.p
-          className="mx-auto mt-8 max-w-2xl text-lg"
+        <p
+          className="landing-hero-reveal mx-auto mt-8 max-w-2xl text-lg"
           style={{ color: "var(--l-text)", opacity: 0.82, lineHeight: 1.7 }}
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.72, ease }}
         >
           Writing a thoughtful connection note means remembering their last
           role, your overlap, the recent post worth mentioning — every time.
           Aletheia keeps track. Open the profile, click Generate. You get a
           short, personal note in your voice, ready to send.
-        </motion.p>
+        </p>
 
         {/* CTAs */}
-        <motion.div
-          className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center"
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.86, ease }}
-        >
+        <div className="landing-hero-reveal mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
           <a href="/install" className="btn-primary">
             Download Extension
           </a>
           <a href="/demo" className="btn-secondary">
             See a real draft
           </a>
-        </motion.div>
+        </div>
 
         {/* Launch info */}
-        <motion.p
-          className="mt-6 text-xs"
+        <p
+          className="landing-hero-reveal mt-6 text-xs"
           style={{ color: "var(--l-text-dim)", letterSpacing: "0.05em" }}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.5, delay: 1.05 }}
         >
           Available for Chrome · 40 free credits · Daily abuse limits
-        </motion.p>
+        </p>
 
-        <motion.p
-          className="mt-2 text-[10px] tracking-widest uppercase"
+        <p
+          className="landing-hero-reveal mt-2 text-[10px] tracking-widest uppercase"
           style={{ color: "var(--l-text-dim)" }}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.5, delay: 1.18 }}
         >
           Profile HTML stripped in your browser · No background scraping
-        </motion.p>
+        </p>
       </div>
 
       {/* Stats bar */}
-      <motion.div
-        className="relative mx-auto mt-16 w-full max-w-3xl"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, delay: 1.1, ease }}
+      <div
+        className="landing-hero-reveal relative mx-auto mt-16 w-full max-w-3xl"
         style={{ zIndex: 2 }}
       >
         <div className="divider" />
@@ -278,14 +238,11 @@ export default function Hero() {
           ))}
         </div>
         <div className="divider" />
-      </motion.div>
+      </div>
 
-      {/* Scroll indicator — fades out past 40vh */}
-      <motion.div
-        className="mt-10 flex flex-col items-center"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: scrolledPast ? 0 : 0.6 }}
-        transition={{ duration: 0.4 }}
+      {/* Scroll indicator */}
+      <div
+        className="landing-scroll-indicator mt-10 flex flex-col items-center"
         aria-hidden
         style={{ zIndex: 2 }}
       >
@@ -301,18 +258,17 @@ export default function Hero() {
             padding: "5px",
           }}
         >
-          <motion.div
+          <div
+            className="landing-scroll-dot"
             style={{
               width: 4,
               height: 8,
               background: "rgba(142,182,155,0.5)",
               borderRadius: 2,
             }}
-            animate={{ y: [0, 8, 0] }}
-            transition={{ repeat: Infinity, duration: 1.6, ease: "easeInOut" }}
           />
         </div>
-      </motion.div>
+      </div>
     </section>
   );
 }

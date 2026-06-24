@@ -1,6 +1,4 @@
 /* Aletheia Global Styles */
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Playfair+Display:ital,opsz,wght@0,9..18,400;0,9..18,700;0,9..18,900;1,9..18,400&family=JetBrains+Mono:wght@300&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -307,6 +305,45 @@
     color 0.45s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+.shader-background {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse 82% 68% at 48% 18%, rgba(112, 184, 200, 0.40) 0%, rgba(48, 136, 144, 0.24) 36%, transparent 68%),
+    radial-gradient(ellipse 70% 56% at 82% 72%, rgba(142, 182, 155, 0.24) 0%, rgba(40, 88, 104, 0.28) 42%, transparent 72%),
+    linear-gradient(135deg, #182830 0%, #204050 26%, #285868 48%, #308890 68%, #5888a0 86%, #70b8c8 100%);
+  background-size: 120% 120%, 130% 130%, 100% 100%;
+  animation: shader-static-drift 18s ease-in-out infinite alternate;
+}
+
+.shader-background::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml,%3Csvg width='160' height='160' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.6'/%3E%3C/svg%3E");
+}
+
+@keyframes shader-static-drift {
+  from {
+    background-position: 45% 42%, 55% 58%, 50% 50%;
+  }
+
+  to {
+    background-position: 56% 50%, 44% 48%, 50% 50%;
+  }
+}
+
+@supports (content-visibility: auto) {
+  .landing main > section:not(#hero) {
+    content-visibility: auto;
+    contain-intrinsic-size: 820px;
+  }
+}
+
 /* ── Navbar — CSS-driven so no hydration flash ────────────
    Dark theme only — light theme removed.
    ─────────────────────────────────────────────────────────── */
@@ -316,6 +353,19 @@
   -webkit-backdrop-filter: blur(0px);
   backdrop-filter: blur(0px);
   will-change: background-color, backdrop-filter, border-color;
+  transition:
+    background-color 0.35s ease,
+    border-color 0.35s ease,
+    box-shadow 0.35s ease,
+    backdrop-filter 0.35s ease;
+}
+
+.landing-navbar.scrolled {
+  background: rgba(5, 31, 32, 0.45);
+  border-bottom-color: rgba(218, 241, 222, 0.10);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 10px 30px -20px rgba(0, 0, 0, 0.45);
 }
 
 /* Logo text */
@@ -339,11 +389,192 @@
 .landing-mobile-menu {
   background: rgba(5, 31, 32, 0.97);
   border-bottom: 1px solid rgba(142, 182, 155, 0.12);
+  clip-path: inset(0 0 100% 0);
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+  transform: translateY(-8px);
+  transition:
+    clip-path 0.42s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.24s ease,
+    transform 0.32s ease,
+    visibility 0s linear 0.42s;
+}
+
+.landing-mobile-menu.open {
+  clip-path: inset(0 0 0 0);
+  opacity: 1;
+  pointer-events: auto;
+  visibility: visible;
+  transform: translateY(0);
+  transition:
+    clip-path 0.48s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.24s ease,
+    transform 0.32s ease,
+    visibility 0s;
 }
 
 /* Mobile menu icon colour */
 .landing-menu-icon {
   color: #DAF1DE;
+}
+
+.landing-nav-active-line {
+  transform-origin: center;
+  animation: nav-line-grow 0.28s ease-out both;
+}
+
+@keyframes nav-line-grow {
+  from {
+    transform: scaleX(0);
+  }
+
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.landing-hero-word {
+  animation: hero-word-rise 0.72s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.landing-hero-reveal {
+  animation: hero-block-rise 0.72s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.landing-hero-underline-path {
+  stroke-dasharray: 170;
+  stroke-dashoffset: 170;
+  animation: hero-underline-draw 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.landing-section-reveal {
+  animation: section-rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.landing-scroll-indicator {
+  opacity: 0.6;
+  animation: fade-in-slow 0.6s ease 1.15s both;
+}
+
+.landing-scroll-dot {
+  animation: scroll-dot 1.6s ease-in-out infinite;
+}
+
+@keyframes hero-word-rise {
+  from {
+    transform: translate3d(0, 18px, 0);
+  }
+
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes hero-block-rise {
+  from {
+    opacity: 0.001;
+    transform: translate3d(0, 14px, 0);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes hero-underline-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes section-rise {
+  from {
+    opacity: 0.001;
+    transform: translate3d(0, 18px, 0);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes scroll-dot {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(8px);
+  }
+}
+
+.landing-faq-panel {
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition:
+    max-height 0.28s ease,
+    opacity 0.2s ease,
+    transform 0.24s ease;
+}
+
+.landing-faq-panel.open {
+  max-height: 420px;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.landing-pricing-cta {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  text-decoration: none;
+  background: transparent;
+  color: var(--l-text);
+  border: 2px solid var(--l-text);
+  border-radius: var(--l-radius, 0);
+}
+
+.landing-pricing-cta:hover {
+  background: var(--l-text);
+  color: var(--l-bg);
+}
+
+.landing-pricing-cta.is-highlighted {
+  background: var(--l-blue);
+  color: var(--l-bg);
+  border-color: var(--l-blue);
+}
+
+.landing-pricing-cta.is-highlighted:hover {
+  background: var(--l-blue-light);
+  border-color: var(--l-blue-light);
+  color: #051f20;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shader-background,
+  .landing-hero-word,
+  .landing-hero-reveal,
+  .landing-hero-underline-path,
+  .landing-section-reveal,
+  .landing-scroll-indicator,
+  .landing-scroll-dot,
+  .landing-nav-active-line {
+    animation: none;
+  }
+
+  .landing-mobile-menu,
+  .landing-navbar,
+  .landing-faq-panel {
+    transition: none;
+  }
 }
 
 
@@ -1167,4 +1398,3 @@
     scroll-behavior: auto !important;
   }
 }
-
