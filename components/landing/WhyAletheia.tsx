@@ -11,23 +11,23 @@ type Card = {
 const cards: Card[] = [
   {
     icon: Clock,
-    badge: "The reading tax",
-    title: "Every note is a tab tour.",
-    body: "Skim their experience. Find the recent post worth mentioning. Note the overlap with your resume. Draft the opener. Trim it twice. Fifteen minutes per recipient before you hit send.",
+    badge: "The context problem",
+    title: "Good messages need more than a template.",
+    body: "A useful first message needs context: who they are, what they work on, why you are reaching out, and where your background fits.",
     tag: "01",
   },
   {
     icon: Bot,
-    badge: "The memory tax",
-    title: "Twenty profiles, each different.",
-    body: "You keep the context in your head — last role, mutual interest, the angle worth opening on — or you open five tabs and copy-paste through it. Neither scales past a busy afternoon.",
+    badge: "The generic draft problem",
+    title: "Most AI drafts sound too polished.",
+    body: "Basic prompts often mention too much, miss the real reason for reaching out, or produce a message that does not sound like something you would send.",
     tag: "02",
   },
   {
     icon: Sparkles,
     badge: "The Aletheia way",
-    title: "You stay personal. It stays short.",
-    body: "Aletheia reads the profile you have open, pulls the angle that ties to your resume, drafts a short note in your voice. Open profile, click Generate, review, send. Same care, none of the tab juggling.",
+    title: "You stay specific and in control.",
+    body: "Choose the context, pick the message type, review the draft, and decide what to use. Approved drafts help Aletheia learn the structure and wording you prefer.",
     tag: "03",
   },
 ];
@@ -56,9 +56,9 @@ export default function WhyAletheia() {
                 letterSpacing: "-0.02em",
               }}
             >
-              Personal outreach shouldn&apos;t cost you{" "}
+              For messages that need{" "}
               <em style={{ fontStyle: "italic", fontWeight: 400 }}>
-                an afternoon
+                more than a template
               </em>
               .
             </h2>
@@ -67,10 +67,9 @@ export default function WhyAletheia() {
             className="text-base leading-relaxed"
             style={{ color: "var(--l-text-muted)" }}
           >
-            Reaching out the right way means reading the profile, lining it up
-            with your resume, finding the real overlap, and writing the opener.
-            Aletheia handles the reading and drafting on the page you already
-            have open. You stay personal. You stay in control.
+            Aletheia is for students, job seekers, engineers, founders, and
+            professionals who want a first message to be specific without
+            spending too much time rewriting the same opener.
           </p>
         </div>
 

@@ -47,11 +47,10 @@ export default function FounderNote() {
           <p>Hi — I&apos;m Nagarjun.</p>
 
           <p>
-            For a while, every LinkedIn connection request I sent was
-            hand-written. Open the profile, skim three jobs, find the recent
-            post that overlapped with my resume, write the opener, trim it
-            twice. Reaching out to a recruiter at a small startup took fifteen
-            minutes. Reaching out to twenty people took the morning.
+            For a while, every LinkedIn connection note I sent was handwritten.
+            I would read the profile, check my resume for the right overlap,
+            write the opener, and trim it until it sounded like me. One message
+            was manageable. Twenty messages took the morning.
           </p>
 
           <p>
@@ -63,15 +62,14 @@ export default function FounderNote() {
           </p>
 
           <p>
-            Aletheia is the in-between I wanted. It reads the profile I have
-            open and the primary resume in my account, then puts together a
-            short note in my voice that I review before I send. Same care, none
-            of the tab-juggling.
+            Aletheia is the in-between I wanted. It uses the context I choose,
+            the primary resume in my account, and the intent behind the message
+            to prepare a short draft that I review before I send.
           </p>
 
           <p style={{ color: "var(--l-text)" }}>
-            If you have sat at your laptop with five LinkedIn tabs open trying
-            to draft a note that didn&apos;t sound generic — this is for you.
+            If you have sat at your laptop trying to write a note that feels
+            specific without sounding forced, this is for you.
           </p>
         </div>
 

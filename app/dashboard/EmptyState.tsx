@@ -13,10 +13,10 @@ export default function EmptyState() {
         <li>
           <span className="font-semibold text-white">1.</span> Install the
           Aletheia extension —{" "}
-          <Link href="/ascendia-extension.zip" className="underline text-white">
-            download the .zip
+          <Link href="/install" className="underline text-white">
+            open the Chrome Web Store guide
           </Link>{" "}
-          and load it unpacked at chrome://extensions.
+          and add the official extension to Chrome.
         </li>
         <li>
           <span className="font-semibold text-white">2.</span> Upload a primary
@@ -27,8 +27,8 @@ export default function EmptyState() {
           so Aletheia can ground drafts in your background.
         </li>
         <li>
-          <span className="font-semibold text-white">3.</span> Open any LinkedIn
-          profile and click <em>Generate</em> in the popup.
+          <span className="font-semibold text-white">3.</span> Open a supported
+          profile or opportunity and draft your first message.
         </li>
       </ol>
       <div className="flex flex-col gap-3 sm:flex-row">

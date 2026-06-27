@@ -57,11 +57,11 @@ export default function TermsPage() {
 
         <Section title="2. What the Service does">
           <p>
-            Aletheia reads a LinkedIn profile you open in your browser, combines
-            it with your resume and intent, and produces a draft connection
-            request, cold email, or InMail. You review the draft and decide
-            whether to send it. The Service does not send messages for you, does
-            not auto-connect, does not scrape profiles you have not opened, and
+            Aletheia uses the profile or opportunity context you choose to
+            reference, combines it with your resume and intent, and produces a
+            draft connection note, networking email, follow-up, or role-fit
+            reply. You review the draft and decide whether to send it. The
+            Service does not send messages for you, does not auto-connect, and
             does not collect or contact people on your behalf.
           </p>
         </Section>
@@ -88,18 +88,18 @@ export default function TermsPage() {
               sender details.
             </li>
             <li>
-              Build an automation layer on top of the Service to bulk-send
-              connection requests or messages on LinkedIn in a way that violates
-              LinkedIn’s User Agreement or Professional Community Policies.
+              Build an automated sending layer on top of the Service in a way
+              that violates LinkedIn’s User Agreement, Professional Community
+              Policies, or any applicable platform rules.
             </li>
             <li>
               Generate harassing, defamatory, hateful, sexually explicit,
               fraudulent, or illegal content.
             </li>
             <li>
-              Scrape, harvest, or store personal data about people who have not
-              consented, beyond the public profile content you read for a single
-              drafting session.
+              Harvest or store personal data about people who have not
+              consented, beyond the context needed for a single drafting
+              session.
             </li>
             <li>
               Reverse-engineer, decompile, or attempt to extract source code,

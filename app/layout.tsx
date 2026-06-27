@@ -41,23 +41,21 @@ const flaviotte = localFont({
 
 export const metadata: Metadata = {
   title: {
-    default:
-      "Aletheia — LinkedIn outreach drafted from their profile and your resume",
+    default: "Aletheia — LinkedIn Message Drafts for Professional Networking",
     template: "%s | Aletheia",
   },
   description:
-    "Chrome extension that drafts personal LinkedIn connection requests, cold emails, and InMails from the recipient's profile and your resume. Start with 40 free credits and review every draft before you send.",
+    "Aletheia is a Chrome extension for drafting LinkedIn connection notes, networking emails, follow-ups, and role-fit replies. Use your resume and selected profile context, then review every draft before sending.",
   keywords: [
-    "LinkedIn outreach",
-    "LinkedIn drafting tool",
-    "personalized outreach",
-    "connection request drafts",
+    "LinkedIn connection message",
+    "networking email",
+    "professional outreach",
     "Chrome extension",
-    "cold email",
-    "networking",
-    "InMail",
-    "connection request",
-    "profile-grounded messages",
+    "resume based drafts",
+    "follow up email",
+    "role fit summary",
+    "job search networking",
+    "professional networking drafts",
   ],
   authors: [{ name: "Nagarjun Mallesh" }],
   icons: {
@@ -65,10 +63,9 @@ export const metadata: Metadata = {
     apple: "/Aletheia.svg",
   },
   openGraph: {
-    title:
-      "Aletheia — personal LinkedIn outreach, drafted from their profile and your resume",
+    title: "Aletheia — LinkedIn Message Drafts for Professional Networking",
     description:
-      "Chrome extension that drafts personal LinkedIn connection requests, cold emails, and InMails from the recipient's profile and your resume. Start with 40 free credits and review every draft before you send.",
+      "Draft LinkedIn connection notes, networking emails, follow-ups, and role-fit replies from context you choose. Resume-aware, user-reviewed, and installed through Chrome.",
     type: "website",
     locale: "en_US",
     images: [
@@ -76,16 +73,15 @@ export const metadata: Metadata = {
         url: "/Aletheia.svg",
         width: 1200,
         height: 630,
-        alt: "Aletheia — personal LinkedIn outreach drafting tool",
+        alt: "Aletheia professional networking message draft assistant",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title:
-      "Aletheia — personal LinkedIn outreach, drafted from their profile and your resume",
+    title: "Aletheia — LinkedIn Message Drafts for Professional Networking",
     description:
-      "Chrome extension that drafts personal LinkedIn connection requests, cold emails, and InMails from the recipient's profile and your resume. Start with 40 free credits and review every draft before you send.",
+      "Draft LinkedIn connection notes, networking emails, follow-ups, and role-fit replies from context you choose. Resume-aware, user-reviewed, and installed through Chrome.",
     images: ["/Aletheia.svg"],
   },
   robots: {

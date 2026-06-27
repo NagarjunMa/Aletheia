@@ -1,5 +1,9 @@
 import Link from "next/link";
 
+const CHROME_WEB_STORE_URL =
+  process.env.NEXT_PUBLIC_CHROME_WEB_STORE_URL ??
+  "https://chromewebstore.google.com/search/Aletheia";
+
 export default function CTA() {
   return (
     <section
@@ -23,20 +27,21 @@ export default function CTA() {
                 letterSpacing: "-0.02em",
               }}
             >
-              Install in <em style={{ fontStyle: "italic" }}>60 seconds.</em>
+              Install from the{" "}
+              <em style={{ fontStyle: "italic" }}>Chrome Web Store.</em>
             </h2>
             <p
               className="mt-5 text-sm leading-relaxed"
               style={{ color: "var(--l-text-muted)", maxWidth: "48ch" }}
             >
-              Aletheia ships as a Chrome extension. While we await Chrome Web
-              Store approval, download the .zip and load it unpacked — full
-              install guide on the next page. The trial includes 40 credits with
-              no expiry.
+              Aletheia is available as a Chrome extension. Install it from the
+              official Chrome Web Store listing, sign in, add your primary
+              resume in the dashboard, and start drafting reviewed professional
+              messages.
             </p>
 
             <p className="mt-6 text-xs" style={{ color: "var(--l-text-dim)" }}>
-              40 free credits · 2 per connection · 4 per email or InMail
+              40 free credits · Browser-managed updates · User-reviewed drafts
             </p>
           </div>
 
@@ -52,10 +57,12 @@ export default function CTA() {
               className="mb-6 text-xs font-bold tracking-widest uppercase"
               style={{ color: "var(--l-text)" }}
             >
-              Download for Chrome
+              Available for Chrome
             </p>
-            <Link
-              href="/install"
+            <a
+              href={CHROME_WEB_STORE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
               className="btn-primary w-full justify-center"
               style={{
                 width: "100%",
@@ -63,13 +70,13 @@ export default function CTA() {
                 justifyContent: "center",
               }}
             >
-              Download Extension
-            </Link>
+              Get Aletheia on Chrome
+            </a>
             <p
               className="mt-4 text-center text-xs"
               style={{ color: "var(--l-text-dim)" }}
             >
-              .zip · ~450 KB · Step-by-step install guide included
+              Official Chrome Web Store install
             </p>
             <div
               className="mt-6 pt-6 text-center text-xs tracking-widest uppercase"
