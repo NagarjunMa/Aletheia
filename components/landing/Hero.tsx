@@ -1,21 +1,20 @@
 import { Fragment } from "react";
 
 const stats = [
-  { value: "Seconds", label: "Per draft" },
-  { value: "270", label: "Chars, LinkedIn-ready" },
-  { value: "0", label: "Tabs to juggle" },
+  { value: "Seconds", label: "Per first draft" },
+  { value: "40", label: "Free starter credits" },
+  { value: "100%", label: "Reviewed before sending" },
 ];
 
 // Word-level stagger: split each headline line into individual words.
-// "One click." is kept as a single token so the sage underline spans both words.
 const headlineLines: Array<{ words: string[]; italic?: boolean }> = [
-  { words: ["Their", "profile,", "your", "resume."] },
-  { words: ["One", "draft.", "One click."] }, // "One click." gets SVG underline
-  { words: ["No", "tabs", "to", "juggle."], italic: true },
+  { words: ["Write", "clearer", "first", "messages"] },
+  { words: ["without", "starting", "from"] },
+  { words: ["scratch."], italic: true },
 ];
 
 /**
- * Brush-stroke SVG underline on "One click." — drawn with CSS stroke animation.
+ * Brush-stroke SVG underline on the accent word, drawn with CSS stroke animation.
  * Forest-green theme: stroke is sage #8EB69B.
  */
 function AccentUnderline({ delay = 0 }: { delay?: number }) {
@@ -108,12 +107,12 @@ export default function Hero() {
       >
         {/* Eyebrow badge */}
         <div className="landing-hero-reveal mb-10 flex justify-center">
-          <span className="section-label">LinkedIn outreach, made easier</span>
+          <span className="section-label">Professional networking drafts</span>
         </div>
 
         {/* ── Headline — word-by-word stagger ── */}
         <h1
-          aria-label="Their profile, your resume. One draft. One click. No tabs to juggle."
+          aria-label="Write clearer first messages without starting from scratch."
           style={{
             fontFamily:
               "var(--font-flaviotte), Playfair Display, Georgia, serif",
@@ -125,7 +124,7 @@ export default function Hero() {
           }}
         >
           {headlineLines.map((line, lineIdx) => {
-            const isAccentLine = lineIdx === 1; // "One draft. One click."
+            const isAccentLine = lineIdx === 1;
             const lineDelay = 0.18 + lineIdx * 0.15;
 
             return (
@@ -137,7 +136,7 @@ export default function Hero() {
                 }}
               >
                 {line.words.map((word, wordIdx) => {
-                  const isHuman = isAccentLine && word === "One click.";
+                  const isHuman = isAccentLine && word === "from";
                   const wDelay = lineDelay + wordIdx * 0.07;
 
                   return (
@@ -167,16 +166,16 @@ export default function Hero() {
           className="landing-hero-reveal mx-auto mt-8 max-w-2xl text-lg"
           style={{ color: "var(--l-text)", opacity: 0.82, lineHeight: 1.7 }}
         >
-          Writing a thoughtful connection note means remembering their last
-          role, your overlap, the recent post worth mentioning — every time.
-          Aletheia keeps track. Open the profile, click Generate. You get a
-          short, personal note in your voice, ready to send.
+          Aletheia drafts LinkedIn connection notes, networking emails,
+          follow-ups, and role-fit replies using your resume, your intent, and
+          the profile you choose to reference. You review and edit every message
+          before sending.
         </p>
 
         {/* CTAs */}
         <div className="landing-hero-reveal mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
           <a href="/install" className="btn-primary">
-            Download Extension
+            Get Aletheia on Chrome
           </a>
           <a href="/demo" className="btn-secondary">
             See a real draft
@@ -188,14 +187,14 @@ export default function Hero() {
           className="landing-hero-reveal mt-6 text-xs"
           style={{ color: "var(--l-text-dim)", letterSpacing: "0.05em" }}
         >
-          Available for Chrome · 40 free credits · Daily abuse limits
+          Available for Chrome · 40 free credits · Daily usage limits
         </p>
 
         <p
           className="landing-hero-reveal mt-2 text-[10px] tracking-widest uppercase"
           style={{ color: "var(--l-text-dim)" }}
         >
-          Profile HTML stripped in your browser · No background scraping
+          Chrome Web Store install · No credential access · No automated sending
         </p>
       </div>
 

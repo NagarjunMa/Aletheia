@@ -9,10 +9,11 @@ export const metadata: Metadata = {
 };
 
 type VersionPayload = {
-  version: string;
+  appVersion: string;
+  extensionVersion: string;
   sha: string;
-  builtAt: string;
-  sizeBytes: number;
+  builtAt?: string;
+  chromeWebStoreUrl: string | null;
 };
 
 async function getVersion(): Promise<VersionPayload | null> {
@@ -56,14 +57,27 @@ export default async function StatusPage() {
         </h1>
         {version ? (
           <dl className="grid grid-cols-[140px_1fr] gap-y-2 text-sm">
-            <dt style={{ color: "var(--l-text-dim)" }}>Version</dt>
-            <dd>{version.version}</dd>
+            <dt style={{ color: "var(--l-text-dim)" }}>App version</dt>
+            <dd>{version.appVersion}</dd>
+            <dt style={{ color: "var(--l-text-dim)" }}>Extension</dt>
+            <dd>{version.extensionVersion}</dd>
             <dt style={{ color: "var(--l-text-dim)" }}>Commit</dt>
             <dd className="font-mono">{version.sha.slice(0, 12)}</dd>
-            <dt style={{ color: "var(--l-text-dim)" }}>Built</dt>
-            <dd>{new Date(version.builtAt).toISOString()}</dd>
-            <dt style={{ color: "var(--l-text-dim)" }}>Extension size</dt>
-            <dd>{(version.sizeBytes / 1024).toFixed(0)} KB</dd>
+            <dt style={{ color: "var(--l-text-dim)" }}>Install source</dt>
+            <dd>
+              {version.chromeWebStoreUrl ? (
+                <a
+                  href={version.chromeWebStoreUrl}
+                  className="underline"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Chrome Web Store
+                </a>
+              ) : (
+                "Chrome Web Store URL not configured"
+              )}
+            </dd>
           </dl>
         ) : (
           <p style={{ color: "var(--l-text-muted)" }}>

@@ -5,7 +5,7 @@ import DemoExample from "@/components/demo/DemoExample";
 export const metadata: Metadata = {
   title: "Demo — see a real draft | Aletheia",
   description:
-    "See the exact input and output Aletheia produces. No sign-up, no install, just one rendered example.",
+    "See a sample Aletheia draft. No sign-up, no install, just one rendered example.",
 };
 
 export default function DemoPage() {
@@ -31,23 +31,23 @@ export default function DemoPage() {
             color: "var(--l-text)",
           }}
         >
-          One profile in. One note out.
+          One context. One reviewed draft.
         </h1>
         <p
           className="mb-12 max-w-2xl text-sm"
           style={{ color: "var(--l-text-muted)" }}
         >
-          This is real output from a real Claude generation. No sign-up. No
-          install. If the note below sounds like something you would actually
-          send, the rest of the product works the same — one click per profile
-          in your browser.
+          This sample shows the kind of concise draft Aletheia is designed to
+          prepare. No sign-up. No install. If the note below sounds like
+          something you would actually edit and send, the product follows the
+          same review-first workflow.
         </p>
 
         <DemoExample />
 
         <div className="mt-14 flex flex-col items-center gap-3">
           <Link href="/install" className="btn-primary">
-            Download Extension
+            Get Aletheia on Chrome
           </Link>
           <Link
             href="/"

@@ -4,70 +4,41 @@ import Navbar from "@/components/landing/Navbar";
 import Footer from "@/components/landing/Footer";
 import ShaderBackground from "@/components/ShaderBackground";
 
+const CHROME_WEB_STORE_URL =
+  process.env.NEXT_PUBLIC_CHROME_WEB_STORE_URL ??
+  "https://chromewebstore.google.com/search/Aletheia";
+
 export const metadata: Metadata = {
-  title: "Install Aletheia — Chrome Extension",
+  title: "Install Aletheia from the Chrome Web Store",
   description:
-    "Download and install the Aletheia Chrome extension. Step-by-step guide for sideloading while we await Chrome Web Store approval.",
+    "Install the official Aletheia Chrome extension from the Chrome Web Store to draft reviewed LinkedIn connection notes, networking emails, follow-ups, and role-fit replies.",
   robots: { index: true, follow: true },
 };
 
-export const dynamic = "force-dynamic";
-
-async function getVersionMeta(): Promise<{
-  version: string;
-  sha: string;
-  sizeBytes: number;
-} | null> {
-  try {
-    const res = await fetch(
-      new URL(
-        "/api/extension/version",
-        process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
-      ),
-      { cache: "no-store" },
-    );
-    if (!res.ok) return null;
-    return await res.json();
-  } catch {
-    return null;
-  }
-}
-
 const STEPS: { title: string; body: string }[] = [
   {
-    title: "Download the .zip",
-    body: "Click the Download button above. Save the file somewhere you can find it — Desktop works fine.",
+    title: "Open the Chrome Web Store listing",
+    body: "Use the official Aletheia listing to install the extension in Chrome.",
   },
   {
-    title: "Unzip it",
-    body: "Mac: double-click the .zip — Finder creates an aletheia-ext folder next to it. Windows: right-click → Extract All.",
+    title: "Add the extension to Chrome",
+    body: "Click Add to Chrome and confirm the browser permission prompt.",
   },
   {
-    title: "Open Chrome extensions",
-    body: "Paste chrome://extensions into the address bar and press Enter.",
+    title: "Sign in to Aletheia",
+    body: "Open the extension, sign in, and connect it to your Aletheia account.",
   },
   {
-    title: "Enable Developer mode",
-    body: "Toggle the Developer mode switch in the top-right corner of the page.",
+    title: "Add your primary resume",
+    body: "Upload or select your primary resume in the dashboard so drafts can reference your real background.",
   },
   {
-    title: "Load unpacked",
-    body: "Click the Load unpacked button (top-left) and select the unzipped Aletheia folder.",
-  },
-  {
-    title: "Pin the icon",
-    body: "Click the puzzle-piece icon in Chrome's toolbar, find Aletheia, and pin it so it's always one click away.",
-  },
-  {
-    title: "Sign in + start drafting",
-    body: "Click the Aletheia icon, sign in with email or Google, open a LinkedIn profile, and draft your first message.",
+    title: "Draft and review",
+    body: "Open a supported profile or opportunity, choose your message type, generate a draft, and review it before sending.",
   },
 ];
 
-export default async function InstallPage() {
-  const meta = await getVersionMeta();
-  const sizeKb = meta ? (meta.sizeBytes / 1024).toFixed(1) : null;
-
+export default function InstallPage() {
   return (
     <div className="landing">
       <ShaderBackground />
@@ -94,8 +65,8 @@ export default async function InstallPage() {
             className="mt-6 max-w-2xl text-sm leading-relaxed"
             style={{ color: "var(--l-text-muted)" }}
           >
-            Aletheia is awaiting Chrome Web Store approval. Until then, you can
-            sideload the extension directly. Takes about 60 seconds.
+            Aletheia is available through the Chrome Web Store. Install it from
+            the official listing to receive browser-managed updates.
           </p>
         </header>
 
@@ -110,28 +81,26 @@ export default async function InstallPage() {
             className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em]"
             style={{ color: "var(--l-text-dim)" }}
           >
-            Latest Build
+            Official install
           </p>
           <p className="text-2xl" style={{ color: "var(--l-text)" }}>
-            {meta ? `v${meta.version}` : "v1.0.0"}
-            <span
-              className="ml-3 text-xs tracking-widest uppercase"
-              style={{ color: "var(--l-text-dim)" }}
-            >
-              {sizeKb ? `${sizeKb} KB` : ""}
-              {meta?.sha ? ` · ${meta.sha}` : ""}
-            </span>
+            Chrome Web Store
           </p>
           <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
-            <a href="/ascendia-extension.zip" className="btn-primary" download>
-              Download .zip
+            <a
+              href={CHROME_WEB_STORE_URL}
+              className="btn-primary"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Open Chrome Web Store
             </a>
             <Link
               href="/demo"
               className="text-xs tracking-widest uppercase"
               style={{ color: "var(--l-text-dim)" }}
             >
-              See a real draft first →
+              See a sample draft first →
             </Link>
           </div>
         </section>
@@ -144,7 +113,7 @@ export default async function InstallPage() {
               fontFamily: "var(--font-flaviotte), Playfair Display, serif",
             }}
           >
-            Install in 7 steps
+            Start in 5 steps
           </h2>
           <ol className="space-y-6">
             {STEPS.map((step, i) => (
@@ -196,17 +165,14 @@ export default async function InstallPage() {
             className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em]"
             style={{ color: "var(--l-blue)" }}
           >
-            Heads up
+            User control
           </p>
           <p
             className="text-sm leading-relaxed"
             style={{ color: "var(--l-text-muted)" }}
           >
-            Sideloading is temporary. As soon as Chrome Web Store approves
-            Aletheia, this page will redirect to the store listing and updates
-            will install automatically. For now, you may see a yellow
-            &ldquo;unsupported extension&rdquo; banner from Chrome — that&apos;s
-            normal for unpacked extensions and is safe to dismiss.
+            Aletheia creates drafts only. You review, edit, copy, approve, or
+            reject each message before deciding what to send.
           </p>
         </section>
 

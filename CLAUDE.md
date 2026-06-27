@@ -7,11 +7,11 @@ Update that file whenever a phase completes or progress is made.
 ---
 
 ## Project Overview
-Aletheia is an AI-powered LinkedIn outreach platform. It generates authentic, human-sounding LinkedIn connection requests, cold emails, and InMails by reading a target's LinkedIn profile, combining it with the user's resume/intent, and running the output through a multi-stage sanitization + AI fingerprint removal pipeline.
+Aletheia helps professionals draft LinkedIn connection notes, networking emails, follow-ups, and role-fit replies from context they choose. Users review and edit every draft before sending. The app combines selected profile or opportunity context with the user's resume/intent and runs the output through a multi-stage sanitization + AI fingerprint removal pipeline.
 
 **Two surfaces:**
 - **Next.js Web App** — auth, dashboard, settings, landing page
-- **Chrome Extension (MV3)** — profile scraping, one-click generation, auto-fill
+- **Chrome Extension (MV3)** — selected page context, one-click draft generation, auto-fill
 
 ---
 
@@ -146,8 +146,8 @@ Copy `.env.local.example` → `.env.local` for local dev. Never commit secrets.
 - **CI pipeline:**
   - `ci.yml` — PR gate: lint + type-check + unit tests + guardrails + smoke build (triggers on `pull_request` to `main`)
   - Merge to `main` → Vercel deploys automatically. No staging environment.
-- **Pre-commit:** Husky + lint-staged runs `eslint --fix`, `prettier --write`, and `vitest related --run` against modified files only. Also rebuilds the downloadable extension zip when `ascendia-extension/(background|content|popup|settings|icons|lib|manifest.json)` files change (Phase 28).
-- **Extension distribution:** `npm run prebuild` runs `scripts/build-extension-zip.mjs` before every `next build`. esbuild bundles the extension, jszip packages it → `public/ascendia-extension.zip` (gitignored, ~439 KB). Vercel edge CDN serves the static asset at `/ascendia-extension.zip`. Version metadata at `/api/extension/version` (`{ version, sha, builtAt, sizeBytes }`).
+- **Pre-commit:** Husky + lint-staged runs `eslint --fix`, `prettier --write`, and `vitest related --run` against modified files only. Extension packaging is manual for Chrome Web Store submission.
+- **Extension distribution:** Public installs go through the Chrome Web Store. `npm run build:extension` creates a local, gitignored upload artifact at `ascendia-extension/dist/aletheia-extension.zip`; it is not written to `public/` and is not served by Vercel. Version metadata at `/api/extension/version` reports app/extension versions and the configured Chrome Web Store URL.
 - **Database migrations:** `supabase/migrations/` — apply via Supabase CLI or SQL Editor
 - **No Docker** — Vercel-native deployment
 

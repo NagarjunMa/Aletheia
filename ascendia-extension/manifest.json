@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Aletheia - LinkedIn Message Generator",
+  "name": "Aletheia - Professional Message Drafts",
   "version": "1.0.2",
-  "description": "Generate personalized LinkedIn connection messages and cold emails using AI",
+  "description": "Draft reviewed LinkedIn connection notes and professional networking messages from context you choose.",
   "permissions": [
     "storage",
     "activeTab",

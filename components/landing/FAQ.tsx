@@ -5,32 +5,32 @@ import { Plus, Minus } from "lucide-react";
 
 const faqs = [
   {
-    q: "Is it safe for my LinkedIn account?",
-    a: "Yes. Aletheia reads profile information from the page you already have open — it never logs in, sends messages, or performs automated actions on your behalf. You always copy and paste the draft yourself.",
+    q: "Does Aletheia send messages for me?",
+    a: "No. Aletheia drafts messages. It does not send messages, click buttons, submit forms, or take actions on your behalf.",
   },
   {
-    q: "Does it support multiple languages?",
-    a: "English only. Multi-language support is being explored but there is no confirmed timeline.",
+    q: "Does Aletheia collect my LinkedIn password?",
+    a: "No. Aletheia does not ask for or collect LinkedIn credentials.",
   },
   {
-    q: "How does the resume integration work?",
-    a: "You upload resumes in your Aletheia dashboard and choose one primary resume for generation. When drafting, the AI uses that resume to ground the self-introduction - referencing your actual role, company, and relevant experience instead of inventing credentials. If no primary resume exists, the AI focuses on curiosity about the recipient rather than fabricating your background.",
+    q: "How does resume support work?",
+    a: "You upload resumes in your dashboard and choose one as your primary resume. Drafts can use that resume to reference your actual skills, projects, and experience.",
   },
   {
-    q: "Can I try it before paying?",
-    a: "Absolutely. The trial gives you 40 credits with no expiry and no credit card required. LinkedIn connections use 2 credits; emails and InMails use 4.",
+    q: "What can I draft with Aletheia?",
+    a: "You can draft LinkedIn connection notes, networking emails, follow-ups, referral requests, and role-fit replies.",
   },
   {
-    q: "Does it work on LinkedIn Recruiter?",
-    a: "Yes — Aletheia works across free LinkedIn, LinkedIn Premium, and LinkedIn Recruiter wherever you view a profile in Chrome.",
+    q: "Do I have to send the draft?",
+    a: "No. You always review the draft first. You can edit, regenerate, copy, approve, or reject it.",
   },
   {
-    q: "What does adaptive learning mean?",
-    a: "When you accept a generated message (by copying it), Aletheia saves it as an example of your preferred writing style. After 3 accepted messages, the AI uses those examples to match your tone, sentence length, and vocabulary in future generations. This means the tool gets better the more you use it — adapting to your voice rather than imposing a generic one.",
+    q: "Where do I install Aletheia?",
+    a: "Aletheia is available through the official Chrome Web Store listing.",
   },
   {
-    q: "What data does Aletheia send to its servers?",
-    a: "When you generate a draft, Aletheia sends the recipient's public LinkedIn profile data (name, headline, experience, posts, skills) and your draft preferences (intent and format) to its API. Your primary resume is loaded from your Aletheia account on the server. HTML is stripped and injection patterns are blocked before the data reaches the model. No LinkedIn credentials are ever transmitted. Drafts you keep are stored locally in the extension to inform future drafts.",
+    q: "Is Aletheia affiliated with LinkedIn?",
+    a: "No. Aletheia is an independent product and is not affiliated with, endorsed by, or sponsored by LinkedIn.",
   },
 ];
 

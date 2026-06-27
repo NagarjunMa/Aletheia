@@ -5,10 +5,9 @@ import Image from "next/image";
 import Link from "next/link";
 import { Menu, X } from "lucide-react";
 
-// Replace with real Web Store URL once the listing is published. Until then,
-// link to /install so the click lands on the sideload guide.
 const CHROME_WEB_STORE_URL: string =
-  process.env.NEXT_PUBLIC_CHROME_WEB_STORE_URL ?? "/install";
+  process.env.NEXT_PUBLIC_CHROME_WEB_STORE_URL ??
+  "https://chromewebstore.google.com/search/Aletheia";
 
 const navLinks = [
   { label: "Features", href: "#features" },
@@ -155,9 +154,7 @@ export default function Navbar() {
             className="btn-primary"
             style={{ fontSize: "0.68rem", padding: "0.65rem 1.4rem" }}
           >
-            {CHROME_WEB_STORE_URL.startsWith("http")
-              ? "Get on Chrome Web Store"
-              : "Download Extension"}
+            Get on Chrome Web Store
           </a>
         </div>
 
@@ -237,9 +234,7 @@ export default function Navbar() {
             className="btn-primary"
             style={{ width: "100%", display: "flex", justifyContent: "center" }}
           >
-            {CHROME_WEB_STORE_URL.startsWith("http")
-              ? "Get on Chrome Web Store"
-              : "Download Extension"}
+            Get on Chrome Web Store
           </a>
         </div>
       </div>

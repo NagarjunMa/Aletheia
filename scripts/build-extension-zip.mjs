@@ -1,14 +1,11 @@
 #!/usr/bin/env node
-// Bundle the Chrome extension and zip it into public/ascendia-extension.zip
-// so the Next.js app can serve it as a static download.
+// Bundle the Chrome extension into a local artifact for Chrome Web Store upload.
 //
 // Runs:
-//   - Via `npm run prebuild` → triggered automatically by `npm run build`
-//     (Vercel runs `npm run build`, so production downloads stay fresh).
 //   - Via `.husky/pre-commit` when ascendia-extension/** files change.
 //   - Manually: `node scripts/build-extension-zip.mjs`
 //
-// The zip is gitignored — it's a build artifact, regenerated each deploy.
+// The zip is gitignored and is not written to public/ or deployed by Vercel.
 
 import JSZip from 'jszip'
 import { execSync } from 'node:child_process'
@@ -20,9 +17,9 @@ import { fileURLToPath } from 'node:url'
 const __filename = fileURLToPath(import.meta.url)
 const ROOT = path.resolve(path.dirname(__filename), '..')
 const EXT_DIR = path.join(ROOT, 'ascendia-extension')
-const PUBLIC_DIR = path.join(ROOT, 'public')
-const OUT_ZIP = path.join(PUBLIC_DIR, 'ascendia-extension.zip')
-const VERSION_FILE = path.join(PUBLIC_DIR, 'ascendia-extension.version.json')
+const DIST_DIR = path.join(EXT_DIR, 'dist')
+const OUT_ZIP = path.join(DIST_DIR, 'aletheia-extension.zip')
+const VERSION_FILE = path.join(DIST_DIR, 'aletheia-extension.version.json')
 
 // Extension source ships as plain MV3 JS — no bundling.
 // service-worker.js uses importScripts('auth.js') which requires siblings
@@ -104,7 +101,7 @@ async function addPathToZip(zip, srcPath, destPath) {
 }
 
 async function buildZip() {
-  await mkdir(PUBLIC_DIR, { recursive: true })
+  await mkdir(DIST_DIR, { recursive: true })
 
   const zip = new JSZip()
 

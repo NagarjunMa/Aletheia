@@ -1,46 +1,52 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { createLogger } from "@/lib/logger";
 import { getCorsHeaders } from "@/lib/cors";
-
-const log = createLogger("extension-version");
 
 export const dynamic = "force-dynamic";
 
-// Returns the version metadata for the downloadable extension zip.
-// Generated at build time by scripts/build-extension-zip.mjs.
-// Used by the landing page + dashboard to surface "v1.0.0 · 78ca5a7" and
-// to cache-bust the /ascendia-extension.zip download link.
+type PackageJson = {
+  version?: string;
+};
+
+type ExtensionManifest = {
+  version?: string;
+};
+
+async function readJson<T>(filePath: string): Promise<T> {
+  const raw = await readFile(filePath, "utf8");
+  return JSON.parse(raw) as T;
+}
+
 export async function GET(request: NextRequest) {
   const corsHeaders = getCorsHeaders(request, { methods: "GET, OPTIONS" });
+  const root = process.cwd();
 
-  try {
-    const metaPath = path.join(
-      process.cwd(),
-      "public",
-      "ascendia-extension.version.json",
-    );
-    const raw = await readFile(metaPath, "utf8");
-    const meta = JSON.parse(raw);
+  const [pkg, manifest] = await Promise.all([
+    readJson<PackageJson>(path.join(root, "package.json")),
+    readJson<ExtensionManifest>(
+      path.join(root, "ascendia-extension", "manifest.json"),
+    ),
+  ]);
 
-    return NextResponse.json(meta, {
+  return NextResponse.json(
+    {
+      appVersion: pkg.version ?? "unknown",
+      extensionVersion: manifest.version ?? "unknown",
+      sha:
+        process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 12) ??
+        process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA?.slice(0, 12) ??
+        "local",
+      builtAt: process.env.VERCEL_GIT_COMMIT_SHA ? undefined : "local",
+      chromeWebStoreUrl: process.env.NEXT_PUBLIC_CHROME_WEB_STORE_URL ?? null,
+    },
+    {
       headers: {
         ...corsHeaders,
-        // Cache for 5 min at edge; clients re-fetch hourly via stale-while-revalidate
         "Cache-Control": "s-maxage=300, stale-while-revalidate=3600",
       },
-    });
-  } catch (err) {
-    log.warn(
-      { err: err instanceof Error ? err.message : String(err) },
-      "version metadata missing — extension zip may not be built yet",
-    );
-    return NextResponse.json(
-      { error: "Extension version metadata unavailable" },
-      { status: 503, headers: corsHeaders },
-    );
-  }
+    },
+  );
 }
 
 export async function OPTIONS(request: NextRequest) {

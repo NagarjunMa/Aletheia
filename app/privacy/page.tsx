@@ -7,7 +7,7 @@ import ShaderBackground from "@/components/ShaderBackground";
 export const metadata: Metadata = {
   title: "Privacy Policy",
   description:
-    "How Aletheia collects, stores, and processes data. Plain-English disclosure of LinkedIn profile reads, resume text, generated messages, and third-party processors (Supabase, Anthropic, Sentry, Vercel).",
+    "How Aletheia collects, stores, and processes data for reviewed professional message drafts, resume context, account data, and third-party processors.",
   robots: { index: true, follow: true },
 };
 
@@ -43,11 +43,11 @@ export default function PrivacyPage() {
         <Section title="1. Who we are">
           <p>
             Aletheia is a Chrome extension and web service that helps people
-            write LinkedIn connection requests, cold emails, and InMails.
-            Aletheia is operated by {OPERATOR_NAME}, an individual sole
-            developer based in {OPERATOR_LOCATION}. We are not a registered
-            corporation. Aletheia is not affiliated with, endorsed by, or
-            sponsored by LinkedIn Corporation.
+            draft LinkedIn connection notes, networking emails, follow-ups, and
+            role-fit replies. Aletheia is operated by {OPERATOR_NAME}, an
+            individual sole developer based in {OPERATOR_LOCATION}. We are not a
+            registered corporation. Aletheia is not affiliated with, endorsed
+            by, or sponsored by LinkedIn Corporation.
           </p>
           <p>
             Questions or requests: <ContactLink />.
@@ -58,20 +58,18 @@ export default function PrivacyPage() {
           <p>We collect only what we need to operate the service:</p>
           <ul>
             <li>
-              <strong>LinkedIn profile content</strong> you choose to read with
-              the extension — name, headline, location, about section,
-              experience, recent posts, skills, and the public profile URL. We
-              read this from the page DOM at the moment you click Generate.
+              <strong>Selected profile context</strong> from the page you choose
+              to reference — such as name, headline, location, about section,
+              experience, recent posts, skills, and profile URL. This is used
+              only when you request a draft.
             </li>
             <li>
-              <strong>Resume and job description text</strong> you paste into
-              the extension. Used to ground the generated message in your real
-              background.
+              <strong>Resume and opportunity context</strong> you provide in
+              Aletheia. Used to ground drafts in your real background.
             </li>
             <li>
-              <strong>Generated messages</strong> the AI produces, plus
-              accept/reject feedback you give. Used to improve future
-              generations for your account.
+              <strong>Generated drafts</strong>, plus accept/reject feedback you
+              give. Used to improve future drafts for your account.
             </li>
             <li>
               <strong>Account email</strong> you sign up with, plus auth tokens

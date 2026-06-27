@@ -1,18 +1,18 @@
 const steps = [
   {
     num: "01",
-    title: "Open the profile",
-    body: "Open any LinkedIn profile in Chrome. Aletheia reads the page — name, headline, location, about, experience, recent posts, and skills. HTML is stripped and injection patterns are blocked before anything leaves your browser.",
+    title: "Install from Chrome Web Store",
+    body: "Add Aletheia from the official Chrome Web Store listing and sign in to your account.",
   },
   {
     num: "02",
-    title: "Pick intent and format",
-    body: "Choose what kind of note — connection, cold email, or InMail — and the intent behind it. Aletheia combines the profile with your resume and drafts an opener grounded in real overlap. Drafts you keep inform future ones, so the tone tracks how you actually write.",
+    title: "Add your resume",
+    body: "Upload a resume in the dashboard and choose the version you want Aletheia to use.",
   },
   {
     num: "03",
-    title: "Review and send",
-    body: "You see the draft before anyone else. Edit a word, regenerate, or send as-is. Aletheia never posts, connects, or messages on your behalf — you stay in the loop on every send.",
+    title: "Review the draft",
+    body: "Open a profile or opportunity, choose the message type, and review the result. Edit, regenerate, copy, approve, or reject the draft. Aletheia does not send messages for you.",
   },
 ];
 
@@ -170,7 +170,7 @@ export default function HowItWorks() {
           {/* Left: heading + steps */}
           <div>
             <div className="landing-section-reveal">
-              <span className="section-label mb-6 block">Under the Hood</span>
+              <span className="section-label mb-6 block">Process</span>
               <h2
                 style={{
                   fontFamily: "var(--font-flaviotte), Playfair Display, serif",
@@ -181,11 +181,11 @@ export default function HowItWorks() {
                   letterSpacing: "-0.02em",
                 }}
               >
-                Three layers between{" "}
+                A simple path from{" "}
                 <em
                   style={{ fontStyle: "italic", color: "var(--l-text-muted)" }}
                 >
-                  AI and inbox.
+                  profile to draft.
                 </em>
               </h2>
             </div>
