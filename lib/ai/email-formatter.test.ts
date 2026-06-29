@@ -108,6 +108,28 @@ describe("formatGeneratedEmailBody", () => {
     expect(formatted).toContain("linkedin.com/in/nagarjun-mallesh");
   });
 
+  it("keeps FastAPI attached when repairing inline founder proof labels", () => {
+    const body =
+      "Hi Talha,\n\nYour post about founding.dev caught my attention, replacing bloated SaaS stacks with custom-built tooling is a real problem worth solving. That's the kind of infrastructure and product challenge I want to work on.\n\nA quick look at my background:\nCloud & Infrastructure: AWS environments managed with Terraform across backend services AI & RAG Systems: Built RAG pipelines and AI-integrated backend services using Python and FastAPI Full-Stack Context: TypeScript, React, and Node.js alongside core backend and cloud work I think my background maps well to what you're building, the infra automation and AI integration layers especially. I'd be interested in learning more about what you're building and where I could contribute. Would you be open to a brief conversation?\n\nBest,\nNagarjun Mallesh\nlinkedin.com/in/nagarjun-mallesh";
+
+    const formatted = formatGeneratedEmailBody(body, {
+      category: "cold_email",
+      mode: "founder_ceo_outreach",
+    });
+
+    expect(formatted).toContain(
+      "AI & RAG Systems: Built RAG pipelines and AI-integrated backend services using Python and FastAPI",
+    );
+    expect(formatted).toContain(
+      "\nFull-Stack Context: TypeScript, React, and Node.js alongside core backend and cloud work",
+    );
+    expect(formatted).not.toMatch(/\n\nFastAPI\b/);
+    expect(formatted).toContain(
+      "\n\nI'd be interested in learning more about what you're building and where I could contribute.",
+    );
+    expect(formatted).toContain("Would you be open to a brief conversation?");
+  });
+
   it("removes misleading resume attachment status while preserving the ask", () => {
     const body =
       "Hi Dhiraj,\n\nI came across your post about AI Engineer openings. I don't have a resume attached here, but I'd genuinely like to learn more about what you're building and where I might fit.\n\nBest,\nNagarjun Mallesh";
