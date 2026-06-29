@@ -364,7 +364,7 @@ describe("COLD_EMAIL_PROMPT subject line policy", () => {
   ];
 
   it("tracks the prompt behavior change with a new version", () => {
-    expect(PROMPT_VERSION).toBe("1.7.0");
+    expect(PROMPT_VERSION).toBe("1.7.1");
   });
 
   it("documents scenario-specific email modes", () => {
@@ -389,7 +389,13 @@ describe("COLD_EMAIL_PROMPT subject line policy", () => {
       "Never inline proof points into a paragraph",
     );
     expect(COLD_EMAIL_PROMPT).toContain(
-      "The simple ask and signature are mandatory.",
+      "The final ask and signature are mandatory.",
+    );
+    expect(COLD_EMAIL_PROMPT).toContain(
+      "It must show the user wants to start a conversation about the role, team, or future possibilities.",
+    );
+    expect(COLD_EMAIL_PROMPT).toContain(
+      "where I could contribute. Would you be open to a brief conversation?",
     );
     expect(COLD_EMAIL_PROMPT).toContain(
       'avoid "huge congratulations", "massive", "immediately caught my eye"',

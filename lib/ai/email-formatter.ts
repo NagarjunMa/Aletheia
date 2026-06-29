@@ -143,8 +143,19 @@ const INLINE_PROOF_LABEL = new RegExp(
   "g",
 );
 
+const STRAY_TECH_PREFIX = new RegExp(
+  `^(FastAPI|Node\\.js|Next\\.js|React|TypeScript|Python|AWS|GCP|Docker|Terraform)\\s+(${STRUCTURED_PROOF_LABEL}:\\s+\\S[\\s\\S]*)$`,
+);
+
 const POST_PROOF_SENTENCE_START =
   /\s+((?:I think|I can|I would|I’d|I'd|That|This|Given|My background|Would you|Are you|Happy to|Please|Let me)\b[\s\S]*)$/;
+
+function splitFounderClosingParagraph(paragraph: string): string {
+  return paragraph.replace(
+    /\s+(I'd be interested\b|I would be interested\b|I'd be glad to discuss\b|I would be glad to discuss\b)/gi,
+    "\n\n$1",
+  );
+}
 
 function repairStructuredProofBlocks(body: string): string {
   return body.replace(
@@ -169,33 +180,48 @@ function repairStructuredProofBlocks(body: string): string {
       let trailingParagraph = "";
 
       for (const line of lines) {
-        if (!isStructuredProofLine(line)) {
+        const strayTechMatch = line.match(STRAY_TECH_PREFIX);
+        let normalizedLine = line;
+        const strayTech = strayTechMatch?.[1];
+        const proofLine = strayTechMatch?.[2];
+        const previousProofLine = repairedLines.at(-1);
+        if (strayTech && proofLine && previousProofLine) {
+          repairedLines[repairedLines.length - 1] =
+            `${previousProofLine} ${strayTech}`;
+          normalizedLine = proofLine;
+        }
+
+        if (!isStructuredProofLine(normalizedLine)) {
           trailingParagraph = trailingParagraph
-            ? `${trailingParagraph} ${line}`
-            : line;
+            ? `${trailingParagraph} ${normalizedLine}`
+            : normalizedLine;
           continue;
         }
 
-        const trailingMatch = line.match(POST_PROOF_SENTENCE_START);
+        const trailingMatch = normalizedLine.match(POST_PROOF_SENTENCE_START);
         const trailingSentence = trailingMatch?.[1]?.trim();
         if (
           trailingMatch?.index &&
           trailingMatch.index > 0 &&
           trailingSentence
         ) {
-          repairedLines.push(line.slice(0, trailingMatch.index).trim());
+          repairedLines.push(
+            normalizedLine.slice(0, trailingMatch.index).trim(),
+          );
           trailingParagraph = trailingParagraph
             ? `${trailingParagraph} ${trailingSentence}`
             : trailingSentence;
         } else {
-          repairedLines.push(line);
+          repairedLines.push(normalizedLine);
         }
       }
 
       return [
         heading,
         repairedLines.join("\n"),
-        trailingParagraph ? `\n\n${trailingParagraph}` : "",
+        trailingParagraph
+          ? `\n\n${splitFounderClosingParagraph(trailingParagraph)}`
+          : "",
       ]
         .filter(Boolean)
         .join("\n");
@@ -291,6 +317,10 @@ function normalizeBodyParagraphs(body: string, mode: EmailMode): string {
     .replace(/\s+(In terms of\b)/gi, "\n\n$1")
     .replace(/\s+(A quick look at my background:)/gi, "\n\n$1")
     .replace(/\s+(Interested in\b|Would you\b|If this\b)/gi, "\n\n$1")
+    .replace(
+      /\s+(I'd be interested\b|I would be interested\b|I'd be glad to discuss\b|I would be glad to discuss\b)/gi,
+      "\n\n$1",
+    )
     .replace(/\s+(Please advise\b)/gi, "\n\n$1");
 
   remainder = repairStructuredProofBlocks(remainder);
