@@ -157,6 +157,33 @@ function splitFounderClosingParagraph(paragraph: string): string {
   );
 }
 
+function reattachOrphanedTechPrefix(
+  paragraph: string,
+  proofLines: string[],
+): string {
+  const orphanMatch = paragraph.match(
+    /^(FastAPI|Node\.js|Next\.js|React|TypeScript|Python|AWS|GCP|Docker|Terraform)\s+([\s\S]+)$/i,
+  );
+  const orphanTech = orphanMatch?.[1];
+  const remainingParagraph = orphanMatch?.[2];
+
+  if (!orphanTech || !remainingParagraph) {
+    return paragraph;
+  }
+
+  const incompleteLineIndex = proofLines.findIndex((line) =>
+    /\b(?:and|using|with)$/i.test(line),
+  );
+
+  if (incompleteLineIndex === -1) {
+    return paragraph;
+  }
+
+  proofLines[incompleteLineIndex] =
+    `${proofLines[incompleteLineIndex]} ${orphanTech}`;
+  return remainingParagraph;
+}
+
 function repairStructuredProofBlocks(body: string): string {
   return body.replace(
     /(A quick look at my background:)([\s\S]*?)(?=(?:\n\n(?:Best|Thanks|Regards|Sincerely|Appreciate it either way),?\n)|$)/gi,
@@ -214,6 +241,13 @@ function repairStructuredProofBlocks(body: string): string {
         } else {
           repairedLines.push(normalizedLine);
         }
+      }
+
+      if (trailingParagraph) {
+        trailingParagraph = reattachOrphanedTechPrefix(
+          trailingParagraph,
+          repairedLines,
+        );
       }
 
       return [
