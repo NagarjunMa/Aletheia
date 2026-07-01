@@ -130,6 +130,24 @@ describe("formatGeneratedEmailBody", () => {
     expect(formatted).toContain("Would you be open to a brief conversation?");
   });
 
+  it("reattaches orphaned FastAPI from the trailing paragraph in initial outreach", () => {
+    const body =
+      "Hi Kate,\n\nYou posted about the AI Engineer role at Tulip and specifically called out AI-minded folks, that caught my attention. Tulip's no-code platform for frontline operations is a genuinely interesting problem space, and the Series D momentum makes the timing compelling.\n\nA quick look at my background:\nAI & RAG Systems: Built RAG pipelines and AI-integrated backend services using Python and\nCloud & Infrastructure: AWS environments managed with Terraform across backend and infrastructure projects\nFull-Stack Context: TypeScript, React, and Node.js alongside core backend and cloud work\n\nFastAPI I think my background maps well to what you're describing, hands-on AI systems work with solid cloud infrastructure depth underneath it. Would a brief chat make sense, or happy to share more context first?\n\nBest,\nNagarjun Mallesh\nlinkedin.com/in/nagarjun-mallesh";
+
+    const formatted = formatGeneratedEmailBody(body, {
+      category: "cold_email",
+      mode: "initial_outreach",
+    });
+
+    expect(formatted).toContain(
+      "AI & RAG Systems: Built RAG pipelines and AI-integrated backend services using Python and FastAPI",
+    );
+    expect(formatted).not.toMatch(/\n\nFastAPI\b/);
+    expect(formatted).toContain(
+      "\n\nI think my background maps well to what you're describing",
+    );
+  });
+
   it("removes misleading resume attachment status while preserving the ask", () => {
     const body =
       "Hi Dhiraj,\n\nI came across your post about AI Engineer openings. I don't have a resume attached here, but I'd genuinely like to learn more about what you're building and where I might fit.\n\nBest,\nNagarjun Mallesh";

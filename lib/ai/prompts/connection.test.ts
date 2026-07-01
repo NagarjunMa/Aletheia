@@ -364,7 +364,7 @@ describe("COLD_EMAIL_PROMPT subject line policy", () => {
   ];
 
   it("tracks the prompt behavior change with a new version", () => {
-    expect(PROMPT_VERSION).toBe("1.7.1");
+    expect(PROMPT_VERSION).toBe("1.7.2");
   });
 
   it("documents scenario-specific email modes", () => {
@@ -396,6 +396,9 @@ describe("COLD_EMAIL_PROMPT subject line policy", () => {
     );
     expect(COLD_EMAIL_PROMPT).toContain(
       "where I could contribute. Would you be open to a brief conversation?",
+    );
+    expect(COLD_EMAIL_PROMPT).toContain(
+      "Never output bracket placeholders such as [User Name], [LinkedIn URL], [Contact Links], or [Company].",
     );
     expect(COLD_EMAIL_PROMPT).toContain(
       'avoid "huge congratulations", "massive", "immediately caught my eye"',
