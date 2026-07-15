@@ -148,13 +148,18 @@ const STRAY_TECH_PREFIX = new RegExp(
 );
 
 const POST_PROOF_SENTENCE_START =
-  /\s+((?:I think|I can|I would|I’d|I'd|That|This|Given|My background|Would you|Are you|Happy to|Please|Let me)\b[\s\S]*)$/;
+  /\s+((?:I think|I can|I would|I’d|I'd|That|This|Given|My background|My experience|The (?:combination|background|experience)|With (?:this|that|these|the|[A-Z][A-Za-z0-9.-]*)|Would you|Are you|Happy to|Please|Let me)\b[\s\S]*)$/;
 
-function splitFounderClosingParagraph(paragraph: string): string {
-  return paragraph.replace(
-    /\s+(I'd be interested\b|I would be interested\b|I'd be glad to discuss\b|I would be glad to discuss\b)/gi,
-    "\n\n$1",
-  );
+function splitPostProofParagraphs(paragraph: string): string {
+  return paragraph
+    .replace(
+      /\s+(I'd be interested\b|I would be interested\b|I'd be glad to discuss\b|I would be glad to discuss\b)/gi,
+      "\n\n$1",
+    )
+    .replace(
+      /\s+(Would you\b|Are you\b|Interested in\b|Happy to\b|Please\b|Let me know\b)/g,
+      "\n\n$1",
+    );
 }
 
 function reattachOrphanedTechPrefix(
@@ -254,7 +259,7 @@ function repairStructuredProofBlocks(body: string): string {
         heading,
         repairedLines.join("\n"),
         trailingParagraph
-          ? `\n\n${splitFounderClosingParagraph(trailingParagraph)}`
+          ? `\n\n${splitPostProofParagraphs(trailingParagraph)}`
           : "",
       ]
         .filter(Boolean)
