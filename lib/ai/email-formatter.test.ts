@@ -148,6 +148,39 @@ describe("formatGeneratedEmailBody", () => {
     );
   });
 
+  it("keeps an Agentplace value statement out of the final proof line", () => {
+    const body =
+      "Hi Polina, The trace analysis feature you shipped is a useful step forward for agent observability. That work sits close to what I've been building. A quick look at my background:\nAI & Backend: Built RAG pipelines and backend services using Python and FastAPI\nCloud & Infrastructure: Terraform-managed AWS and GCP environments with monitoring automation\nFull-Stack Context: Worked across TypeScript, React, Node.js, PostgreSQL, and Docker The combination of AI backend experience and cloud infrastructure is relevant to Agentplace. Would you be open to a brief conversation? Best,\nNagarjun Mallesh\nlinkedin.com/in/nagarjun-mallesh";
+
+    const formatted = formatGeneratedEmailBody(body, {
+      category: "cold_email",
+      mode: "initial_outreach",
+    });
+
+    expect(formatted).toContain(
+      "Full-Stack Context: Worked across TypeScript, React, Node.js, PostgreSQL, and Docker\n\nThe combination of AI backend experience",
+    );
+    expect(formatted).not.toContain("PostgreSQL, and Docker The combination");
+    expect(formatted).toContain(
+      "\n\nWould you be open to a brief conversation?",
+    );
+    expect(formatted).toContain("Best,\nNagarjun Mallesh");
+  });
+
+  it("separates company-led value statements from structured proof lines", () => {
+    const body =
+      "Hi Polina, Your Langfuse trace analysis post caught my attention. A quick look at my background:\nAI Backend: Built RAG pipelines using Python and FastAPI\nCloud Infrastructure: Managed Terraform-based AWS environments\nFull-Stack Context: Worked across TypeScript, React, and Node.js With Agentplace.io building deeper into agent observability, my backend experience could help the platform layer. Happy to share more context. Best,\nNagarjun Mallesh";
+
+    const formatted = formatGeneratedEmailBody(body, {
+      category: "cold_email",
+      mode: "initial_outreach",
+    });
+
+    expect(formatted).toContain(
+      "Full-Stack Context: Worked across TypeScript, React, and Node.js\n\nWith Agentplace.io building deeper into agent observability",
+    );
+  });
+
   it("removes misleading resume attachment status while preserving the ask", () => {
     const body =
       "Hi Dhiraj,\n\nI came across your post about AI Engineer openings. I don't have a resume attached here, but I'd genuinely like to learn more about what you're building and where I might fit.\n\nBest,\nNagarjun Mallesh";

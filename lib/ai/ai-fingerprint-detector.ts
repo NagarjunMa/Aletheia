@@ -225,7 +225,11 @@ function cleanupSanitizedContent(content: string): string {
   let cleaned = content;
   cleaned = cleaned.replace(/  +/g, " ");
   cleaned = cleaned.replace(/\s+([,.!?])/g, "$1");
-  cleaned = cleaned.replace(/([.!?])\s*\n/g, "$1\n");
+  // Keep intentional paragraph boundaries intact. `\s` also matches newlines,
+  // so the previous expression collapsed `\n\n` to `\n` whenever a paragraph
+  // ended in punctuation. Email formatting relies on those blank lines to keep
+  // proof points, value statements, asks, and signatures in separate sections.
+  cleaned = cleaned.replace(/([.!?])[ \t]*\n/g, "$1\n");
   cleaned = cleaned.replace(/\n\s*\n\s*\n/g, "\n\n");
   cleaned = cleaned.trim();
   return cleaned;

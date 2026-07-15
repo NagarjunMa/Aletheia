@@ -70,6 +70,20 @@ describe("detectAIFingerprints", () => {
     expect(result.sanitizedContent).toContain(" - ");
   });
 
+  it("preserves intentional paragraph breaks while humanizing content", () => {
+    const text =
+      "The trace analysis launch is useful — it shortens debugging.\n\nMy backend experience maps to that work.\n\nWould a brief chat be useful?";
+    const result = detectAIFingerprints(text, "linkedin");
+
+    expect(result.detectedPatterns).toContain("em_dash_usage");
+    expect(result.sanitizedContent).toContain(
+      "it shortens debugging.\n\nMy backend experience",
+    );
+    expect(result.sanitizedContent).toContain(
+      "that work.\n\nWould a brief chat",
+    );
+  });
+
   it("sanitizedContent is always a string", () => {
     const result = detectAIFingerprints("Some text here.", "general");
     expect(typeof result.sanitizedContent).toBe("string");
