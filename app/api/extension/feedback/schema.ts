@@ -12,6 +12,12 @@ export const evalMetadataSchema = z
     generationTimeMs: z.number().int().nonnegative(),
     inputTokens: z.number().int().nonnegative(),
     outputTokens: z.number().int().nonnegative(),
+    resumeSource: z
+      .enum(["user_resumes", "profiles", "legacy_payload", "none"])
+      .optional(),
+    hasPrimaryResume: z.boolean().optional(),
+    injectionTriggered: z.boolean().optional(),
+    safeCandidateSummaryUsed: z.boolean().optional(),
   })
   .strict();
 

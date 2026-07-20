@@ -6,17 +6,25 @@ const ORIGINAL_COMMIT_SHA = process.env.VERCEL_GIT_COMMIT_SHA;
 const ORIGINAL_PUBLIC_COMMIT_SHA =
   process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA;
 const ORIGINAL_STORE_URL = process.env.NEXT_PUBLIC_CHROME_WEB_STORE_URL;
+const ORIGINAL_PUBLISHED_VERSION =
+  process.env.CHROME_WEB_STORE_PUBLISHED_VERSION;
+const ORIGINAL_MINIMUM_VERSION =
+  process.env.MINIMUM_SUPPORTED_EXTENSION_VERSION;
 
 beforeEach(() => {
   delete process.env.VERCEL_GIT_COMMIT_SHA;
   delete process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA;
   delete process.env.NEXT_PUBLIC_CHROME_WEB_STORE_URL;
+  delete process.env.CHROME_WEB_STORE_PUBLISHED_VERSION;
+  delete process.env.MINIMUM_SUPPORTED_EXTENSION_VERSION;
 });
 
 afterEach(() => {
   process.env.VERCEL_GIT_COMMIT_SHA = ORIGINAL_COMMIT_SHA;
   process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA = ORIGINAL_PUBLIC_COMMIT_SHA;
   process.env.NEXT_PUBLIC_CHROME_WEB_STORE_URL = ORIGINAL_STORE_URL;
+  process.env.CHROME_WEB_STORE_PUBLISHED_VERSION = ORIGINAL_PUBLISHED_VERSION;
+  process.env.MINIMUM_SUPPORTED_EXTENSION_VERSION = ORIGINAL_MINIMUM_VERSION;
 });
 
 describe("GET /api/extension/version", () => {
@@ -27,18 +35,31 @@ describe("GET /api/extension/version", () => {
     expect(res.status).toBe(200);
     expect(body).toMatchObject({
       appVersion: "0.1.0",
-      extensionVersion: "1.0.2",
+      extensionVersion: "1.0.3",
       sha: "local",
       builtAt: "local",
       chromeWebStoreUrl: null,
+      api: {
+        currentVersion: "1",
+        supportedVersions: ["1"],
+      },
+      extension: {
+        latestSourceVersion: "1.0.3",
+        publishedVersion: "1.0.2",
+        minimumSupportedVersion: "1.0.2",
+        chromeWebStoreUrl: null,
+      },
     });
-    expect(res.headers.get("Cache-Control")).toContain("s-maxage=300");
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
+    expect(res.headers.get("X-Aletheia-API-Version")).toBe("1");
   });
 
   it("returns deployment metadata and Chrome Web Store URL when configured", async () => {
     process.env.VERCEL_GIT_COMMIT_SHA = "1234567890abcdef";
     process.env.NEXT_PUBLIC_CHROME_WEB_STORE_URL =
       "https://chromewebstore.google.com/detail/aletheia/example";
+    process.env.CHROME_WEB_STORE_PUBLISHED_VERSION = "1.0.2";
+    process.env.MINIMUM_SUPPORTED_EXTENSION_VERSION = "1.0.1";
 
     const res = await GET(makeRequest({ method: "GET" }));
     const body = await res.json();
@@ -46,10 +67,15 @@ describe("GET /api/extension/version", () => {
     expect(res.status).toBe(200);
     expect(body).toMatchObject({
       appVersion: "0.1.0",
-      extensionVersion: "1.0.2",
+      extensionVersion: "1.0.3",
       sha: "1234567890ab",
       chromeWebStoreUrl:
         "https://chromewebstore.google.com/detail/aletheia/example",
+    });
+    expect(body.extension).toMatchObject({
+      latestSourceVersion: "1.0.3",
+      publishedVersion: "1.0.2",
+      minimumSupportedVersion: "1.0.1",
     });
     expect(body).not.toHaveProperty("builtAt");
   });
@@ -62,6 +88,17 @@ describe("GET /api/extension/version", () => {
 
     expect(res.status).toBe(200);
     expect(body.sha).toBe("fedcba098765");
+  });
+
+  it("treats empty injected commit SHA values as a local build", async () => {
+    process.env.VERCEL_GIT_COMMIT_SHA = "";
+    process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA = "";
+
+    const res = await GET(makeRequest({ method: "GET" }));
+    const body = await res.json();
+
+    expect(body.sha).toBe("local");
+    expect(body.builtAt).toBe("local");
   });
 });
 

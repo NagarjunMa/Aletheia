@@ -3,6 +3,8 @@
 
 // Initialize when DOM loads
 document.addEventListener('DOMContentLoaded', async () => {
+  document.getElementById('extensionVersion').textContent =
+    `v${chrome.runtime.getManifest().version}`
   await initializeSettings()
   setupEventListeners()
   await loadUserSettings()
@@ -390,7 +392,7 @@ async function exportUsageData() {
 
     const exportData = {
       exportedAt: new Date().toISOString(),
-      version: '2.0.0',
+      version: chrome.runtime.getManifest().version,
       dailyUsage: data.dailyUsage || {},
       categoryUsage: data.categoryUsage || {},
       acceptedMessages: data.accepted || [],

@@ -242,10 +242,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const accessToken = await getValidAccessToken(url);
         await fetch(`${url}/api/extension/feedback`, {
           method: 'POST',
-          headers: {
+          headers: getAletheiaRequestHeaders({
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${accessToken}`
-          },
+          }),
           body: JSON.stringify(message.payload)
         });
         console.log('[SW] Feedback sent successfully');
@@ -474,6 +474,7 @@ async function makeAPIRequest(endpoint, options = {}, baseUrl = null) {
 
       const response = await fetch(url, {
         ...options,
+        headers: getAletheiaRequestHeaders(options.headers || {}),
         signal: controller.signal
       });
 
@@ -492,9 +493,16 @@ async function makeAPIRequest(endpoint, options = {}, baseUrl = null) {
           errorBody?.error ||
           response.statusText ||
           'API request failed';
-        const apiError = new Error(`HTTP ${response.status}: ${apiMessage}`);
+        const updateHint =
+          response.status === 426 && errorBody?.chromeWebStoreUrl
+            ? ` Update from ${errorBody.chromeWebStoreUrl}`
+            : '';
+        const apiError = new Error(
+          `HTTP ${response.status}: ${apiMessage}${updateHint}`
+        );
         apiError.status = response.status;
         apiError.code = errorBody?.code;
+        apiError.updateUrl = errorBody?.chromeWebStoreUrl;
         throw apiError;
       }
 
@@ -515,6 +523,14 @@ async function makeAPIRequest(endpoint, options = {}, baseUrl = null) {
         error.status === 402 ||
         error.code === 'INSUFFICIENT_CREDITS' ||
         error.message.includes('402')
+      ) {
+        throw error;
+      }
+
+      if (
+        error.status === 426 ||
+        error.code === 'EXTENSION_UPDATE_REQUIRED' ||
+        error.code === 'API_VERSION_UNSUPPORTED'
       ) {
         throw error;
       }

@@ -144,6 +144,10 @@ describe("feedbackSchema", () => {
         generationTimeMs: 1234,
         inputTokens: 500,
         outputTokens: 200,
+        resumeSource: "user_resumes",
+        hasPrimaryResume: true,
+        injectionTriggered: false,
+        safeCandidateSummaryUsed: false,
       },
     });
     expect(result.success).toBe(true);
@@ -191,6 +195,24 @@ const validBody = {
 };
 
 describe("POST /api/extension/feedback — dual-behavior persistence contract", () => {
+  it("rejects unsupported API versions before authentication", async () => {
+    const res = await POST(
+      makeRequest({
+        method: "POST",
+        headers: {
+          "X-Aletheia-API-Version": "2",
+          "X-Aletheia-Extension-Version": "1.0.3",
+        },
+      }),
+    );
+
+    expect(res.status).toBe(426);
+    await expect(res.json()).resolves.toMatchObject({
+      code: "API_VERSION_UNSUPPORTED",
+    });
+    expect(mockAuthGetUser).not.toHaveBeenCalled();
+  });
+
   beforeEach(() => {
     mockAuthGetUser.mockReset();
     mockInsert.mockReset();
@@ -222,7 +244,15 @@ describe("POST /api/extension/feedback — dual-behavior persistence contract", 
     );
     expect(res.status).toBe(200);
     expect(mockServiceFrom).toHaveBeenCalledWith("user_feedback");
-    expect(mockInsert).toHaveBeenCalled();
+    expect(mockInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          extension_version: "1.0.2",
+          extension_api_version: "1",
+          legacy_extension_client: true,
+        }),
+      }),
+    );
   });
 
   // T8 — fire-and-forget guarantee (RPC error must not affect HTTP response)

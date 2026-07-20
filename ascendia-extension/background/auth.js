@@ -3,6 +3,16 @@
 
 const AUTH_STORAGE_KEY = 'aletheia_auth';
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000; // 5 minutes before expiry
+const ALETHEIA_API_VERSION = '1';
+
+function getAletheiaRequestHeaders(additionalHeaders = {}) {
+  return {
+    ...additionalHeaders,
+    'X-Extension-Source': 'aletheia-extension',
+    'X-Aletheia-API-Version': ALETHEIA_API_VERSION,
+    'X-Aletheia-Extension-Version': chrome.runtime.getManifest().version,
+  };
+}
 
 function normalizeApiUrl(apiUrl) {
   let value = String(apiUrl || '').trim();
@@ -86,9 +96,7 @@ async function _doFetchSessionFromWebApp(apiUrl) {
     const response = await fetch(`${baseUrl}/api/extension/session`, {
       method: 'GET',
       credentials: 'include',
-      headers: {
-        'X-Extension-Source': 'aletheia-extension',
-      },
+      headers: getAletheiaRequestHeaders(),
     });
 
     console.log('[AUTH] Session endpoint response:', response.status);
@@ -190,7 +198,7 @@ async function _doFetchSessionFromWebApp(apiUrl) {
   let supabaseUrl, supabaseAnonKey;
   try {
     const configResp = await fetch(`${baseUrl}/api/extension/config`, {
-      headers: { 'X-Extension-Source': 'aletheia-extension' }
+      headers: getAletheiaRequestHeaders()
     });
     if (configResp.ok) {
       const config = await configResp.json();
@@ -246,7 +254,7 @@ async function _doRefreshToken(auth) {
         const { apiUrl } = await chrome.storage.local.get('apiUrl');
         const url = normalizeApiUrl(apiBaseUrl || apiUrl || 'https://www.aletheia.live');
         const configResp = await fetch(`${url}/api/extension/config`, {
-          headers: { 'X-Extension-Source': 'aletheia-extension' }
+          headers: getAletheiaRequestHeaders()
         });
         if (configResp.ok) {
           const config = await configResp.json();
@@ -448,7 +456,7 @@ function handleAuthBridgeSession(sessionData) {
     let supabaseUrl, supabaseAnonKey;
     try {
       const configResp = await fetch(`${url}/api/extension/config`, {
-        headers: { 'X-Extension-Source': 'aletheia-extension' }
+        headers: getAletheiaRequestHeaders()
       });
       if (configResp.ok) {
         const config = await configResp.json();
