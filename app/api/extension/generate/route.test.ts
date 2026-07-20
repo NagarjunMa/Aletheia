@@ -300,6 +300,27 @@ describe("POST /api/extension/generate", () => {
     expect(res.status).toBe(401);
     const body = await res.json();
     expect(body.error).toBe("Unauthorized");
+    expect(res.headers.get("X-Aletheia-API-Version")).toBe("1");
+  });
+
+  it("rejects unsupported API versions before authentication or billing", async () => {
+    const res = await POST(
+      makeRequest({
+        method: "POST",
+        headers: {
+          "X-Aletheia-API-Version": "2",
+          "X-Aletheia-Extension-Version": "1.0.3",
+        },
+      }),
+    );
+
+    expect(res.status).toBe(426);
+    await expect(res.json()).resolves.toMatchObject({
+      code: "API_VERSION_UNSUPPORTED",
+      requestedApiVersion: "2",
+    });
+    expect(mockAuthGetUser).not.toHaveBeenCalled();
+    expect(mockRpc).not.toHaveBeenCalled();
   });
 
   it("returns 429 when rate limit is exceeded", async () => {

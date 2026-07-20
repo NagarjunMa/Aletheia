@@ -194,6 +194,15 @@ describe("getCorsHeaders", () => {
         "Authorization",
       );
       expect(headers["Access-Control-Allow-Headers"]).toContain("Content-Type");
+      expect(headers["Access-Control-Allow-Headers"]).toContain(
+        "X-Aletheia-API-Version",
+      );
+      expect(headers["Access-Control-Allow-Headers"]).toContain(
+        "X-Aletheia-Extension-Version",
+      );
+      expect(headers["Access-Control-Expose-Headers"]).toContain(
+        "X-Aletheia-Minimum-Extension-Version",
+      );
     });
 
     it("always includes Vary: Origin header", () => {

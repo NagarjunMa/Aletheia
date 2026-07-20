@@ -9,6 +9,7 @@
 
 import JSZip from 'jszip'
 import { execSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { readFile, writeFile, mkdir, stat } from 'node:fs/promises'
 import { readdirSync, statSync } from 'node:fs'
 import path from 'node:path'
@@ -31,6 +32,7 @@ const STATIC_INCLUDES = [
   'popup/',
   'settings/',
   'icons/',
+  'assets/',
 ]
 
 // Source files that are leftover from the gated Phase 0 refactor and not
@@ -68,8 +70,7 @@ function walkDir(dirAbs, baseAbs) {
         entry === 'node_modules' ||
         entry === 'coverage' ||
         entry === 'test' ||
-        entry === 'dist' ||
-        entry === 'assets'
+        entry === 'dist'
       ) {
         continue
       }
@@ -127,12 +128,25 @@ async function buildZip() {
   const manifest = JSON.parse(
     await readFile(path.join(EXT_DIR, 'manifest.json'), 'utf8'),
   )
+  const authSource = await readFile(
+    path.join(EXT_DIR, 'background', 'auth.js'),
+    'utf8',
+  )
+  const apiVersionMatch = authSource.match(
+    /const ALETHEIA_API_VERSION = ["']([^"']+)["']/,
+  )
+  if (!apiVersionMatch) {
+    throw new Error('Could not read ALETHEIA_API_VERSION from background/auth.js')
+  }
 
   const meta = {
     version: manifest.version,
+    apiVersion: apiVersionMatch[1],
     sha: getGitSha(),
     builtAt: new Date().toISOString(),
     sizeBytes: buffer.byteLength,
+    sha256: createHash('sha256').update(buffer).digest('hex'),
+    chromeWebStoreItemId: process.env.CHROME_WEB_STORE_ITEM_ID ?? null,
   }
   await writeFile(VERSION_FILE, JSON.stringify(meta, null, 2))
 

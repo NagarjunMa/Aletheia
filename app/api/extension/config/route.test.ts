@@ -31,6 +31,15 @@ describe("GET /api/extension/config", () => {
     const body = await res.json();
     expect(body.supabase_url).toBe("https://test.supabase.co");
     expect(body.supabase_anon_key).toBe("test-anon-key");
+    expect(body.api).toEqual({
+      currentVersion: "1",
+      supportedVersions: ["1"],
+    });
+    expect(body.extension).toMatchObject({
+      publishedVersion: "1.0.2",
+      minimumSupportedVersion: "1.0.2",
+    });
+    expect(res.headers.get("X-Aletheia-API-Version")).toBe("1");
   });
 
   it("includes CORS headers in the response", async () => {

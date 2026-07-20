@@ -14,6 +14,16 @@ type VersionPayload = {
   sha: string;
   builtAt?: string;
   chromeWebStoreUrl: string | null;
+  api: {
+    currentVersion: string;
+    supportedVersions: string[];
+  };
+  extension: {
+    latestSourceVersion: string;
+    publishedVersion: string;
+    minimumSupportedVersion: string;
+    chromeWebStoreUrl: string | null;
+  };
 };
 
 async function getVersion(): Promise<VersionPayload | null> {
@@ -60,7 +70,14 @@ export default async function StatusPage() {
             <dt style={{ color: "var(--l-text-dim)" }}>App version</dt>
             <dd>{version.appVersion}</dd>
             <dt style={{ color: "var(--l-text-dim)" }}>Extension</dt>
-            <dd>{version.extensionVersion}</dd>
+            <dd>
+              Source {version.extension.latestSourceVersion} · Store{" "}
+              {version.extension.publishedVersion}
+            </dd>
+            <dt style={{ color: "var(--l-text-dim)" }}>Minimum extension</dt>
+            <dd>{version.extension.minimumSupportedVersion}</dd>
+            <dt style={{ color: "var(--l-text-dim)" }}>API contract</dt>
+            <dd>v{version.api.currentVersion}</dd>
             <dt style={{ color: "var(--l-text-dim)" }}>Commit</dt>
             <dd className="font-mono">{version.sha.slice(0, 12)}</dd>
             <dt style={{ color: "var(--l-text-dim)" }}>Install source</dt>

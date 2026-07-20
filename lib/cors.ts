@@ -80,7 +80,9 @@ export function getCorsHeaders(
     "Access-Control-Allow-Origin": acao,
     "Access-Control-Allow-Methods": options.methods ?? "GET, OPTIONS",
     "Access-Control-Allow-Headers":
-      "Content-Type, Authorization, X-Extension-Source",
+      "Content-Type, Authorization, X-Extension-Source, X-Aletheia-API-Version, X-Aletheia-Extension-Version",
+    "Access-Control-Expose-Headers":
+      "X-Aletheia-API-Version, X-Aletheia-Minimum-Extension-Version",
     "Access-Control-Allow-Credentials":
       options.allowCredentials && isAllowedOrigin ? "true" : "",
     Vary: "Origin",
