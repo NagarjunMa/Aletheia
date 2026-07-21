@@ -364,7 +364,7 @@ describe("COLD_EMAIL_PROMPT subject line policy", () => {
   ];
 
   it("tracks the prompt behavior change with a new version", () => {
-    expect(PROMPT_VERSION).toBe("1.7.3");
+    expect(PROMPT_VERSION).toBe("1.8.0");
   });
 
   it("documents scenario-specific email modes", () => {
@@ -408,6 +408,14 @@ describe("COLD_EMAIL_PROMPT subject line policy", () => {
     );
     expect(COLD_EMAIL_PROMPT).toContain(
       "Proof points must stay visually scannable",
+    );
+    expect(COLD_EMAIL_PROMPT).toContain(
+      "Return the final draft by calling the provided return_email_draft tool.",
+    );
+    expect(COLD_EMAIL_PROMPT).toContain("Do not write JSON manually.");
+    expect(COLD_EMAIL_PROMPT).not.toContain("JSON only");
+    expect(LINKEDIN_INMAIL_PROMPT).toContain(
+      "Return the final draft by calling the provided return_email_draft tool.",
     );
   });
 

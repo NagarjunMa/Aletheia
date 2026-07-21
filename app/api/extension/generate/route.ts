@@ -35,11 +35,7 @@ import {
 import { z } from "zod";
 import { getCorsHeaders } from "@/lib/cors";
 import { createLogger } from "@/lib/logger";
-import {
-  countWords,
-  truncateToWordLimit,
-  stripMarkdownCodeFences,
-} from "./utils";
+import { countWords, truncateToWordLimit } from "./utils";
 import { generateRequestSchema } from "./schema";
 
 const log = createLogger("generate-route");
@@ -69,6 +65,66 @@ type ReservedCredit = {
   reservationId: string;
   amount: number;
 };
+
+const EMAIL_DRAFT_TOOL_NAME = "return_email_draft";
+
+const emailDraftTool = {
+  name: EMAIL_DRAFT_TOOL_NAME,
+  description:
+    "Return the final outreach draft as structured fields. Use the body field for the complete message text with paragraph breaks preserved.",
+  input_schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      subject_line: {
+        type: "string",
+        description:
+          "The final subject line. Must follow the approved subject templates from the system instructions.",
+        minLength: 1,
+        maxLength: 160,
+      },
+      body: {
+        type: "string",
+        description:
+          "The final email or InMail body. Preserve intentional paragraph breaks and proof-point lines.",
+        minLength: 1,
+        maxLength: 5000,
+      },
+      word_count: {
+        type: "integer",
+        description:
+          "Approximate word count for the body. The server recalculates the final count after sanitization.",
+        minimum: 1,
+        maximum: 250,
+      },
+    },
+    required: ["subject_line", "body", "word_count"],
+  },
+} as const;
+
+const emailDraftToolInputSchema = z
+  .object({
+    subject_line: z.string().trim().min(1).max(160),
+    body: z.string().trim().min(1).max(5000),
+    word_count: z.number().int().min(1).max(250),
+  })
+  .strict();
+
+function getEmailDraftToolInput(response: Anthropic.Messages.Message) {
+  const toolBlock = response.content.find(
+    (block) =>
+      block.type === "tool_use" &&
+      block.name === EMAIL_DRAFT_TOOL_NAME &&
+      typeof block.input === "object" &&
+      block.input !== null,
+  );
+
+  if (!toolBlock || toolBlock.type !== "tool_use") {
+    throw new Error("Claude did not return the required email draft tool");
+  }
+
+  return emailDraftToolInputSchema.parse(toolBlock.input);
+}
 
 // ─── Auth helper ───
 
@@ -456,6 +512,8 @@ export async function POST(request: NextRequest) {
       promptInput.styleProfile = styleProfile;
     }
     const userPrompt = buildPrompt(promptInput);
+    const shouldUseEmailDraftTool =
+      category === "cold_email" || category === "linkedin_inmail";
 
     const startTime = Date.now();
     const response = await getAnthropic().messages.create(
@@ -465,20 +523,23 @@ export async function POST(request: NextRequest) {
         temperature: 0.8,
         system: systemPrompt,
         messages: [{ role: "user", content: userPrompt }],
+        ...(shouldUseEmailDraftTool
+          ? {
+              tools: [emailDraftTool],
+              tool_choice: {
+                type: "tool" as const,
+                name: EMAIL_DRAFT_TOOL_NAME,
+              },
+            }
+          : {}),
       },
       { timeout: 30_000 },
     );
 
     const processingTime = Date.now() - startTime;
     const textBlock = response.content.find((block) => block.type === "text");
-    if (!textBlock || textBlock.type !== "text" || !textBlock.text) {
-      log.error(
-        { contentTypes: response.content.map((b) => b.type) },
-        "Claude returned no text content block",
-      );
-      throw new Error("No text content in Claude response");
-    }
-    const rawContent = textBlock.text;
+    const rawContent =
+      textBlock && textBlock.type === "text" ? textBlock.text : "";
 
     const tokenUsage = response.usage;
     const totalTokens = tokenUsage.input_tokens + tokenUsage.output_tokens;
@@ -524,99 +585,95 @@ export async function POST(request: NextRequest) {
     // Parse response based on category with validation
     if (category === "cold_email" || category === "linkedin_inmail") {
       try {
-        const cleanedContent = stripMarkdownCodeFences(rawContent);
-        const parsed = JSON.parse(cleanedContent);
+        const parsed = getEmailDraftToolInput(response);
+        const basicSubjectSanitization = sanitize(
+          stripModelPreambleAndSuffix(parsed.subject_line),
+        );
+        const basicBodySanitization = sanitize(
+          stripModelPreambleAndSuffix(parsed.body),
+        );
 
-        if (parsed.subject_line && parsed.body) {
-          const basicSubjectSanitization = sanitize(
-            stripModelPreambleAndSuffix(parsed.subject_line),
-          );
-          const basicBodySanitization = sanitize(
-            stripModelPreambleAndSuffix(parsed.body),
-          );
+        const enhancedSubjectSanitization = await sanitizeForLinkedIn(
+          basicSubjectSanitization,
+        );
+        const enhancedBodySanitization = await sanitizeForLinkedIn(
+          basicBodySanitization,
+        );
 
-          const enhancedSubjectSanitization = await sanitizeForLinkedIn(
-            basicSubjectSanitization,
-          );
-          const enhancedBodySanitization = await sanitizeForLinkedIn(
-            basicBodySanitization,
-          );
+        const sanitizedSubject = enhancedSubjectSanitization.success
+          ? enhancedSubjectSanitization.sanitizedContent
+          : basicSubjectSanitization;
+        const sanitizedBody = enhancedBodySanitization.success
+          ? enhancedBodySanitization.sanitizedContent
+          : basicBodySanitization;
 
-          const sanitizedSubject = enhancedSubjectSanitization.success
-            ? enhancedSubjectSanitization.sanitizedContent
-            : basicSubjectSanitization;
-          const sanitizedBody = enhancedBodySanitization.success
-            ? enhancedBodySanitization.sanitizedContent
-            : basicBodySanitization;
+        const subjectPatterns =
+          enhancedSubjectSanitization.aiFingerprints?.detectedPatterns ?? [];
+        const bodyPatterns =
+          enhancedBodySanitization.aiFingerprints?.detectedPatterns ?? [];
 
-          const subjectPatterns =
-            enhancedSubjectSanitization.aiFingerprints?.detectedPatterns ?? [];
-          const bodyPatterns =
-            enhancedBodySanitization.aiFingerprints?.detectedPatterns ?? [];
-
-          if (subjectPatterns.length || bodyPatterns.length) {
-            log.info(
-              {
-                subjectPatterns,
-                bodyPatterns,
-                category: validatedData.category,
-              },
-              "AI fingerprints stripped in Chrome extension generation",
-            );
-          }
-
-          let finalBody = formatGeneratedEmailBody(sanitizedBody, {
-            category,
-            mode: emailMode,
-          });
-          let wordCount = countWords(finalBody);
-          const { max: maxWords } = getEmailWordLimit(category, emailMode);
-          if (wordCount > maxWords) {
-            log.warn(
-              { category, wordCount, maxWords },
-              "Category exceeds word limit",
-            );
-            finalBody = truncateToWordLimit(finalBody, maxWords);
-            wordCount = countWords(finalBody);
-          }
-
-          // Mark slot consumed — successful response, no refund needed.
-          reservedUserId = undefined;
-          reservedCredit = undefined;
-          return NextResponse.json(
+        if (subjectPatterns.length || bodyPatterns.length) {
+          log.info(
             {
-              success: true,
-              subject_line: sanitizedSubject,
-              body: finalBody,
-              category,
-              word_count: wordCount,
-              character_count: finalBody.length,
-              usage: tokenUsage,
-              processingTime,
-              evalMetadata,
-              ...(CREDIT_BILLING_ENABLED
-                ? {
-                    billingMode,
-                    creditCost,
-                    creditsRemaining,
-                    unlimitedCredits: unlimitedCreditUser,
-                  }
-                : {}),
+              subjectPatterns,
+              bodyPatterns,
+              category: validatedData.category,
             },
-            {
-              headers: { ...corsHeaders, ...rateLimitHeaders },
-            },
+            "AI fingerprints stripped in Chrome extension generation",
           );
         }
+
+        let finalBody = formatGeneratedEmailBody(sanitizedBody, {
+          category,
+          mode: emailMode,
+        });
+        let wordCount = countWords(finalBody);
+        const { max: maxWords } = getEmailWordLimit(category, emailMode);
+        if (wordCount > maxWords) {
+          log.warn(
+            { category, wordCount, maxWords },
+            "Category exceeds word limit",
+          );
+          finalBody = truncateToWordLimit(finalBody, maxWords);
+          wordCount = countWords(finalBody);
+        }
+
+        // Mark slot consumed — successful response, no refund needed.
+        reservedUserId = undefined;
+        reservedCredit = undefined;
+        return NextResponse.json(
+          {
+            success: true,
+            subject_line: sanitizedSubject,
+            body: finalBody,
+            category,
+            word_count: wordCount,
+            character_count: finalBody.length,
+            usage: tokenUsage,
+            processingTime,
+            evalMetadata,
+            ...(CREDIT_BILLING_ENABLED
+              ? {
+                  billingMode,
+                  creditCost,
+                  creditsRemaining,
+                  unlimitedCredits: unlimitedCreditUser,
+                }
+              : {}),
+          },
+          {
+            headers: { ...corsHeaders, ...rateLimitHeaders },
+          },
+        );
       } catch (parseError) {
         log.warn(
           { err: parseError },
-          "Failed to parse JSON response, attempting fallback",
+          "Failed to validate email draft tool response",
         );
 
         log.warn(
           { category: validatedData.category },
-          "JSON parse failed for cold_email — returning 502",
+          "Email draft tool response invalid — returning 502",
         );
         // Refund the rate-limit slot: user paid for a call that produced
         // no usable output. Quota was already incremented before Claude
@@ -638,6 +695,13 @@ export async function POST(request: NextRequest) {
     }
 
     // For LinkedIn connections - apply AI fingerprint detection and sanitization
+    if (!rawContent) {
+      log.error(
+        { contentTypes: response.content.map((b) => b.type) },
+        "Claude returned no text content block",
+      );
+      throw new Error("No text content in Claude response");
+    }
     const basicSanitization = sanitize(stripModelPreambleAndSuffix(rawContent));
     const enhancedSanitization = await sanitizeForLinkedIn(basicSanitization);
     const sanitizedContent = enhancedSanitization.success
