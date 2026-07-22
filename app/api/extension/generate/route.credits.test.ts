@@ -258,7 +258,7 @@ describe("POST /api/extension/generate with credit billing enabled", () => {
     );
   });
 
-  it("refunds reserved credits when email JSON parsing fails", async () => {
+  it("refunds reserved credits when email tool output validation fails", async () => {
     mockAnthropicCreate.mockResolvedValueOnce({
       content: [{ type: "text", text: "This is not JSON." }],
       usage: { input_tokens: 100, output_tokens: 40 },

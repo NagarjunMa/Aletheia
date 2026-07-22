@@ -118,6 +118,19 @@ const validPayload = {
   category: "linkedin_connection",
 };
 
+function emailDraftToolBlock(input: {
+  subject_line: string;
+  body: string;
+  word_count: number;
+}) {
+  return {
+    type: "tool_use",
+    id: "toolu_test",
+    name: "return_email_draft",
+    input,
+  };
+}
+
 describe("generateRequestSchema", () => {
   it("parses a minimal valid payload", () => {
     const result = generateRequestSchema.safeParse(validPayload);
@@ -361,13 +374,14 @@ describe("POST /api/extension/generate", () => {
     expect(body.error).toBe("Failed to generate content");
   });
 
-  it("correctly parses markdown json wrapped in fences", async () => {
+  it("reads cold email content from the forced email draft tool", async () => {
     mockAnthropicCreate.mockResolvedValueOnce({
       content: [
-        {
-          type: "text",
-          text: '```json\n{"subject_line":"Mock Subject","body":"Mock Body"}\n```',
-        },
+        emailDraftToolBlock({
+          subject_line: "Mock Subject",
+          body: "Mock Body",
+          word_count: 2,
+        }),
       ],
       usage: { input_tokens: 10, output_tokens: 20 },
     });
@@ -384,19 +398,26 @@ describe("POST /api/extension/generate", () => {
     const body = await res.json();
     expect(body.subject_line).toBe("Mock Subject");
     expect(body.body).toBe("Mock Body");
+    const callArgs = mockAnthropicCreate.mock.calls[0]?.[0];
+    expect(callArgs.tools).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "return_email_draft" }),
+      ]),
+    );
+    expect(callArgs.tool_choice).toEqual({
+      type: "tool",
+      name: "return_email_draft",
+    });
   });
 
   it("formats cold email bodies and returns emailMode in eval metadata", async () => {
     mockAnthropicCreate.mockResolvedValueOnce({
       content: [
-        {
-          type: "text",
-          text: JSON.stringify({
-            subject_line: "Backend Engineering Interest",
-            body: "Hi Megan, I'm Nagarjun - backend/ML engineer based in NYC. Found you through Bountiful's YC listing. On the technical side, I've built RAG-based AI systems with Python and FastAPI. interested in a quick chat, or happy to share more context first? Thanks either way. Nagarjun",
-            word_count: 43,
-          }),
-        },
+        emailDraftToolBlock({
+          subject_line: "Backend Engineering Interest",
+          body: "Hi Megan, I'm Nagarjun - backend/ML engineer based in NYC. Found you through Bountiful's YC listing. On the technical side, I've built RAG-based AI systems with Python and FastAPI. interested in a quick chat, or happy to share more context first? Thanks either way. Nagarjun",
+          word_count: 43,
+        }),
       ],
       usage: { input_tokens: 100, output_tokens: 80 },
     });
@@ -512,10 +533,11 @@ describe("POST /api/extension/generate", () => {
   it("returns 200 with subject_line + body + word_count for linkedin_inmail", async () => {
     mockAnthropicCreate.mockResolvedValueOnce({
       content: [
-        {
-          type: "text",
-          text: '{"subject_line":"Quick question about sparse attention","body":"Hi Priya — read your NeurIPS talk and the edge-deploy point matched what we saw in fraud-detection inference.","word_count":24}',
-        },
+        emailDraftToolBlock({
+          subject_line: "Quick question about sparse attention",
+          body: "Hi Priya — read your NeurIPS talk and the edge-deploy point matched what we saw in fraud-detection inference.",
+          word_count: 24,
+        }),
       ],
       usage: { input_tokens: 100, output_tokens: 80 },
     });
@@ -560,8 +582,8 @@ describe("POST /api/extension/generate", () => {
     expect(body.error).toBeTruthy();
   });
 
-  // T6 — 502 JSON parse failure for cold_email
-  it("returns 502 when Claude returns malformed JSON for cold_email", async () => {
+  // T6 — 502 tool validation failure for cold_email
+  it("returns 502 when Claude does not return the email draft tool", async () => {
     mockAnthropicCreate.mockResolvedValueOnce({
       content: [
         {
@@ -583,6 +605,36 @@ describe("POST /api/extension/generate", () => {
     expect(res.status).toBe(502);
     const body = await res.json();
     expect(body.error).toBeTruthy();
+  });
+
+  it("returns 502 when Claude returns malformed email draft tool input", async () => {
+    mockAnthropicCreate.mockResolvedValueOnce({
+      content: [
+        {
+          type: "tool_use",
+          id: "toolu_test",
+          name: "return_email_draft",
+          input: {
+            subject_line: "",
+            body: "Missing a valid subject line.",
+            word_count: 5,
+          },
+        },
+      ],
+      usage: { input_tokens: 100, output_tokens: 30 },
+    });
+
+    const testPayload = { ...validPayload, category: "cold_email" };
+    const res = await POST(
+      makeRequest({
+        method: "POST",
+        headers: { authorization: "Bearer test" },
+        body: testPayload,
+      }),
+    );
+    expect(res.status).toBe(502);
+    const body = await res.json();
+    expect(body.code).toBe("PARSE_FAILED");
   });
 
   // T7 — 401 invalid bearer (Supabase rejects token)
