@@ -11,6 +11,10 @@ import {
   createBearerServiceClient,
 } from "@/lib/supabase/server";
 import { getCorsHeaders } from "@/lib/cors";
+import {
+  evaluateExtensionContract,
+  getExtensionContractResponseHeaders,
+} from "@/lib/extension-contract";
 import { feedbackSchema } from "./schema";
 
 const log = createLogger("extension-feedback");
@@ -52,12 +56,23 @@ async function authenticateRequest(
 // ─── POST handler ───
 
 export async function POST(request: NextRequest) {
-  const corsHeaders = getCorsHeaders(request, {
-    allowCredentials: true,
-    methods: "GET, POST, OPTIONS",
-  });
+  const corsHeaders = {
+    ...getCorsHeaders(request, {
+      allowCredentials: true,
+      methods: "GET, POST, OPTIONS",
+    }),
+    ...getExtensionContractResponseHeaders(),
+  };
 
   try {
+    const contract = evaluateExtensionContract(request.headers);
+    if (!contract.compatible) {
+      return NextResponse.json(contract.body, {
+        status: contract.status,
+        headers: corsHeaders,
+      });
+    }
+
     // Auth
     const authResult = await authenticateRequest(request);
     if (!authResult) {
@@ -85,6 +100,9 @@ export async function POST(request: NextRequest) {
         category,
         rejectionReason,
         promptVersion: evalMetadata?.promptVersion,
+        apiVersion: contract.apiVersion,
+        extensionVersion: contract.extensionVersion,
+        legacyExtensionClient: contract.legacyClient,
       },
       "Feedback received",
     );
@@ -102,6 +120,9 @@ export async function POST(request: NextRequest) {
           category,
           message_length: message.length,
           has_subject: !!subjectLine,
+          extension_version: contract.extensionVersion,
+          extension_api_version: contract.apiVersion,
+          legacy_extension_client: contract.legacyClient,
           ...(evalMetadata ?? {}),
         },
       });
@@ -263,6 +284,7 @@ export async function OPTIONS(request: NextRequest) {
         allowCredentials: true,
         methods: "GET, POST, OPTIONS",
       }),
+      ...getExtensionContractResponseHeaders(),
       "Access-Control-Max-Age": "86400",
     },
   });

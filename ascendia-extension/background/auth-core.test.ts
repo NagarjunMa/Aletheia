@@ -15,8 +15,25 @@ import {
   checkUsageLimit,
   logUsageData,
   filterAcceptedExamples,
+  getAletheiaRequestHeaders,
+  ALETHEIA_API_VERSION,
   AUTH_STORAGE_KEY,
 } from "./auth-core.js";
+
+describe("getAletheiaRequestHeaders", () => {
+  it("adds API and installed extension versions without dropping caller headers", () => {
+    expect(
+      getAletheiaRequestHeaders("1.0.3", {
+        Authorization: "Bearer token",
+      }),
+    ).toEqual({
+      Authorization: "Bearer token",
+      "X-Extension-Source": "aletheia-extension",
+      "X-Aletheia-API-Version": ALETHEIA_API_VERSION,
+      "X-Aletheia-Extension-Version": "1.0.3",
+    });
+  });
+});
 
 // ─── normalizeApiUrl ───
 

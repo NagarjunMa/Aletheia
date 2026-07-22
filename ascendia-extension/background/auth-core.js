@@ -4,6 +4,16 @@
 
 export const AUTH_STORAGE_KEY = 'aletheia_auth';
 export const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000; // 5 minutes before expiry
+export const ALETHEIA_API_VERSION = '1';
+
+export function getAletheiaRequestHeaders(extensionVersion, additionalHeaders = {}) {
+  return {
+    ...additionalHeaders,
+    'X-Extension-Source': 'aletheia-extension',
+    'X-Aletheia-API-Version': ALETHEIA_API_VERSION,
+    'X-Aletheia-Extension-Version': extensionVersion,
+  };
+}
 
 export function normalizeApiUrl(apiUrl) {
   let value = String(apiUrl || '').trim();

@@ -36,6 +36,16 @@ import { z } from "zod";
 import { getCorsHeaders } from "@/lib/cors";
 import { createLogger } from "@/lib/logger";
 import { countWords, truncateToWordLimit } from "./utils";
+import {
+  CURRENT_EXTENSION_API_VERSION,
+  evaluateExtensionContract,
+  getExtensionContractResponseHeaders,
+} from "@/lib/extension-contract";
+import {
+  countWords,
+  truncateToWordLimit,
+  stripMarkdownCodeFences,
+} from "./utils";
 import { generateRequestSchema } from "./schema";
 
 const log = createLogger("generate-route");
@@ -236,10 +246,13 @@ async function checkRateLimit(
 // Request validation schema
 
 export async function POST(request: NextRequest) {
-  const corsHeaders = getCorsHeaders(request, {
-    allowCredentials: true,
-    methods: "GET, POST, OPTIONS",
-  });
+  const corsHeaders = {
+    ...getCorsHeaders(request, {
+      allowCredentials: true,
+      methods: "GET, POST, OPTIONS",
+    }),
+    ...getExtensionContractResponseHeaders(),
+  };
 
   // Tracks whether the rate-limit slot was reserved for this user; set
   // after a successful checkRateLimit. Used by the catch block to refund
@@ -251,6 +264,14 @@ export async function POST(request: NextRequest) {
   let billingMode: "credits" | "unlimited_developer" | undefined;
 
   try {
+    const contract = evaluateExtensionContract(request.headers);
+    if (!contract.compatible) {
+      return NextResponse.json(contract.body, {
+        status: contract.status,
+        headers: corsHeaders,
+      });
+    }
+
     // 1. Auth check FIRST (before rate limiting)
     const authResult = await authenticateRequest(request);
     if (!authResult) {
@@ -553,6 +574,9 @@ export async function POST(request: NextRequest) {
         processingTime,
         category,
         promptVersion: PROMPT_VERSION,
+        apiVersion: contract.apiVersion,
+        extensionVersion: contract.extensionVersion,
+        legacyExtensionClient: contract.legacyClient,
       },
       "Generation completed",
     );
@@ -875,10 +899,13 @@ export async function POST(request: NextRequest) {
 
 // GET endpoint for health check with Bearer token validation
 export async function GET(request: NextRequest) {
-  const corsHeaders = getCorsHeaders(request, {
-    allowCredentials: true,
-    methods: "GET, POST, OPTIONS",
-  });
+  const corsHeaders = {
+    ...getCorsHeaders(request, {
+      allowCredentials: true,
+      methods: "GET, POST, OPTIONS",
+    }),
+    ...getExtensionContractResponseHeaders(),
+  };
 
   try {
     // Auth check
@@ -916,7 +943,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         service: "Aletheia Extension API",
-        version: "2.0.0",
+        version: CURRENT_EXTENSION_API_VERSION,
+        apiVersion: CURRENT_EXTENSION_API_VERSION,
         endpoints: {
           generate: "POST /api/extension/generate",
         },
@@ -947,6 +975,7 @@ export async function OPTIONS(request: NextRequest) {
         allowCredentials: true,
         methods: "GET, POST, OPTIONS",
       }),
+      ...getExtensionContractResponseHeaders(),
       "Access-Control-Max-Age": "86400",
     },
   });

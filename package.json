@@ -9,6 +9,7 @@
     "dev": "next dev -p 3000",
     "build": "next build",
     "build:extension": "node scripts/build-extension-zip.mjs",
+    "check:extension-version": "node scripts/check-extension-version.mjs",
     "start": "next start",
     "lint": "eslint app components lib proxy.ts next.config.js instrumentation.ts instrumentation-client.ts sentry.client.config.ts sentry.edge.config.ts sentry.server.config.ts",
     "test": "vitest",

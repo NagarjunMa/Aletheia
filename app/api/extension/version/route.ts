@@ -2,6 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { getCorsHeaders } from "@/lib/cors";
+import {
+  CURRENT_EXTENSION_API_VERSION,
+  getChromeWebStoreUrl,
+  getExtensionContractResponseHeaders,
+  getMinimumSupportedExtensionVersion,
+  getPublishedExtensionVersion,
+  SUPPORTED_EXTENSION_API_VERSIONS,
+} from "@/lib/extension-contract";
 
 export const dynamic = "force-dynamic";
 
@@ -28,22 +36,39 @@ export async function GET(request: NextRequest) {
       path.join(root, "ascendia-extension", "manifest.json"),
     ),
   ]);
+  const sourceExtensionVersion = manifest.version ?? "unknown";
+  const publishedExtensionVersion = getPublishedExtensionVersion();
+  const minimumSupportedExtensionVersion =
+    getMinimumSupportedExtensionVersion();
+  const chromeWebStoreUrl = getChromeWebStoreUrl();
+  const deploymentSha =
+    process.env.VERCEL_GIT_COMMIT_SHA?.trim() ||
+    process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA?.trim() ||
+    "";
 
   return NextResponse.json(
     {
       appVersion: pkg.version ?? "unknown",
-      extensionVersion: manifest.version ?? "unknown",
-      sha:
-        process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 12) ??
-        process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA?.slice(0, 12) ??
-        "local",
-      builtAt: process.env.VERCEL_GIT_COMMIT_SHA ? undefined : "local",
-      chromeWebStoreUrl: process.env.NEXT_PUBLIC_CHROME_WEB_STORE_URL ?? null,
+      extensionVersion: sourceExtensionVersion,
+      sha: deploymentSha ? deploymentSha.slice(0, 12) : "local",
+      builtAt: deploymentSha ? undefined : "local",
+      chromeWebStoreUrl,
+      api: {
+        currentVersion: CURRENT_EXTENSION_API_VERSION,
+        supportedVersions: SUPPORTED_EXTENSION_API_VERSIONS,
+      },
+      extension: {
+        latestSourceVersion: sourceExtensionVersion,
+        publishedVersion: publishedExtensionVersion,
+        minimumSupportedVersion: minimumSupportedExtensionVersion,
+        chromeWebStoreUrl,
+      },
     },
     {
       headers: {
         ...corsHeaders,
-        "Cache-Control": "s-maxage=300, stale-while-revalidate=3600",
+        ...getExtensionContractResponseHeaders(),
+        "Cache-Control": "no-store",
       },
     },
   );
