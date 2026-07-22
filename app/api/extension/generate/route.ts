@@ -35,17 +35,12 @@ import {
 import { z } from "zod";
 import { getCorsHeaders } from "@/lib/cors";
 import { createLogger } from "@/lib/logger";
-import { countWords, truncateToWordLimit } from "./utils";
 import {
   CURRENT_EXTENSION_API_VERSION,
   evaluateExtensionContract,
   getExtensionContractResponseHeaders,
 } from "@/lib/extension-contract";
-import {
-  countWords,
-  truncateToWordLimit,
-  stripMarkdownCodeFences,
-} from "./utils";
+import { countWords, truncateToWordLimit } from "./utils";
 import { generateRequestSchema } from "./schema";
 
 const log = createLogger("generate-route");
