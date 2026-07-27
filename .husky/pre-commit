@@ -19,10 +19,24 @@ make guardrails || { echo "❌ Guardrails failed. Security patterns must pass.";
 echo "🏗️ Pre-commit: running production build..."
 make build || { echo "❌ Build failed. Fix build errors before committing."; exit 1; }
 
-# Only rebuild the downloadable extension zip when extension source actually
-# changed. Excludes tests/configs/dist so plain doc edits don't trigger it.
-if git diff --cached --name-only | grep -qE '^ascendia-extension/(background|content|popup|settings|icons|lib|manifest\.json)'; then
-  echo "📦 Pre-commit: extension source changed — rebuilding downloadable zip..."
+# Mirror the CI extension job whenever extension dependencies, tests, metadata,
+# or packaged files change. Packaging-script changes use the same path.
+staged_files="$(git diff --cached --name-only --diff-filter=ACMRD)"
+if printf '%s\n' "$staged_files" | grep -qE '^ascendia-extension/|^scripts/(build-extension-zip|check-extension-version)\.mjs$'; then
+  extension_base="HEAD"
+  if git show-ref --verify --quiet refs/remotes/origin/main; then
+    extension_base="$(git merge-base HEAD origin/main)"
+  elif git show-ref --verify --quiet refs/heads/main; then
+    extension_base="$(git merge-base HEAD main)"
+  fi
+
+  echo "🔐 Pre-commit: validating extension version policy..."
+  node scripts/check-extension-version.mjs "$extension_base" || { echo "❌ Extension manifest version check failed."; exit 1; }
+
+  echo "🧩 Pre-commit: running extension CI checks..."
+  make extension-ci || { echo "❌ Extension validation failed."; exit 1; }
+
+  echo "📦 Pre-commit: rebuilding downloadable extension zip..."
   npm run build:extension || { echo "❌ Extension zip build failed."; exit 1; }
 fi
 

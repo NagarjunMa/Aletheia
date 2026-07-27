@@ -2,7 +2,7 @@
         test test-watch test-coverage test-ui \
         guardrails guardrails-watch \
         e2e e2e-ui e2e-debug \
-        analyze validate clean ci
+        analyze validate clean test-ext build-ext extension-ci ci
 
 # ─── Default ──────────────────────────────────────────────────────────────────
 
@@ -103,6 +103,13 @@ test-ext: ## Run extension unit + integration tests
 
 build-ext: ## Build extension (esbuild: source → dist/)
 	cd ascendia-extension && node build.mjs
+
+extension-ci: ## Run the same extension audit and validation used by CI
+	npm --prefix ascendia-extension run security:audit
+	npm --prefix ascendia-extension run type-check
+	npm --prefix ascendia-extension run lint
+	npm --prefix ascendia-extension test
+	npm --prefix ascendia-extension run build:ext
 
 # ─── CI Simulation ────────────────────────────────────────────────────────────
 
