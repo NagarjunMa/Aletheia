@@ -1,0 +1,222 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { z } from "zod";
+import { createLogger } from "@/lib/logger";
+import {
+  candidateEvidenceInputSchema,
+  candidateProfileInputSchema,
+  type CandidateEvidenceInput,
+  type CandidateProfileInput,
+} from "@/lib/candidate-profile/schema";
+import type { TablesInsert } from "@/lib/database/types";
+import { createClient } from "@/lib/supabase/server";
+
+const log = createLogger("candidate-profile-actions");
+const profileCategorySchema = z.enum([
+  "current_work",
+  "direction",
+  "proof_links",
+  "logistics",
+  "boundaries",
+]);
+
+export type CandidateProfileCategory = z.infer<typeof profileCategorySchema>;
+
+export type CandidateProfileActionResult =
+  { ok: true } | { ok: false; error: string };
+
+function validationError(message: string): CandidateProfileActionResult {
+  return { ok: false, error: message };
+}
+
+function refreshCandidateProfilePages() {
+  revalidatePath("/dashboard");
+}
+
+function categoryPayload(
+  category: CandidateProfileCategory,
+  profile: CandidateProfileInput,
+): Omit<TablesInsert<"candidate_profiles">, "user_id"> {
+  switch (category) {
+    case "current_work":
+      return {
+        current_role: profile.currentRole,
+        current_responsibilities: profile.currentResponsibilities,
+        schema_version: 1,
+      };
+    case "direction":
+      return {
+        startup_motivation: profile.startupMotivation,
+        career_goals: profile.careerGoals,
+        target_roles: profile.targetRoles,
+        target_company_stages: profile.targetCompanyStages,
+        target_industries: profile.targetIndustries,
+        schema_version: 1,
+      };
+    case "proof_links":
+      return {
+        github_url: profile.githubUrl,
+        linkedin_url: profile.linkedinUrl,
+        portfolio_url: profile.portfolioUrl,
+        schema_version: 1,
+      };
+    case "logistics":
+      return {
+        location: profile.location,
+        work_authorization: profile.workAuthorization,
+        relocation_preference: profile.relocationPreference,
+        availability: profile.availability,
+        schema_version: 1,
+      };
+    case "boundaries":
+      return {
+        excluded_claims: profile.excludedClaims,
+        schema_version: 1,
+      };
+  }
+}
+
+export async function saveCandidateProfileCategory(
+  category: CandidateProfileCategory,
+  input: CandidateProfileInput,
+): Promise<CandidateProfileActionResult> {
+  const parsedCategory = profileCategorySchema.safeParse(category);
+  const parsedProfile = candidateProfileInputSchema.safeParse(input);
+  if (!parsedCategory.success || !parsedProfile.success) {
+    return validationError(
+      parsedProfile.success
+        ? "Invalid application profile category"
+        : (parsedProfile.error.issues[0]?.message ??
+            "Invalid application profile"),
+    );
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+  if (authError || !user) {
+    return validationError("Authentication required");
+  }
+
+  const { error } = await supabase.from("candidate_profiles").upsert(
+    {
+      user_id: user.id,
+      ...categoryPayload(parsedCategory.data, parsedProfile.data),
+    },
+    { onConflict: "user_id" },
+  );
+
+  if (error) {
+    log.error(
+      {
+        category: parsedCategory.data,
+        err: error.message,
+        userId: user.id.substring(0, 12),
+      },
+      "Candidate profile category save failed",
+    );
+    return validationError(
+      "Could not save this profile category. Please try again.",
+    );
+  }
+
+  refreshCandidateProfilePages();
+  return { ok: true };
+}
+
+export async function saveCandidateEvidence(
+  input: CandidateEvidenceInput,
+): Promise<CandidateProfileActionResult> {
+  const parsed = candidateEvidenceInputSchema.safeParse(input);
+  if (!parsed.success) {
+    return validationError(
+      parsed.error.issues[0]?.message ?? "Invalid evidence story",
+    );
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+  if (authError || !user) {
+    return validationError("Authentication required");
+  }
+
+  const evidence = parsed.data;
+  const payload = {
+    kind: evidence.kind,
+    title: evidence.title,
+    context: evidence.context,
+    actions: evidence.actions,
+    outcome: evidence.outcome,
+    metrics: evidence.metrics,
+    skills: evidence.skills,
+    links: evidence.links,
+    confirmed_at: evidence.confirmed ? new Date().toISOString() : null,
+    sort_order: evidence.sortOrder,
+  };
+
+  const result = evidence.id
+    ? await supabase
+        .from("candidate_evidence")
+        .update(payload)
+        .eq("id", evidence.id)
+        .eq("user_id", user.id)
+    : await supabase
+        .from("candidate_evidence")
+        .insert({ ...payload, user_id: user.id });
+
+  if (result.error) {
+    log.error(
+      { err: result.error.message, userId: user.id.substring(0, 12) },
+      "Candidate evidence save failed",
+    );
+    return validationError(
+      "Could not save this evidence story. Please try again.",
+    );
+  }
+
+  refreshCandidateProfilePages();
+  return { ok: true };
+}
+
+export async function deleteCandidateEvidence(
+  evidenceId: string,
+): Promise<CandidateProfileActionResult> {
+  const parsedId = z.string().uuid().safeParse(evidenceId);
+  if (!parsedId.success) {
+    return validationError("Invalid evidence story");
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+  if (authError || !user) {
+    return validationError("Authentication required");
+  }
+
+  const { error } = await supabase
+    .from("candidate_evidence")
+    .delete()
+    .eq("id", parsedId.data)
+    .eq("user_id", user.id);
+
+  if (error) {
+    log.error(
+      { err: error.message, userId: user.id.substring(0, 12) },
+      "Candidate evidence delete failed",
+    );
+    return validationError(
+      "Could not delete this evidence story. Please try again.",
+    );
+  }
+
+  refreshCandidateProfilePages();
+  return { ok: true };
+}

@@ -114,6 +114,30 @@ export default async function ProfilePage() {
           </div>
         </div>
 
+        <section className="glass my-6 rounded-2xl p-6">
+          <p className="text-xs uppercase tracking-[0.18em] text-[#DAF1DE]/65">
+            Candidate source of truth
+          </p>
+          <div className="mt-3 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h3 className="text-xl font-semibold text-white">
+                Application profile
+              </h3>
+              <p className="mt-2 max-w-lg text-sm leading-6 text-[hsl(var(--muted-foreground))]">
+                Add verified achievements, difficult projects, startup goals,
+                links, and application logistics for grounded YC startup role
+                answers.
+              </p>
+            </div>
+            <Link
+              href="/dashboard#candidate-profile"
+              className="inline-flex shrink-0 items-center justify-center rounded-xl bg-[hsl(var(--primary))] px-4 py-2.5 text-sm font-semibold text-[hsl(var(--primary-foreground))] transition-opacity hover:opacity-90"
+            >
+              Edit details in dashboard
+            </Link>
+          </div>
+        </section>
+
         <ProfileForm
           initialFullName={profile?.full_name ?? ""}
           initialTargetJobDescription={profile?.target_job_description ?? ""}

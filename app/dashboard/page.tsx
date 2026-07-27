@@ -6,6 +6,7 @@ import {
   ArrowRight,
   BarChart3,
   CheckCircle2,
+  ClipboardCheck,
   FileText,
   Gauge,
   Mail,
@@ -20,7 +21,10 @@ import {
 } from "lucide-react";
 import ShaderBackground from "@/components/ShaderBackground";
 import SignOutButton from "@/components/SignOutButton";
+import ApplicationProfileEditor from "@/app/profile/application/ApplicationProfileEditor";
 import CreditsPanel from "./CreditsPanel";
+import { getApplicationProfileReadiness } from "@/lib/candidate-profile/schema";
+import { getCandidateApplicationProfile } from "@/lib/candidate-profile/service";
 import {
   listUserResumes,
   MAX_RESUMES_PER_USER,
@@ -28,9 +32,7 @@ import {
 } from "@/lib/resumes/service";
 
 type FeedbackCategory =
-  | "linkedin_connection"
-  | "cold_email"
-  | "linkedin_inmail";
+  "linkedin_connection" | "cold_email" | "linkedin_inmail";
 
 type FeedbackMetadata = {
   category?: unknown;
@@ -106,6 +108,7 @@ export default async function DashboardPage() {
     preferencesResult,
     feedbackResult,
     resumesResult,
+    applicationProfile,
   ] = await Promise.all([
     supabase.from("profiles").select("*").eq("id", user.id).single(),
     supabase
@@ -135,6 +138,7 @@ export default async function DashboardPage() {
       .order("created_at", { ascending: false })
       .limit(500),
     listUserResumes(supabase, user.id).catch(() => [] as ResumeListItem[]),
+    getCandidateApplicationProfile(supabase, user.id),
   ]);
 
   const profile = profileResult.data;
@@ -146,6 +150,11 @@ export default async function DashboardPage() {
   const totalMessages = feedbackResult.count ?? feedbackRows.length;
   const resumes = resumesResult;
   const primaryResume = resumes.find((resume) => resume.is_primary);
+  const applicationReadiness = getApplicationProfileReadiness({
+    profile: applicationProfile.profile,
+    evidence: applicationProfile.evidence,
+    hasPrimaryResume: Boolean(primaryResume),
+  });
 
   const approvedCount =
     preferencesResult.data?.approved_message_count ??
@@ -238,6 +247,9 @@ export default async function DashboardPage() {
                 <ActionLink href="/profile" icon={User}>
                   Manage profile
                 </ActionLink>
+                <ActionLink href="#candidate-profile" icon={ClipboardCheck}>
+                  Edit candidate details
+                </ActionLink>
                 <ActionLink href="/settings" icon={Settings}>
                   Writing settings
                 </ActionLink>
@@ -248,6 +260,47 @@ export default async function DashboardPage() {
           <div className="md:col-span-6 xl:col-span-12">
             <CreditsPanel />
           </div>
+
+          <BentoCard className="md:col-span-6 xl:col-span-12">
+            <div className="grid gap-6 lg:grid-cols-[0.85fr_1.15fr_auto] lg:items-center">
+              <div>
+                <TileHeader icon={ClipboardCheck} title="Candidate details" />
+                <div className="mt-4 flex items-end gap-3">
+                  <p className="text-4xl font-bold text-white">
+                    {applicationReadiness.completionPercent}%
+                  </p>
+                  <p className="pb-1 text-sm text-[#CBEFEB]/65">
+                    {applicationReadiness.ready
+                      ? "ready to generate"
+                      : "foundation in progress"}
+                  </p>
+                </div>
+              </div>
+              <div>
+                <div className="h-2 overflow-hidden rounded-full bg-[#06191d]/55">
+                  <div
+                    className="h-full rounded-full bg-[#DAF1DE]/75"
+                    style={{
+                      width: `${applicationReadiness.completionPercent}%`,
+                    }}
+                  />
+                </div>
+                <p className="mt-3 text-sm leading-6 text-[#CBEFEB]/70">
+                  {applicationReadiness.ready
+                    ? "Your resume or current role and confirmed evidence meet the minimum grounding threshold."
+                    : (applicationReadiness.missingRequired[0] ??
+                      "Add verified context to strengthen role-fit answers.")}
+                </p>
+              </div>
+              <Link
+                href="#candidate-profile"
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-[#DAF1DE]/20 bg-[#DAF1DE]/13 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#DAF1DE]/22"
+              >
+                {applicationReadiness.ready ? "Review details" : "Add details"}
+                <ArrowRight className="h-4 w-4" aria-hidden={true} />
+              </Link>
+            </div>
+          </BentoCard>
 
           <BentoCard className="md:col-span-6 xl:col-span-6 xl:row-span-2">
             <div className="flex h-full flex-col">
@@ -412,6 +465,36 @@ export default async function DashboardPage() {
               </div>
             </div>
           </BentoCard>
+        </section>
+
+        <section
+          id="candidate-profile"
+          className="scroll-mt-6 pt-14"
+          aria-labelledby="candidate-profile-heading"
+        >
+          <div className="mb-7 max-w-3xl">
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#DAF1DE]/70">
+              Candidate source of truth
+            </p>
+            <h2
+              id="candidate-profile-heading"
+              className="mt-3 text-3xl font-bold text-white sm:text-4xl"
+            >
+              Your details, editable in one place.
+            </h2>
+            <p className="mt-3 text-sm leading-6 text-[#CBEFEB]/72 sm:text-base">
+              Open a category, update only what changed, and save it without
+              leaving the dashboard. Confirmed evidence remains separate from
+              stable career and application details.
+            </p>
+          </div>
+
+          <ApplicationProfileEditor
+            key={applicationProfile.evidence.map((item) => item.id).join(":")}
+            initialProfile={applicationProfile.profile}
+            initialEvidence={applicationProfile.evidence}
+            hasPrimaryResume={Boolean(primaryResume)}
+          />
         </section>
       </div>
     </div>
