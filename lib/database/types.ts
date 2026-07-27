@@ -34,6 +34,139 @@ export type Database = {
   };
   public: {
     Tables: {
+      candidate_evidence: {
+        Row: {
+          actions: string;
+          confirmed_at: string | null;
+          context: string;
+          created_at: string;
+          id: string;
+          kind: string;
+          links: string[];
+          metrics: string[];
+          outcome: string;
+          skills: string[];
+          sort_order: number;
+          title: string;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          actions: string;
+          confirmed_at?: string | null;
+          context?: string;
+          created_at?: string;
+          id?: string;
+          kind: string;
+          links?: string[];
+          metrics?: string[];
+          outcome?: string;
+          skills?: string[];
+          sort_order?: number;
+          title: string;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          actions?: string;
+          confirmed_at?: string | null;
+          context?: string;
+          created_at?: string;
+          id?: string;
+          kind?: string;
+          links?: string[];
+          metrics?: string[];
+          outcome?: string;
+          skills?: string[];
+          sort_order?: number;
+          title?: string;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "candidate_evidence_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      candidate_profiles: {
+        Row: {
+          availability: string;
+          career_goals: string;
+          created_at: string;
+          current_responsibilities: string;
+          current_role: string;
+          excluded_claims: string[];
+          github_url: string;
+          linkedin_url: string;
+          location: string;
+          portfolio_url: string;
+          relocation_preference: string;
+          schema_version: number;
+          startup_motivation: string;
+          target_company_stages: string[];
+          target_industries: string[];
+          target_roles: string[];
+          updated_at: string;
+          user_id: string;
+          work_authorization: string;
+        };
+        Insert: {
+          availability?: string;
+          career_goals?: string;
+          created_at?: string;
+          current_responsibilities?: string;
+          current_role?: string;
+          excluded_claims?: string[];
+          github_url?: string;
+          linkedin_url?: string;
+          location?: string;
+          portfolio_url?: string;
+          relocation_preference?: string;
+          schema_version?: number;
+          startup_motivation?: string;
+          target_company_stages?: string[];
+          target_industries?: string[];
+          target_roles?: string[];
+          updated_at?: string;
+          user_id: string;
+          work_authorization?: string;
+        };
+        Update: {
+          availability?: string;
+          career_goals?: string;
+          created_at?: string;
+          current_responsibilities?: string;
+          current_role?: string;
+          excluded_claims?: string[];
+          github_url?: string;
+          linkedin_url?: string;
+          location?: string;
+          portfolio_url?: string;
+          relocation_preference?: string;
+          schema_version?: number;
+          startup_motivation?: string;
+          target_company_stages?: string[];
+          target_industries?: string[];
+          target_roles?: string[];
+          updated_at?: string;
+          user_id?: string;
+          work_authorization?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "candidate_profiles_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: true;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       extension_rate_limits: {
         Row: {
           created_at: string;
