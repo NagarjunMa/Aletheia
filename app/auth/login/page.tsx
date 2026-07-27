@@ -11,14 +11,14 @@ import { ensureProfileAction } from "@/app/auth/actions";
 
 /* ── Shared theme tokens ─────────────────────────── */
 const T = {
-  bg: "#000000",
-  surface: "rgba(255, 255, 255, 0.04)",
-  surface2: "rgba(255, 255, 255, 0.07)",
-  text: "#CBEFEB",
-  muted: "#48A89A",
-  dim: "rgba(203,239,235,0.40)",
-  border: "rgba(203,239,235,0.12)",
-  accent: "#48A89A",
+  bg: "#050806",
+  surface: "rgba(1, 50, 32, 0.20)",
+  surface2: "rgba(11, 110, 79, 0.18)",
+  text: "#D1F2EB",
+  muted: "#50C878",
+  dim: "rgba(209,242,235,0.52)",
+  border: "rgba(209,242,235,0.14)",
+  accent: "#50C878",
   error: "rgba(239,68,68,0.12)",
   errorText: "#f87171",
 };
@@ -395,7 +395,7 @@ function LoginForm() {
             background: loading ? T.surface2 : T.accent,
             border: `1px solid ${loading ? T.border : T.accent}`,
             borderRadius: 0,
-            color: "#051F20",
+            color: "#050806",
             fontSize: "0.68rem",
             fontWeight: 800,
             letterSpacing: "0.15em",

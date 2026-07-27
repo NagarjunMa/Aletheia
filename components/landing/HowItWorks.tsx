@@ -87,7 +87,7 @@ const MockupCard = () => (
               fontWeight: 600,
               padding: "3px 10px",
               background: i === 0 ? "var(--l-blue)" : "var(--l-surface-2)",
-              color: i === 0 ? "#051F20" : "var(--l-text-dim)",
+              color: i === 0 ? "#050806" : "var(--l-text-dim)",
               borderRadius: "1px",
             }}
           >
@@ -130,7 +130,7 @@ const MockupCard = () => (
           letterSpacing: "0.12em",
           textTransform: "uppercase",
           background: "var(--l-blue)",
-          color: "#051F20",
+          color: "#050806",
           borderRadius: "1px",
           border: "none",
           cursor: "pointer",

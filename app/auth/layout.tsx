@@ -28,18 +28,6 @@ export default function AuthLayout({
 
       {/* ── Left: form panel ─────────────────────────────── */}
       <div className="w-full lg:w-1/2 flex items-center justify-center px-6 py-16 relative z-10 overflow-hidden">
-        {/* Micro dot grid texture */}
-        <div
-          aria-hidden
-          style={{
-            position: "absolute",
-            inset: 0,
-            backgroundImage:
-              "radial-gradient(rgba(218,241,222,0.05) 1px, transparent 1px)",
-            backgroundSize: "28px 28px",
-            pointerEvents: "none",
-          }}
-        />
         {/* Vignette to focus attention on form */}
         <div
           aria-hidden
@@ -57,7 +45,7 @@ export default function AuthLayout({
       {/* ── Right: branding panel ─────────────────────────── */}
       <div
         className="hidden lg:flex lg:w-1/2 relative z-10 overflow-hidden items-center justify-center"
-        style={{ borderLeft: "1px solid rgba(255,255,255,0.05)" }}
+        style={{ borderLeft: "1px solid rgba(209,242,235,0.08)" }}
       >
         {/* Watermark */}
         <div
@@ -77,7 +65,7 @@ export default function AuthLayout({
               fontFamily: "var(--font-flaviotte), Playfair Display, serif",
               fontSize: "28rem",
               fontWeight: 900,
-              color: "rgba(218,241,222,0.025)",
+              color: "rgba(209,242,235,0.025)",
               lineHeight: 1,
               fontStyle: "italic",
             }}
@@ -101,7 +89,7 @@ export default function AuthLayout({
                 fontFamily: "var(--font-flaviotte), Playfair Display, serif",
                 fontWeight: 400,
                 fontSize: "1.25rem",
-                color: "#DAF1DE",
+                color: "#D1F2EB",
                 letterSpacing: "0.06em",
               }}
             >
@@ -125,13 +113,13 @@ export default function AuthLayout({
             transition={{ duration: 0.7, delay: 0.25 }}
           >
             LinkedIn outreach that sounds{" "}
-            <em style={{ fontStyle: "italic", color: "#DAF1DE" }}>human.</em>
+            <em style={{ fontStyle: "italic", color: "#D1F2EB" }}>human.</em>
           </motion.h2>
 
           {/* Subtext */}
           <motion.p
             style={{
-              color: "rgba(218,241,222,0.5)",
+              color: "rgba(209,242,235,0.68)",
               fontSize: "0.875rem",
               lineHeight: 1.7,
               marginBottom: "2.5rem",
@@ -147,7 +135,7 @@ export default function AuthLayout({
           {/* Feature bullets */}
           <motion.div
             style={{
-              borderTop: "1px solid rgba(218,241,222,0.08)",
+              borderTop: "1px solid rgba(209,242,235,0.1)",
               paddingTop: "1.75rem",
               display: "flex",
               flexDirection: "column",
@@ -167,7 +155,7 @@ export default function AuthLayout({
               >
                 <span
                   style={{
-                    color: "#DAF1DE",
+                    color: "#50C878",
                     fontSize: "0.7rem",
                     marginTop: "2px",
                     flexShrink: 0,
@@ -177,7 +165,7 @@ export default function AuthLayout({
                 </span>
                 <span
                   style={{
-                    color: "rgba(218,241,222,0.50)",
+                    color: "rgba(209,242,235,0.66)",
                     fontSize: "0.8rem",
                     lineHeight: 1.6,
                   }}
@@ -199,7 +187,7 @@ export default function AuthLayout({
             <p
               style={{
                 fontSize: "0.7rem",
-                color: "rgba(218,241,222,0.30)",
+                color: "rgba(209,242,235,0.48)",
                 letterSpacing: "0.10em",
                 textTransform: "uppercase",
                 marginBottom: "0.75rem",
@@ -210,7 +198,7 @@ export default function AuthLayout({
             <p
               style={{
                 fontSize: "0.85rem",
-                color: "rgba(218,241,222,0.60)",
+                color: "rgba(209,242,235,0.72)",
                 lineHeight: 1.6,
                 fontStyle: "italic",
               }}
@@ -221,7 +209,7 @@ export default function AuthLayout({
             <p
               style={{
                 fontSize: "0.7rem",
-                color: "rgba(218,241,222,0.30)",
+                color: "rgba(209,242,235,0.48)",
                 marginTop: "0.5rem",
                 letterSpacing: "0.06em",
               }}

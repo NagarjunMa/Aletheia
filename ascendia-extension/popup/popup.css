@@ -1,52 +1,43 @@
-/* Aletheia Extension — Aurora Green Theme */
+/* Aletheia Extension — Luxury Evergreen Theme */
 
 /* ── Local font: Flaviotte (shared with web app) ────────────── */
 @font-face {
-  font-family: 'Flaviotte';
+  font-family: "Flaviotte";
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url('../assets/fonts/Flaviotte.woff2') format('woff2'),
-       url('../assets/fonts/Flaviotte.woff') format('woff');
+  src:
+    url("../assets/fonts/Flaviotte.woff2") format("woff2"),
+    url("../assets/fonts/Flaviotte.woff") format("woff");
 }
 
-/* Design Tokens — Aurora Forest Palette (from Stitch ref #17907855579365939357) */
+/* Reference palette: ink, dark evergreen, deep emerald, emerald, mint. */
 :root {
-  /* ── Aurora Forest Scale ──────────────────────────────────────────
-     #000000  pure black base
-     #1E4D4A  deep teal (primary aurora shard)
-     #163351  navy blue (secondary aurora shard)
-     #2D1B4E  deep violet (tertiary aurora shard)
-     #0D3D2E  forest green (quaternary aurora shard)
-     #DAF1DE  mint (accent / primary text highlight)
-  ─────────────────────────────────────────────────────────────────── */
-
-  --green-deepest: #000000;
-  --green-dark:    #0a0a0a;
-  --green-mid:     #111111;
-  --green-border:  #48A89A;
-  --green-muted:   #CBEFEB;
-  --green-lightest: #CBEFEB;
+  --green-deepest: #050806;
+  --green-dark: #080d0a;
+  --green-mid: #013220;
+  --green-border: #50c878;
+  --green-muted: #9dbdb4;
+  --green-lightest: #d1f2eb;
 
   /* Semantic colour aliases (replaces old --primary-* slots) */
   --primary-900: var(--green-deepest);
   --primary-800: var(--green-dark);
   --primary-700: var(--green-mid);
   --primary-600: var(--green-border);
-  --primary-500: #2e6051;
+  --primary-500: #3d9b5d;
   /* mid-muted, for placeholder / disabled */
   --primary-400: var(--green-muted);
-  --primary-300: #aed4b7;
+  --primary-300: #b4d8cf;
   /* slightly dimmed text */
-  --primary-200: #c9e8cf;
+  --primary-200: #c5e6de;
   --primary-100: var(--green-lightest);
-  --primary-50: #edf8ef;
+  --primary-50: #e6f8f4;
 
-  /* Accent — #48A89A teal as single ambient accent */
-  --accent-600: #1E4D4A;
-  --accent-500: #286860;
-  --accent-400: #48A89A;
-  --accent-300: #7ECFCA;
+  --accent-600: #064c37;
+  --accent-500: #0b6e4f;
+  --accent-400: #50c878;
+  --accent-300: #8bdda6;
 
   /* Status Colors — keep familiar semantic meanings */
   --success-600: #1a5c3a;
@@ -62,15 +53,18 @@
   --error-400: #cc5a5a;
 
   /* Glassmorphism — teal-ambient glass surfaces */
-  --glass-bg:           rgba(255, 255, 255, 0.03);
-  --glass-bg-strong:    rgba(255, 255, 255, 0.06);
-  --glass-border:       rgba(72, 168, 154, 0.12);
-  --glass-shadow:       0 8px 32px rgba(0, 0, 0, 0.7);
+  --glass-bg: rgba(1, 50, 32, 0.22);
+  --glass-bg-strong: rgba(11, 110, 79, 0.2);
+  --glass-border: rgba(209, 242, 235, 0.12);
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.7);
   --glass-shadow-hover: 0 12px 40px rgba(0, 0, 0, 0.85);
 
   /* Typography */
-  --font-family: 'Flaviotte', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-  --font-family-mono: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, monospace;
+  --font-family:
+    "Flaviotte", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    system-ui, sans-serif;
+  --font-family-mono:
+    "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas, monospace;
 
   /* Spacing Scale */
   --space-1: 0.25rem;
@@ -117,14 +111,20 @@ body {
   font-family: var(--font-family);
   font-size: 14px;
   line-height: 1.6;
-  color: #CBEFEB;
-  /* Static cyan/teal palette mirroring web ShaderBackground (#204050 → #70b8c8) */
+  color: var(--green-lightest);
   background:
-    radial-gradient(ellipse 70% 55% at 0%   0%,  #285868 0%, transparent 60%),
-    radial-gradient(ellipse 65% 50% at 100% 0%,  #5888a0 0%, transparent 65%),
-    radial-gradient(ellipse 80% 60% at 100% 100%, #308890 0%, transparent 60%),
-    radial-gradient(ellipse 60% 55% at 50%  60%, #70b8c8 0%, transparent 70%),
-    #182830;
+    radial-gradient(
+      ellipse 95% 58% at 12% 112%,
+      rgba(209, 242, 235, 0.4) 0%,
+      rgba(80, 200, 120, 0.28) 30%,
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse 80% 58% at 100% 94%,
+      rgba(11, 110, 79, 0.3) 0%,
+      transparent 70%
+    ),
+    linear-gradient(180deg, #050806 0%, #080d0a 54%, #013220 100%);
   overflow-x: hidden;
   position: relative;
   margin: 0;
@@ -141,21 +141,25 @@ body {
   z-index: 1;
 }
 
-/* Soft cyan ambient overlay — reinforces #70b8c8 highlight + adds depth */
+/* Dark vignette preserves contrast while the emerald bloom supplies depth. */
 body::before {
-  content: '';
+  content: "";
   position: fixed;
   inset: 0;
   background:
-    radial-gradient(ellipse 80% 60% at 15%  10%, rgba(112, 184, 200, 0.18) 0%, transparent 65%),
-    radial-gradient(ellipse 60% 50% at 85%  90%, rgba(112, 184, 200, 0.12) 0%, transparent 65%);
+    linear-gradient(180deg, rgba(5, 8, 6, 0.42) 0%, transparent 46%),
+    radial-gradient(
+      ellipse 110% 95% at 50% 48%,
+      transparent 36%,
+      rgba(0, 0, 0, 0.36) 100%
+    );
   pointer-events: none;
   z-index: 0;
 }
 
 /* Film grain (ibelick technique) — SVG feTurbulence at low opacity */
 body::after {
-  content: '';
+  content: "";
   position: fixed;
   inset: 0;
   z-index: 9998;
@@ -196,7 +200,7 @@ body::after {
 }
 
 .logo-text {
-  font-family: 'Flaviotte', 'Cormorant Garamond', Georgia, serif;
+  font-family: "Flaviotte", "Cormorant Garamond", Georgia, serif;
   font-size: 1.45rem;
   font-weight: 300;
   color: var(--green-lightest);
@@ -390,9 +394,16 @@ body::after {
 
 /* Main Content */
 .main-content {
+  margin: var(--space-3);
   padding: var(--space-5);
   position: relative;
   z-index: var(--z-base);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--glass-shadow);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
 }
 
 .input-group {
@@ -432,7 +443,7 @@ textarea:focus,
   border-color: var(--accent-400);
   background: var(--glass-bg-strong);
   box-shadow:
-    0 0 0 3px rgba(59, 130, 246, 0.1),
+    0 0 0 3px rgba(80, 200, 120, 0.12),
     var(--glass-shadow);
 }
 
@@ -458,10 +469,10 @@ textarea::placeholder {
 .generate-btn {
   width: 100%;
   padding: var(--space-4) var(--space-6);
-  background: linear-gradient(135deg, #286860, #48A89A);
-  border: 1px solid rgba(72, 168, 154, 0.6);
+  background: linear-gradient(135deg, #0b6e4f, #50c878);
+  border: 1px solid rgba(80, 200, 120, 0.6);
   border-radius: var(--radius-xl);
-  color: #000a09;
+  color: #050806;
   font-weight: 600;
   font-size: 14px;
   font-family: var(--font-family);
@@ -474,24 +485,29 @@ textarea::placeholder {
   margin-bottom: var(--space-6);
   position: relative;
   overflow: hidden;
-  box-shadow: 0 4px 24px rgba(72, 168, 154, 0.25);
+  box-shadow: 0 8px 28px rgba(11, 110, 79, 0.28);
 }
 
 .generate-btn::before {
-  content: '';
+  content: "";
   position: absolute;
   top: 0;
   left: -100%;
   width: 100%;
   height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.12), transparent);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.12),
+    transparent
+  );
   transition: left var(--transition-slow);
 }
 
 .generate-btn:hover:not(:disabled) {
-  background: linear-gradient(135deg, #48A89A, #7ECFCA);
+  background: linear-gradient(135deg, #50c878, #d1f2eb);
   transform: translateY(-2px);
-  box-shadow: 0 8px 32px rgba(72, 168, 154, 0.40);
+  box-shadow: 0 10px 34px rgba(80, 200, 120, 0.3);
 }
 
 .generate-btn:hover:not(:disabled)::before {
@@ -545,13 +561,18 @@ textarea::placeholder {
 }
 
 .output-section::before {
-  content: '';
+  content: "";
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   height: 1px;
-  background: linear-gradient(90deg, transparent, var(--green-muted), transparent);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--green-muted),
+    transparent
+  );
   opacity: 0.6;
 }
 
@@ -679,7 +700,11 @@ textarea::placeholder {
 }
 
 .action-btn.primary:hover {
-  background: linear-gradient(135deg, var(--green-muted), var(--green-lightest));
+  background: linear-gradient(
+    135deg,
+    var(--green-muted),
+    var(--green-lightest)
+  );
   transform: translateY(-1px);
   box-shadow: var(--glass-shadow);
 }
@@ -711,14 +736,19 @@ textarea::placeholder {
 }
 
 .feedback-section::before {
-  content: '';
+  content: "";
   position: absolute;
   top: 0;
   left: 50%;
   transform: translateX(-50%);
   width: 60px;
   height: 1px;
-  background: linear-gradient(90deg, transparent, var(--accent-400), transparent);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--accent-400),
+    transparent
+  );
 }
 
 .feedback-label {
@@ -821,7 +851,11 @@ textarea::placeholder {
 }
 
 .reauth-btn:hover:not(:disabled) {
-  background: linear-gradient(135deg, var(--green-muted), var(--green-lightest));
+  background: linear-gradient(
+    135deg,
+    var(--green-muted),
+    var(--green-lightest)
+  );
   transform: translateY(-1px);
   box-shadow: var(--glass-shadow);
 }
