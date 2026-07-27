@@ -89,20 +89,8 @@ jobs:
       - name: Verify extension version bump
         run: node scripts/check-extension-version.mjs "${{ github.event.pull_request.base.sha }}"
 
-      - name: Audit extension dependencies
-        run: npm --prefix ascendia-extension run security:audit
-
-      - name: Type check extension
-        run: npm --prefix ascendia-extension run type-check
-
-      - name: Lint extension
-        run: npm --prefix ascendia-extension run lint
-
-      - name: Test extension
-        run: npm --prefix ascendia-extension test
-
-      - name: Build extension
-        run: npm --prefix ascendia-extension run build:ext
+      - name: Audit and validate extension
+        run: make extension-ci
 
   smoke-test:
     name: Smoke Test & Health Check
