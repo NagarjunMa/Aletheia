@@ -10,6 +10,32 @@ function read(relativePath: string) {
 }
 
 describe("extension validation parity", () => {
+  it("declares every package imported by the extension ESLint config", () => {
+    const extensionPackage = JSON.parse(
+      read("ascendia-extension/package.json"),
+    ) as {
+      devDependencies?: Record<string, string>;
+    };
+    const eslintConfig = read("ascendia-extension/eslint.config.mjs");
+    const importedPackages = [
+      ...eslintConfig.matchAll(/from ["']([^./][^"']*)/g),
+    ]
+      .map((match) => match[1])
+      .map((specifier) =>
+        specifier.startsWith("@")
+          ? specifier.split("/").slice(0, 2).join("/")
+          : specifier.split("/")[0],
+      );
+
+    expect(importedPackages.length).toBeGreaterThan(0);
+    for (const packageName of importedPackages) {
+      expect(
+        extensionPackage.devDependencies?.[packageName],
+        `${packageName} must be a direct extension devDependency`,
+      ).toBeDefined();
+    }
+  });
+
   it("declares every formatter invoked by lint-staged", () => {
     const rootPackage = JSON.parse(read("package.json")) as {
       devDependencies?: Record<string, string>;
