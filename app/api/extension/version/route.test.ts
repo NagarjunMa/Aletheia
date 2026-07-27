@@ -35,7 +35,7 @@ describe("GET /api/extension/version", () => {
     expect(res.status).toBe(200);
     expect(body).toMatchObject({
       appVersion: "0.1.0",
-      extensionVersion: "1.0.3",
+      extensionVersion: "1.0.4",
       sha: "local",
       builtAt: "local",
       chromeWebStoreUrl: null,
@@ -44,7 +44,7 @@ describe("GET /api/extension/version", () => {
         supportedVersions: ["1"],
       },
       extension: {
-        latestSourceVersion: "1.0.3",
+        latestSourceVersion: "1.0.4",
         publishedVersion: "1.0.2",
         minimumSupportedVersion: "1.0.2",
         chromeWebStoreUrl: null,
@@ -67,13 +67,13 @@ describe("GET /api/extension/version", () => {
     expect(res.status).toBe(200);
     expect(body).toMatchObject({
       appVersion: "0.1.0",
-      extensionVersion: "1.0.3",
+      extensionVersion: "1.0.4",
       sha: "1234567890ab",
       chromeWebStoreUrl:
         "https://chromewebstore.google.com/detail/aletheia/example",
     });
     expect(body.extension).toMatchObject({
-      latestSourceVersion: "1.0.3",
+      latestSourceVersion: "1.0.4",
       publishedVersion: "1.0.2",
       minimumSupportedVersion: "1.0.1",
     });

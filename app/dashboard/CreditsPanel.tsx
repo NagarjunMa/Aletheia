@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { Coins, RefreshCw } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 
 type CreditPack = {
   id: string;
@@ -30,7 +33,7 @@ type CreditSummary = {
   ledger: LedgerRow[];
 };
 
-export default function CreditsPanel() {
+export default function CreditsPanel({ className }: { className?: string }) {
   const [summary, setSummary] = useState<CreditSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -68,81 +71,74 @@ export default function CreditsPanel() {
     };
   }, []);
 
-  return (
-    <div className="rounded-lg border border-[#DAF1DE]/16 bg-[#CBEFEB]/10 p-5 shadow-[0_22px_70px_rgba(4,18,22,0.24)] backdrop-blur-2xl transition-colors hover:border-[#DAF1DE]/24 hover:bg-[#CBEFEB]/13 sm:p-6">
-      <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-        <div className="min-w-0">
-          <div className="flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#DAF1DE]/14 bg-[#DAF1DE]/12 text-[#DAF1DE]">
-              {isLoading ? (
-                <RefreshCw
-                  className="h-5 w-5 animate-spin"
-                  aria-hidden={true}
-                />
-              ) : (
-                <Coins className="h-5 w-5" aria-hidden={true} />
-              )}
-            </span>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#DAF1DE]/72">
-              Credits
-            </p>
-          </div>
-          <div className="mt-5">
-            <p className="text-4xl font-bold leading-none text-white">
-              {isLoading
-                ? "..."
-                : summary?.unlimitedCredits
-                  ? "Unlimited"
-                  : (summary?.balance ?? 0).toLocaleString()}
-              <span className="ml-2 text-base font-normal text-[#CBEFEB]/62">
-                {summary?.unlimitedCredits ? "developer access" : "available"}
-              </span>
-            </p>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-[#CBEFEB]/70">
-              {summary?.unlimitedCredits
-                ? "This development account bypasses credit debits for testing. Daily limits still protect the app."
-                : "LinkedIn connections use 2 credits. Emails and InMails use 4. Credits do not expire; daily limits still protect the app."}
-            </p>
-            {error && (
-              <p className="mt-3 text-sm font-semibold text-rose-200">
-                {error}
-              </p>
-            )}
-          </div>
-        </div>
+  const packs = summary?.packs ?? [
+    { id: "starter", name: "Starter", credits: 60, priceUsd: 5 },
+    { id: "plus", name: "Plus", credits: 100, priceUsd: 7 },
+    { id: "pro", name: "Pro", credits: 500, priceUsd: 20 },
+  ];
 
-        <div className="grid w-full gap-3 sm:grid-cols-3 lg:max-w-xl">
-          {(
-            summary?.packs ?? [
-              { id: "starter", name: "Starter", credits: 60, priceUsd: 5 },
-              { id: "plus", name: "Plus", credits: 100, priceUsd: 7 },
-              { id: "pro", name: "Pro", credits: 500, priceUsd: 20 },
-            ]
-          ).map((pack) => (
+  return (
+    <Card
+      className={cn(
+        "flex flex-col p-5 transition-[border-color,background-color,transform] duration-300 hover:-translate-y-0.5 hover:border-primary/25 hover:bg-card sm:p-6",
+        className,
+      )}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary">
+            {isLoading ? (
+              <RefreshCw className="h-4 w-4 animate-spin" aria-hidden={true} />
+            ) : (
+              <Coins className="h-4 w-4" aria-hidden={true} />
+            )}
+          </span>
+          <p className="text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+            Credit balance
+          </p>
+        </div>
+        <Badge variant="outline">No expiry</Badge>
+      </div>
+
+      <div className="mt-7">
+        <p className="text-5xl font-semibold leading-none tracking-[-0.04em] text-foreground">
+          {isLoading
+            ? "—"
+            : summary?.unlimitedCredits
+              ? "Unlimited"
+              : (summary?.balance ?? 0).toLocaleString()}
+        </p>
+        <p className="mt-3 text-sm leading-6 text-muted-foreground">
+          {summary?.unlimitedCredits
+            ? "Developer access is active. Daily safeguards still apply."
+            : "Connections use 2 credits; email and InMail drafts use 4."}
+        </p>
+        {error && (
+          <p className="mt-3 text-sm font-semibold text-rose-200">{error}</p>
+        )}
+      </div>
+
+      <div className="mt-auto pt-7">
+        <p className="mb-3 text-[0.64rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+          Credit packs
+        </p>
+        <div className="grid grid-cols-3 gap-2">
+          {packs.map((pack) => (
             <div
               key={pack.id}
-              className="rounded-lg border border-[#DAF1DE]/12 bg-[#06191d]/42 p-4"
+              className="rounded-lg border border-border/60 bg-background/30 p-3"
             >
-              <p className="text-xs uppercase tracking-[0.18em] text-[#DAF1DE]/58">
-                {pack.name}
-              </p>
-              <p className="mt-2 text-xl font-semibold text-white">
+              <p className="text-xs text-muted-foreground">{pack.name}</p>
+              <p className="mt-1 text-sm font-semibold text-foreground">
                 ${pack.priceUsd}
+                <span className="ml-1 font-normal text-muted-foreground">
+                  · {pack.credits}
+                </span>
               </p>
-              <p className="mt-1 text-sm text-[#CBEFEB]/68">
-                {pack.credits.toLocaleString()} credits
-              </p>
-              <button
-                type="button"
-                disabled
-                className="mt-4 w-full rounded-lg border border-[#DAF1DE]/12 bg-[#DAF1DE]/8 px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#DAF1DE]/55"
-              >
-                Checkout soon
-              </button>
             </div>
           ))}
         </div>
       </div>
-    </div>
+    </Card>
   );
 }

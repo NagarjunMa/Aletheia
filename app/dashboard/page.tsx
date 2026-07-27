@@ -16,12 +16,15 @@ import {
   Upload,
   User,
   XCircle,
-  Zap,
   type LucideIcon,
 } from "lucide-react";
 import ShaderBackground from "@/components/ShaderBackground";
 import SignOutButton from "@/components/SignOutButton";
 import ApplicationProfileEditor from "@/app/profile/application/ApplicationProfileEditor";
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+import { cn } from "@/lib/utils";
 import CreditsPanel from "./CreditsPanel";
 import { getApplicationProfileReadiness } from "@/lib/candidate-profile/schema";
 import { getCandidateApplicationProfile } from "@/lib/candidate-profile/service";
@@ -32,7 +35,9 @@ import {
 } from "@/lib/resumes/service";
 
 type FeedbackCategory =
-  "linkedin_connection" | "cold_email" | "linkedin_inmail";
+  | "linkedin_connection"
+  | "cold_email"
+  | "linkedin_inmail";
 
 type FeedbackMetadata = {
   category?: unknown;
@@ -192,58 +197,88 @@ export default async function DashboardPage() {
 
   const displayName = profile?.full_name || user.email?.split("@")[0] || "User";
 
+  const dailyUsagePercent = Math.min(
+    Math.round((todayUsage / DAILY_LIMIT) * 100),
+    100,
+  );
+
   return (
-    <div className="landing min-h-[100dvh] px-4 py-10 sm:px-6 lg:px-8">
+    <div className="landing min-h-[100dvh] px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
       <ShaderBackground />
-      <div className="mx-auto max-w-6xl animate-fade-in">
-        <div className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+      <main className="mx-auto max-w-7xl animate-fade-in">
+        <header className="mb-8 flex flex-col gap-5 border-b border-border/70 pb-7 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="mb-2 text-xs uppercase tracking-[0.24em] text-[#DAF1DE]/70">
-              Profile command center
-            </p>
-            <h1 className="text-3xl font-bold text-white sm:text-4xl">
-              Welcome back, {displayName}
+            <div className="mb-3 flex items-center gap-3">
+              <span className="h-px w-8 bg-primary" aria-hidden="true" />
+              <p className="text-[0.68rem] font-semibold uppercase tracking-[0.26em] text-primary">
+                Workspace overview
+              </p>
+            </div>
+            <h1 className="max-w-3xl text-3xl font-semibold tracking-[-0.025em] text-foreground sm:text-5xl">
+              Good to see you, {displayName}.
             </h1>
-            <p className="mt-2 text-sm text-[#CBEFEB]/70">{user.email}</p>
+            <p className="mt-3 text-sm text-muted-foreground">{user.email}</p>
           </div>
           <SignOutButton />
-        </div>
+        </header>
 
         <section
           className="grid grid-cols-1 gap-4 md:grid-cols-6 xl:grid-cols-12"
           aria-label="Profile activity overview"
         >
-          <MetricTile
-            title="Today's usage"
-            value={todayUsage.toString()}
-            suffix={`/ ${DAILY_LIMIT}`}
-            note={`${Math.max(DAILY_LIMIT - todayUsage, 0)} drafts left today`}
-            icon={MessageSquare}
-            className="md:col-span-3 xl:col-span-3"
-          />
-          <MetricTile
-            title="Drafts generated"
-            value={totalDrafts.toLocaleString()}
-            note="Stored draft history"
-            icon={FileText}
-            className="md:col-span-3 xl:col-span-3"
-          />
-          <MetricTile
-            title="CPL score"
-            value={cplScore.toFixed(1)}
-            note="Current profile baseline"
-            icon={Zap}
-            className="md:col-span-3 xl:col-span-3"
-          />
-          <BentoCard className="md:col-span-3 xl:col-span-3">
-            <div className="flex h-full flex-col justify-between gap-5">
-              <div>
-                <TileHeader icon={Sparkles} title="Quick actions" />
-                <p className="mt-3 text-sm text-[#CBEFEB]/70">
-                  Jump into the places that keep generation quality sharp.
-                </p>
+          <BentoCard className="relative overflow-hidden md:col-span-6 xl:col-span-7">
+            <div
+              aria-hidden
+              className="absolute -bottom-24 -right-20 h-64 w-64 rounded-full bg-primary/10 blur-3xl"
+            />
+            <div className="relative">
+              <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <TileHeader icon={MessageSquare} title="Workspace pulse" />
+                  <h2 className="mt-7 max-w-md text-2xl font-semibold leading-tight tracking-[-0.02em] text-foreground sm:text-3xl">
+                    Your outreach system is ready when you are.
+                  </h2>
+                </div>
+                <Badge variant="outline">
+                  Today · {dailyUsagePercent}% used
+                </Badge>
               </div>
-              <div className="grid gap-2">
+
+              <div className="mt-9 grid gap-3 sm:grid-cols-3">
+                <StatBlock
+                  label="Daily usage"
+                  value={todayUsage.toString()}
+                  suffix={`/ ${DAILY_LIMIT}`}
+                />
+                <StatBlock
+                  label="Draft archive"
+                  value={totalDrafts.toLocaleString()}
+                />
+                <StatBlock label="CPL score" value={cplScore.toFixed(1)} />
+              </div>
+
+              <div className="mt-7">
+                <div className="mb-2 flex justify-between text-xs text-muted-foreground">
+                  <span>
+                    {Math.max(DAILY_LIMIT - todayUsage, 0)} drafts remain
+                  </span>
+                  <span>{dailyUsagePercent}%</span>
+                </div>
+                <Progress
+                  value={dailyUsagePercent}
+                  aria-label="Daily draft usage"
+                />
+              </div>
+            </div>
+          </BentoCard>
+
+          <BentoCard className="md:col-span-6 xl:col-span-5">
+            <div className="flex h-full flex-col">
+              <TileHeader icon={Sparkles} title="Quick actions" />
+              <p className="mt-5 max-w-sm text-sm leading-6 text-muted-foreground">
+                Keep the context behind each draft current and specific.
+              </p>
+              <div className="mt-7 grid flex-1 content-end gap-2">
                 <ActionLink href="/profile" icon={User}>
                   Manage profile
                 </ActionLink>
@@ -257,153 +292,148 @@ export default async function DashboardPage() {
             </div>
           </BentoCard>
 
-          <div className="md:col-span-6 xl:col-span-12">
-            <CreditsPanel />
-          </div>
-
-          <BentoCard className="md:col-span-6 xl:col-span-12">
-            <div className="grid gap-6 lg:grid-cols-[0.85fr_1.15fr_auto] lg:items-center">
+          <BentoCard className="md:col-span-6 xl:col-span-7">
+            <div className="grid h-full gap-7 lg:grid-cols-[0.75fr_1.25fr] lg:items-center">
               <div>
-                <TileHeader icon={ClipboardCheck} title="Candidate details" />
-                <div className="mt-4 flex items-end gap-3">
-                  <p className="text-4xl font-bold text-white">
+                <TileHeader icon={ClipboardCheck} title="Application profile" />
+                <div className="mt-7 flex items-baseline gap-3">
+                  <p className="text-5xl font-semibold tracking-[-0.04em] text-foreground">
                     {applicationReadiness.completionPercent}%
                   </p>
-                  <p className="pb-1 text-sm text-[#CBEFEB]/65">
-                    {applicationReadiness.ready
-                      ? "ready to generate"
-                      : "foundation in progress"}
-                  </p>
+                  <span className="text-sm text-muted-foreground">
+                    complete
+                  </span>
                 </div>
               </div>
               <div>
-                <div className="h-2 overflow-hidden rounded-full bg-[#06191d]/55">
-                  <div
-                    className="h-full rounded-full bg-[#DAF1DE]/75"
-                    style={{
-                      width: `${applicationReadiness.completionPercent}%`,
-                    }}
-                  />
-                </div>
-                <p className="mt-3 text-sm leading-6 text-[#CBEFEB]/70">
+                <Progress
+                  value={applicationReadiness.completionPercent}
+                  aria-label="Application profile completion"
+                />
+                <p className="mt-4 text-sm leading-6 text-muted-foreground">
                   {applicationReadiness.ready
-                    ? "Your resume or current role and confirmed evidence meet the minimum grounding threshold."
+                    ? "Your verified evidence meets the grounding threshold for role-fit drafts."
                     : (applicationReadiness.missingRequired[0] ??
                       "Add verified context to strengthen role-fit answers.")}
                 </p>
+                <Link
+                  href="#candidate-profile"
+                  className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-primary transition-colors hover:text-foreground"
+                >
+                  {applicationReadiness.ready
+                    ? "Review application profile"
+                    : "Continue building profile"}
+                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                </Link>
               </div>
-              <Link
-                href="#candidate-profile"
-                className="inline-flex items-center justify-center gap-2 rounded-lg border border-[#DAF1DE]/20 bg-[#DAF1DE]/13 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#DAF1DE]/22"
-              >
-                {applicationReadiness.ready ? "Review details" : "Add details"}
-                <ArrowRight className="h-4 w-4" aria-hidden={true} />
-              </Link>
             </div>
           </BentoCard>
 
-          <BentoCard className="md:col-span-6 xl:col-span-6 xl:row-span-2">
+          <div className="md:col-span-6 xl:col-span-5">
+            <CreditsPanel className="h-full" />
+          </div>
+
+          <BentoCard className="md:col-span-6 xl:col-span-7 xl:row-span-2">
             <div className="flex h-full flex-col">
-              <div className="mb-5 flex items-center justify-between gap-3">
+              <div className="mb-6 flex items-start justify-between gap-3">
                 <div>
                   <TileHeader icon={Mail} title="Recent messages" />
-                  <p className="mt-2 text-sm text-[#CBEFEB]/65">
-                    Latest generated drafts saved to your workspace.
+                  <p className="mt-3 text-sm text-muted-foreground">
+                    Your latest saved drafts, ordered by recency.
                   </p>
                 </div>
-                <span className="rounded-full border border-[#DAF1DE]/15 bg-[#DAF1DE]/10 px-3 py-1 text-xs text-[#DAF1DE]">
-                  {recentDrafts.length} shown
-                </span>
+                <Badge variant="secondary">{recentDrafts.length} shown</Badge>
               </div>
 
               {recentDrafts.length > 0 ? (
-                <div className="grid gap-3">
+                <div className="grid gap-2">
                   {recentDrafts.map((draft) => (
                     <article
                       key={draft.id}
-                      className="rounded-lg border border-[#DAF1DE]/12 bg-[#06191d]/45 p-4 transition-colors hover:border-[#DAF1DE]/24 hover:bg-[#0c2529]/55"
+                      className="group rounded-lg border border-border/65 bg-background/35 p-4 transition-colors hover:border-primary/30 hover:bg-secondary/50"
                     >
                       <div className="flex items-start justify-between gap-4">
                         <div className="min-w-0">
-                          <p className="line-clamp-2 text-sm leading-6 text-white">
+                          <p className="line-clamp-2 text-sm leading-6 text-foreground">
                             {truncateMessage(draft.content)}
                           </p>
-                          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[#CBEFEB]/62">
+                          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                             <span className="capitalize">
                               {(draft.draft_type ?? "message").replace(
                                 /_/g,
                                 " ",
                               )}
                             </span>
-                            <span>•</span>
+                            <span aria-hidden="true">·</span>
                             <span>{formatDate(draft.created_at)}</span>
                             {draft.is_accepted && (
                               <>
-                                <span>•</span>
-                                <span className="text-emerald-300">
-                                  Approved
-                                </span>
+                                <span aria-hidden="true">·</span>
+                                <span className="text-primary">Approved</span>
                               </>
                             )}
                           </div>
                         </div>
                         {draft.cpl_score != null && (
-                          <span className="shrink-0 rounded-md border border-[#DAF1DE]/12 bg-[#DAF1DE]/10 px-2.5 py-1 text-sm font-semibold text-[#DAF1DE]">
-                            {Math.round(draft.cpl_score)}
-                          </span>
+                          <Badge variant="outline">
+                            {Math.round(draft.cpl_score)} CPL
+                          </Badge>
                         )}
                       </div>
                     </article>
                   ))}
                 </div>
               ) : (
-                <div className="flex flex-1 flex-col justify-center rounded-lg border border-dashed border-[#DAF1DE]/20 bg-[#DAF1DE]/8 p-6">
-                  <p className="text-base font-semibold text-white">
-                    No recent messages yet.
+                <div className="flex flex-1 flex-col justify-center rounded-lg border border-dashed border-border bg-background/25 p-6">
+                  <p className="text-base font-semibold text-foreground">
+                    Your draft archive is quiet.
                   </p>
-                  <p className="mt-2 text-sm leading-6 text-[#CBEFEB]/70">
-                    Upload a primary resume, open a LinkedIn profile, and
-                    generate your first draft from the extension.
+                  <p className="mt-2 max-w-lg text-sm leading-6 text-muted-foreground">
+                    Add a primary resume, open a LinkedIn profile, and generate
+                    your first reviewed draft from the extension.
                   </p>
                   <Link
                     href="/profile"
-                    className="mt-5 inline-flex w-fit items-center gap-2 rounded-lg border border-[#DAF1DE]/20 bg-[#DAF1DE]/12 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#DAF1DE]/18"
+                    className="mt-5 inline-flex w-fit items-center gap-2 text-sm font-semibold text-primary hover:text-foreground"
                   >
-                    Add resume
-                    <ArrowRight className="h-4 w-4" aria-hidden={true} />
+                    Add a resume
+                    <ArrowRight className="h-4 w-4" aria-hidden="true" />
                   </Link>
                 </div>
               )}
             </div>
           </BentoCard>
 
-          <MetricTile
-            title="Approval rate"
-            value={approvalRate}
-            note={`${approvedCount.toLocaleString()} approved`}
-            icon={CheckCircle2}
-            className="md:col-span-2 xl:col-span-2"
-            tone="success"
-          />
-          <MetricTile
-            title="Reject rate"
-            value={rejectRate}
-            note={`${rejectedCount.toLocaleString()} rejected`}
-            icon={XCircle}
-            className="md:col-span-2 xl:col-span-2"
-            tone="danger"
-          />
-          <MetricTile
-            title="Total messages"
-            value={totalMessages.toLocaleString()}
-            note="Feedback events recorded"
-            icon={Gauge}
-            className="md:col-span-2 xl:col-span-2"
-          />
+          <BentoCard className="md:col-span-3 xl:col-span-5">
+            <TileHeader icon={Gauge} title="Review health" />
+            <div className="mt-7 grid grid-cols-3 divide-x divide-border/70">
+              <HealthMetric
+                icon={CheckCircle2}
+                label="Approved"
+                value={approvalRate}
+                tone="positive"
+              />
+              <HealthMetric
+                icon={XCircle}
+                label="Rejected"
+                value={rejectRate}
+                tone="negative"
+              />
+              <HealthMetric
+                icon={MessageSquare}
+                label="Reviewed"
+                value={totalMessages.toLocaleString()}
+              />
+            </div>
+            <p className="mt-6 text-xs leading-5 text-muted-foreground">
+              {approvedCount.toLocaleString()} approved ·{" "}
+              {rejectedCount.toLocaleString()} rejected
+            </p>
+          </BentoCard>
 
-          <BentoCard className="md:col-span-6 xl:col-span-6">
-            <TileHeader icon={BarChart3} title="Message categories" />
-            <div className="mt-5 grid gap-4">
+          <BentoCard className="md:col-span-3 xl:col-span-5">
+            <TileHeader icon={BarChart3} title="Message mix" />
+            <div className="mt-6 grid gap-5">
               {categoryStats.map((stat) => (
                 <CategoryMeter
                   key={stat.key}
@@ -415,21 +445,28 @@ export default async function DashboardPage() {
           </BentoCard>
 
           <BentoCard className="md:col-span-6 xl:col-span-12">
-            <div className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr] lg:items-center">
+            <div className="grid gap-7 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
               <div>
-                <TileHeader icon={FileText} title="Your resume" />
-                <h2 className="mt-4 text-2xl font-semibold text-white">
+                <TileHeader icon={FileText} title="Resume context" />
+                <h2 className="mt-5 text-2xl font-semibold tracking-tight text-foreground">
                   {primaryResume
                     ? primaryResume.label
                     : "No primary resume selected"}
                 </h2>
-                <p className="mt-2 max-w-2xl text-sm leading-6 text-[#CBEFEB]/72">
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
                   {primaryResume
-                    ? `${primaryResume.file_name} is powering resume-aware generation across the extension.`
-                    : "Upload a resume in your profile so Aletheia can ground messages in your real background."}
+                    ? `${primaryResume.file_name} is grounding generation across the extension.`
+                    : "Upload a resume so Aletheia can ground messages in your real background."}
                 </p>
+                <Link
+                  href="/profile"
+                  className="mt-5 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:brightness-110"
+                >
+                  <Upload className="h-4 w-4" aria-hidden="true" />
+                  {primaryResume ? "Manage resumes" : "Upload resume"}
+                </Link>
               </div>
-              <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-2">
+              <div className="grid gap-2 sm:grid-cols-2">
                 <ResumeFact
                   label="Uploaded"
                   value={`${resumes.length} / ${MAX_RESUMES_PER_USER}`}
@@ -450,18 +487,9 @@ export default async function DashboardPage() {
                 <ResumeFact
                   label="File size"
                   value={
-                    primaryResume ? formatSize(primaryResume.file_size) : "-"
+                    primaryResume ? formatSize(primaryResume.file_size) : "—"
                   }
                 />
-              </div>
-              <div className="lg:col-span-2">
-                <Link
-                  href="/profile"
-                  className="inline-flex items-center gap-2 rounded-lg border border-[#DAF1DE]/20 bg-[#DAF1DE]/14 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#DAF1DE]/22"
-                >
-                  <Upload className="h-4 w-4" aria-hidden={true} />
-                  {primaryResume ? "Manage resumes" : "Upload resume"}
-                </Link>
               </div>
             </div>
           </BentoCard>
@@ -473,16 +501,19 @@ export default async function DashboardPage() {
           aria-labelledby="candidate-profile-heading"
         >
           <div className="mb-7 max-w-3xl">
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#DAF1DE]/70">
-              Candidate source of truth
-            </p>
+            <div className="mb-3 flex items-center gap-3">
+              <span className="h-px w-8 bg-primary" aria-hidden="true" />
+              <p className="text-[0.68rem] font-semibold uppercase tracking-[0.26em] text-primary">
+                Candidate source of truth
+              </p>
+            </div>
             <h2
               id="candidate-profile-heading"
-              className="mt-3 text-3xl font-bold text-white sm:text-4xl"
+              className="text-3xl font-semibold tracking-[-0.025em] text-foreground sm:text-4xl"
             >
               Your details, editable in one place.
             </h2>
-            <p className="mt-3 text-sm leading-6 text-[#CBEFEB]/72 sm:text-base">
+            <p className="mt-3 text-sm leading-6 text-muted-foreground sm:text-base">
               Open a category, update only what changed, and save it without
               leaving the dashboard. Confirmed evidence remains separate from
               stable career and application details.
@@ -496,24 +527,27 @@ export default async function DashboardPage() {
             hasPrimaryResume={Boolean(primaryResume)}
           />
         </section>
-      </div>
+      </main>
     </div>
   );
 }
 
 function BentoCard({
   children,
-  className = "",
+  className,
 }: {
   children: ReactNode;
   className?: string;
 }) {
   return (
-    <div
-      className={`rounded-lg border border-[#DAF1DE]/16 bg-[#CBEFEB]/10 p-5 shadow-[0_22px_70px_rgba(4,18,22,0.24)] backdrop-blur-2xl transition-colors hover:border-[#DAF1DE]/24 hover:bg-[#CBEFEB]/13 sm:p-6 ${className}`}
+    <Card
+      className={cn(
+        "p-5 transition-[border-color,background-color,transform] duration-300 hover:-translate-y-0.5 hover:border-primary/25 hover:bg-card sm:p-6",
+        className,
+      )}
     >
       {children}
-    </div>
+    </Card>
   );
 }
 
@@ -526,57 +560,39 @@ function TileHeader({
 }) {
   return (
     <div className="flex items-center gap-3">
-      <span className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#DAF1DE]/14 bg-[#DAF1DE]/12 text-[#DAF1DE]">
+      <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary">
         <Icon className="h-5 w-5" aria-hidden={true} />
       </span>
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#DAF1DE]/72">
+      <p className="text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
         {title}
       </p>
     </div>
   );
 }
 
-function MetricTile({
-  title,
+function StatBlock({
+  label,
   value,
   suffix,
-  note,
-  icon,
-  className,
-  tone = "default",
 }: {
-  title: string;
+  label: string;
   value: string;
   suffix?: string;
-  note: string;
-  icon: LucideIcon;
-  className?: string;
-  tone?: "default" | "success" | "danger";
 }) {
-  const toneClass =
-    tone === "success"
-      ? "text-emerald-300"
-      : tone === "danger"
-        ? "text-rose-300"
-        : "text-white";
-
   return (
-    <BentoCard className={className ?? ""}>
-      <div className="flex h-full flex-col justify-between gap-7">
-        <TileHeader icon={icon} title={title} />
-        <div>
-          <p className={`text-4xl font-bold leading-none ${toneClass}`}>
-            {value}
-            {suffix && (
-              <span className="ml-2 text-base font-normal text-[#CBEFEB]/62">
-                {suffix}
-              </span>
-            )}
-          </p>
-          <p className="mt-3 text-sm text-[#CBEFEB]/68">{note}</p>
-        </div>
-      </div>
-    </BentoCard>
+    <div className="rounded-lg border border-border/60 bg-background/30 p-4">
+      <p className="text-[0.66rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+        {label}
+      </p>
+      <p className="mt-3 text-3xl font-semibold leading-none tracking-[-0.035em] text-foreground">
+        {value}
+        {suffix && (
+          <span className="ml-1.5 text-sm font-normal tracking-normal text-muted-foreground">
+            {suffix}
+          </span>
+        )}
+      </p>
+    </div>
   );
 }
 
@@ -592,14 +608,48 @@ function ActionLink({
   return (
     <Link
       href={href}
-      className="flex items-center justify-between gap-3 rounded-lg border border-[#DAF1DE]/12 bg-[#06191d]/42 px-3.5 py-3 text-sm font-semibold text-white transition-colors hover:border-[#DAF1DE]/24 hover:bg-[#DAF1DE]/12"
+      className="group flex items-center justify-between gap-3 rounded-lg border border-border/65 bg-background/30 px-3.5 py-3 text-sm font-semibold text-foreground transition-colors hover:border-primary/30 hover:bg-secondary/60"
     >
       <span className="flex items-center gap-3">
-        <Icon className="h-4 w-4 text-[#DAF1DE]/72" aria-hidden={true} />
+        <Icon className="h-4 w-4 text-primary" aria-hidden={true} />
         {children}
       </span>
-      <ArrowRight className="h-4 w-4 text-[#DAF1DE]/60" aria-hidden={true} />
+      <ArrowRight
+        className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary"
+        aria-hidden={true}
+      />
     </Link>
+  );
+}
+
+function HealthMetric({
+  icon: Icon,
+  label,
+  value,
+  tone = "default",
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  tone?: "default" | "positive" | "negative";
+}) {
+  return (
+    <div className="px-3 first:pl-0 last:pr-0">
+      <Icon
+        className={cn(
+          "mb-3 h-4 w-4 text-muted-foreground",
+          tone === "positive" && "text-primary",
+          tone === "negative" && "text-rose-300",
+        )}
+        aria-hidden="true"
+      />
+      <p className="text-2xl font-semibold tracking-tight text-foreground">
+        {value}
+      </p>
+      <p className="mt-1 text-[0.64rem] uppercase tracking-[0.14em] text-muted-foreground">
+        {label}
+      </p>
+    </div>
   );
 }
 
@@ -609,17 +659,17 @@ function CategoryMeter({ stat, total }: { stat: CategoryStat; total: number }) {
   return (
     <div>
       <div className="mb-2 flex items-center justify-between gap-3">
-        <span className="text-sm font-semibold text-white">{stat.label}</span>
-        <span className="text-xs text-[#CBEFEB]/65">
-          {stat.count.toLocaleString()} - {percentage}%
+        <span className="text-sm font-medium text-foreground">
+          {stat.label}
+        </span>
+        <span className="text-xs tabular-nums text-muted-foreground">
+          {stat.count.toLocaleString()} · {percentage}%
         </span>
       </div>
-      <div className="h-2 overflow-hidden rounded-full bg-[#06191d]/55">
-        <div
-          className="h-full rounded-full bg-[#DAF1DE]/70"
-          style={{ width: `${percentage}%` }}
-        />
-      </div>
+      <Progress
+        value={percentage}
+        aria-label={`${stat.label} ${percentage}%`}
+      />
     </div>
   );
 }
@@ -634,14 +684,14 @@ function ResumeFact({
   suffix?: string;
 }) {
   return (
-    <div className="rounded-lg border border-[#DAF1DE]/12 bg-[#06191d]/42 p-4">
-      <p className="text-xs uppercase tracking-[0.18em] text-[#DAF1DE]/58">
+    <div className="rounded-lg border border-border/60 bg-background/30 p-4">
+      <p className="text-[0.65rem] uppercase tracking-[0.16em] text-muted-foreground">
         {label}
       </p>
-      <p className="mt-2 text-xl font-semibold text-white">
+      <p className="mt-2 text-xl font-semibold text-foreground">
         {value}
         {suffix && (
-          <span className="ml-1 text-xs font-normal text-[#CBEFEB]/62">
+          <span className="ml-1 text-xs font-normal text-muted-foreground">
             {suffix}
           </span>
         )}

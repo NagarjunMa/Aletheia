@@ -15,7 +15,7 @@ const headlineLines: Array<{ words: string[]; italic?: boolean }> = [
 
 /**
  * Brush-stroke SVG underline on the accent word, drawn with CSS stroke animation.
- * Forest-green theme: stroke is sage #8EB69B.
+ * Luxury evergreen theme: stroke is emerald #50C878.
  */
 function AccentUnderline({ delay = 0 }: { delay?: number }) {
   return (
@@ -37,7 +37,7 @@ function AccentUnderline({ delay = 0 }: { delay?: number }) {
         className="landing-hero-underline-path"
         d="M4 8 Q40 4 80 8 Q120 12 156 6"
         fill="none"
-        stroke="#8EB69B"
+        stroke="#50C878"
         strokeWidth="2.5"
         strokeLinecap="round"
         style={{ animationDelay: `${delay}s` }}

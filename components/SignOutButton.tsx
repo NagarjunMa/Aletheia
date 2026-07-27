@@ -11,7 +11,7 @@ export default function SignOutButton() {
       type="button"
       onClick={() => startTransition(() => signOutAction())}
       disabled={pending}
-      className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card))] px-3 py-1.5 text-xs font-semibold uppercase tracking-widest text-white transition-colors hover:bg-[hsl(var(--secondary))] disabled:opacity-50"
+      className="rounded-lg border border-border/80 bg-card/80 px-3.5 py-2 text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground backdrop-blur-xl transition-colors hover:border-primary/30 hover:bg-secondary hover:text-foreground disabled:opacity-50"
       aria-label="Sign out"
     >
       {pending ? "Signing out…" : "Sign out"}
