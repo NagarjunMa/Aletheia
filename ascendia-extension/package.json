@@ -18,12 +18,14 @@
     "build:ext": "node build.mjs"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/chrome": "^0.1.43",
     "@types/node": "^24.13.1",
     "@typescript-eslint/eslint-plugin": "^8.60.1",
     "@typescript-eslint/parser": "^8.60.1",
     "esbuild": "^0.28.1",
     "eslint": "^10.8.0",
+    "globals": "^17.8.0",
     "typescript": "^5.3.3",
     "vitest": "^4.1.8"
   },
