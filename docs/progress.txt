@@ -22,6 +22,39 @@ Follow-up:
 
 ### 2026-07-28
 
+Branch: `codex/extension-auth-bridge-fix`
+
+Area: Chrome extension authentication bridge
+
+Problem: Popup authentication actions returned `undefined` before any request reached Vercel. The popup discarded `chrome.runtime.lastError`, so a missing or failed background listener was presented as a generic connection failure. The esbuild output also retained `importScripts('auth.js')` while omitting that sibling file, making `dist/` incapable of starting its service worker when loaded unpacked.
+
+Decision: Convert the background worker and auth helper to static ES modules, declare the worker as a module in the manifest, make the esbuild output a complete loadable extension directory, and return a structured `BACKGROUND_UNAVAILABLE` response whenever Chrome reports a broken message channel. Bump the packaged extension from `1.0.4` to `1.0.5`.
+
+Files changed:
+
+- `ascendia-extension/background/auth.js`
+- `ascendia-extension/background/service-worker.js`
+- `ascendia-extension/background/service-worker-contract.test.ts`
+- `ascendia-extension/popup/popup.js`
+- `ascendia-extension/popup/runtime-messaging.test.ts`
+- `ascendia-extension/settings/settings.js`
+- `ascendia-extension/build.mjs`
+- extension manifest/package version files and API version-route expectations
+
+Tests/checks:
+
+- Extension security audit, lint, type-check, 121 tests, loadable production bundle, ZIP packaging, and extension version policy
+- Repository lint, strict type-check, 555 unit tests, 13 guardrail tests, and production build
+- Focused `/api/extension/version` route tests and Chrome runtime JavaScript syntax checks
+
+Result: All validation passed with zero extension audit vulnerabilities. The compiled worker is self-contained with no runtime `importScripts`, and `dist/` contains the manifest, HTML/CSS, icons, fonts, and compiled scripts needed for an unpacked install. Messaging failures now expose the actual background-worker condition instead of logging `undefined`.
+
+Follow-up:
+
+- Reload extension `1.0.5` from `ascendia-extension/` or the rebuilt ZIP, then verify Connect opens the Aletheia login/session flow and `/api/extension/session` appears in Vercel logs.
+
+### 2026-07-28
+
 Branch: `codex/repository-hygiene`
 
 Area: Repository configuration and developer documentation
