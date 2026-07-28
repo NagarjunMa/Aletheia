@@ -36,8 +36,8 @@ describe("linkedin-reader extension context guard", () => {
   });
 
   it("only injects the profile reader into already-open LinkedIn profile tabs", () => {
-    expect(serviceWorkerSource).toContain(
-      "chrome.tabs.query({ url: 'https://www.linkedin.com/in/*' })",
+    expect(serviceWorkerSource).toMatch(
+      /chrome\.tabs\.query\(\{\s*url: ["']https:\/\/www\.linkedin\.com\/in\/\*["'],?\s*\}\)/,
     );
   });
 });

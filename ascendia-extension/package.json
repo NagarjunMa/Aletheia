@@ -1,6 +1,6 @@
 {
   "name": "aletheia-extension",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Enhanced Aletheia Chrome Extension with enterprise-grade security and performance",
   "private": true,
   "scripts": {

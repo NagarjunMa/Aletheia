@@ -1,22 +1,22 @@
 // Aletheia Extension Auth Module
 // Manages Supabase session sharing between web app and extension
 
-const AUTH_STORAGE_KEY = 'aletheia_auth';
+const AUTH_STORAGE_KEY = "aletheia_auth";
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000; // 5 minutes before expiry
-const ALETHEIA_API_VERSION = '1';
+const ALETHEIA_API_VERSION = "1";
 
-function getAletheiaRequestHeaders(additionalHeaders = {}) {
+export function getAletheiaRequestHeaders(additionalHeaders = {}) {
   return {
     ...additionalHeaders,
-    'X-Extension-Source': 'aletheia-extension',
-    'X-Aletheia-API-Version': ALETHEIA_API_VERSION,
-    'X-Aletheia-Extension-Version': chrome.runtime.getManifest().version,
+    "X-Extension-Source": "aletheia-extension",
+    "X-Aletheia-API-Version": ALETHEIA_API_VERSION,
+    "X-Aletheia-Extension-Version": chrome.runtime.getManifest().version,
   };
 }
 
 function normalizeApiUrl(apiUrl) {
-  let value = String(apiUrl || '').trim();
-  while (value.endsWith('/') && !value.endsWith('://')) {
+  let value = String(apiUrl || "").trim();
+  while (value.endsWith("/") && !value.endsWith("://")) {
     value = value.slice(0, -1);
   }
   return value;
@@ -29,8 +29,11 @@ async function getStoredAuth() {
   return result[AUTH_STORAGE_KEY] || null;
 }
 
-async function storeAuth(authData) {
-  console.log('[AUTH] Storing auth for:', (authData.user?.email || '').substring(0, 4) + '***');
+export async function storeAuth(authData) {
+  console.log(
+    "[AUTH] Storing auth for:",
+    (authData.user?.email || "").substring(0, 4) + "***",
+  );
   await chrome.storage.local.set({
     [AUTH_STORAGE_KEY]: {
       access_token: authData.access_token,
@@ -40,13 +43,16 @@ async function storeAuth(authData) {
       supabase_url: authData.supabase_url,
       supabase_anon_key: authData.supabase_anon_key,
       stored_at: Date.now(),
-    }
+    },
   });
-  console.log('[AUTH] Auth stored successfully, expires_at:', authData.expires_at);
+  console.log(
+    "[AUTH] Auth stored successfully, expires_at:",
+    authData.expires_at,
+  );
 }
 
-async function clearAuth() {
-  console.log('[AUTH] Clearing stored auth');
+export async function clearAuth() {
+  console.log("[AUTH] Clearing stored auth");
   await chrome.storage.local.remove(AUTH_STORAGE_KEY);
 }
 
@@ -56,7 +62,11 @@ function isTokenValid(auth) {
   if (!auth || !auth.access_token || !auth.expires_at) return false;
   const nowSec = Math.floor(Date.now() / 1000);
   const valid = auth.expires_at > nowSec;
-  console.log('[AUTH] isTokenValid:', valid, `(expires_at=${auth.expires_at}, now=${nowSec}, remaining=${auth.expires_at - nowSec}s)`);
+  console.log(
+    "[AUTH] isTokenValid:",
+    valid,
+    `(expires_at=${auth.expires_at}, now=${nowSec}, remaining=${auth.expires_at - nowSec}s)`,
+  );
   return valid;
 }
 
@@ -64,8 +74,12 @@ function needsRefresh(auth) {
   if (!auth || !auth.expires_at) return true;
   const nowMs = Date.now();
   const expiresMs = auth.expires_at * 1000;
-  const needs = (expiresMs - nowMs) < TOKEN_REFRESH_BUFFER_MS;
-  console.log('[AUTH] needsRefresh:', needs, `(${Math.round((expiresMs - nowMs) / 1000)}s until expiry, buffer=${TOKEN_REFRESH_BUFFER_MS / 1000}s)`);
+  const needs = expiresMs - nowMs < TOKEN_REFRESH_BUFFER_MS;
+  console.log(
+    "[AUTH] needsRefresh:",
+    needs,
+    `(${Math.round((expiresMs - nowMs) / 1000)}s until expiry, buffer=${TOKEN_REFRESH_BUFFER_MS / 1000}s)`,
+  );
   return needs;
 }
 
@@ -77,36 +91,46 @@ function needsRefresh(auth) {
 
 let _fetchSessionPromise = null;
 
-async function fetchSessionFromWebApp(apiUrl) {
+export async function fetchSessionFromWebApp(apiUrl) {
   if (_fetchSessionPromise) {
-    console.log('[AUTH] fetchSessionFromWebApp: already in-flight, coalescing...');
+    console.log(
+      "[AUTH] fetchSessionFromWebApp: already in-flight, coalescing...",
+    );
     return _fetchSessionPromise;
   }
-  _fetchSessionPromise = _doFetchSessionFromWebApp(apiUrl)
-    .finally(() => { _fetchSessionPromise = null; });
+  _fetchSessionPromise = _doFetchSessionFromWebApp(apiUrl).finally(() => {
+    _fetchSessionPromise = null;
+  });
   return _fetchSessionPromise;
 }
 
 async function _doFetchSessionFromWebApp(apiUrl) {
   const baseUrl = normalizeApiUrl(apiUrl);
-  console.log('[AUTH] fetchSessionFromWebApp: calling', baseUrl + '/api/extension/session');
+  console.log(
+    "[AUTH] fetchSessionFromWebApp: calling",
+    baseUrl + "/api/extension/session",
+  );
 
   // Method 1: Server endpoint (reliable — proxy handles cookie validation)
   try {
     const response = await fetch(`${baseUrl}/api/extension/session`, {
-      method: 'GET',
-      credentials: 'include',
+      method: "GET",
+      credentials: "include",
       headers: getAletheiaRequestHeaders(),
     });
 
-    console.log('[AUTH] Session endpoint response:', response.status);
+    console.log("[AUTH] Session endpoint response:", response.status);
 
     if (response.ok) {
       const sessionData = await response.json();
-      console.log('[AUTH] ✓ Session from server endpoint: user=' + (sessionData.user?.email || '').substring(0, 4) + '***');
+      console.log(
+        "[AUTH] ✓ Session from server endpoint: user=" +
+          (sessionData.user?.email || "").substring(0, 4) +
+          "***",
+      );
 
       if (!sessionData.access_token) {
-        throw new Error('Server returned session without access_token');
+        throw new Error("Server returned session without access_token");
       }
 
       return {
@@ -120,16 +144,21 @@ async function _doFetchSessionFromWebApp(apiUrl) {
     }
 
     const errorBody = await response.json().catch(() => ({}));
-    console.log('[AUTH] Session endpoint error:', errorBody.error || response.statusText);
+    console.log(
+      "[AUTH] Session endpoint error:",
+      errorBody.error || response.statusText,
+    );
 
     // Propagate 401 status so callers can apply backoff
     if (response.status === 401) {
-      const err = new Error(errorBody.error || 'Unauthorized');
+      const err = new Error(errorBody.error || "Unauthorized");
       err.status = 401;
-      err.retryAfter = parseInt(response.headers.get('Retry-After'), 10) || 0;
-      if (errorBody.code === 'refresh_token_already_used') {
-        console.log('[AUTH] refresh_token_already_used — clearing stale stored auth');
-        err.code = 'refresh_token_already_used';
+      err.retryAfter = parseInt(response.headers.get("Retry-After"), 10) || 0;
+      if (errorBody.code === "refresh_token_already_used") {
+        console.log(
+          "[AUTH] refresh_token_already_used — clearing stale stored auth",
+        );
+        err.code = "refresh_token_already_used";
         await clearAuth();
       }
       throw err;
@@ -137,68 +166,97 @@ async function _doFetchSessionFromWebApp(apiUrl) {
   } catch (fetchError) {
     // Re-throw 401 errors so callers can apply backoff (don't fall through to cookie fallback)
     if (fetchError.status === 401) throw fetchError;
-    console.warn('[AUTH] Session endpoint fetch failed:', fetchError.message);
+    console.warn("[AUTH] Session endpoint fetch failed:", fetchError.message);
   }
 
   // Method 2: Fallback — read cookies directly via chrome.cookies API
-  console.log('[AUTH] Falling back to chrome.cookies.getAll...');
+  console.log("[AUTH] Falling back to chrome.cookies.getAll...");
   const cookies = await chrome.cookies.getAll({ url: baseUrl });
-  console.log('[AUTH] All cookies for', baseUrl, ':', cookies.map(c => `${c.name}=${c.value.substring(0, 20)}...`).join(', ') || '(none)');
+  console.log(
+    "[AUTH] All cookies for",
+    baseUrl,
+    ":",
+    cookies.map((c) => `${c.name}=${c.value.substring(0, 20)}...`).join(", ") ||
+      "(none)",
+  );
 
   // Match only `sb-<ref>-auth-token` and its `.0`/`.1` chunks. PKCE OAuth
   // verifiers (`sb-<ref>-auth-token-code-verifier`) share the substring
   // but carry a random string, not a session payload.
-  const authCookies = cookies
-    .filter(c => /^sb-[^=]+-auth-token(?:\.\d+)?$/.test(c.name));
+  const authCookies = cookies.filter((c) =>
+    /^sb-[^=]+-auth-token(?:\.\d+)?$/.test(c.name),
+  );
 
-  console.log('[AUTH] Auth cookies found:', authCookies.map(c => c.name).join(', ') || '(none)');
+  console.log(
+    "[AUTH] Auth cookies found:",
+    authCookies.map((c) => c.name).join(", ") || "(none)",
+  );
 
   if (authCookies.length === 0) {
-    throw new Error('No active session found. Please log in to the web app first.');
+    throw new Error(
+      "No active session found. Please log in to the web app first.",
+    );
   }
 
   // Reassemble: single cookie or chunked (@supabase/ssr ≥0.5 splits
   // sessions across `sb-<ref>-auth-token.0`, `.1`, ... above ~3180 bytes).
   let rawValue;
-  const baseCookie = authCookies.find(c => /^sb-[^.]+-auth-token$/.test(c.name));
+  const baseCookie = authCookies.find((c) =>
+    /^sb-[^.]+-auth-token$/.test(c.name),
+  );
   if (baseCookie) {
     rawValue = baseCookie.value;
   } else {
     const chunks = authCookies
-      .filter(c => /\.\d+$/.test(c.name))
+      .filter((c) => /\.\d+$/.test(c.name))
       .sort((a, b) => {
-        const ai = parseInt(a.name.split('.').pop(), 10);
-        const bi = parseInt(b.name.split('.').pop(), 10);
+        const ai = parseInt(a.name.split(".").pop(), 10);
+        const bi = parseInt(b.name.split(".").pop(), 10);
         return ai - bi;
       });
-    rawValue = chunks.map(c => c.value).join('');
+    rawValue = chunks.map((c) => c.value).join("");
   }
 
   // Modern @supabase/ssr prefixes the value with literal "base64-".
   let candidate = rawValue;
-  try { candidate = decodeURIComponent(rawValue); } catch (e) { /* not URL-encoded */ }
+  try {
+    candidate = decodeURIComponent(rawValue);
+  } catch (e) {
+    /* not URL-encoded */
+  }
 
   let session = null;
-  if (candidate.startsWith('base64-')) {
-    try { session = JSON.parse(atob(candidate.slice(7))); }
-    catch (e) { throw new Error('Could not parse base64- prefixed session cookie. Please log in again.'); }
+  if (candidate.startsWith("base64-")) {
+    try {
+      session = JSON.parse(atob(candidate.slice(7)));
+    } catch (e) {
+      throw new Error(
+        "Could not parse base64- prefixed session cookie. Please log in again.",
+      );
+    }
   } else {
-    try { session = JSON.parse(candidate); }
-    catch (e) {
-      try { session = JSON.parse(atob(candidate)); }
-      catch (e2) { throw new Error('Could not parse session from cookies. Please log in again.'); }
+    try {
+      session = JSON.parse(candidate);
+    } catch (e) {
+      try {
+        session = JSON.parse(atob(candidate));
+      } catch (e2) {
+        throw new Error(
+          "Could not parse session from cookies. Please log in again.",
+        );
+      }
     }
   }
 
   if (!session || !session.access_token) {
-    throw new Error('Invalid session data in cookies. Please log in again.');
+    throw new Error("Invalid session data in cookies. Please log in again.");
   }
 
   // Fetch Supabase config for token refresh
   let supabaseUrl, supabaseAnonKey;
   try {
     const configResp = await fetch(`${baseUrl}/api/extension/config`, {
-      headers: getAletheiaRequestHeaders()
+      headers: getAletheiaRequestHeaders(),
     });
     if (configResp.ok) {
       const config = await configResp.json();
@@ -206,18 +264,22 @@ async function _doFetchSessionFromWebApp(apiUrl) {
       supabaseAnonKey = config.supabase_anon_key;
     }
   } catch (e) {
-    console.warn('[AUTH] Could not fetch Supabase config:', e.message);
+    console.warn("[AUTH] Could not fetch Supabase config:", e.message);
   }
 
   return {
     access_token: session.access_token,
     refresh_token: session.refresh_token,
     expires_at: session.expires_at,
-    user: session.user ? {
-      id: session.user.id,
-      email: session.user.email,
-      full_name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0],
-    } : null,
+    user: session.user
+      ? {
+          id: session.user.id,
+          email: session.user.email,
+          full_name:
+            session.user.user_metadata?.full_name ||
+            session.user.email?.split("@")[0],
+        }
+      : null,
     supabase_url: supabaseUrl,
     supabase_anon_key: supabaseAnonKey,
   };
@@ -232,65 +294,87 @@ let _refreshPromise = null;
 async function refreshToken(auth) {
   // If a refresh is already in flight, reuse its result
   if (_refreshPromise) {
-    console.log('[AUTH] Refresh already in-flight, reusing...');
+    console.log("[AUTH] Refresh already in-flight, reusing...");
     return _refreshPromise;
   }
 
-  _refreshPromise = _doRefreshToken(auth)
-    .finally(() => { _refreshPromise = null; });
+  _refreshPromise = _doRefreshToken(auth).finally(() => {
+    _refreshPromise = null;
+  });
 
   return _refreshPromise;
 }
 
 async function _doRefreshToken(auth) {
-  console.log('[AUTH] Refreshing token via Supabase API...');
+  console.log("[AUTH] Refreshing token via Supabase API...");
 
-  if (!auth || !auth.refresh_token || !auth.supabase_url || !auth.supabase_anon_key) {
+  if (
+    !auth ||
+    !auth.refresh_token ||
+    !auth.supabase_url ||
+    !auth.supabase_anon_key
+  ) {
     // Try to fetch config if missing
-    if (auth && auth.refresh_token && (!auth.supabase_url || !auth.supabase_anon_key)) {
-      console.log('[AUTH] Missing Supabase config, fetching...');
+    if (
+      auth &&
+      auth.refresh_token &&
+      (!auth.supabase_url || !auth.supabase_anon_key)
+    ) {
+      console.log("[AUTH] Missing Supabase config, fetching...");
       try {
-        const { apiBaseUrl } = await chrome.storage.sync.get('apiBaseUrl');
-        const { apiUrl } = await chrome.storage.local.get('apiUrl');
-        const url = normalizeApiUrl(apiBaseUrl || apiUrl || 'https://www.aletheia.live');
+        const { apiBaseUrl } = await chrome.storage.sync.get("apiBaseUrl");
+        const { apiUrl } = await chrome.storage.local.get("apiUrl");
+        const url = normalizeApiUrl(
+          apiBaseUrl || apiUrl || "https://www.aletheia.live",
+        );
         const configResp = await fetch(`${url}/api/extension/config`, {
-          headers: getAletheiaRequestHeaders()
+          headers: getAletheiaRequestHeaders(),
         });
         if (configResp.ok) {
           const config = await configResp.json();
           auth.supabase_url = config.supabase_url;
           auth.supabase_anon_key = config.supabase_anon_key;
         }
-      } catch (e) { /* ignore */ }
+      } catch (e) {
+        /* ignore */
+      }
     }
 
-    if (!auth?.refresh_token || !auth?.supabase_url || !auth?.supabase_anon_key) {
-      console.error('[AUTH] ✗ Missing refresh credentials:', {
+    if (
+      !auth?.refresh_token ||
+      !auth?.supabase_url ||
+      !auth?.supabase_anon_key
+    ) {
+      console.error("[AUTH] ✗ Missing refresh credentials:", {
         hasRefreshToken: !!auth?.refresh_token,
         hasSupabaseUrl: !!auth?.supabase_url,
         hasAnonKey: !!auth?.supabase_anon_key,
       });
-      throw new Error('Missing refresh credentials');
+      throw new Error("Missing refresh credentials");
     }
   }
 
   const response = await fetch(
     `${auth.supabase_url}/auth/v1/token?grant_type=refresh_token`,
     {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
-        'apikey': auth.supabase_anon_key,
+        "Content-Type": "application/json",
+        apikey: auth.supabase_anon_key,
       },
       body: JSON.stringify({ refresh_token: auth.refresh_token }),
-    }
+    },
   );
 
-  console.log('[AUTH] Refresh response status:', response.status);
+  console.log("[AUTH] Refresh response status:", response.status);
 
   if (!response.ok) {
-    const body = await response.text().catch(() => '');
-    console.error('[AUTH] ✗ Token refresh failed:', response.status, body.substring(0, 200));
+    const body = await response.text().catch(() => "");
+    console.error(
+      "[AUTH] ✗ Token refresh failed:",
+      response.status,
+      body.substring(0, 200),
+    );
     // If refresh token is consumed/expired, clear auth so user gets prompted to re-login
     if (response.status === 400 || response.status === 401) {
       await clearAuth();
@@ -299,18 +383,22 @@ async function _doRefreshToken(auth) {
   }
 
   const data = await response.json();
-  console.log('[AUTH] ✓ Token refreshed, new expires_at:', data.expires_at);
+  console.log("[AUTH] ✓ Token refreshed, new expires_at:", data.expires_at);
 
   const updatedAuth = {
     ...auth,
     access_token: data.access_token,
     refresh_token: data.refresh_token,
     expires_at: data.expires_at,
-    user: data.user ? {
-      id: data.user.id,
-      email: data.user.email,
-      full_name: data.user.user_metadata?.full_name || data.user.email?.split('@')[0],
-    } : auth.user,
+    user: data.user
+      ? {
+          id: data.user.id,
+          email: data.user.email,
+          full_name:
+            data.user.user_metadata?.full_name ||
+            data.user.email?.split("@")[0],
+        }
+      : auth.user,
   };
 
   await storeAuth(updatedAuth);
@@ -319,20 +407,23 @@ async function _doRefreshToken(auth) {
 
 // ─── Main entry point ───
 
-async function getValidAccessToken(apiUrl) {
+export async function getValidAccessToken(apiUrl) {
   apiUrl = normalizeApiUrl(apiUrl);
-  console.log('[AUTH] getValidAccessToken for', apiUrl);
+  console.log("[AUTH] getValidAccessToken for", apiUrl);
   let auth = await getStoredAuth();
 
   if (auth) {
-    console.log('[AUTH] Found stored auth for:', (auth.user?.email || '').substring(0, 4) + '***');
+    console.log(
+      "[AUTH] Found stored auth for:",
+      (auth.user?.email || "").substring(0, 4) + "***",
+    );
   } else {
-    console.log('[AUTH] No stored auth found');
+    console.log("[AUTH] No stored auth found");
   }
 
   // If we have a valid, non-expiring-soon token, return it
   if (auth && isTokenValid(auth) && !needsRefresh(auth)) {
-    console.log('[AUTH] ✓ Using stored valid token');
+    console.log("[AUTH] ✓ Using stored valid token");
     return auth.access_token;
   }
 
@@ -340,40 +431,54 @@ async function getValidAccessToken(apiUrl) {
   if (auth && auth.refresh_token) {
     try {
       auth = await refreshToken(auth);
-      console.log('[AUTH] ✓ Using refreshed token');
+      console.log("[AUTH] ✓ Using refreshed token");
       return auth.access_token;
     } catch (refreshError) {
-      console.warn('[AUTH] Token refresh failed, will try fetching new session:', refreshError.message);
+      console.warn(
+        "[AUTH] Token refresh failed, will try fetching new session:",
+        refreshError.message,
+      );
     }
   }
 
   // Fall back to fetching a new session from the web app
   try {
-    console.log('[AUTH] Trying to fetch session from web app cookies...');
+    console.log("[AUTH] Trying to fetch session from web app cookies...");
     const sessionData = await fetchSessionFromWebApp(apiUrl);
     await storeAuth(sessionData);
-    console.log('[AUTH] ✓ Using session from web app cookies');
+    console.log("[AUTH] ✓ Using session from web app cookies");
     return sessionData.access_token;
   } catch (fetchError) {
-    console.error('[AUTH] ✗ fetchSessionFromWebApp failed:', fetchError.message);
+    console.error(
+      "[AUTH] ✗ fetchSessionFromWebApp failed:",
+      fetchError.message,
+    );
     // Clear stale auth
     await clearAuth();
     throw new Error(
-      'Not authenticated. Please log in to the Aletheia web app and click "Connect" in the extension. (' + fetchError.message + ')'
+      'Not authenticated. Please log in to the Aletheia web app and click "Connect" in the extension. (' +
+        fetchError.message +
+        ")",
     );
   }
 }
 
 // ─── Auth status helper ───
 
-async function getAuthStatus() {
+export async function getAuthStatus() {
   const auth = await getStoredAuth();
   if (!auth || !auth.access_token) {
-    console.log('[AUTH] getAuthStatus: not authenticated (no stored auth)');
+    console.log("[AUTH] getAuthStatus: not authenticated (no stored auth)");
     return { authenticated: false };
   }
   const valid = isTokenValid(auth);
-  console.log('[AUTH] getAuthStatus: authenticated=' + valid + ', user=' + (auth.user?.email || '').substring(0, 4) + '***');
+  console.log(
+    "[AUTH] getAuthStatus: authenticated=" +
+      valid +
+      ", user=" +
+      (auth.user?.email || "").substring(0, 4) +
+      "***",
+  );
   return {
     authenticated: valid,
     user: auth.user || null,
@@ -386,29 +491,31 @@ async function getAuthStatus() {
 // Keep-alive: MV3 service workers can be terminated. Use alarms to keep alive.
 // Recovery from restarts is handled in service-worker.js.
 
-const LOGIN_KEEPALIVE_ALARM = 'aletheia-login-keepalive';
+const LOGIN_KEEPALIVE_ALARM = "aletheia-login-keepalive";
 
 // Pending login resolve/reject — allows authBridgeSession messages to settle the promise
 let _loginResolve = null;
 let _loginReject = null;
 
-async function waitForLogin(apiUrl) {
+export async function waitForLogin(apiUrl) {
   apiUrl = normalizeApiUrl(apiUrl);
   const LOGIN_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
-  console.log('[AUTH] waitForLogin: opening login tab for', apiUrl);
+  console.log("[AUTH] waitForLogin: opening login tab for", apiUrl);
 
   // Tab deduplication
   const loginUrl = `${apiUrl}/auth/login?source=extension`;
-  const existingTabs = await chrome.tabs.query({ url: `${apiUrl}/auth/login*` });
+  const existingTabs = await chrome.tabs.query({
+    url: `${apiUrl}/auth/login*`,
+  });
   let tab;
   if (existingTabs.length > 0) {
     tab = existingTabs[0];
     await chrome.tabs.update(tab.id, { active: true });
-    console.log('[AUTH] waitForLogin: reusing existing login tab, id=', tab.id);
+    console.log("[AUTH] waitForLogin: reusing existing login tab, id=", tab.id);
   } else {
     tab = await chrome.tabs.create({ url: loginUrl });
-    console.log('[AUTH] waitForLogin: new login tab opened, id=', tab.id);
+    console.log("[AUTH] waitForLogin: new login tab opened, id=", tab.id);
   }
 
   // Persist login state (survives service worker restart)
@@ -418,7 +525,7 @@ async function waitForLogin(apiUrl) {
       tabId: tab.id,
       startedAt: Date.now(),
       timeoutAt: Date.now() + LOGIN_TIMEOUT_MS,
-    }
+    },
   });
 
   // Set keepalive alarm to prevent service worker termination during login
@@ -433,37 +540,44 @@ async function injectAuthBridge(tabId) {
   try {
     await chrome.scripting.executeScript({
       target: { tabId },
-      files: ['content/auth-bridge.js'],
+      files: ["content/auth-bridge.js"],
     });
-    console.log('[AUTH] auth-bridge.js injected into tab', tabId);
+    console.log("[AUTH] auth-bridge.js injected into tab", tabId);
   } catch (e) {
-    console.warn('[AUTH] Could not inject auth-bridge.js:', e.message);
+    console.warn("[AUTH] Could not inject auth-bridge.js:", e.message);
   }
 }
 
 // Handle session data sent from auth-bridge content script
-function handleAuthBridgeSession(sessionData) {
+export function handleAuthBridgeSession(sessionData) {
   if (!sessionData || !sessionData.access_token) return;
 
-  console.log('[AUTH] authBridgeSession received for:', (sessionData.user?.email || '').substring(0, 4) + '***');
+  console.log(
+    "[AUTH] authBridgeSession received for:",
+    (sessionData.user?.email || "").substring(0, 4) + "***",
+  );
 
   // Fetch Supabase config and store
   Promise.all([
-    chrome.storage.sync.get('apiBaseUrl'),
-    chrome.storage.local.get('apiUrl'),
+    chrome.storage.sync.get("apiBaseUrl"),
+    chrome.storage.local.get("apiUrl"),
   ]).then(async ([{ apiBaseUrl }, { apiUrl }]) => {
-    const url = normalizeApiUrl(apiBaseUrl || apiUrl || 'https://www.aletheia.live');
+    const url = normalizeApiUrl(
+      apiBaseUrl || apiUrl || "https://www.aletheia.live",
+    );
     let supabaseUrl, supabaseAnonKey;
     try {
       const configResp = await fetch(`${url}/api/extension/config`, {
-        headers: getAletheiaRequestHeaders()
+        headers: getAletheiaRequestHeaders(),
       });
       if (configResp.ok) {
         const config = await configResp.json();
         supabaseUrl = config.supabase_url;
         supabaseAnonKey = config.supabase_anon_key;
       }
-    } catch (e) { /* ignore */ }
+    } catch (e) {
+      /* ignore */
+    }
 
     const authData = {
       ...sessionData,
@@ -500,11 +614,13 @@ function pollUntilSession(apiUrl, tabId, timeoutAt) {
     _loginReject = (err) => settle(() => reject(err), false);
 
     function cleanup(shouldCloseTab) {
-      console.log('[AUTH] pollUntilSession: cleanup (closeTab=' + shouldCloseTab + ')');
+      console.log(
+        "[AUTH] pollUntilSession: cleanup (closeTab=" + shouldCloseTab + ")",
+      );
       chrome.cookies.onChanged.removeListener(cookieListener);
       chrome.tabs.onUpdated.removeListener(tabListener);
       chrome.alarms.clear(LOGIN_KEEPALIVE_ALARM);
-      chrome.storage.local.remove('_loginPending');
+      chrome.storage.local.remove("_loginPending");
       clearTimeout(pollTimer);
       clearTimeout(cookieDebounceTimer);
       clearTimeout(timeoutTimer);
@@ -512,7 +628,11 @@ function pollUntilSession(apiUrl, tabId, timeoutAt) {
       _loginReject = null;
       // Only close the login tab on successful login
       if (shouldCloseTab) {
-        try { chrome.tabs.remove(tabId); } catch (e) { /* already closed */ }
+        try {
+          chrome.tabs.remove(tabId);
+        } catch (e) {
+          /* already closed */
+        }
       }
     }
 
@@ -532,14 +652,19 @@ function pollUntilSession(apiUrl, tabId, timeoutAt) {
       fetchInFlight = true;
       try {
         const sessionData = await fetchSessionFromWebApp(apiUrl);
-        console.log('[AUTH] pollUntilSession: session found for', (sessionData.user?.email || '').substring(0, 4) + '***');
+        console.log(
+          "[AUTH] pollUntilSession: session found for",
+          (sessionData.user?.email || "").substring(0, 4) + "***",
+        );
         await storeAuth(sessionData);
         settle(() => resolve(sessionData), true);
       } catch (e) {
         if (e.status === 401) {
-          console.log('[AUTH] pollUntilSession: 401 (user not logged in yet), will keep polling');
+          console.log(
+            "[AUTH] pollUntilSession: 401 (user not logged in yet), will keep polling",
+          );
         } else {
-          console.log('[AUTH] pollUntilSession: no session yet:', e.message);
+          console.log("[AUTH] pollUntilSession: no session yet:", e.message);
         }
       } finally {
         fetchInFlight = false;
@@ -550,8 +675,11 @@ function pollUntilSession(apiUrl, tabId, timeoutAt) {
     function cookieListener(changeInfo) {
       if (changeInfo.removed) return;
       const { cookie } = changeInfo;
-      if (cookie.name.startsWith('sb-') && cookie.name.includes('-auth-token')) {
-        console.log('[AUTH] cookie detected:', cookie.name);
+      if (
+        cookie.name.startsWith("sb-") &&
+        cookie.name.includes("-auth-token")
+      ) {
+        console.log("[AUTH] cookie detected:", cookie.name);
         resetPollStep();
         clearTimeout(cookieDebounceTimer);
         cookieDebounceTimer = setTimeout(() => {
@@ -563,8 +691,10 @@ function pollUntilSession(apiUrl, tabId, timeoutAt) {
 
     // Tab load listener — inject auth-bridge when login tab loads
     function tabListener(tid, changeInfo) {
-      if (tid === tabId && changeInfo.status === 'complete') {
-        console.log('[AUTH] login tab finished loading, injecting auth-bridge...');
+      if (tid === tabId && changeInfo.status === "complete") {
+        console.log(
+          "[AUTH] login tab finished loading, injecting auth-bridge...",
+        );
         resetPollStep();
         if (!bridgeInjected) {
           bridgeInjected = true;
@@ -583,8 +713,11 @@ function pollUntilSession(apiUrl, tabId, timeoutAt) {
 
     // setTimeout-based polling with stepped backoff
     function schedulePoll() {
-      const interval = POLL_INTERVALS[Math.min(pollStep, POLL_INTERVALS.length - 1)];
-      console.log(`[AUTH] pollUntilSession: next poll in ${interval}ms (step ${pollStep})`);
+      const interval =
+        POLL_INTERVALS[Math.min(pollStep, POLL_INTERVALS.length - 1)];
+      console.log(
+        `[AUTH] pollUntilSession: next poll in ${interval}ms (step ${pollStep})`,
+      );
       pollTimer = setTimeout(async () => {
         if (settled) return;
         await tryFetchSession();
@@ -596,28 +729,39 @@ function pollUntilSession(apiUrl, tabId, timeoutAt) {
 
     // Timeout
     const remaining = timeoutAt - Date.now();
-    timeoutTimer = setTimeout(() => {
-      console.log('[AUTH] pollUntilSession: timed out');
-      settle(() => reject(new Error('Login timed out. Please try again.')), false);
-    }, Math.max(remaining, 0));
+    timeoutTimer = setTimeout(
+      () => {
+        console.log("[AUTH] pollUntilSession: timed out");
+        settle(
+          () => reject(new Error("Login timed out. Please try again.")),
+          false,
+        );
+      },
+      Math.max(remaining, 0),
+    );
   });
 }
 
 // ─── Clear auth and fetch fresh session ───
 
-async function clearAuthAndFetchFresh(apiUrl) {
+export async function clearAuthAndFetchFresh(apiUrl) {
   apiUrl = normalizeApiUrl(apiUrl);
-  console.log('[AUTH] clearAuthAndFetchFresh: clearing stored auth and fetching fresh session');
+  console.log(
+    "[AUTH] clearAuthAndFetchFresh: clearing stored auth and fetching fresh session",
+  );
   await clearAuth();
   const sessionData = await fetchSessionFromWebApp(apiUrl);
   await storeAuth(sessionData);
-  console.log('[AUTH] clearAuthAndFetchFresh: ✓ fresh session for', (sessionData.user?.email || '').substring(0, 4) + '***');
+  console.log(
+    "[AUTH] clearAuthAndFetchFresh: ✓ fresh session for",
+    (sessionData.user?.email || "").substring(0, 4) + "***",
+  );
   return sessionData;
 }
 
 // ─── Proactive refresh (called by alarm) ───
 
-async function proactiveRefresh(apiUrl) {
+export async function proactiveRefresh(apiUrl) {
   apiUrl = normalizeApiUrl(apiUrl);
   const auth = await getStoredAuth();
   if (!auth) return;
@@ -625,16 +769,19 @@ async function proactiveRefresh(apiUrl) {
   if (needsRefresh(auth) && auth.refresh_token) {
     try {
       await refreshToken(auth);
-      console.log('[AUTH] Proactive token refresh successful');
+      console.log("[AUTH] Proactive token refresh successful");
     } catch (error) {
-      console.warn('[AUTH] Proactive token refresh failed:', error.message);
+      console.warn("[AUTH] Proactive token refresh failed:", error.message);
       // Try fetching from web app as fallback
       try {
         const sessionData = await fetchSessionFromWebApp(apiUrl);
         await storeAuth(sessionData);
-        console.log('[AUTH] Proactive session fetch successful');
+        console.log("[AUTH] Proactive session fetch successful");
       } catch (fetchError) {
-        console.warn('[AUTH] Proactive session fetch failed:', fetchError.message);
+        console.warn(
+          "[AUTH] Proactive session fetch failed:",
+          fetchError.message,
+        );
       }
     }
   }
