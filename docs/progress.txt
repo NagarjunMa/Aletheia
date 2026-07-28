@@ -20,6 +20,29 @@ Follow-up:
 
 ## Entries
 
+### 2026-07-28
+
+Branch: `codex/repository-hygiene`
+
+Area: Repository configuration and developer documentation
+
+Problem: AI-agent documentation, machine-local Claude state, duplicated lint-staged rules, an oversized template-derived `.gitignore`, and competing browser Sentry initializers created avoidable repository ambiguity.
+
+Decision: Keep thin root agent entry points for tool discovery, move the canonical guide and durable audits/evaluation material under `docs/`, remove stale `.claude` snapshots and vendored skills, keep lint-staged configuration only in `package.json`, and make `instrumentation-client.ts` the single browser Sentry initializer.
+
+Files changed:
+
+- `AGENTS.md`, `CLAUDE.md`, `docs/agents/engineering-guide.md`
+- `.claude/`, `.gitignore`, `.lintstagedrc.json`, `skills-lock.json`
+- `docs/audits/`, `docs/evals/`, `README.md`
+- `instrumentation-client.ts`, `instrumentation-client.test.ts`, `sentry.client.config.ts`
+
+Tests/checks: Repository lint, strict type-check, 555 unit tests, 13 guardrail tests, production build, focused browser Sentry tests, `.gitignore` behavior checks, and lint-staged configuration resolution.
+
+Result: Complete. The root keeps only thin agent discovery files, no `.claude` files remain tracked, lint-staged resolves only the `package.json` configuration, and browser Sentry has one privacy-hardened initializer.
+
+Follow-up: None currently identified.
+
 ### 2026-06-11
 
 Branch: `fix/extension-resume-pdf-parser`
