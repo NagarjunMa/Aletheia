@@ -22,6 +22,8 @@ describe("candidate application profile migration", () => {
     expect(migrationSql).toContain(
       "user_id uuid not null references public.profiles(id) on delete cascade",
     );
+    expect(migrationSql).toContain('"current_role" text not null default');
+    expect(migrationSql).toContain('char_length("current_role")');
     expect(migrationSql).toContain("candidate_evidence_kind_check");
     expect(migrationSql).toContain("candidate_evidence_actions_length_check");
   });

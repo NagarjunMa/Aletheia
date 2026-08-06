@@ -4,7 +4,7 @@
 
 CREATE TABLE public.candidate_profiles (
   user_id UUID PRIMARY KEY REFERENCES public.profiles(id) ON DELETE CASCADE,
-  current_role TEXT NOT NULL DEFAULT '',
+  "current_role" TEXT NOT NULL DEFAULT '',
   current_responsibilities TEXT NOT NULL DEFAULT '',
   startup_motivation TEXT NOT NULL DEFAULT '',
   career_goals TEXT NOT NULL DEFAULT '',
@@ -23,7 +23,7 @@ CREATE TABLE public.candidate_profiles (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CONSTRAINT candidate_profiles_current_role_length_check
-    CHECK (char_length(current_role) <= 160),
+    CHECK (char_length("current_role") <= 160),
   CONSTRAINT candidate_profiles_responsibilities_length_check
     CHECK (char_length(current_responsibilities) <= 3000),
   CONSTRAINT candidate_profiles_startup_motivation_length_check
