@@ -20,6 +20,40 @@ Follow-up:
 
 ## Entries
 
+### 2026-08-06
+
+Branch: `fix/candidate-profile-migration`
+
+Area: Candidate application profile database migration
+
+Problem: The production candidate-profile dashboard could not query its required tables because migration `20260726233739` had not been applied. Running the migration exposed a PostgreSQL parse error: `current_role` conflicts with the `CURRENT_ROLE` keyword when used as an unquoted column identifier.
+
+Decision: Quote `"current_role"` in the table definition and its length constraint, add a regression assertion, apply the corrected migration transactionally through the Supabase SQL editor, and record only this migration as applied in the linked project's migration history. Validate the live ownership contract with a rollback-only transaction running as PostgreSQL's `authenticated` role instead of using an administrative client for user-facing CRUD.
+
+Files changed:
+
+- `supabase/migrations/20260726233739_create_candidate_application_profile.sql`
+- `supabase/migrations/candidate-application-profile.test.ts`
+- `docs/progress.txt`
+
+Tests/checks:
+
+- Confirmed the new regression assertion failed before the SQL correction and passed afterward
+- Focused candidate-profile migration tests: 5 files and 37 tests passed
+- Remote verification: both tables, RLS, eight policies, authenticated grants, anon revocations, 34 constraints, three triggers, and the evidence-limit function are present
+- Rollback-only authenticated-role smoke test passed create/read/update/delete for both candidate tables, rejected cross-user reads/updates/inserts, and left zero test rows
+- Linked migration history now contains local and remote version `20260726233739`
+- Full web CI: lint passed, type-check passed, 41 files and 555 unit tests passed, 13 guardrail tests passed, and the Next.js production build succeeded
+- Supabase advisors report no security or performance findings for `candidate_profiles` or `candidate_evidence`
+
+Result: The candidate profile schema is live in Supabase, its authenticated ownership contract is verified, and the repository migration now matches the SQL that was successfully applied. The available Chrome session was signed out and redirected to login, so no credentials or browser storage were accessed; the database-level smoke test provides the production RLS evidence for this PR.
+
+Follow-up:
+
+- Merge this fix branch so future environments can apply the migration successfully.
+- Reconcile the older local/remote Supabase migration-history drift separately; it was intentionally excluded from this production change.
+- Triage the existing unrelated Supabase advisor backlog separately (security-definer grants/search paths, the public `vector` extension, leaked-password protection, and duplicate permissive `profiles` policies).
+
 ### 2026-07-28
 
 Branch: `codex/extension-auth-bridge-fix`
