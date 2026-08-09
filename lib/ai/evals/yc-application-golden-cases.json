@@ -1,0 +1,142 @@
+[
+  {
+    "id": "technical-depth-production-ownership",
+    "description": "Prioritize a confirmed end-to-end production project for an early engineering role.",
+    "request": {
+      "category": "yc_application",
+      "jd": "Founding engineer for an AI developer-tools startup. Own TypeScript services, observability, deployment reliability, and customer-facing product work from ambiguous requirements through production.",
+      "question": "Why are you a strong candidate for this role?"
+    },
+    "candidateContext": {
+      "profile": {
+        "currentRole": "Software Engineer",
+        "startupMotivation": "Prefers small teams with direct product ownership.",
+        "excludedClaims": []
+      },
+      "confirmedEvidence": [
+        {
+          "id": "evidence:11111111-1111-4111-8111-111111111111",
+          "kind": "production_scale",
+          "title": "Production observability rollout",
+          "actions": "Designed the service instrumentation, deployment checks, and incident triage workflow.",
+          "outcome": "Reduced the time needed to identify failing requests.",
+          "metrics": [],
+          "skills": ["TypeScript", "observability"]
+        }
+      ],
+      "resumeSummary": "Built and operated TypeScript services used by external customers."
+    },
+    "expectations": {
+      "minWords": 50,
+      "maxWords": 150,
+      "requiredSourceIds": [
+        "profile.current_role",
+        "evidence:11111111-1111-4111-8111-111111111111"
+      ],
+      "forbiddenClaims": []
+    }
+  },
+  {
+    "id": "ambiguity-and-speed",
+    "description": "Ground an answer in confirmed ambiguity and speed-to-production evidence.",
+    "request": {
+      "category": "yc_application",
+      "jd": "Early product engineer joining a seed-stage workflow startup. Turn incomplete customer problems into small experiments, collaborate with operations, and ship useful software within short feedback cycles."
+    },
+    "candidateContext": {
+      "profile": {
+        "currentRole": "Full-stack Engineer",
+        "startupMotivation": "Enjoys short feedback loops and direct customer context.",
+        "excludedClaims": []
+      },
+      "confirmedEvidence": [
+        {
+          "id": "evidence:22222222-2222-4222-8222-222222222222",
+          "kind": "ambiguity",
+          "title": "Undefined operations workflow",
+          "actions": "Interviewed operators, reduced the problem to one measurable workflow, and built a testable first release.",
+          "outcome": "The team obtained concrete usage feedback for the next iteration.",
+          "metrics": [],
+          "skills": ["product discovery", "React"]
+        }
+      ],
+      "resumeSummary": "Worked across product and engineering on customer-facing workflows."
+    },
+    "expectations": {
+      "minWords": 50,
+      "maxWords": 150,
+      "requiredSourceIds": ["evidence:22222222-2222-4222-8222-222222222222"],
+      "forbiddenClaims": []
+    }
+  },
+  {
+    "id": "excluded-technology",
+    "description": "Prove that a prohibited technology claim cannot appear even when the job description requests it.",
+    "request": {
+      "category": "yc_application",
+      "jd": "Backend engineer for a data infrastructure company. The role values Python, FastAPI, PostgreSQL, production APIs, and engineers who can own reliability work across the stack.",
+      "question": "What makes your background relevant to this position?"
+    },
+    "candidateContext": {
+      "profile": {
+        "currentRole": "Backend Engineer",
+        "startupMotivation": "Wants ownership of production systems.",
+        "excludedClaims": ["FastAPI"]
+      },
+      "confirmedEvidence": [
+        {
+          "id": "evidence:33333333-3333-4333-8333-333333333333",
+          "kind": "technical_project",
+          "title": "Reliable PostgreSQL ingestion service",
+          "actions": "Implemented idempotent ingestion, failure handling, and production dashboards.",
+          "outcome": "Improved recovery from partial ingestion failures.",
+          "metrics": [],
+          "skills": ["PostgreSQL", "Python"]
+        }
+      ],
+      "resumeSummary": "Built Python and PostgreSQL services; no FastAPI experience is claimed."
+    },
+    "expectations": {
+      "minWords": 50,
+      "maxWords": 150,
+      "requiredSourceIds": ["evidence:33333333-3333-4333-8333-333333333333"],
+      "forbiddenClaims": ["FastAPI"]
+    }
+  },
+  {
+    "id": "sparse-but-sufficient",
+    "description": "Create a defensible response without inventing metrics when the profile is sparse.",
+    "request": {
+      "category": "yc_application",
+      "jd": "Software engineer at a small B2B startup. Build web product features, work closely with a founder, and take responsibility for testing and production support after launch."
+    },
+    "candidateContext": {
+      "profile": {
+        "currentRole": "Software Engineer",
+        "startupMotivation": "Interested in early product ownership.",
+        "excludedClaims": []
+      },
+      "confirmedEvidence": [
+        {
+          "id": "evidence:44444444-4444-4444-8444-444444444444",
+          "kind": "leadership",
+          "title": "Feature ownership after launch",
+          "actions": "Implemented a customer workflow, added tests, monitored the release, and handled follow-up fixes.",
+          "outcome": "Delivered a maintained production feature.",
+          "metrics": [],
+          "skills": ["React", "testing"]
+        }
+      ],
+      "resumeSummary": "Shipped and supported customer-facing web features."
+    },
+    "expectations": {
+      "minWords": 50,
+      "maxWords": 150,
+      "requiredSourceIds": [
+        "profile.current_role",
+        "evidence:44444444-4444-4444-8444-444444444444"
+      ],
+      "forbiddenClaims": ["percent", "revenue", "users"]
+    }
+  }
+]
