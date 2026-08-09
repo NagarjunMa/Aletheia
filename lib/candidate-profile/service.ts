@@ -19,7 +19,7 @@ const PROFILE_FIELDS =
 const EVIDENCE_FIELDS =
   "id,user_id,kind,title,context,actions,outcome,metrics,skills,links,confirmed_at,sort_order,created_at,updated_at" as const;
 
-function mapProfile(
+export function mapCandidateProfileRow(
   row: Tables<"candidate_profiles"> | null,
 ): CandidateProfileInput {
   if (!row) return candidateProfileInputSchema.parse({});
@@ -43,7 +43,7 @@ function mapProfile(
   });
 }
 
-function mapEvidence(
+export function mapCandidateEvidenceRow(
   row: Tables<"candidate_evidence">,
 ): CandidateEvidenceRecord {
   return {
@@ -84,11 +84,11 @@ export async function getCandidateApplicationProfile(
   }
 
   return {
-    profile: mapProfile(
+    profile: mapCandidateProfileRow(
       profileResult.data as Tables<"candidate_profiles"> | null,
     ),
     evidence: (
       (evidenceResult.data ?? []) as Tables<"candidate_evidence">[]
-    ).map(mapEvidence),
+    ).map(mapCandidateEvidenceRow),
   };
 }
