@@ -20,6 +20,35 @@ Follow-up:
 
 ## Entries
 
+### 2026-08-09
+
+Branch: `fix/candidate-profile-migration`
+
+Area: Extension CI dependency audit
+
+Problem: PR #63 was blocked by the repository-wide extension security job after new high-severity advisories marked transitive development dependencies `brace-expansion@5.0.8` and `nanoid@3.3.16` as vulnerable.
+
+Decision: Refresh only the extension lockfile within the parent packages' existing semver ranges. Resolve ESLint's transitive dependency to `brace-expansion@5.0.9` and PostCSS's transitive dependency to `nanoid@3.3.18`. Do not bump the Chrome manifest or package version because no packaged extension source or asset changed.
+
+Files changed:
+
+- `ascendia-extension/package-lock.json`
+- `docs/progress.txt`
+
+Tests/checks:
+
+- Extension audit: zero vulnerabilities
+- Extension version policy: no packaged extension changes detected
+- Extension type-check and lint passed
+- Extension unit suite: 10 files and 121 tests passed
+- Production extension bundle built successfully
+
+Result: The extension security gate is clean while the published/runtime extension remains version `1.0.5`.
+
+Follow-up:
+
+- Let GitHub Actions rerun the complete PR gate with the refreshed lockfile.
+
 ### 2026-08-06
 
 Branch: `fix/candidate-profile-migration`
