@@ -22,6 +22,45 @@ Follow-up:
 
 ### 2026-08-09
 
+Branch: `feature/yc-grounding-context`
+
+Area: YC application response generation — Phase 2 deterministic grounding
+
+Problem: Phase 1 froze the YC request and response contracts, but generation still needed a caller-scoped way to load server-owned candidate facts and a deterministic way to select safe, relevant context before any model, billing, or rate-limit work.
+
+Decision: Create a stateless anon-key Supabase client carrying the already verified caller JWT so RLS remains the authorization boundary. Load the candidate profile, confirmed evidence, primary resume, and legacy resume fallback in one repository operation. Assemble prompt context with stable source IDs, explicit trust order, deterministic relevance ranking, NFKC normalization, XML escaping, exact-content deduplication, excluded-claim filtering, and fixed evidence/source budgets. Return readiness and privacy-safe count metadata; log only source counts and readiness counts. Do not add a model call, route dispatch, billing integration, extension change, database migration, or service-role access in this phase.
+
+Files changed:
+
+- `lib/supabase/bearer-user-client.ts` and its tests
+- `lib/candidate-profile/service.ts`
+- `modules/application-answer/domain/yc-grounding.types.ts`
+- `modules/application-answer/infrastructure/candidate-context.repository.ts` and its tests
+- `modules/application-answer/application/build-yc-grounding-context.ts` and its tests
+- `modules/application-answer/application/prepare-yc-grounding-context.ts` and its tests
+- `docs/progress.txt`
+
+Tests/checks:
+
+- TDD red gates covered missing modules plus control-character token injection, XML boundary injection, escaped-size expansion, punctuation-equivalent excluded claims, and privacy-safe orchestration telemetry before implementation
+- Focused Phase 2 suite: 4 files and 23 tests passed
+- Candidate-profile and resume regression suites passed
+- Repository lint and strict TypeScript passed
+- Full unit suite: 46 files and 603 tests passed
+- Guardrails: 13 tests passed
+- Next.js production build succeeded
+- Prettier and `git diff --check` passed
+
+Result: Phase 2 is complete. Identical inputs produce deterministic bounded context; unconfirmed or excluded evidence cannot enter it; source trust is represented by stable IDs and priority ordering; readiness is available before billable work; and the public repository API cannot accept a service-role client. Existing outreach and extension code is unchanged, so manifest `1.0.5` does not require a bump. No Supabase migration is required.
+
+Follow-up:
+
+- Review and merge the Phase 2 PR before starting Phase 3.
+- Implement the structured YC model pipeline, provenance validation, API dispatch, and billing/refund integration in a new `feature/` branch after merge.
+- The existing stale Browserslist-data warning remains tracked separately in Linear issue NAK-32 and does not fail CI.
+
+### 2026-08-09
+
 Branch: `feature/yc-application-contract`
 
 Area: YC application response generation — Phase 1 contract foundation
