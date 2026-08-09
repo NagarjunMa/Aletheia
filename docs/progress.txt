@@ -22,6 +22,40 @@ Follow-up:
 
 ### 2026-08-09
 
+Branch: `feature/yc-application-contract`
+
+Area: YC application response generation — Phase 1 contract foundation
+
+Problem: The YC workflow needed a versioned, testable product contract before candidate grounding, model orchestration, billing, or extension UI could be implemented safely. The contract also needed to prove that the new category would not alter existing outreach requests or become reachable through the production route prematurely.
+
+Decision: Keep extension API v1 and reuse `jd` as the required YC job-description wire field. Add a strict `yc_application` request branch with a server-owned default question, NFKC/line-ending/whitespace normalization, explicit input bounds, a 50–150-word success schema, server-only claim provenance, four-credit response invariants, a stable error/status/refund map, and a privacy-safe non-billable readiness response. Preserve the active production parser as legacy-only until Phase 3 supplies safe dispatch, grounding, billing, and refund behavior.
+
+Files changed:
+
+- `app/api/extension/generate/schema.ts`
+- `app/api/extension/generate/yc-application-contract.test.ts`
+- `lib/ai/evals/yc-application-golden-cases.json`
+- `docs/progress.txt`
+
+Tests/checks:
+
+- TDD red gate: 22 contract failures and one passing API-version assertion before the contract existed; the added readiness-schema test also failed before implementation
+- Focused YC and legacy route contracts: 2 files and 82 tests passed
+- Repository lint and strict TypeScript passed
+- Full unit suite: 42 files and 580 tests passed
+- Guardrails: 13 tests passed
+- Next.js production build succeeded
+- `git diff --check` passed
+
+Result: Phase 1 schemas and executable fixtures are complete without adding a model call, production YC dispatch, billing migration, extension UI, extension files, or Supabase changes. Existing LinkedIn connection, cold email, and InMail request parsing remains compatible, and the current production parser explicitly rejects `yc_application` until the later integration phase.
+
+Follow-up:
+
+- Review and merge PR 1 before starting Phase 2.
+- Implement deterministic, RLS-scoped, confirmed-only grounding context in `feature/yc-grounding-context` after Phase 1 merges.
+
+### 2026-08-09
+
 Branch: `fix/candidate-profile-migration`
 
 Area: Extension CI dependency audit
