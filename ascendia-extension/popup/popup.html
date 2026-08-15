@@ -124,11 +124,12 @@
             </option>
             <option value="cold_email">Cold Email (Apollo)</option>
             <option value="linkedin_inmail">LinkedIn InMail</option>
+            <option value="yc_application">YC Application Answer</option>
           </select>
         </div>
 
         <!-- Intent Selection -->
-        <div class="input-group">
+        <div id="intentGroup" class="input-group">
           <label for="intent">Purpose</label>
           <select id="intent" class="select-input">
             <option value="networking">General Networking</option>
@@ -151,7 +152,7 @@
           </select>
         </div>
 
-        <!-- Context Input (Optional) -->
+        <!-- Job description or conversation context -->
         <div class="input-group">
           <label id="contextInputLabel" for="jdInput"
             >Job Description (Optional)</label
@@ -161,11 +162,31 @@
             placeholder="Paste job description to create more targeted messages..."
             rows="3"
             maxlength="12000"
+            aria-describedby="contextInputHelp contextInputCount"
           ></textarea>
-          <div class="char-count">
+          <p id="contextInputHelp" class="input-help hidden"></p>
+          <div id="contextInputCount" class="char-count">
             <span id="jdCharCount">0</span>/<span id="contextMaxCount"
               >2000</span
             >
+          </div>
+        </div>
+
+        <!-- YC application question -->
+        <div id="ycQuestionGroup" class="input-group hidden">
+          <label for="ycQuestionInput">Application Question</label>
+          <textarea
+            id="ycQuestionInput"
+            rows="3"
+            maxlength="1000"
+            aria-describedby="ycQuestionHelp ycQuestionCount"
+          >
+Why are you a strong candidate for this role?</textarea>
+          <p id="ycQuestionHelp" class="input-help">
+            Edit this when the application asks a different question.
+          </p>
+          <div id="ycQuestionCount" class="char-count">
+            <span id="ycQuestionCharCount">45</span>/<span>1000</span>
           </div>
         </div>
 
@@ -185,7 +206,12 @@
         </button>
 
         <!-- Output Section -->
-        <div id="output" class="output-section hidden">
+        <div
+          id="output"
+          class="output-section hidden"
+          tabindex="-1"
+          aria-live="polite"
+        >
           <!-- Subject Line (for emails) -->
           <div id="subjectLine" class="output-item hidden">
             <label class="output-label">Subject Line</label>
@@ -214,7 +240,9 @@
           <!-- Message Body -->
           <div id="messageBody" class="output-item">
             <div class="output-header">
-              <label class="output-label">Message</label>
+              <label id="messageOutputLabel" class="output-label"
+                >Message</label
+              >
               <div id="messageCharCount" class="char-count-display"></div>
             </div>
             <div id="messageText" class="output-text"></div>
@@ -322,7 +350,13 @@
         </div>
 
         <!-- Error Message -->
-        <div id="errorMessage" class="error-message hidden">
+        <div
+          id="errorMessage"
+          class="error-message hidden"
+          role="alert"
+          aria-live="assertive"
+          tabindex="-1"
+        >
           <svg
             class="error-icon"
             viewBox="0 0 24 24"
@@ -334,7 +368,17 @@
             <path d="m15 9-6 6" />
             <path d="m9 9 6 6" />
           </svg>
-          <span id="errorText">Something went wrong. Please try again.</span>
+          <div class="error-content">
+            <span id="errorText">Something went wrong. Please try again.</span>
+            <ul id="errorDetails" class="error-details hidden"></ul>
+            <a
+              id="errorAction"
+              class="error-action hidden"
+              href="#"
+              target="_blank"
+              rel="noopener noreferrer"
+            ></a>
+          </div>
         </div>
       </div>
 
@@ -360,6 +404,6 @@
       </div>
     </div>
 
-    <script src="popup.js"></script>
+    <script type="module" src="popup.js"></script>
   </body>
 </html>

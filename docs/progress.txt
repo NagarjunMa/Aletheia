@@ -22,6 +22,43 @@ Follow-up:
 
 ### 2026-08-15
 
+Branch: `feature/yc-extension-workflow`
+
+Area: YC application response generation — Phase 4 Chrome extension workflow
+
+Problem: The merged backend could generate grounded YC answers, but extension `1.0.5` exposed only LinkedIn/email categories, required a LinkedIn profile for every request, discarded structured readiness details at the background boundary, and persisted the shared context input.
+
+Decision: Add a page-independent `yc_application` popup path using the strict API v1 `{ category, jd, question }` request. Keep pasted YC job descriptions and questions in popup memory only, skip LinkedIn extraction and legacy style examples, mirror server input bounds, preserve structured 422/426 recovery actions, and reuse the existing evergreen/Flaviotte interface. Bump the packaged release candidate to `1.0.6` only after its focused tests and extension CI pass.
+
+Files changed:
+
+- YC popup core, UI, accessibility states, styling, and red-first tests under `ascendia-extension/popup`
+- pure background generation boundary helpers, structured-error propagation, deterministic 4xx handling, and tests under `ascendia-extension/background`
+- non-LinkedIn integration and artifact-contract tests under `ascendia-extension/test`
+- extension manifest/package/lock version `1.0.6`
+- ZIP inclusion and extension version-policy scripts
+- `docs/progress.txt`
+
+Tests/checks:
+
+- Red gate: 15 expected failures across core, DOM contract, integration, background, and artifact suites before implementation
+- Extension CI: audit found zero vulnerabilities; type-check, lint, 13 test files / 141 tests, and the production esbuild bundle passed
+- Root extension-version policy tests: 6 passed; policy verified `1.0.5 -> 1.0.6`
+- Store artifact built successfully; ZIP integrity and inclusion of `popup-core.js` and `generation-core.js` passed
+- Artifact metadata appends `-dirty` when the ZIP is built from uncommitted work, preventing a false commit-SHA match before the post-commit release rebuild
+- Browser-rendered popup smoke test from a non-LinkedIn URL completed with no page errors and verified category controls, valid-input enablement, generated output, 64-word indicator, hidden auto-fill, copy, regenerate, and feedback controls
+- `git diff --check` passed
+
+Result: Phase 4 implementation and automated gates are complete locally. Existing outreach regressions remain green, YC input does not require or trigger LinkedIn extraction, and actionable profile/update links survive the runtime boundary. The Linear phase remains In Progress until the exact ZIP is loaded unpacked and exercised against the live deployed API.
+
+Follow-up:
+
+- Apply and verify migration `20260815180105` through the controlled Supabase deployment workflow before the live YC billing smoke test.
+- Load the exact `1.0.6` ZIP unpacked and test one successful YC response plus readiness, compatibility, copy, regenerate, and feedback paths against the deployed backend.
+- Open and merge the Phase 4 PR only after that acceptance evidence is recorded; begin Phase 5 afterward.
+
+### 2026-08-15
+
 Branch: `feature/yc-generation-api`
 
 Area: YC application response generation — Phase 3 generation API and billing

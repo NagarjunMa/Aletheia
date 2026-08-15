@@ -55,4 +55,15 @@ describe("background service worker startup contract", () => {
     expect(bundledWorker).not.toContain("importScripts(");
     expect(bundledWorker).not.toContain('from "./auth.js"');
   });
+
+  it("preserves structured generation errors for actionable popup recovery", () => {
+    const serviceWorker = read("background/service-worker.js");
+    const generationCore = read("background/generation-core.js");
+
+    expect(serviceWorker).toContain("serializeGenerationError(error)");
+    expect(serviceWorker).toMatch(/from ["']\.\/generation-core\.js["']/);
+    expect(generationCore).toContain("applicationProfileUrl");
+    expect(generationCore).toContain("missingFields");
+    expect(generationCore).toContain("recommendedFields");
+  });
 });

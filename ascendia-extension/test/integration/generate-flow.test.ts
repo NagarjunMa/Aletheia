@@ -93,6 +93,38 @@ describe("generate flow integration", () => {
     expect(parsed.body).toBe("Hi Jane...");
   });
 
+  it("YC flow builds and parses without a LinkedIn profile", () => {
+    const payload = buildGeneratePayload(
+      null,
+      null,
+      "Build and operate an AI product with a small YC startup team while working closely with customers from idea through production.",
+      "yc_application",
+      "networking",
+      [],
+      "initial_outreach",
+      "Why are you the strongest candidate for this role?",
+    );
+
+    expect(payload).toEqual({
+      category: "yc_application",
+      jd: "Build and operate an AI product with a small YC startup team while working closely with customers from idea through production.",
+      question: "Why are you the strongest candidate for this role?",
+    });
+
+    const answer = Array.from(
+      { length: 50 },
+      (_, index) => `grounded${index}`,
+    ).join(" ");
+    const parsed = parseGenerationResponse({
+      success: true,
+      category: "yc_application",
+      body: answer,
+      word_count: 50,
+    });
+    expect(parsed.body).toBe(answer);
+    expect(parsed.word_count).toBe(50);
+  });
+
   it("expired token triggers refresh path", async () => {
     // Store expired auth
     await storeAuth(storage, {

@@ -1,6 +1,17 @@
 // Aletheia Extension Popup JavaScript
 // Main UI logic and user interaction handlers
 
+import {
+  YC_APPLICATION_CATEGORY,
+  buildGeneratePayload,
+  calculateCharCount,
+  getCategoryUiState,
+  getGenerationErrorPresentation,
+  isAuthError,
+  parseGenerationResponse,
+  validateGenerationInput,
+} from "./popup-core.js";
+
 let currentProfile = null;
 let currentOutput = null;
 const BACKGROUND_UNAVAILABLE_CODE = "BACKGROUND_UNAVAILABLE";
@@ -113,6 +124,8 @@ async function initializePopup() {
   // Set up character counter for JD input
   setupCharacterCounter();
 
+  document.getElementById("mainContent")?.classList.remove("hidden");
+
   // Restore last generation if available
   await restoreLastGeneration();
 }
@@ -158,17 +171,23 @@ function setupEventListeners() {
   });
 
   // Category change handler
-  document
-    .getElementById("category")
-    ?.addEventListener("change", updateUIForCategory);
+  document.getElementById("category")?.addEventListener("change", async () => {
+    updateUIForCategory();
+    await checkLinkedInProfile();
+  });
   document
     .getElementById("emailMode")
     ?.addEventListener("change", updateUIForCategory);
 
   // JD input change handler
-  document
-    .getElementById("jdInput")
-    ?.addEventListener("input", updateCharacterCount);
+  document.getElementById("jdInput")?.addEventListener("input", () => {
+    updateCharacterCount();
+    updateGenerateAvailability();
+  });
+  document.getElementById("ycQuestionInput")?.addEventListener("input", () => {
+    updateQuestionCharacterCount();
+    updateGenerateAvailability();
+  });
 }
 
 function showUserBadge(user) {
@@ -364,6 +383,17 @@ function showAuthRequired(authStatus) {
 async function checkLinkedInProfile(forceRefresh = false) {
   const readingBanner = document.getElementById("readingProfile");
   const refreshIcon = document.querySelector("#refreshBtn .refresh-icon");
+  const category = document.getElementById("category")?.value;
+
+  if (category === YC_APPLICATION_CATEGORY) {
+    readingBanner.style.display = "none";
+    refreshIcon?.classList.remove("spinning");
+    document.getElementById("profileBanner")?.classList.add("hidden");
+    document.getElementById("noProfile")?.classList.add("hidden");
+    document.getElementById("mainContent")?.classList.remove("hidden");
+    updateGenerateAvailability();
+    return;
+  }
 
   // Reset banner state
   document.getElementById("profileBanner").classList.add("hidden");
@@ -442,38 +472,42 @@ function showProfileDetected(profile) {
 }
 
 function showNoProfile() {
+  currentProfile = null;
   document.getElementById("noProfile").classList.remove("hidden");
   document.getElementById("profileBanner").classList.add("hidden");
-  // Fix 5: Don't hide mainContent — just disable the generate button
-  const btn = document.getElementById("generateBtn");
-  if (btn) btn.disabled = true;
+  document.getElementById("mainContent")?.classList.remove("hidden");
+  updateGenerateAvailability();
 }
 
 function enableMainContent() {
   document.getElementById("mainContent")?.classList.remove("hidden");
-  const btn = document.getElementById("generateBtn");
-  if (btn) btn.disabled = false;
+  updateGenerateAvailability();
 }
 
 async function generateMessage() {
-  if (!currentProfile) {
-    showError(
-      "No LinkedIn profile detected. Please navigate to a LinkedIn profile first.",
-    );
+  const category = document.getElementById("category").value;
+  const contextValue = document.getElementById("jdInput").value.trim();
+  const questionValue = document
+    .getElementById("ycQuestionInput")
+    ?.value.trim();
+  const validation = validateGenerationInput({
+    category,
+    hasProfile: Boolean(currentProfile),
+    contextValue,
+    questionValue,
+  });
+
+  if (!validation.valid) {
+    showError(validation.message);
     return;
   }
 
   try {
     setGeneratingState(true);
 
-    const category = document.getElementById("category").value;
     const intent = document.getElementById("intent").value;
     const emailMode =
       document.getElementById("emailMode")?.value || "initial_outreach";
-    const contextValue = document.getElementById("jdInput").value.trim();
-    const isFollowUp = emailMode === "follow_up";
-    const jd = isFollowUp ? "" : contextValue;
-    const conversationContext = isFollowUp ? contextValue : "";
 
     const { accepted = [] } = await chrome.storage.local.get(["accepted"]);
 
@@ -482,18 +516,20 @@ async function generateMessage() {
       .map((item) => item.body)
       .slice(-3);
 
-    const response = await chrome.runtime.sendMessage({
+    const payload = buildGeneratePayload(
+      currentProfile,
+      null,
+      contextValue,
+      category,
+      intent,
+      relevantExamples,
+      emailMode,
+      questionValue,
+    );
+
+    const response = await sendBackgroundMessage({
       action: "generate",
-      payload: {
-        profileMarkdown: currentProfile.profileMarkdown,
-        profileUrl: currentProfile.profileUrl,
-        jd,
-        conversationContext,
-        category,
-        intent,
-        emailMode,
-        acceptedExamples: relevantExamples,
-      },
+      payload,
     });
 
     if (response.success) {
@@ -502,11 +538,12 @@ async function generateMessage() {
       await storeGeneration(response);
       await incrementUsageCount();
     } else {
-      const errMsg = response.error || "Generation failed. Please try again.";
+      const presentation = getGenerationErrorPresentation(response);
+      const errMsg = presentation.message;
       if (isAuthError(errMsg)) {
         showAuthError(errMsg);
       } else {
-        showError(errMsg);
+        showGenerationError(presentation);
       }
     }
   } catch (error) {
@@ -530,36 +567,8 @@ function displayOutput(output) {
   const subjectLine = document.getElementById("subjectLine");
   const subjectText = document.getElementById("subjectText");
 
-  const processedOutput = { ...output };
-
-  if (
-    (output.category === "cold_email" ||
-      output.category === "linkedin_inmail") &&
-    typeof output.body === "string"
-  ) {
-    try {
-      let jsonString = output.body.trim();
-
-      if (jsonString.startsWith("```json")) {
-        jsonString = jsonString
-          .replace(/^```json\s*/, "")
-          .replace(/\s*```$/, "");
-      } else if (jsonString.startsWith("```")) {
-        jsonString = jsonString.replace(/^```\s*/, "").replace(/\s*```$/, "");
-      }
-
-      if (jsonString.startsWith("{") || jsonString.startsWith('"')) {
-        const parsed = JSON.parse(jsonString);
-        if (parsed.subject_line || parsed.body) {
-          processedOutput.subject_line =
-            parsed.subject_line || output.subject_line;
-          processedOutput.body = parsed.body || output.body;
-        }
-      }
-    } catch (e) {
-      console.warn("Failed to parse JSON response:", e);
-    }
-  }
+  const processedOutput = parseGenerationResponse(output);
+  currentOutput = processedOutput;
 
   const messageBody = processedOutput.body || processedOutput.message || "";
   messageText.textContent = messageBody;
@@ -577,33 +586,18 @@ function displayOutput(output) {
 
   outputSection.classList.remove("hidden");
   hideError();
+  outputSection.focus({ preventScroll: true });
 }
 
 function updateCharacterCountDisplay(text, category) {
-  const charCount = text.length;
   const messageCharCount = document.getElementById("messageCharCount");
 
   if (!messageCharCount) return;
 
-  let isOverLimit, displayText;
-
-  switch (category) {
-    case "linkedin_connection":
-      isOverLimit = charCount > 280;
-      displayText = `${charCount}/300`;
-      break;
-    case "linkedin_inmail":
-      isOverLimit = charCount > 1800;
-      displayText = `${charCount} chars`;
-      break;
-    case "cold_email":
-      isOverLimit = charCount > 1500;
-      displayText = `${charCount} chars`;
-      break;
-    default:
-      displayText = `${charCount} chars`;
-      isOverLimit = false;
-  }
+  const { displayText, isOverLimit, isNearLimit } = calculateCharCount(
+    text,
+    category,
+  );
 
   messageCharCount.textContent = displayText;
 
@@ -612,7 +606,7 @@ function updateCharacterCountDisplay(text, category) {
     messageCharCount.classList.add("over-limit");
     messageCharCount.style.color = "var(--warning-400)";
     messageCharCount.style.borderColor = "var(--warning-400)";
-  } else if (category === "linkedin_connection" && charCount > 250) {
+  } else if (isNearLimit) {
     messageCharCount.classList.add("near-limit");
     messageCharCount.style.color = "var(--warning-500)";
     messageCharCount.style.borderColor = "var(--warning-500)";
@@ -633,8 +627,8 @@ function setGeneratingState(isGenerating) {
     generateText.textContent = "Generating...";
     generateSpinner.classList.remove("hidden");
   } else {
-    generateText.textContent = "Generate Message";
     generateSpinner.classList.add("hidden");
+    updateGenerateAvailability();
   }
 }
 
@@ -869,38 +863,46 @@ function updateUIForCategory() {
   const category = document.getElementById("category").value;
   const emailMode =
     document.getElementById("emailMode")?.value || "initial_outreach";
+  const uiState = getCategoryUiState(category, emailMode);
+  const intentGroup = document.getElementById("intentGroup");
   const emailModeGroup = document.getElementById("emailModeGroup");
+  const ycQuestionGroup = document.getElementById("ycQuestionGroup");
   const contextInputLabel = document.getElementById("contextInputLabel");
   const contextInput = document.getElementById("jdInput");
+  const contextInputHelp = document.getElementById("contextInputHelp");
   const contextMaxCount = document.getElementById("contextMaxCount");
+  const outputLabel = document.getElementById("messageOutputLabel");
+  const fillButton = document.getElementById("fillBtn");
 
-  const buttonText = {
-    linkedin_connection: "Generate Connection Request",
-    cold_email: "Generate Cold Email",
-    linkedin_inmail: "Generate InMail",
-  };
+  document.getElementById("generateText").textContent = uiState.generateLabel;
+  intentGroup?.classList.toggle("hidden", !uiState.showIntent);
+  emailModeGroup?.classList.toggle("hidden", !uiState.showEmailMode);
+  ycQuestionGroup?.classList.toggle("hidden", !uiState.showQuestion);
+  fillButton?.classList.toggle("hidden", !uiState.showAutoFill);
+  if (outputLabel) outputLabel.textContent = uiState.outputLabel;
 
-  document.getElementById("generateText").textContent =
-    buttonText[category] || "Generate Message";
-  if (emailModeGroup) {
-    emailModeGroup.classList.toggle(
-      "hidden",
-      category === "linkedin_connection",
-    );
-  }
   if (contextInputLabel && contextInput && contextMaxCount) {
-    const isFollowUp =
-      category !== "linkedin_connection" && emailMode === "follow_up";
-    contextInputLabel.textContent = isFollowUp
-      ? "Previous Conversation (Optional)"
-      : "Job Description (Optional)";
-    contextInput.placeholder = isFollowUp
-      ? "Paste prior emails or replies for follow-up context..."
-      : "Paste job description to create more targeted messages...";
-    contextInput.rows = isFollowUp ? 4 : 3;
-    contextMaxCount.textContent = isFollowUp ? "12000" : "2000";
+    contextInputLabel.textContent = uiState.contextLabel;
+    contextInput.placeholder = uiState.contextPlaceholder;
+    contextInput.rows = category === YC_APPLICATION_CATEGORY ? 7 : 3;
+    contextInput.maxLength = uiState.contextMaxLength;
+    contextInput.required = uiState.contextRequired;
+    contextInput.setAttribute(
+      "aria-required",
+      uiState.contextRequired ? "true" : "false",
+    );
+    contextMaxCount.textContent = String(uiState.contextMaxLength);
+    if (contextInputHelp) {
+      contextInputHelp.textContent = uiState.contextRequired
+        ? "Required · paste at least 80 characters so the answer can be role-specific."
+        : "";
+      contextInputHelp.classList.toggle("hidden", !uiState.contextRequired);
+    }
     updateCharacterCount();
   }
+
+  updateQuestionCharacterCount();
+  updateGenerateAvailability();
 }
 
 function setupCharacterCounter() {
@@ -922,6 +924,33 @@ function updateCharacterCount() {
   const charCount = document.getElementById("jdCharCount");
   if (!jdInput || !charCount) return;
   charCount.textContent = jdInput.value.length;
+}
+
+function updateQuestionCharacterCount() {
+  const input = document.getElementById("ycQuestionInput");
+  const count = document.getElementById("ycQuestionCharCount");
+  if (!input || !count) return;
+  count.textContent = input.value.length;
+}
+
+function updateGenerateAvailability() {
+  const button = document.getElementById("generateBtn");
+  const category = document.getElementById("category")?.value;
+  const generateText = document.getElementById("generateText");
+  if (!button || !category) return;
+
+  const emailMode =
+    document.getElementById("emailMode")?.value || "initial_outreach";
+  const uiState = getCategoryUiState(category, emailMode);
+  const validation = validateGenerationInput({
+    category,
+    hasProfile: Boolean(currentProfile),
+    contextValue: document.getElementById("jdInput")?.value || "",
+    questionValue: document.getElementById("ycQuestionInput")?.value || "",
+  });
+
+  button.disabled = !validation.valid;
+  if (generateText) generateText.textContent = uiState.generateLabel;
 }
 
 async function updateUsageStats() {
@@ -974,22 +1003,71 @@ function showError(message) {
   }
 
   errorText.textContent = message;
+  document.getElementById("errorDetails")?.classList.add("hidden");
+  document.getElementById("errorAction")?.classList.add("hidden");
   errorEl.classList.remove("hidden");
 
   setTimeout(hideError, 5000);
 }
 
-function hideError() {
-  document.getElementById("errorMessage")?.classList.add("hidden");
+function showGenerationError(presentation) {
+  const errorEl = document.getElementById("errorMessage");
+  const errorText = document.getElementById("errorText");
+  const details = document.getElementById("errorDetails");
+  const action = document.getElementById("errorAction");
+  if (!errorEl || !errorText || !details || !action) {
+    showError(presentation.message);
+    return;
+  }
+
+  errorText.textContent = presentation.message;
+  details.replaceChildren();
+  const fields = [
+    ...presentation.missingFields,
+    ...presentation.recommendedFields,
+  ];
+  for (const field of fields.slice(0, 6)) {
+    const item = document.createElement("li");
+    item.textContent = field;
+    details.appendChild(item);
+  }
+  details.classList.toggle("hidden", fields.length === 0);
+
+  action.classList.add("hidden");
+  if (
+    presentation.actionLabel &&
+    isTrustedAletheiaUrl(presentation.actionUrl)
+  ) {
+    action.textContent = presentation.actionLabel;
+    action.href = presentation.actionUrl;
+    action.classList.remove("hidden");
+  }
+
+  errorEl.classList.remove("hidden");
+  errorEl.focus?.();
 }
 
-function isAuthError(message) {
-  if (!message) return false;
-  return (
-    message.startsWith("AUTH_FAILED:") ||
-    message.includes("Not authenticated") ||
-    message.includes("Session expired")
-  );
+function isTrustedAletheiaUrl(value) {
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === "https:" &&
+      [
+        "aletheia.live",
+        "www.aletheia.live",
+        "chrome.google.com",
+        "chromewebstore.google.com",
+      ].includes(url.hostname)
+    );
+  } catch {
+    return false;
+  }
+}
+
+function hideError() {
+  document.getElementById("errorMessage")?.classList.add("hidden");
+  document.getElementById("errorDetails")?.classList.add("hidden");
+  document.getElementById("errorAction")?.classList.add("hidden");
 }
 
 function showAuthError(message) {
@@ -1129,6 +1207,19 @@ function displayValidationFeedback(output) {
     }
   }
 
+  if (category === YC_APPLICATION_CATEGORY) {
+    const wordCount =
+      output.word_count ||
+      calculateCharCount(output.body || "", category).count;
+    const isWithinRange = wordCount >= 50 && wordCount <= 150;
+    feedbackItems.push({
+      icon: isWithinRange ? "✅" : "⚠️",
+      text: `${wordCount} words`,
+      status: isWithinRange ? "success" : "warning",
+      details: "Required response range: 50–150 words",
+    });
+  }
+
   if (validation.sanitization_applied) {
     feedbackItems.push({
       icon: "🛡️",
@@ -1214,17 +1305,21 @@ function toggleValidationDetails() {
 
 async function storeGeneration(output) {
   try {
+    const category = document.getElementById("category").value;
+    const isYcApplication = category === YC_APPLICATION_CATEGORY;
     const generationData = {
       output,
       timestamp: Date.now(),
-      profile: currentProfile,
-      inputs: {
-        contextValue: document.getElementById("jdInput").value.trim(),
-        category: document.getElementById("category").value,
-        intent: document.getElementById("intent").value,
-        emailMode:
-          document.getElementById("emailMode")?.value || "initial_outreach",
-      },
+      profile: isYcApplication ? null : currentProfile,
+      inputs: isYcApplication
+        ? { category }
+        : {
+            contextValue: document.getElementById("jdInput").value.trim(),
+            category,
+            intent: document.getElementById("intent").value,
+            emailMode:
+              document.getElementById("emailMode")?.value || "initial_outreach",
+          },
     };
 
     await chrome.storage.local.set({ lastGeneration: generationData });
@@ -1255,11 +1350,13 @@ async function restoreLastGeneration() {
         emailMode.value = lastGeneration.inputs.emailMode || "initial_outreach";
       }
       const restoredContext =
-        lastGeneration.inputs.contextValue ??
-        (lastGeneration.inputs.emailMode === "follow_up"
-          ? lastGeneration.inputs.conversationContext
-          : lastGeneration.inputs.jd) ??
-        "";
+        lastGeneration.inputs.category === YC_APPLICATION_CATEGORY
+          ? ""
+          : (lastGeneration.inputs.contextValue ??
+            (lastGeneration.inputs.emailMode === "follow_up"
+              ? lastGeneration.inputs.conversationContext
+              : lastGeneration.inputs.jd) ??
+            "");
       document.getElementById("jdInput").value = restoredContext;
 
       updateCharacterCount();

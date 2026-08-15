@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Aletheia - Professional Message Drafts",
-  "version": "1.0.5",
-  "description": "Draft reviewed LinkedIn connection notes and professional networking messages from context you choose.",
+  "version": "1.0.6",
+  "description": "Draft reviewed outreach messages and grounded YC application answers from context you choose.",
   "permissions": [
     "storage",
     "activeTab",
