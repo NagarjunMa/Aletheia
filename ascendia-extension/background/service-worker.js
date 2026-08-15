@@ -13,6 +13,10 @@ import {
   storeAuth,
   waitForLogin,
 } from "./auth.js";
+import {
+  buildGenerationRequestData,
+  serializeGenerationError,
+} from "./generation-core.js";
 
 // In-flight guard: prevents duplicate authenticate calls from opening multiple tabs
 let authenticatePromise = null;
@@ -175,12 +179,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "generate") {
     handleGenerateRequest(message.payload)
       .then((result) => sendResponse(result))
-      .catch((error) =>
-        sendResponse({
-          success: false,
-          error: error.message || "Generation failed",
-        }),
-      );
+      .catch((error) => sendResponse(serializeGenerationError(error)));
     return true;
   }
 
@@ -444,10 +443,7 @@ async function handleGenerateRequest(payload) {
         .map((item) => item.body || item.message)
         .slice(-3);
 
-      const requestData = {
-        ...payload,
-        acceptedExamples: relevantExamples,
-      };
+      const requestData = buildGenerationRequestData(payload, relevantExamples);
 
       // Make API request with Bearer token
       const response = await makeAPIRequest(
@@ -464,7 +460,12 @@ async function handleGenerateRequest(payload) {
       );
 
       if (!response.success) {
-        throw new Error(response.error || "API request failed");
+        const responseError = new Error(
+          response.message || response.error || "API request failed",
+        );
+        responseError.code = response.code;
+        responseError.apiResponse = response;
+        throw responseError;
       }
 
       await logUsage(payload.category);
@@ -609,6 +610,7 @@ async function makeAPIRequest(endpoint, options = {}, baseUrl = null) {
         apiError.status = response.status;
         apiError.code = errorBody?.code;
         apiError.updateUrl = errorBody?.chromeWebStoreUrl;
+        apiError.apiResponse = errorBody;
         throw apiError;
       }
 
@@ -640,6 +642,13 @@ async function makeAPIRequest(endpoint, options = {}, baseUrl = null) {
         error.code === "EXTENSION_UPDATE_REQUIRED" ||
         error.code === "API_VERSION_UNSUPPORTED"
       ) {
+        throw error;
+      }
+
+      // Validation, billing, readiness, and compatibility failures are
+      // deterministic client responses. Retrying them adds latency and can
+      // repeat server work without changing the outcome.
+      if (error.status >= 400 && error.status < 500) {
         throw error;
       }
 

@@ -22,9 +22,8 @@ const DIST_DIR = path.join(EXT_DIR, 'dist')
 const OUT_ZIP = path.join(DIST_DIR, 'aletheia-extension.zip')
 const VERSION_FILE = path.join(DIST_DIR, 'aletheia-extension.version.json')
 
-// Extension source ships as plain MV3 JS — no bundling.
-// service-worker.js uses importScripts('auth.js') which requires siblings
-// to exist at runtime. esbuild bundling broke this contract.
+// Extension source ships as plain MV3 modules — no bundling. Runtime imports
+// must therefore be present beside their entry points in the ZIP artifact.
 const STATIC_INCLUDES = [
   'manifest.json',
   'background/',
@@ -35,13 +34,11 @@ const STATIC_INCLUDES = [
   'assets/',
 ]
 
-// Source files that are leftover from the gated Phase 0 refactor and not
-// referenced by manifest.json or other runtime JS. Excluded from the zip.
+// Pure helpers not referenced by runtime modules remain excluded from the ZIP.
 const EXCLUDED_FILES = new Set([
   'background/auth-core.js',
   'content/profile-extractor.js',
   'content/filler-core.js',
-  'popup/popup-core.js',
 ])
 
 function log(msg) {
@@ -50,9 +47,15 @@ function log(msg) {
 
 function getGitSha() {
   try {
-    return execSync('git rev-parse --short HEAD', { cwd: ROOT })
+    const sha = execSync('git rev-parse --short HEAD', { cwd: ROOT })
       .toString()
       .trim()
+    const isDirty = Boolean(
+      execSync('git status --porcelain --untracked-files=normal', { cwd: ROOT })
+        .toString()
+        .trim(),
+    )
+    return isDirty ? `${sha}-dirty` : sha
   } catch {
     return 'untracked'
   }

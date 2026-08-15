@@ -457,6 +457,13 @@ textarea::placeholder {
   font-style: italic;
 }
 
+.input-help {
+  margin: var(--space-2) 0 0;
+  color: var(--green-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
 .char-count {
   margin-top: var(--space-2);
   text-align: right;
@@ -727,6 +734,79 @@ textarea::placeholder {
   transform: translateX(2px);
 }
 
+/* Output quality summary */
+.validation-feedback {
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+  background: rgba(1, 50, 32, 0.28);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+}
+
+.validation-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.validation-title {
+  color: var(--primary-200);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+.validation-toggle {
+  padding: 3px var(--space-2);
+  background: transparent;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  color: var(--green-muted);
+  font: 10px var(--font-family-mono);
+  cursor: pointer;
+}
+
+.validation-toggle:hover {
+  border-color: var(--accent-400);
+  color: var(--accent-400);
+}
+
+.validation-items {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.validation-item {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  column-gap: var(--space-2);
+  color: var(--primary-300);
+  font-size: 11px;
+}
+
+.validation-item.success {
+  color: var(--green-lightest);
+}
+
+.validation-item.warning {
+  color: var(--warning-400);
+}
+
+.validation-icon {
+  line-height: 1.5;
+}
+
+.validation-details {
+  grid-column: 2;
+  margin-top: 2px;
+  color: var(--primary-400);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
 /* Feedback Section */
 .feedback-section {
   margin-top: var(--space-6);
@@ -823,7 +903,7 @@ textarea::placeholder {
   font-size: 13px;
   margin-bottom: var(--space-5);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--space-3);
   box-shadow: 0 4px 16px rgba(5, 31, 32, 0.3);
 }
@@ -832,6 +912,35 @@ textarea::placeholder {
   width: 18px;
   height: 18px;
   flex-shrink: 0;
+}
+
+.error-content {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.error-details {
+  margin: 0;
+  padding-left: var(--space-5);
+  color: var(--primary-300);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.error-action {
+  width: fit-content;
+  color: var(--green-lightest);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.error-action:hover {
+  color: var(--accent-400);
 }
 
 /* Re-authenticate button (inline in error banner) */

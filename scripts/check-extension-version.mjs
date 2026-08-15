@@ -21,7 +21,6 @@ const EXCLUDED_PACKAGED_FILES = new Set([
   "ascendia-extension/background/auth-core.js",
   "ascendia-extension/content/profile-extractor.js",
   "ascendia-extension/content/filler-core.js",
-  "ascendia-extension/popup/popup-core.js",
 ]);
 
 function parseVersion(version) {
