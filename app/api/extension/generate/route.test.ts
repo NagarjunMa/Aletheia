@@ -21,6 +21,7 @@ const mockFrom = vi.hoisted(() =>
   })),
 );
 const mockAnthropicCreate = vi.hoisted(() => vi.fn());
+const mockGenerateYcApplication = vi.hoisted(() => vi.fn());
 
 // ─── Module mocks ─────────────────────────────────────────────────────────────
 vi.mock("@supabase/supabase-js", () => ({
@@ -56,6 +57,11 @@ vi.mock("@anthropic-ai/sdk", () => {
   return { default: AnthropicMock };
 });
 
+vi.mock(
+  "@/modules/application-answer/application/generate-yc-application.service",
+  () => ({ generateYcApplication: mockGenerateYcApplication }),
+);
+
 vi.mock("@/lib/cors", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/cors")>();
   return {
@@ -86,6 +92,7 @@ beforeEach(() => {
   mockMaybeSingle.mockReset();
   mockRpc.mockReset();
   mockAnthropicCreate.mockReset();
+  mockGenerateYcApplication.mockReset();
   vi.mocked(getCorsHeaders).mockClear();
 
   mockAuthGetUser.mockResolvedValue({
@@ -109,6 +116,15 @@ beforeEach(() => {
     ],
     usage: { input_tokens: 10, output_tokens: 20 },
   });
+  mockGenerateYcApplication.mockResolvedValue(
+    new Response(
+      JSON.stringify({ success: true, category: "yc_application" }),
+      {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      },
+    ),
+  );
 });
 
 const validPayload = {
@@ -308,6 +324,54 @@ describe("Utility Functions", () => {
 });
 
 describe("POST /api/extension/generate", () => {
+  it("dispatches a valid YC request after auth and before legacy rate limiting", async () => {
+    const res = await POST(
+      makeRequest({
+        method: "POST",
+        headers: { authorization: "Bearer verified-token" },
+        body: {
+          category: "yc_application",
+          jd: "Build and operate an AI product with a small YC startup team while working closely with customers from idea through production.",
+        },
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(mockGenerateYcApplication).toHaveBeenCalledWith(
+      expect.objectContaining({
+        caller: {
+          userId: "test-user-id",
+          email: "",
+          accessToken: "verified-token",
+        },
+        request: expect.objectContaining({
+          category: "yc_application",
+          question: "Why are you a strong candidate for this role?",
+        }),
+      }),
+    );
+    expect(mockRpc).not.toHaveBeenCalled();
+    expect(mockFrom).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid YC input before legacy rate limiting", async () => {
+    const res = await POST(
+      makeRequest({
+        method: "POST",
+        headers: { authorization: "Bearer verified-token" },
+        body: { category: "yc_application", jd: "too short" },
+      }),
+    );
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toMatchObject({
+      code: "INVALID_REQUEST",
+    });
+    expect(mockGenerateYcApplication).not.toHaveBeenCalled();
+    expect(mockRpc).not.toHaveBeenCalled();
+    expect(mockFrom).not.toHaveBeenCalled();
+  });
+
   it("returns 401 when no auth token is provided", async () => {
     const res = await POST(makeRequest({ method: "POST", headers: {} }));
     expect(res.status).toBe(401);

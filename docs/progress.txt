@@ -20,6 +20,42 @@ Follow-up:
 
 ## Entries
 
+### 2026-08-15
+
+Branch: `feature/yc-generation-api`
+
+Area: YC application response generation — Phase 3 generation API and billing
+
+Problem: Phase 2 could prepare deterministic caller-owned grounding, but API v1 still rejected YC requests and there was no YC prompt, structured model contract, post-model grounding validation, four-credit database category, refund lifecycle, or feedback metadata support.
+
+Decision: Add an authenticated YC-only dispatch before the legacy style/rate/billing path. Require readiness before reserving a daily slot or credits. Use one forced Anthropic tool returning a 50–150-word body plus a claim-to-source ledger; sanitize and reject output with unknown/missing sources, excluded claims, forbidden email framing, or unsupported metrics instead of truncating it. Charge four credits through the existing atomic wallet RPC, preserve best-effort credit/rate refunds, and expose only privacy-safe evaluation metadata. Keep extension API v1 and extension manifest `1.0.5`; no packaged extension file changed.
+
+Files changed:
+
+- YC prompt, structured Anthropic repository, deterministic output validator, orchestration service, and red-first tests under `lib/ai/prompts` and `modules/application-answer`
+- authenticated YC dispatch and caller-token plumbing in the existing extension generation service/repository
+- credit policy and migration `20260815180105_add_yc_application_billing_category.sql` with static security regression tests
+- extension feedback schema/route tests for YC evaluation metadata and category consistency
+- `docs/progress.txt`
+
+Tests/checks:
+
+- Red gates proved missing prompt/parser/orchestrator/migration modules and category contracts before implementation
+- Focused prompt, parser, validator, orchestration, route, feedback, billing, and migration suites passed
+- Full repository CI on the declared Node `24.16.0` runtime: lint, strict TypeScript, 51 test files and 644 tests, 13 guardrails, and the Next.js production build passed
+- `git diff --check` passed
+- `supabase db lint --local` could not connect because the local Supabase database was not running on `127.0.0.1:54322`
+- A separate root `npm audit --audit-level moderate` found seven high-severity dependency advisory groups; a non-mutating fix dry run and remediation scope are recorded in Linear issue NAK-35 rather than mixed into this feature branch
+
+Result: Phase 3 is complete locally. API v1 returns a schema-validated grounded YC answer, incomplete grounding returns a non-billable 422 before rate limiting, and downstream invalid/timeout failures refund reserved credits and the daily slot. The billing migration is created and statically verified but is intentionally not applied to a remote Supabase project before PR merge. No extension version bump is required.
+
+Follow-up:
+
+- Review and merge the Phase 3 PR, then apply and verify migration `20260815180105` through the controlled deployment workflow.
+- Begin Phase 4 on `feature/yc-extension-workflow` only after Phase 3 merges.
+- Resolve the root dependency advisories separately through NAK-35 before production release.
+- The existing stale Browserslist-data warning remains tracked separately in Linear issue NAK-32 and does not fail CI.
+
 ### 2026-08-09
 
 Branch: `feature/yc-grounding-context`

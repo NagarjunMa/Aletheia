@@ -37,7 +37,7 @@ const PHRASE_PATTERNS: Array<{ name: string; pattern: RegExp }> = [
   {
     name: "disregard_previous",
     pattern:
-      /(disregard|forget|override|bypass)\s+(prior|previous|all|the|your)\s+(instructions?|rules?|context|prompt|system)/i,
+      /(disregard|forget|override|bypass)\s+(prior|previous|all(?:\s+(?:prior|previous))?|the|your)\s+(instructions?|rules?|context|prompt|system)/i,
   },
   {
     name: "role_marker_at_line_start",

@@ -31,7 +31,10 @@ import {
   CURRENT_EXTENSION_API_VERSION,
   evaluateExtensionContract,
 } from "@/lib/extension-contract";
-import { generateRequestSchema } from "@/app/api/extension/generate/schema";
+import {
+  generateRequestSchema,
+  ycApplicationRequestSchema,
+} from "@/app/api/extension/generate/schema";
 import {
   countWords,
   truncateToWordLimit,
@@ -64,6 +67,7 @@ import {
   refundCreditReservation,
   releaseRateLimitReservation,
 } from "@/modules/outreach/infrastructure/extension-generate.repository";
+import { generateYcApplication } from "@/modules/application-answer/application/generate-yc-application.service";
 
 const log = createLogger("generate-route");
 
@@ -92,6 +96,41 @@ export async function POST(request: NextRequest) {
         { error: "Unauthorized", message: "Valid Bearer token required" },
         { status: 401, headers: corsHeaders },
       );
+    }
+
+    // YC is additive to API v1, but owns a stricter lifecycle: validate and
+    // prepare caller-scoped grounding before rate limiting or billing. Clone
+    // the request so legacy categories retain their established parse order.
+    const dispatchBody = await request
+      .clone()
+      .json()
+      .catch(() => null);
+    if (
+      dispatchBody &&
+      typeof dispatchBody === "object" &&
+      "category" in dispatchBody &&
+      dispatchBody.category === "yc_application"
+    ) {
+      const parsed = ycApplicationRequestSchema.safeParse(dispatchBody);
+      if (!parsed.success) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Invalid request",
+            code: "INVALID_REQUEST",
+            details: toZodErrorDetails(parsed.error),
+          },
+          { status: 400, headers: corsHeaders },
+        );
+      }
+
+      return generateYcApplication({
+        caller: authResult,
+        request: parsed.data,
+        corsHeaders,
+        applicationBaseUrl:
+          process.env.NEXT_PUBLIC_APP_URL ?? request.nextUrl.origin,
+      });
     }
 
     // 2. Fetch user style profile (non-blocking — failure just skips learned style)

@@ -117,13 +117,13 @@ export async function POST(request: NextRequest) {
         rating: approved ? 5 : 1,
         comment: rejectionReason ?? null,
         metadata: {
+          ...(evalMetadata ?? {}),
           category,
           message_length: message.length,
           has_subject: !!subjectLine,
           extension_version: contract.extensionVersion,
           extension_api_version: contract.apiVersion,
           legacy_extension_client: contract.legacyClient,
-          ...(evalMetadata ?? {}),
         },
       });
 

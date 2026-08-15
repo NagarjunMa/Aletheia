@@ -113,7 +113,12 @@ describe("feedbackSchema", () => {
   });
 
   it("accepts all valid category values", () => {
-    const categories = ["linkedin_connection", "cold_email", "linkedin_inmail"];
+    const categories = [
+      "linkedin_connection",
+      "cold_email",
+      "linkedin_inmail",
+      "yc_application",
+    ];
     for (const category of categories) {
       const result = feedbackSchema.safeParse({ ...validPayload, category });
       expect(result.success).toBe(true);
@@ -151,6 +156,52 @@ describe("feedbackSchema", () => {
       },
     });
     expect(result.success).toBe(true);
+  });
+
+  it("accepts YC provenance-safe eval metadata", () => {
+    const result = feedbackSchema.safeParse({
+      ...validPayload,
+      category: "yc_application",
+      evalMetadata: {
+        generationId: "33333333-3333-4333-8333-333333333333",
+        promptVersion: "yc-1.0.0",
+        model: "claude-sonnet-4-6",
+        category: "yc_application",
+        generationTimeMs: 125,
+        inputTokens: 120,
+        outputTokens: 80,
+        profileFieldCount: 2,
+        confirmedEvidenceCount: 1,
+        resumeSource: "user_resumes",
+        injectionTriggered: false,
+        groundingValidationPassed: true,
+      },
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects feedback whose outer category disagrees with eval metadata", () => {
+    const result = feedbackSchema.safeParse({
+      ...validPayload,
+      category: "cold_email",
+      evalMetadata: {
+        generationId: "33333333-3333-4333-8333-333333333333",
+        promptVersion: "yc-1.0.0",
+        model: "claude-sonnet-4-6",
+        category: "yc_application",
+        generationTimeMs: 125,
+        inputTokens: 120,
+        outputTokens: 80,
+        profileFieldCount: 2,
+        confirmedEvidenceCount: 1,
+        resumeSource: "user_resumes",
+        injectionTriggered: false,
+        groundingValidationPassed: true,
+      },
+    });
+
+    expect(result.success).toBe(false);
   });
 
   it("rejects evalMetadata with missing required field", () => {

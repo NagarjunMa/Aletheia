@@ -12,6 +12,7 @@ export const GENERATION_CREDIT_COSTS = {
   linkedin_connection: 2,
   cold_email: 4,
   linkedin_inmail: 4,
+  yc_application: 4,
 } as const;
 
 export type BillableGenerationCategory = keyof typeof GENERATION_CREDIT_COSTS;
