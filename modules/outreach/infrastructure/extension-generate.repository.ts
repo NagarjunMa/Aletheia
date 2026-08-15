@@ -41,7 +41,7 @@ export async function authenticateExtensionRequest(
   } = await getSupabaseAuth().auth.getUser(accessToken);
 
   if (error || !user) return null;
-  return { userId: user.id, email: user.email ?? "" };
+  return { userId: user.id, email: user.email ?? "", accessToken };
 }
 
 export async function checkGenerationRateLimit(

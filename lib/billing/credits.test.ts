@@ -34,6 +34,7 @@ describe("credit billing rules", () => {
     expect(GENERATION_CREDIT_COSTS.linkedin_connection).toBe(2);
     expect(GENERATION_CREDIT_COSTS.cold_email).toBe(4);
     expect(GENERATION_CREDIT_COSTS.linkedin_inmail).toBe(4);
+    expect(GENERATION_CREDIT_COSTS.yc_application).toBe(4);
     expect(CREDIT_PACKS.starter).toMatchObject({
       credits: 60,
       priceUsd: 5,

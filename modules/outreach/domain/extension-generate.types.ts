@@ -1,6 +1,8 @@
 export type AuthenticatedExtensionUser = {
   userId: string;
   email: string;
+  /** Verified caller credential forwarded only to caller-scoped RLS clients. */
+  accessToken: string;
 };
 
 export type RateLimitResult = {
@@ -16,7 +18,4 @@ export type ReservedCredit = {
 };
 
 export type ResumeSource =
-  | "user_resumes"
-  | "profiles"
-  | "legacy_payload"
-  | "none";
+  "user_resumes" | "profiles" | "legacy_payload" | "none";
