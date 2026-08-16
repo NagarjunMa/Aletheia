@@ -15,6 +15,24 @@ import {
 let currentProfile = null;
 let currentOutput = null;
 const BACKGROUND_UNAVAILABLE_CODE = "BACKGROUND_UNAVAILABLE";
+const DEFAULT_API_URL = "https://www.aletheia.live";
+
+function normalizeApiUrl(apiUrl) {
+  let value = String(apiUrl || "").trim();
+  while (value.endsWith("/") && !value.endsWith("://")) {
+    value = value.slice(0, -1);
+  }
+  return value;
+}
+
+async function getConfiguredApiUrl() {
+  const [{ apiBaseUrl }, { apiUrl }] = await Promise.all([
+    chrome.storage.sync.get("apiBaseUrl"),
+    chrome.storage.local.get("apiUrl"),
+  ]);
+
+  return normalizeApiUrl(apiBaseUrl || apiUrl || DEFAULT_API_URL);
+}
 
 function sendBackgroundMessage(message) {
   return new Promise((resolve) => {
@@ -135,6 +153,9 @@ function setupEventListeners() {
   document
     .getElementById("settingsBtn")
     .addEventListener("click", openSettings);
+  document
+    .getElementById("dashboardBtn")
+    ?.addEventListener("click", openDashboard);
 
   // Refresh button
   document.getElementById("refreshBtn").addEventListener("click", () => {
@@ -982,6 +1003,11 @@ async function incrementUsageCount() {
 
 function openSettings() {
   chrome.runtime.openOptionsPage();
+}
+
+async function openDashboard() {
+  const apiUrl = await getConfiguredApiUrl();
+  await chrome.tabs.create({ url: `${apiUrl}/dashboard` });
 }
 
 function showError(message) {

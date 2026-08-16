@@ -104,6 +104,9 @@ function setupEventListeners() {
   document
     .getElementById("disconnectBtn")
     ?.addEventListener("click", handleDisconnect);
+  document
+    .getElementById("openDashboardBtn")
+    ?.addEventListener("click", openDashboard);
 
   document
     .getElementById("manageResumesBtn")
@@ -296,6 +299,11 @@ async function removeLegacyResumeIfServerReady() {
 async function openResumeDashboard() {
   const apiUrl = normalizeApiUrl(currentSettings.apiUrl || DEFAULT_API_URL);
   await chrome.tabs.create({ url: `${apiUrl}/profile` });
+}
+
+async function openDashboard() {
+  const apiUrl = normalizeApiUrl(currentSettings.apiUrl || DEFAULT_API_URL);
+  await chrome.tabs.create({ url: `${apiUrl}/dashboard` });
 }
 
 async function handleConnect() {
