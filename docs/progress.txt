@@ -417,3 +417,41 @@ Follow-up:
 - Collect more accepted/rejected before-after examples for the golden dataset.
 - Add mode-specific client copy or usage guidance only if users still choose the wrong scenario.
 - Evaluate whether a second AI editor pass is needed after observing real generated outputs under `emailMode`.
+
+### 2026-08-16
+
+Branch: `fix/extension-dashboard-access`
+
+Area: Chrome extension navigation and dashboard metrics review
+
+Problem: The extension popup exposed settings but not a direct dashboard link, and the settings page only exposed a resume-specific dashboard path. The dashboard CPL score also needed verification because the UI displayed a CPL field.
+
+Decision: Add direct dashboard access from both extension surfaces without changing auth or generation behavior. Keep resume management linked to `/profile`, and add a general `/dashboard` action. Bump the extension package and manifest version from `1.0.6` to `1.0.7` because packaged extension files changed.
+
+Files changed:
+
+- `ascendia-extension/popup/popup.html`
+- `ascendia-extension/popup/popup.js`
+- `ascendia-extension/settings/settings.html`
+- `ascendia-extension/settings/settings.js`
+- `ascendia-extension/manifest.json`
+- `ascendia-extension/package.json`
+- `ascendia-extension/package-lock.json`
+- `app/api/extension/version/route.test.ts`
+
+Tests/checks:
+
+- `npm --prefix ascendia-extension run security:audit`
+- `npm --prefix ascendia-extension run lint`
+- `npm --prefix ascendia-extension run type-check`
+- `npm --prefix ascendia-extension test`
+- `npm run test -- app/api/extension/version/route.test.ts --run`
+- `npm run check:extension-version -- origin/main`
+- `npm run build:extension`
+
+Result: Extension navigation now opens `/dashboard` from the popup and settings page. CPL score is currently schema/display-backed but not actively calculated in the generation or feedback path; the dashboard reads `profiles.cpl_score` and draft rows read `generated_drafts.cpl_score`, but no active writer was found in the codebase.
+
+Follow-up:
+
+- Implement a real CPL scoring service before treating CPL as a production metric.
+- Add tests around popup/settings dashboard navigation if the extension test harness is expanded for DOM click flows.
