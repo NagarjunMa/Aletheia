@@ -223,6 +223,23 @@ describe("GET /api/extension/session", () => {
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
       );
     });
+
+    it("returns tokens for null-origin requests carrying the extension source header", async () => {
+      // Chrome never attaches Origin to fetches covered by the extension's
+      // host_permissions — this is the actual path the shipped extension
+      // uses. X-Extension-Source is the only identity signal available.
+      const res = await GET(
+        makeRequest({
+          origin: null,
+          headers: { "X-Extension-Source": "aletheia-extension" },
+        }),
+      );
+      expect(res.status).toBe(200);
+
+      const body = await res.json();
+      expect(body.access_token).toBe("test-access");
+      expect(body.refresh_token).toBe("test-refresh");
+    });
   });
 
   describe("Catastrophic Failure", () => {

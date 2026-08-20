@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { createLogger } from "@/lib/logger";
-import { getCorsHeaders, isAllowedExtensionOrigin } from "@/lib/cors";
+import { getCorsHeaders, isApprovedExtensionRequest } from "@/lib/cors";
 import { getExtensionContractResponseHeaders } from "@/lib/extension-contract";
 
 const log = createLogger("extension-session");
@@ -181,8 +181,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const origin = request.headers.get("origin") || "";
-    const isApprovedExtension = isAllowedExtensionOrigin(origin);
+    const isApprovedExtension = isApprovedExtensionRequest(request);
 
     log.info(
       { userId: user.id.substring(0, 8), isApprovedExtension },
