@@ -78,12 +78,19 @@ export function getCorsHeaders(
     ? buildAllowedPatterns().some((p) => p.test(origin))
     : false;
 
-  // Only set ACAO for requests with a recognized origin.
-  // No wildcard fallback for null-origin requests — chrome extension service workers
-  // send origin: chrome-extension://<id> which is matched by ALLOWED_PATTERNS.
-  // The old '*' fallback for x-extension-source header was a CORS bypass risk.
+  // host_permissions-covered fetches from the extension's service worker
+  // never carry an Origin header — Chrome exempts them from CORS entirely.
+  // Treat a verified null-origin extension request as allowed too, echoing
+  // a real configured extension origin — never a '*' wildcard.
+  const isNullOriginExtension = !origin && isApprovedExtensionRequest(request);
+  const treatAsAllowed = isAllowedOrigin || isNullOriginExtension;
+
   let acao = "";
-  if (isAllowedOrigin && origin) acao = origin;
+  if (isAllowedOrigin && origin) {
+    acao = origin;
+  } else if (isNullOriginExtension) {
+    acao = getAllowedExtensionOrigins()[0] ?? "";
+  }
 
   return {
     "Access-Control-Allow-Origin": acao,
@@ -93,7 +100,7 @@ export function getCorsHeaders(
     "Access-Control-Expose-Headers":
       "X-Aletheia-API-Version, X-Aletheia-Minimum-Extension-Version",
     "Access-Control-Allow-Credentials":
-      options.allowCredentials && isAllowedOrigin ? "true" : "",
+      options.allowCredentials && treatAsAllowed && acao ? "true" : "",
     Vary: "Origin",
   };
 }

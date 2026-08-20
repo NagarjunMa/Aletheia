@@ -105,13 +105,11 @@ describe("GET /api/extension/session", () => {
       expect(body.error).toBe("Origin not allowed");
     });
 
-    it("returns 403 for null-origin requests even with the extension source header", async () => {
-      const res = await GET(
-        makeRequest({
-          origin: null,
-          headers: { "X-Extension-Source": "aletheia-extension" },
-        }),
-      );
+    it("returns 403 for null-origin requests without the extension source header", async () => {
+      // Regression guard: a null-origin request with no identifying header
+      // must still be rejected. This is what keeps the fix from reopening
+      // the old wildcard CORS bypass.
+      const res = await GET(makeRequest({ origin: null }));
 
       expect(res.status).toBe(403);
       const body = await res.json();
