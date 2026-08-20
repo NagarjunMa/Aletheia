@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { getCorsHeaders } from "./cors";
+import { getCorsHeaders, isApprovedExtensionRequest } from "./cors";
 
 const EXTENSION_ID = "abcdefghijklmnopabcdefghijklmnop";
 
@@ -260,5 +260,47 @@ describe("getCorsHeaders", () => {
         "https://www.aletheia.live",
       );
     });
+  });
+});
+
+describe("isApprovedExtensionRequest", () => {
+  afterEach(() => {
+    delete process.env.CHROME_EXTENSION_ID;
+    delete process.env.CHROME_EXTENSION_IDS;
+  });
+
+  it("returns true when Origin matches the configured extension origin", () => {
+    process.env.CHROME_EXTENSION_ID = EXTENSION_ID;
+    const req = mockRequest({ origin: `chrome-extension://${EXTENSION_ID}` });
+    expect(isApprovedExtensionRequest(req)).toBe(true);
+  });
+
+  it("returns false when Origin is present but not configured", () => {
+    process.env.CHROME_EXTENSION_ID = EXTENSION_ID;
+    const req = mockRequest({
+      origin: "chrome-extension://badbadbadbadbadbadbadbadbadbadba",
+    });
+    expect(isApprovedExtensionRequest(req)).toBe(false);
+  });
+
+  it("returns true when Origin is null and X-Extension-Source is aletheia-extension", () => {
+    const req = mockRequest({
+      origin: null,
+      extensionSource: "aletheia-extension",
+    });
+    expect(isApprovedExtensionRequest(req)).toBe(true);
+  });
+
+  it("returns false when Origin is null and X-Extension-Source is missing", () => {
+    const req = mockRequest({ origin: null });
+    expect(isApprovedExtensionRequest(req)).toBe(false);
+  });
+
+  it("returns false when Origin is null and X-Extension-Source has the wrong value", () => {
+    const req = mockRequest({
+      origin: null,
+      extensionSource: "some-other-source",
+    });
+    expect(isApprovedExtensionRequest(req)).toBe(false);
   });
 });
