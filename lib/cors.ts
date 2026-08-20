@@ -26,6 +26,15 @@ export function isAllowedExtensionOrigin(origin: string | null): boolean {
   return getAllowedExtensionOrigins().includes(origin.replace(/\/+$/, ""));
 }
 
+export function isApprovedExtensionRequest(request: NextRequest): boolean {
+  const origin = request.headers.get("origin");
+  if (origin) return isAllowedExtensionOrigin(origin);
+  // host_permissions-covered fetches from the extension's service worker
+  // never carry an Origin header — Chrome exempts them from CORS entirely.
+  // X-Extension-Source is the only identity signal available for those.
+  return request.headers.get("x-extension-source") === "aletheia-extension";
+}
+
 function buildAllowedPatterns(): RegExp[] {
   const patterns: RegExp[] = [];
   const deploymentEnv = process.env.VERCEL_ENV ?? process.env.NODE_ENV;
