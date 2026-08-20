@@ -128,7 +128,19 @@ describe("getCorsHeaders", () => {
       );
     });
 
-    it("returns empty for null origin with extension source header (no wildcard bypass)", () => {
+    it("echoes the configured extension origin for null-origin extension requests", () => {
+      process.env.CHROME_EXTENSION_ID = EXTENSION_ID;
+      const headers = getCorsHeaders(
+        mockRequest({ origin: null, extensionSource: "aletheia-extension" }),
+      );
+      expect(headers["Access-Control-Allow-Origin"]).toBe(
+        `chrome-extension://${EXTENSION_ID}`,
+      );
+    });
+
+    it("returns empty ACAO for null-origin extension requests when no extension ID is configured", () => {
+      // Fail-closed: a misconfigured deployment (no CHROME_EXTENSION_ID set)
+      // must not accidentally echo an empty/undefined origin string.
       const headers = getCorsHeaders(
         mockRequest({ origin: null, extensionSource: "aletheia-extension" }),
       );
@@ -232,7 +244,17 @@ describe("getCorsHeaders", () => {
       expect(headers["Access-Control-Allow-Credentials"]).not.toBe("true");
     });
 
-    it("does NOT set credentials for null-origin extension requests", () => {
+    it("sets credentials for null-origin extension requests when an extension ID is configured", () => {
+      process.env.CHROME_EXTENSION_ID = EXTENSION_ID;
+      const headers = getCorsHeaders(
+        mockRequest({ origin: null, extensionSource: "aletheia-extension" }),
+        { allowCredentials: true },
+      );
+      expect(headers["Access-Control-Allow-Credentials"]).toBe("true");
+      delete process.env.CHROME_EXTENSION_ID;
+    });
+
+    it("does NOT set credentials for null-origin extension requests when no extension ID is configured", () => {
       const headers = getCorsHeaders(
         mockRequest({ origin: null, extensionSource: "aletheia-extension" }),
         { allowCredentials: true },
