@@ -19,6 +19,13 @@ const protectedFunctions = [
 ];
 
 describe("credit-based billing migration", () => {
+  it("applies atomically with bounded lock and statement waits", () => {
+    expect(migrationSql).toMatch(/^--[\s\S]*?begin;/);
+    expect(migrationSql).toContain("set local lock_timeout = '5s'");
+    expect(migrationSql).toContain("set local statement_timeout = '60s'");
+    expect(migrationSql.trimEnd().endsWith("commit;")).toBe(true);
+  });
+
   it("creates the public-launch credit model", () => {
     expect(migrationSql).toContain("default 40");
     expect(migrationSql).toContain("'linkedin_connection'");
@@ -62,6 +69,31 @@ describe("credit-based billing migration", () => {
     expect(migrationSql).toContain("for select");
     expect(migrationSql).toContain("to authenticated");
     expect(migrationSql).toContain("using ((select auth.uid()) = user_id)");
+  });
+
+  it("removes default client table grants before restoring authenticated SELECT", () => {
+    expect(migrationSql).toMatch(
+      /revoke all on table public\.user_credit_accounts, public\.credit_ledger[\s\S]*?from anon, authenticated;/,
+    );
+    expect(migrationSql).toContain(
+      "grant select on public.user_credit_accounts to authenticated",
+    );
+    expect(migrationSql).toContain(
+      "grant select on public.credit_ledger to authenticated",
+    );
+  });
+
+  it("qualifies wallet columns that overlap RETURNS TABLE output names", () => {
+    expect(migrationSql).toContain(
+      "update public.user_credit_accounts as account",
+    );
+    expect(migrationSql).toContain("balance = account.balance + p_amount");
+    expect(migrationSql).toContain("balance = account.balance - p_cost");
+    expect(migrationSql).toContain("balance = account.balance + p_credits");
+    expect(migrationSql).toContain(
+      "lifetime_credits_used = greatest(account.lifetime_credits_used - p_amount, 0)",
+    );
+    expect(migrationSql).toContain("select account.balance into v_balance");
   });
 
   it("enforces one trial grant and idempotent purchase/refund ledgers", () => {
