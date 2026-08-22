@@ -4,6 +4,9 @@
 
 BEGIN;
 
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '60s';
+
 ALTER TABLE public.credit_ledger
   DROP CONSTRAINT IF EXISTS credit_ledger_category_check;
 
@@ -55,8 +58,8 @@ BEGIN
   PERFORM public.ensure_credit_account(p_user_id);
 
   SELECT * INTO v_account
-  FROM public.user_credit_accounts
-  WHERE user_id = p_user_id
+  FROM public.user_credit_accounts AS account
+  WHERE account.user_id = p_user_id
   FOR UPDATE;
 
   IF v_account.balance < p_cost THEN
@@ -64,11 +67,11 @@ BEGIN
     RETURN;
   END IF;
 
-  UPDATE public.user_credit_accounts
+  UPDATE public.user_credit_accounts AS account
   SET
-    balance = balance - p_cost,
-    lifetime_credits_used = lifetime_credits_used + p_cost
-  WHERE user_id = p_user_id
+    balance = account.balance - p_cost,
+    lifetime_credits_used = account.lifetime_credits_used + p_cost
+  WHERE account.user_id = p_user_id
   RETURNING * INTO v_account;
 
   INSERT INTO public.credit_ledger (

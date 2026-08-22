@@ -20,6 +20,43 @@ Follow-up:
 
 ## Entries
 
+### 2026-08-22
+
+Branch: `fix/nak-36-credit-billing-migration`
+
+Area: NAK-36 — production credit billing and YC category migration reconciliation
+
+Problem: The linked Supabase project had neither the credit wallet foundation nor the YC billing-category delta, while both migration files were local-only and older migration history remained divergent. The base file was not transaction-wrapped, inherited Supabase default client write grants, and its `RETURNS TABLE(... balance ...)` RPCs used ambiguous unqualified `balance` columns that failed at runtime.
+
+Decision: Avoid blanket `db push`. Confirm the linked project and absent billing objects, add red-first migration safety regressions, wrap both targeted migrations with bounded transactions, revoke default client table grants before restoring owner-only authenticated reads, qualify wallet columns, apply only versions `20260618164022` and `20260815180105`, verify schema/security/behavior, and only then repair those two history entries as applied.
+
+Files changed:
+
+- `supabase/migrations/20260618164022_credit_based_billing.sql`
+- `supabase/migrations/20260815180105_add_yc_application_billing_category.sql`
+- billing migration regression tests
+- `docs/runbooks/credit-billing-migrations.md`
+- `docs/progress.txt`
+
+Tests/checks:
+
+- Red gates reproduced missing transaction bounds, default client grants, and ambiguous wallet-column handling
+- Focused billing migration suite: 2 files and 26 tests passed
+- Linked preflight confirmed `profiles`, required roles, and UUID generation; billing tables/functions/history were absent
+- Catalog verification passed for RLS, owner policies, least-privilege table/RPC grants, fixed function search paths, indexes, trigger, and validated YC category constraint
+- Rollback-only production smoke passed one-time trial grant, four-credit YC reservation, idempotent refund, and idempotent purchase; account and ledger tables remained empty
+- Linked migration history now contains local and remote versions `20260618164022` and `20260815180105`
+- Post-migration Supabase Security and Performance Advisors were rerun with zero errors and no billing-object findings; 38 legacy security warnings and one existing `public.profiles` performance warning remain outside NAK-36
+- Linked full-schema lint reported only unrelated legacy functions referencing absent style/security tables plus an existing unused-variable warning; no billing function compile error remained
+- Full repository CI passed: lint, strict TypeScript, 51 test files / 657 tests, 13 guardrails, and the Next.js production build
+
+Result: The credit wallet and YC billing category are live in Supabase, protected by RLS and least-privilege grants, functionally verified without persisting test transactions, and truthfully recorded in migration history. The exact applied migration SHA-256 values are `d02ef30d4968f28e3060331efadacbb8a726cfc0c87ee699273b5c190a4cbdc6` and `58c1502d13a2da7ff29aff6ab1f25f40ccfda9d7bf23cd624cee575f04dfdc55`.
+
+Follow-up:
+
+- Reconcile unrelated historical migration drift and legacy lint failures separately; do not combine them with NAK-36.
+- Complete the live deployed YC generation acceptance check after this PR is merged and deployed.
+
 ### 2026-08-15
 
 Branch: `feature/yc-extension-workflow`

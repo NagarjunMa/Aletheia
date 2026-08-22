@@ -11,6 +11,13 @@ const migrationSql = readFileSync(
 ).toLowerCase();
 
 describe("YC application billing category migration", () => {
+  it("applies atomically with bounded lock and statement waits", () => {
+    expect(migrationSql).toMatch(/^--[\s\S]*?begin;/);
+    expect(migrationSql).toContain("set local lock_timeout = '5s'");
+    expect(migrationSql).toContain("set local statement_timeout = '60s'");
+    expect(migrationSql.trimEnd().endsWith("commit;")).toBe(true);
+  });
+
   it("extends both the ledger constraint and atomic reservation allowlist", () => {
     expect(migrationSql).toContain(
       "drop constraint if exists credit_ledger_category_check",
@@ -39,6 +46,16 @@ describe("YC application billing category migration", () => {
     );
     expect(migrationSql).not.toMatch(
       /grant execute on function public\.reserve_generation_credits[\s\S]*?to authenticated/,
+    );
+  });
+
+  it("qualifies wallet columns in the replacement reservation RPC", () => {
+    expect(migrationSql).toContain(
+      "update public.user_credit_accounts as account",
+    );
+    expect(migrationSql).toContain("balance = account.balance - p_cost");
+    expect(migrationSql).toContain(
+      "lifetime_credits_used = account.lifetime_credits_used + p_cost",
     );
   });
 });

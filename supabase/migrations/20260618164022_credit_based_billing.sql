@@ -6,6 +6,11 @@
 -- Credits do not expire. The existing daily generation limit remains as a
 -- separate abuse throttle.
 
+BEGIN;
+
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '60s';
+
 CREATE TABLE IF NOT EXISTS public.user_credit_accounts (
   user_id UUID PRIMARY KEY REFERENCES public.profiles(id) ON DELETE CASCADE,
   balance INTEGER NOT NULL DEFAULT 0 CHECK (balance >= 0),
@@ -96,6 +101,9 @@ CREATE POLICY "Users can view own credit ledger"
   TO authenticated
   USING ((SELECT auth.uid()) = user_id);
 
+REVOKE ALL ON TABLE public.user_credit_accounts, public.credit_ledger
+  FROM anon, authenticated;
+
 GRANT SELECT ON public.user_credit_accounts TO authenticated;
 GRANT SELECT ON public.credit_ledger TO authenticated;
 
@@ -147,8 +155,8 @@ BEGIN
   PERFORM public.ensure_credit_account(p_user_id);
 
   SELECT * INTO v_account
-  FROM public.user_credit_accounts
-  WHERE user_id = p_user_id
+  FROM public.user_credit_accounts AS account
+  WHERE account.user_id = p_user_id
   FOR UPDATE;
 
   IF v_account.trial_credits_granted_at IS NOT NULL THEN
@@ -156,11 +164,11 @@ BEGIN
     RETURN;
   END IF;
 
-  UPDATE public.user_credit_accounts
+  UPDATE public.user_credit_accounts AS account
   SET
-    balance = balance + p_amount,
+    balance = account.balance + p_amount,
     trial_credits_granted_at = NOW()
-  WHERE user_id = p_user_id
+  WHERE account.user_id = p_user_id
   RETURNING * INTO v_account;
 
   INSERT INTO public.credit_ledger (
@@ -211,8 +219,8 @@ BEGIN
   PERFORM public.ensure_credit_account(p_user_id);
 
   SELECT * INTO v_account
-  FROM public.user_credit_accounts
-  WHERE user_id = p_user_id
+  FROM public.user_credit_accounts AS account
+  WHERE account.user_id = p_user_id
   FOR UPDATE;
 
   IF v_account.balance < p_cost THEN
@@ -220,11 +228,11 @@ BEGIN
     RETURN;
   END IF;
 
-  UPDATE public.user_credit_accounts
+  UPDATE public.user_credit_accounts AS account
   SET
-    balance = balance - p_cost,
-    lifetime_credits_used = lifetime_credits_used + p_cost
-  WHERE user_id = p_user_id
+    balance = account.balance - p_cost,
+    lifetime_credits_used = account.lifetime_credits_used + p_cost
+  WHERE account.user_id = p_user_id
   RETURNING * INTO v_account;
 
   INSERT INTO public.credit_ledger (
@@ -286,18 +294,18 @@ BEGIN
     WHERE related_ledger_id = p_reservation_id
       AND reason = 'generation_refund'
   ) THEN
-    SELECT balance INTO v_balance
-    FROM public.user_credit_accounts
-    WHERE user_id = p_user_id;
+    SELECT account.balance INTO v_balance
+    FROM public.user_credit_accounts AS account
+    WHERE account.user_id = p_user_id;
     RETURN QUERY SELECT FALSE, v_balance;
     RETURN;
   END IF;
 
-  UPDATE public.user_credit_accounts
+  UPDATE public.user_credit_accounts AS account
   SET
-    balance = balance + p_amount,
-    lifetime_credits_used = GREATEST(lifetime_credits_used - p_amount, 0)
-  WHERE user_id = p_user_id
+    balance = account.balance + p_amount,
+    lifetime_credits_used = GREATEST(account.lifetime_credits_used - p_amount, 0)
+  WHERE account.user_id = p_user_id
   RETURNING * INTO v_account;
 
   INSERT INTO public.credit_ledger (
@@ -362,15 +370,15 @@ BEGIN
   END IF;
 
   SELECT * INTO v_account
-  FROM public.user_credit_accounts
-  WHERE user_id = p_user_id
+  FROM public.user_credit_accounts AS account
+  WHERE account.user_id = p_user_id
   FOR UPDATE;
 
-  UPDATE public.user_credit_accounts
+  UPDATE public.user_credit_accounts AS account
   SET
-    balance = balance + p_credits,
-    lifetime_credits_purchased = lifetime_credits_purchased + p_credits
-  WHERE user_id = p_user_id
+    balance = account.balance + p_credits,
+    lifetime_credits_purchased = account.lifetime_credits_purchased + p_credits
+  WHERE account.user_id = p_user_id
   RETURNING * INTO v_account;
 
   INSERT INTO public.credit_ledger (
@@ -422,3 +430,5 @@ COMMENT ON TABLE public.credit_ledger IS
   'Immutable audit ledger for trial grants, generation debits/refunds, and purchases.';
 COMMENT ON FUNCTION public.reserve_generation_credits(UUID, TEXT, INTEGER) IS
   'Atomically reserves generation credits before Claude calls. Returns allowed=false instead of overdrawing.';
+
+COMMIT;
