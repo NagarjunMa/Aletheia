@@ -1,25 +1,15 @@
-import type { CandidateProfileInput } from "@/lib/candidate-profile/schema";
-import type { CandidateEvidenceRecord } from "@/lib/candidate-profile/service";
+import type {
+  CandidateGroundingSource,
+  CandidateResumeSource,
+} from "@/modules/candidate-context/domain/candidate-context.types";
 
-export type CandidateResumeSource = "user_resumes" | "profiles" | "none";
+export type {
+  CandidateGroundingData,
+  CandidateResumeSource,
+} from "@/modules/candidate-context/domain/candidate-context.types";
 
-export type CandidateGroundingData = {
-  profile: CandidateProfileInput;
-  confirmedEvidence: CandidateEvidenceRecord[];
-  resume: {
-    text: string;
-    source: CandidateResumeSource;
-  };
-};
-
-export type YcGroundingSource = {
-  id: string;
-  type: "evidence" | "profile" | "resume";
-  label: string;
-  content: string;
-  /** Lower numbers are more authoritative. */
-  priority: 1 | 2 | 3;
-};
+/** YC-specific alias retained to preserve the existing public module boundary. */
+export type YcGroundingSource = CandidateGroundingSource;
 
 export type YcGroundingReadiness = {
   ready: boolean;

@@ -34,6 +34,43 @@ const baseInput = {
   intent: "networking" as const,
 };
 
+describe("cold-email grounding prompt", () => {
+  it("serializes only selected candidate sources and requires source IDs", () => {
+    const prompt = buildPrompt({
+      ...baseInput,
+      category: "cold_email",
+      emailMode: "initial_outreach",
+      candidateSources: [
+        {
+          id: "evidence:ai-workflow",
+          type: "evidence",
+          label: "AI workflow",
+          content: "Built an LLM-assisted developer review workflow.",
+          priority: 1,
+        },
+      ],
+    });
+    expect(prompt).toContain("CANDIDATE_GROUNDING");
+    expect(prompt).toContain('id="evidence:ai-workflow"');
+    expect(prompt).toContain(
+      "Built an LLM-assisted developer review workflow.",
+    );
+    expect(prompt).not.toContain(baseInput.resume);
+    expect(COLD_EMAIL_PROMPT).toContain("source_ids");
+  });
+
+  it("uses a no-claim fallback when no selected source exists", () => {
+    const prompt = buildPrompt({
+      ...baseInput,
+      category: "cold_email",
+      emailMode: "follow_up",
+      candidateSources: [],
+    });
+    expect(prompt).toContain("No verified candidate facts are available");
+    expect(prompt).not.toContain(baseInput.resume);
+  });
+});
+
 describe("sanitize", () => {
   it("returns clean text unchanged", () => {
     const text =
@@ -364,7 +401,7 @@ describe("COLD_EMAIL_PROMPT subject line policy", () => {
   ];
 
   it("tracks the prompt behavior change with a new version", () => {
-    expect(PROMPT_VERSION).toBe("1.8.0");
+    expect(PROMPT_VERSION).toBe("2.0.0");
   });
 
   it("documents scenario-specific email modes", () => {
@@ -410,7 +447,7 @@ describe("COLD_EMAIL_PROMPT subject line policy", () => {
       "Proof points must stay visually scannable",
     );
     expect(COLD_EMAIL_PROMPT).toContain(
-      "Return the final draft by calling the provided return_email_draft tool.",
+      "Call the provided return_cold_email_composition tool.",
     );
     expect(COLD_EMAIL_PROMPT).toContain("Do not write JSON manually.");
     expect(COLD_EMAIL_PROMPT).not.toContain("JSON only");

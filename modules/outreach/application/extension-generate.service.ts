@@ -40,6 +40,7 @@ import {
   truncateToWordLimit,
 } from "@/app/api/extension/generate/utils";
 import {
+  candidateContextUnavailableResponse,
   contractFailureResponse,
   createGenerateCorsHeaders,
   createRateLimitHeaders,
@@ -49,9 +50,11 @@ import type {
   ReservedCredit,
   ResumeSource,
 } from "@/modules/outreach/domain/extension-generate.types";
+import type { OutreachGroundingContext } from "@/modules/outreach/domain/outreach-grounding.types";
 import {
   CLAUDE_MODEL,
   createOutreachDraftMessage,
+  getColdEmailDraftToolInput,
   getAnthropicApiErrorStatus,
   getEmailDraftToolInput,
   isAnthropicTimeoutError,
@@ -68,6 +71,9 @@ import {
   releaseRateLimitReservation,
 } from "@/modules/outreach/infrastructure/extension-generate.repository";
 import { generateYcApplication } from "@/modules/application-answer/application/generate-yc-application.service";
+import { prepareOutreachGroundingContext } from "./prepare-outreach-grounding-context";
+import { renderColdEmail } from "./render-cold-email";
+import { validateOutreachDraft } from "./validate-outreach-draft";
 
 const log = createLogger("generate-route");
 
@@ -133,6 +139,28 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // Validate bounded legacy input before reading private candidate context,
+    // then prepare the caller-scoped context before quota or credit mutation.
+    // Phase 1 deliberately does not yet inject these sources into prompts.
+    const validatedData = generateRequestSchema.parse(dispatchBody);
+    let preparedGrounding: OutreachGroundingContext;
+    try {
+      preparedGrounding = await prepareOutreachGroundingContext({
+        caller: authResult,
+        target: {
+          category: validatedData.category,
+          profileMarkdown: validatedData.profileMarkdown,
+          jobDescription: validatedData.jd ?? "",
+          conversationContext: validatedData.conversationContext ?? "",
+        },
+      });
+    } catch {
+      // The preparation service is the private candidate-data boundary.
+      // Its failures are intentionally normalized before any user-resource
+      // reservation or external model call.
+      return candidateContextUnavailableResponse(corsHeaders);
+    }
+
     // 2. Fetch user style profile (non-blocking — failure just skips learned style)
     let styleProfile: StylePatterns | undefined;
     try {
@@ -165,10 +193,6 @@ export async function POST(request: NextRequest) {
     }
     // Mark the slot reserved so a downstream failure can refund it.
     reservedUserId = authResult.userId;
-
-    // 3. Parse and validate request
-    const body = await request.json();
-    const validatedData = generateRequestSchema.parse(body);
 
     const {
       profileMarkdown,
@@ -359,6 +383,9 @@ export async function POST(request: NextRequest) {
       emailMode,
       acceptedExamples: sanitizedExamples || [],
     };
+    if (category === "cold_email") {
+      promptInput.candidateSources = preparedGrounding.sources;
+    }
     if (styleProfile) {
       promptInput.styleProfile = styleProfile;
     }
@@ -371,6 +398,7 @@ export async function POST(request: NextRequest) {
       systemPrompt,
       userPrompt,
       useEmailDraftTool: shouldUseEmailDraftTool,
+      useStructuredColdEmailTool: category === "cold_email",
     });
 
     const processingTime = Date.now() - startTime;
@@ -414,6 +442,7 @@ export async function POST(request: NextRequest) {
       injectionTriggered: injectionScan.triggered,
       safeCandidateSummaryUsed:
         injectionScan.triggered && Boolean(safeCandidateSummary),
+      grounding: preparedGrounding.metadata,
     };
 
     const rateLimitHeaders = createRateLimitHeaders({
@@ -421,8 +450,76 @@ export async function POST(request: NextRequest) {
       dailyLimit: getDailyLimit(),
     });
 
-    // Parse response based on category with validation
-    if (category === "cold_email" || category === "linkedin_inmail") {
+    // Cold email is rendered only from validated semantic composition. The
+    // source ledger and identity stay server-side and are never public.
+    if (category === "cold_email") {
+      try {
+        const draft = validateOutreachDraft({
+          draft: getColdEmailDraftToolInput(response),
+          sources: preparedGrounding.sources,
+        });
+        const rendered = renderColdEmail({
+          draft,
+          identity: preparedGrounding.identity,
+          mode: emailMode,
+        });
+        const subject = sanitize(stripModelPreambleAndSuffix(rendered.subject));
+        const body = stripModelPreambleAndSuffix(rendered.body)
+          .split(/\n{2,}/u)
+          .map((paragraph) => sanitize(paragraph))
+          .filter(Boolean)
+          .join("\n\n");
+
+        reservedUserId = undefined;
+        reservedCredit = undefined;
+        return NextResponse.json(
+          {
+            success: true,
+            subject_line: subject,
+            body,
+            category,
+            word_count: countWords(body),
+            character_count: body.length,
+            usage: tokenUsage,
+            processingTime,
+            evalMetadata: {
+              ...evalMetadata,
+              identityIncluded: rendered.identityIncluded,
+            },
+            ...(CREDIT_BILLING_ENABLED
+              ? {
+                  billingMode,
+                  creditCost,
+                  creditsRemaining,
+                  unlimitedCredits: unlimitedCreditUser,
+                }
+              : {}),
+          },
+          { headers: { ...corsHeaders, ...rateLimitHeaders } },
+        );
+      } catch (parseError) {
+        log.warn(
+          { err: parseError, category },
+          "Failed to validate cold email composition",
+        );
+        if (reservedCredit) {
+          await refundCreditReservation(reservedCredit, "parse_failed");
+          reservedCredit = undefined;
+        }
+        await releaseRateLimitReservation(authResult.userId);
+        reservedUserId = undefined;
+        return NextResponse.json(
+          {
+            error: "Generation format error, please retry",
+            code: "PARSE_FAILED",
+          },
+          { status: 502, headers: { ...corsHeaders, ...rateLimitHeaders } },
+        );
+      }
+    }
+
+    // LinkedIn InMail retains its existing body-only contract.
+    if (category === "linkedin_inmail") {
       try {
         const parsed = getEmailDraftToolInput(response);
         const basicSubjectSanitization = sanitize(

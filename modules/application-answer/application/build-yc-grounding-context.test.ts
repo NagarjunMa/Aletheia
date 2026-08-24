@@ -32,6 +32,7 @@ function groundingData(
   overrides: Partial<CandidateGroundingData> = {},
 ): CandidateGroundingData {
   return {
+    identity: { fullName: "", linkedinUrl: "" },
     profile: candidateProfileInputSchema.parse({
       currentRole: "Platform Engineer",
       currentResponsibilities: "Own production delivery and reliability.",

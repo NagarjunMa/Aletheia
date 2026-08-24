@@ -8,6 +8,7 @@ import {
 import { POST } from "./route";
 import { makeRequest } from "@/__tests__/helpers/request";
 import { getCorsHeaders } from "@/lib/cors";
+import { OutreachGroundingUnavailableError } from "@/modules/outreach/domain/outreach-grounding.types";
 
 // ─── Hoisted mocks ────────────────────────────────────────────────────────────
 const mockAuthGetUser = vi.hoisted(() => vi.fn());
@@ -22,6 +23,7 @@ const mockFrom = vi.hoisted(() =>
 );
 const mockAnthropicCreate = vi.hoisted(() => vi.fn());
 const mockGenerateYcApplication = vi.hoisted(() => vi.fn());
+const mockPrepareOutreachGroundingContext = vi.hoisted(() => vi.fn());
 
 // ─── Module mocks ─────────────────────────────────────────────────────────────
 vi.mock("@supabase/supabase-js", () => ({
@@ -62,6 +64,13 @@ vi.mock(
   () => ({ generateYcApplication: mockGenerateYcApplication }),
 );
 
+vi.mock(
+  "@/modules/outreach/application/prepare-outreach-grounding-context",
+  () => ({
+    prepareOutreachGroundingContext: mockPrepareOutreachGroundingContext,
+  }),
+);
+
 vi.mock("@/lib/cors", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/cors")>();
   return {
@@ -93,6 +102,7 @@ beforeEach(() => {
   mockRpc.mockReset();
   mockAnthropicCreate.mockReset();
   mockGenerateYcApplication.mockReset();
+  mockPrepareOutreachGroundingContext.mockReset();
   vi.mocked(getCorsHeaders).mockClear();
 
   mockAuthGetUser.mockResolvedValue({
@@ -125,6 +135,18 @@ beforeEach(() => {
       },
     ),
   );
+  mockPrepareOutreachGroundingContext.mockResolvedValue({
+    identity: { fullName: "Candidate Name", linkedinUrl: "" },
+    sources: [],
+    metadata: {
+      groundingLevel: "target_only",
+      fallbackReason: "no_resume_context",
+      selectedSourceCount: 0,
+      selectedEvidenceCount: 0,
+      selectedSourceKinds: [],
+      injectionSafeMode: false,
+    },
+  });
 });
 
 const validPayload = {
@@ -144,6 +166,25 @@ function emailDraftToolBlock(input: {
     id: "toolu_test",
     name: "return_email_draft",
     input,
+  };
+}
+
+function coldEmailCompositionBlock(overrides: Record<string, unknown> = {}) {
+  return {
+    type: "tool_use",
+    id: "toolu_cold_email",
+    name: "return_cold_email_composition",
+    input: {
+      subject_line: "Mock Subject",
+      greeting: "Megan",
+      target_opening: "Your product work stood out.",
+      candidate_positioning:
+        "I build practical software for engineering teams.",
+      proof_points: [],
+      value_statement: "That background maps well to the role.",
+      cta: "Would you be open to a brief chat?",
+      ...overrides,
+    },
   };
 }
 
@@ -420,6 +461,25 @@ describe("POST /api/extension/generate", () => {
     expect(body.error).toBe("Daily limit reached");
   });
 
+  it("returns candidate-context 503 before rate-limit or model work", async () => {
+    mockPrepareOutreachGroundingContext.mockRejectedValueOnce(
+      new OutreachGroundingUnavailableError(),
+    );
+    const res = await POST(
+      makeRequest({
+        method: "POST",
+        headers: { authorization: "Bearer test" },
+        body: validPayload,
+      }),
+    );
+    expect(res.status).toBe(503);
+    await expect(res.json()).resolves.toMatchObject({
+      code: "CANDIDATE_CONTEXT_UNAVAILABLE",
+    });
+    expect(mockRpc).not.toHaveBeenCalled();
+    expect(mockAnthropicCreate).not.toHaveBeenCalled();
+  });
+
   it("returns 500 when Anthropic fails or returns no content", async () => {
     mockAnthropicCreate.mockResolvedValueOnce({
       content: [],
@@ -440,13 +500,7 @@ describe("POST /api/extension/generate", () => {
 
   it("reads cold email content from the forced email draft tool", async () => {
     mockAnthropicCreate.mockResolvedValueOnce({
-      content: [
-        emailDraftToolBlock({
-          subject_line: "Mock Subject",
-          body: "Mock Body",
-          word_count: 2,
-        }),
-      ],
+      content: [coldEmailCompositionBlock()],
       usage: { input_tokens: 10, output_tokens: 20 },
     });
 
@@ -461,26 +515,24 @@ describe("POST /api/extension/generate", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.subject_line).toBe("Mock Subject");
-    expect(body.body).toBe("Mock Body");
+    expect(body.body).toContain("Hi Megan,");
     const callArgs = mockAnthropicCreate.mock.calls[0]?.[0];
     expect(callArgs.tools).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ name: "return_email_draft" }),
+        expect.objectContaining({ name: "return_cold_email_composition" }),
       ]),
     );
     expect(callArgs.tool_choice).toEqual({
       type: "tool",
-      name: "return_email_draft",
+      name: "return_cold_email_composition",
     });
   });
 
   it("formats cold email bodies and returns emailMode in eval metadata", async () => {
     mockAnthropicCreate.mockResolvedValueOnce({
       content: [
-        emailDraftToolBlock({
+        coldEmailCompositionBlock({
           subject_line: "Backend Engineering Interest",
-          body: "Hi Megan, I'm Nagarjun - backend/ML engineer based in NYC. Found you through Bountiful's YC listing. On the technical side, I've built RAG-based AI systems with Python and FastAPI. interested in a quick chat, or happy to share more context first? Thanks either way. Nagarjun",
-          word_count: 43,
         }),
       ],
       usage: { input_tokens: 100, output_tokens: 80 },
@@ -501,10 +553,8 @@ describe("POST /api/extension/generate", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.body).toContain("Hi Megan,\n\n");
-    expect(body.body).toContain("I'm Nagarjun, backend/ML engineer");
-    expect(body.body).toContain("\n\nOn the technical side,");
-    expect(body.body).toContain("\n\nInterested in a quick chat");
-    expect(body.body).toContain("Thanks either way,\nNagarjun");
+    expect(body.body).toContain("Would you be open to a brief chat?");
+    expect(body.body).toContain("Best,\nCandidate Name");
     expect(body.evalMetadata.emailMode).toBe("initial_outreach");
   });
 
@@ -677,11 +727,15 @@ describe("POST /api/extension/generate", () => {
         {
           type: "tool_use",
           id: "toolu_test",
-          name: "return_email_draft",
+          name: "return_cold_email_composition",
           input: {
             subject_line: "",
-            body: "Missing a valid subject line.",
-            word_count: 5,
+            greeting: "Megan",
+            target_opening: "Target work.",
+            candidate_positioning: "Candidate work.",
+            proof_points: [],
+            value_statement: "Value.",
+            cta: "Chat?",
           },
         },
       ],

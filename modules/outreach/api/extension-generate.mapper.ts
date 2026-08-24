@@ -45,3 +45,16 @@ export function contractFailureResponse(
     headers,
   });
 }
+
+export function candidateContextUnavailableResponse(
+  headers: Record<string, string>,
+) {
+  return NextResponse.json(
+    {
+      success: false,
+      error: "Candidate context is temporarily unavailable",
+      code: "CANDIDATE_CONTEXT_UNAVAILABLE",
+    },
+    { status: 503, headers },
+  );
+}
