@@ -1,7 +1,7 @@
-import { Clock, Bot, Sparkles } from "lucide-react";
+import { BookOpenCheck, MessagesSquare, PencilLine } from "lucide-react";
 
 type Card = {
-  icon: typeof Clock;
+  icon: typeof BookOpenCheck;
   badge: string;
   title: string;
   body: string;
@@ -10,24 +10,24 @@ type Card = {
 
 const cards: Card[] = [
   {
-    icon: Clock,
-    badge: "The context problem",
-    title: "Good messages need more than a template.",
-    body: "A useful first message needs context: who they are, what they work on, why you are reaching out, and where your background fits.",
+    icon: BookOpenCheck,
+    badge: "Choose the material",
+    title: "Start with the details that matter.",
+    body: "A considered introduction begins with the profile or opportunity in front of you, the reason you are writing, and the experience you want to bring into view.",
     tag: "01",
   },
   {
-    icon: Bot,
-    badge: "The generic draft problem",
-    title: "Most AI drafts sound too polished.",
-    body: "Basic prompts often mention too much, miss the real reason for reaching out, or produce a message that does not sound like something you would send.",
+    icon: PencilLine,
+    badge: "Keep it bounded",
+    title: "A useful draft is specific, not expansive.",
+    body: "Aletheia helps turn selected context into a concise starting point, so you can focus on relevance, tone, and the next step rather than a blank page.",
     tag: "02",
   },
   {
-    icon: Sparkles,
-    badge: "The Aletheia way",
-    title: "You stay specific and in control.",
-    body: "Choose the context, pick the message type, review the draft, and decide what to use. Approved drafts help Aletheia learn the structure and wording you prefer.",
+    icon: MessagesSquare,
+    badge: "Make it yours",
+    title: "Your judgment remains the final edit.",
+    body: "Review, revise, copy, approve, or reject every draft. Feedback can help Aletheia learn your preferred structure and wording, but it never decides what to send.",
     tag: "03",
   },
 ];
@@ -56,7 +56,7 @@ export default function WhyAletheia() {
                 letterSpacing: "-0.02em",
               }}
             >
-              For messages that need{" "}
+              For messages that deserve{" "}
               <em style={{ fontStyle: "italic", fontWeight: 400 }}>
                 more than a template
               </em>
@@ -67,9 +67,8 @@ export default function WhyAletheia() {
             className="text-base leading-relaxed"
             style={{ color: "var(--l-text-muted)" }}
           >
-            Aletheia is for students, job seekers, engineers, founders, and
-            professionals who want a first message to be specific without
-            spending too much time rewriting the same opener.
+            Aletheia is for people who want professional outreach to reflect
+            genuine context—without losing an afternoon to the first sentence.
           </p>
         </div>
 

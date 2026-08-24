@@ -43,11 +43,12 @@ export default function PrivacyPage() {
         <Section title="1. Who we are">
           <p>
             Aletheia is a Chrome extension and web service that helps people
-            draft LinkedIn connection notes, networking emails, follow-ups, and
-            role-fit replies. Aletheia is operated by {OPERATOR_NAME}, an
-            individual sole developer based in {OPERATOR_LOCATION}. We are not a
-            registered corporation. Aletheia is not affiliated with, endorsed
-            by, or sponsored by LinkedIn Corporation.
+            prepare LinkedIn connection notes, cold email, InMail, follow-ups,
+            role-fit replies, and grounded YC application answers. Aletheia is
+            operated by {OPERATOR_NAME}, an individual sole developer based in{" "}
+            {OPERATOR_LOCATION}. We are not a registered corporation. Aletheia
+            is not affiliated with, endorsed by, or sponsored by LinkedIn
+            Corporation.
           </p>
           <p>
             Questions or requests: <ContactLink />.
@@ -58,18 +59,22 @@ export default function PrivacyPage() {
           <p>We collect only what we need to operate the service:</p>
           <ul>
             <li>
-              <strong>Selected profile context</strong> from the page you choose
-              to reference — such as name, headline, location, about section,
-              experience, recent posts, skills, and profile URL. This is used
+              <strong>Selected supported-page context</strong> from the LinkedIn
+              or Apollo page you choose to reference — such as name, headline,
+              location, role, and profile or opportunity details. This is used
               only when you request a draft.
             </li>
             <li>
-              <strong>Resume and opportunity context</strong> you provide in
-              Aletheia. Used to ground drafts in your real background.
+              <strong>
+                Resume, opportunity, and confirmed evidence context
+              </strong>{" "}
+              you provide in Aletheia. This supports professional drafts and
+              grounded YC application answers from your recorded background.
             </li>
             <li>
               <strong>Generated drafts</strong>, plus accept/reject feedback you
-              give. Used to improve future drafts for your account.
+              give. This feedback can be used to improve future drafts for your
+              account.
             </li>
             <li>
               <strong>Account email</strong> you sign up with, plus auth tokens
@@ -81,9 +86,10 @@ export default function PrivacyPage() {
             </li>
           </ul>
           <p>
-            We do <em>not</em> collect: payment card numbers (no paid tier yet),
+            We do <em>not</em> collect: payment card numbers through Aletheia,
             LinkedIn passwords, LinkedIn cookies belonging to third parties, or
-            messages from people other than you.
+            messages from people other than you. Aletheia currently provides a
+            trial only; refill checkout is not available.
           </p>
         </Section>
 
@@ -157,6 +163,11 @@ export default function PrivacyPage() {
           <p>
             The web app sets only the cookies required for sign-in (Supabase
             session cookies). No advertising or cross-site tracking cookies.
+          </p>
+          <p>
+            If you choose auto-fill, the extension places a reviewed draft into
+            a supported compose field. It does not click Send, submit forms, or
+            otherwise send messages for you.
           </p>
           <p>
             The Chrome extension uses <code>chrome.storage.local</code> to

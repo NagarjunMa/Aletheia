@@ -1,25 +1,24 @@
 export const SAMPLE_PROFILE = {
-  name: "Priya Raman",
-  headline: "Senior ML Engineer at DeepMind · ex-Stripe",
-  location: "London, United Kingdom",
+  name: "Elena Park",
+  headline: "Applied Systems Engineer at Harborline Systems (fictional)",
+  location: "Northbridge, United States (fictional)",
   about:
-    "ML engineer focused on inference-time efficiency. Previously built fraud models at Stripe. Recent talk on sparse attention at NeurIPS 2025.",
+    "Applied systems engineer focused on practical reliability for small teams. Recent internal note on reducing handoffs in field operations.",
   experience: [
-    "Senior ML Engineer, Google DeepMind — 2024 to present",
-    "Senior ML Engineer, Stripe — 2020 to 2024",
-    "ML Engineer, Two Sigma — 2018 to 2020",
+    "Applied Systems Engineer, Harborline Systems (fictional) — 2024 to present",
+    "Platform Engineer, Linden Works (fictional) — 2021 to 2024",
+    "Systems Analyst, Oak Street Labs (fictional) — 2019 to 2021",
   ],
   recentPost:
-    "After two months on sparse-attention inference, the real win wasn't latency — it was the smaller models we could now deploy to edge.",
+    "The useful operational change was not another dashboard—it was reducing the number of handoffs a field team needed to complete the work.",
 };
 
-export const SAMPLE_RESUME = `Nagarjun Mallesh — MS Computer Science, Boston University.
-Built fraud-detection pipelines processing 4M events/day at a fintech startup.
-Open-source contributor: pytorch/serve. Looking for ML infra roles where inference cost matters.`;
+export const SAMPLE_RESUME = `Alex Rowan (fictional) — MS in Information Systems.
+Built workflow tools for a small logistics team and maintained data-quality checks for daily operations.
+Interested in practical systems work where better handoffs reduce the burden on people.`;
 
 export const SAMPLE_DRAFT = {
   category: "linkedin_connection" as const,
-  body: "Hi Priya — read your NeurIPS talk on sparse attention. I worked on inference-cost reduction at a fintech (smaller scale, fraud pipelines) and the edge-deploy angle in your recent post matched what we saw — smaller models often unlocked more than raw latency. Would love to follow your work.",
-  character_count: 322,
-  processingTime: 7400,
+  body: "Hi Elena — your note on reducing field-team handoffs stood out. I have worked on smaller operational workflows where clearer ownership made the biggest difference, and your focus on making the work easier for the people doing it resonated. I would value following what your team is learning.",
+  character_count: 298,
 };

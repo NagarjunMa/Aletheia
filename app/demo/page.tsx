@@ -3,9 +3,9 @@ import Link from "next/link";
 import DemoExample from "@/components/demo/DemoExample";
 
 export const metadata: Metadata = {
-  title: "Demo — see a real draft | Aletheia",
+  title: "Illustrative example | Aletheia",
   description:
-    "See a sample Aletheia draft. No sign-up, no install, just one rendered example.",
+    "Explore a fictional, illustrative Aletheia workflow. See how selected context becomes a professional draft for you to review.",
 };
 
 export default function DemoPage() {
@@ -31,16 +31,31 @@ export default function DemoPage() {
             color: "var(--l-text)",
           }}
         >
-          One context. One reviewed draft.
+          One illustrative context. One reviewed draft.
         </h1>
         <p
           className="mb-12 max-w-2xl text-sm"
           style={{ color: "var(--l-text-muted)" }}
         >
-          This sample shows the kind of concise draft Aletheia is designed to
-          prepare. No sign-up. No install. If the note below sounds like
-          something you would actually edit and send, the product follows the
-          same review-first workflow.
+          This sample demonstrates format and workflow—not a customer outcome.
+          Every name, company, achievement, and message below is fictional.
+          Aletheia uses the same review-first approach when you choose your own
+          context.
+        </p>
+
+        <p
+          className="mb-8 border px-4 py-3 text-xs leading-relaxed"
+          style={{
+            borderColor: "var(--l-border)",
+            background: "var(--l-surface)",
+            color: "var(--l-text-muted)",
+          }}
+        >
+          <strong style={{ color: "var(--l-text)" }}>
+            Illustrative data only.
+          </strong>{" "}
+          This page does not show a real person, customer, company relationship,
+          or generated customer message.
         </p>
 
         <DemoExample />

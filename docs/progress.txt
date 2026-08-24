@@ -22,6 +22,37 @@ Follow-up:
 
 ### 2026-08-24
 
+Branch: `feat/ale-33-landing-trust-seo`
+
+Area: ALE-33 — landing-page trust, positioning, and SEO refresh
+
+Problem: The public site described unavailable paid packs, labeled fictional demo data as a real draft, used stale canonical fallbacks, and did not clearly distinguish optional field auto-fill from sending.
+
+Decision: Replace transactional framing and pseudo-metrics with a review-first product narrative and verifiable public trust links. Publish only the implemented 40-credit trial, use fictional demo data, add a generated truthful Open Graph product preview, and align public legal/install/metadata surfaces with committed product behavior.
+
+Files changed:
+
+- Landing narrative, trust, pricing, navigation, FAQ, CTA, and footer components
+- Public demo, install, privacy, terms, SEO metadata, robots, sitemap, and Open Graph route
+- Playwright public-content and illustrative-demo regression coverage
+
+Tests/checks:
+
+- Strict TypeScript and lint passed
+- Unit suite: 57 files / 681 tests passed
+- Guardrails: 13 tests passed
+- Public Playwright smoke/content suite: 12 tests passed
+- Next.js production build and `git diff --check` passed
+- Manual responsive inspection at 390px verified no horizontal overflow
+
+Result: Public copy now clearly states user review and no-send boundaries, optional supported-field fill, current trial-only pricing, fictional demo data, public trust destinations, and canonical `www.aletheia.live` metadata.
+
+Follow-up:
+
+- Review the scoped change set, commit it, open the ALE-33 PR, and perform post-deployment route/metadata verification after merge.
+
+### 2026-08-24
+
 Branch: `test/ale-24-nordnet-cold-email-regressions`
 
 Area: ALE-24 — synthetic Nordnet cold-email quality regression

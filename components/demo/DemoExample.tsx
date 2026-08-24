@@ -20,7 +20,7 @@ export default function DemoExample() {
           className="mb-3 text-[0.65rem] tracking-widest uppercase"
           style={{ color: "var(--l-text-dim)" }}
         >
-          Input — LinkedIn profile + your resume
+          Illustrative input — selected profile + your resume
         </p>
         <h3
           style={{
@@ -73,7 +73,8 @@ export default function DemoExample() {
           className="mb-3 text-[0.65rem] tracking-widest uppercase"
           style={{ color: "var(--l-blue)" }}
         >
-          Output — connection note ({SAMPLE_DRAFT.character_count} chars)
+          Illustrative output — connection note ({SAMPLE_DRAFT.character_count}{" "}
+          chars)
         </p>
         <p
           data-testid="demo-draft"
@@ -86,8 +87,7 @@ export default function DemoExample() {
           {SAMPLE_DRAFT.body}
         </p>
         <p className="mt-6 text-xs" style={{ color: "var(--l-text-dim)" }}>
-          Generated in {SAMPLE_DRAFT.processingTime / 1000}s · sanitised · AI
-          fingerprints stripped
+          Fictional example · review and edit before using
         </p>
       </section>
     </div>

@@ -31,8 +31,8 @@ export default function FounderNote() {
             letterSpacing: "-0.015em",
           }}
         >
-          I built Aletheia because I wanted to keep writing personal notes —
-          without spending my afternoon on each one.
+          I built Aletheia because context switching should not be the hardest
+          part of a thoughtful introduction.
         </h2>
 
         <div
@@ -48,23 +48,21 @@ export default function FounderNote() {
 
           <p>
             For a while, every LinkedIn connection note I sent was handwritten.
-            I would read the profile, check my resume for the right overlap,
-            write the opener, and trim it until it sounded like me. One message
-            was manageable. Twenty messages took the morning.
+            I would read the profile, look for the relevant part of my own
+            background, write an opener, and trim it until it felt honest. One
+            message was manageable. Repeating that context switch was not.
           </p>
 
           <p>
-            I tried letting a large language model do the writing. The drafts
-            were fast, but they read like drafts a model wrote — wrong tone, the
-            em-dash watermark, opening lines I would never use, twice the length
-            any thoughtful note should be. Sending those didn&apos;t feel like
-            me. The reply rate said the same.
+            The point was never to hand judgment to a model. I wanted a place to
+            bring the right source material together, keep the factual boundary
+            clear, and start from a draft I could make my own.
           </p>
 
           <p>
-            Aletheia is the in-between I wanted. It uses the context I choose,
-            the primary resume in my account, and the intent behind the message
-            to prepare a short draft that I review before I send.
+            Aletheia is that in-between. It uses the context I choose, the
+            source material I have recorded, and the purpose behind the message
+            to prepare a draft that I review before I act.
           </p>
 
           <p style={{ color: "var(--l-text)" }}>

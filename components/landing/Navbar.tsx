@@ -7,12 +7,15 @@ import { Menu, X } from "lucide-react";
 
 const CHROME_WEB_STORE_URL: string =
   process.env.NEXT_PUBLIC_CHROME_WEB_STORE_URL ??
-  "https://chromewebstore.google.com/search/Aletheia";
+  "https://chromewebstore.google.com/detail/pneenlhefkghefjpaafgllkjkpfjnkgg";
 
 const navLinks = [
-  { label: "Features", href: "#features" },
-  { label: "Process", href: "#how-it-works" },
+  { label: "Product", href: "#product" },
+  { label: "How it works", href: "#how-it-works" },
+  { label: "Application answers", href: "#application-answers" },
+  { label: "Trust", href: "#trust" },
   { label: "Pricing", href: "#pricing" },
+  { label: "FAQ", href: "#faq" },
 ];
 
 export default function Navbar() {

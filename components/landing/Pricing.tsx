@@ -1,246 +1,93 @@
-type Tier = {
-  name: string;
-  monthlyPrice: number | null;
-  period: string;
-  description: string;
-  cta: string;
-  ctaHref: string;
-  download: boolean;
-  highlighted: boolean;
-  badge?: string;
-  features: string[];
-};
-
-// TODO(stripe): Wire these dashboard CTAs to Stripe Checkout once the webhook
-// is ready to apply purchased credits through apply_credit_purchase().
-const tiers: Tier[] = [
-  {
-    name: "Trial",
-    monthlyPrice: 0,
-    period: "/trial",
-    description:
-      "40 credits to try connection notes, networking emails, follow-ups, and role-fit replies.",
-    cta: "Get on Chrome",
-    ctaHref: "/install",
-    download: false,
-    highlighted: false,
-    features: [
-      "40 credits with no expiry",
-      "2 credits per connection note",
-      "4 credits per email or follow-up",
-      "Daily limits keep usage reliable",
-    ],
-  },
-  {
-    name: "Starter",
-    monthlyPrice: 5,
-    period: "one-time",
-    description: "60 credits for focused job-search or networking use.",
-    cta: "View Credits",
-    ctaHref: "/dashboard",
-    download: false,
-    highlighted: false,
-    features: [
-      "60 credits",
-      "Up to 30 LinkedIn connection notes",
-      "Up to 15 emails or follow-ups",
-      "Credits never expire",
-    ],
-  },
-  {
-    name: "Plus",
-    monthlyPrice: 7,
-    period: "one-time",
-    description: "100 credits for regular drafting during an active search.",
-    cta: "View Credits",
-    ctaHref: "/dashboard",
-    download: false,
-    highlighted: true,
-    badge: "RECOMMENDED",
-    features: [
-      "100 credits",
-      "Up to 50 LinkedIn connection notes",
-      "Up to 25 emails or follow-ups",
-      "Useful for weekly networking",
-    ],
-  },
-  {
-    name: "Pro",
-    monthlyPrice: 20,
-    period: "one-time",
-    description: "500 credits for heavier drafting needs.",
-    cta: "View Credits",
-    ctaHref: "/dashboard",
-    download: false,
-    highlighted: false,
-    features: [
-      "500 credits",
-      "Up to 250 LinkedIn connection notes",
-      "Up to 125 emails or follow-ups",
-      "No credit expiry",
-    ],
-  },
+const trialDetails = [
+  "40 trial credits, granted once per account",
+  "2 credits for a LinkedIn connection note",
+  "4 credits for cold email, InMail, or a YC application answer",
+  "Credits do not expire; daily safeguards still apply",
 ];
 
 export default function Pricing() {
   return (
     <section
       id="pricing"
-      className="relative py-28 px-5 sm:px-8"
+      className="relative px-5 py-28 sm:px-8"
       style={{ background: "var(--l-bg)" }}
     >
       <div className="divider" />
-
-      <div className="mx-auto max-w-7xl pt-20">
-        {/* Header */}
-        <div className="landing-section-reveal mb-14 text-center">
-          <span
-            className="section-label mb-5 block mx-auto"
-            style={{ width: "fit-content" }}
-          >
-            Pricing
+      <div className="mx-auto max-w-5xl pt-20">
+        <div className="landing-section-reveal mx-auto mb-14 max-w-2xl text-center">
+          <span className="section-label mx-auto mb-5 block w-fit">
+            Current access
           </span>
           <h2
             style={{
               fontFamily: "var(--font-flaviotte), Playfair Display, serif",
               fontWeight: 900,
-              fontSize: "clamp(1.6rem, 3.5vw, 2.5rem)",
+              fontSize: "clamp(1.8rem, 3.8vw, 2.7rem)",
               lineHeight: 1.08,
               color: "var(--l-text)",
               letterSpacing: "-0.02em",
             }}
           >
-            Start with 40 credits.{" "}
-            <em style={{ fontStyle: "italic" }}>Refill when you need to.</em>
+            Start with the work in front of you.
           </h2>
+          <p
+            className="mt-5 text-sm leading-relaxed"
+            style={{ color: "var(--l-text-muted)" }}
+          >
+            Aletheia currently includes a 40-credit trial. Refill checkout is
+            not available yet, so no paid plan or purchase is being advertised
+            here.
+          </p>
         </div>
 
-        {/* Pricing cards */}
         <div
-          className="grid gap-px mx-auto max-w-5xl md:grid-cols-2 lg:grid-cols-4"
-          style={{ background: "var(--l-border)" }}
+          className="landing-section-reveal mx-auto max-w-2xl p-8 sm:p-10"
+          style={{
+            background: "var(--l-surface)",
+            border: "1px solid var(--l-border)",
+          }}
         >
-          {tiers.map((tier, i) => {
-            const displayPrice =
-              tier.monthlyPrice === null
-                ? "Custom"
-                : tier.monthlyPrice === 0
-                  ? "$0"
-                  : `$${tier.monthlyPrice}`;
-
-            return (
-              <div
-                key={tier.name}
-                className="landing-section-reveal relative flex flex-col p-10"
+          <div className="flex flex-col justify-between gap-6 sm:flex-row sm:items-start">
+            <div>
+              <p
+                className="text-[10px] font-bold uppercase tracking-[0.2em]"
+                style={{ color: "var(--l-blue)" }}
+              >
+                Trial
+              </p>
+              <p
+                className="mt-3 text-5xl"
                 style={{
-                  background: tier.highlighted
-                    ? "var(--l-surface-2)"
-                    : "var(--l-surface)",
-                  animationDelay: `${i * 0.08}s`,
+                  fontFamily: "var(--font-flaviotte), Playfair Display, serif",
+                  color: "var(--l-text)",
+                  fontWeight: 900,
+                  fontStyle: "italic",
                 }}
               >
-                {/* Badge */}
-                {tier.badge && (
-                  <div className="mb-4">
-                    <span
-                      style={{
-                        display: "inline-block",
-                        padding: "3px 10px",
-                        fontSize: "0.6rem",
-                        fontWeight: 800,
-                        letterSpacing: "0.18em",
-                        textTransform: "uppercase",
-                        background: "var(--l-blue)",
-                        color: "var(--l-bg)",
-                      }}
-                    >
-                      {tier.badge}
-                    </span>
-                  </div>
-                )}
-
-                {/* Tier name */}
-                <p
-                  style={{
-                    marginBottom: "0.25rem",
-                    fontSize: "0.6rem",
-                    fontWeight: 800,
-                    letterSpacing: "0.2em",
-                    textTransform: "uppercase",
-                    color: tier.highlighted
-                      ? "var(--l-blue)"
-                      : "var(--l-text-dim)",
-                  }}
-                >
-                  {tier.name}
-                </p>
-
-                {/* Price */}
-                <div className="flex items-end gap-1 mb-5">
-                  <span
-                    style={{
-                      fontFamily:
-                        "var(--font-flaviotte), Playfair Display, serif",
-                      fontSize: "3.2rem",
-                      fontWeight: 900,
-                      lineHeight: 1,
-                      color: "var(--l-text)",
-                      fontStyle: "italic",
-                    }}
-                  >
-                    {displayPrice}
-                  </span>
-                  {tier.period && (
-                    <span
-                      className="mb-2 text-xs"
-                      style={{ color: "var(--l-text-dim)" }}
-                    >
-                      {tier.period}
-                    </span>
-                  )}
-                </div>
-
-                <p
-                  className="mb-8 text-sm"
-                  style={{ color: "var(--l-text-muted)" }}
-                >
-                  {tier.description}
-                </p>
-
-                {/* Feature list */}
-                <ul className="mb-10 flex flex-col gap-3 flex-1">
-                  {tier.features.map((f) => (
-                    <li
-                      key={f}
-                      className="flex items-center gap-2.5 text-sm"
-                      style={{ color: "var(--l-text-muted)" }}
-                    >
-                      <span
-                        style={{
-                          color: "var(--l-blue)",
-                          fontWeight: 900,
-                          fontSize: "0.9rem",
-                        }}
-                      >
-                        ·
-                      </span>
-                      {f}
-                    </li>
-                  ))}
-                </ul>
-
-                {/* CTA */}
-                <a
-                  href={tier.ctaHref}
-                  className={`landing-pricing-cta flex items-center justify-center gap-2 py-3.5 transition-all duration-200 cursor-pointer ${
-                    tier.highlighted ? "is-highlighted" : ""
-                  }`}
-                >
-                  {tier.cta}
-                </a>
-              </div>
-            );
-          })}
+                $0
+              </p>
+            </div>
+            <a
+              href="/install"
+              className="btn-primary justify-center sm:min-w-48"
+            >
+              Get Aletheia on Chrome
+            </a>
+          </div>
+          <ul
+            className="mt-9 grid gap-3 border-t pt-8 text-sm leading-relaxed sm:grid-cols-2"
+            style={{
+              borderColor: "var(--l-border)",
+              color: "var(--l-text-muted)",
+            }}
+          >
+            {trialDetails.map((detail) => (
+              <li key={detail} className="flex gap-3">
+                <span style={{ color: "var(--l-blue)" }}>·</span>
+                {detail}
+              </li>
+            ))}
+          </ul>
         </div>
       </div>
     </section>

@@ -3,15 +3,23 @@
 import Image from "next/image";
 import Link from "next/link";
 
+const CHROME_WEB_STORE_URL =
+  process.env.NEXT_PUBLIC_CHROME_WEB_STORE_URL ??
+  "https://chromewebstore.google.com/detail/pneenlhefkghefjpaafgllkjkpfjnkgg";
+
 type FooterLink =
   | { label: string; type: "scroll"; href: string }
   | { label: string; type: "route"; href: string };
 
 const footerLinks: FooterLink[] = [
-  { label: "Features", type: "scroll", href: "#features" },
-  { label: "Process", type: "scroll", href: "#how-it-works" },
+  { label: "Product", type: "scroll", href: "#product" },
+  { label: "How it works", type: "scroll", href: "#how-it-works" },
+  { label: "Trust", type: "scroll", href: "#trust" },
   { label: "Pricing", type: "scroll", href: "#pricing" },
   { label: "FAQ", type: "scroll", href: "#faq" },
+  { label: "Demo", type: "route", href: "/demo" },
+  { label: "Install", type: "route", href: "/install" },
+  { label: "Status", type: "route", href: "/status" },
   { label: "Privacy", type: "route", href: "/privacy" },
   { label: "Terms", type: "route", href: "/terms" },
 ];
@@ -78,6 +86,14 @@ export default function Footer() {
                 </button>
               ),
             )}
+            <a
+              href={CHROME_WEB_STORE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`${linkClasses} text-[var(--l-text-dim)] hover:text-[var(--l-text)] transition-colors duration-150`}
+            >
+              Chrome Web Store
+            </a>
           </nav>
 
           {/* Copyright + disclaimer */}
@@ -93,8 +109,15 @@ export default function Footer() {
               style={{ color: "var(--l-text-dim)" }}
             >
               Not affiliated with, endorsed by, or sponsored by LinkedIn
-              Corporation.
+              Corporation or Apollo.io. Aletheia is an independent product.
             </p>
+            <a
+              href="mailto:hello@aletheia.live"
+              className="text-[9px]"
+              style={{ color: "var(--l-blue)" }}
+            >
+              hello@aletheia.live
+            </a>
           </div>
         </div>
       </div>

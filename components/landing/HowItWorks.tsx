@@ -1,18 +1,18 @@
 const steps = [
   {
     num: "01",
-    title: "Install from Chrome Web Store",
-    body: "Add Aletheia from the official Chrome Web Store listing and sign in to your account.",
+    title: "Set your source of truth",
+    body: "Install from the official Chrome Web Store, sign in, and select the primary resume or application profile you want Aletheia to use.",
   },
   {
     num: "02",
-    title: "Add your resume",
-    body: "Upload a resume in the dashboard and choose the version you want Aletheia to use.",
+    title: "Choose the target and purpose",
+    body: "Open a supported profile or opportunity, then select the professional conversation you want to begin—from a connection note to a role-fit response.",
   },
   {
     num: "03",
-    title: "Review the draft",
-    body: "Open a profile or opportunity, choose the message type, and review the result. Edit, regenerate, copy, approve, or reject the draft. Aletheia does not send messages for you.",
+    title: "Refine before you act",
+    body: "Review and edit the draft in your own voice. You can copy it or optionally fill it into a supported field; Aletheia never submits a form or sends a message.",
   },
 ];
 
@@ -41,7 +41,7 @@ const MockupCard = () => (
         style={{ background: "rgba(255,255,255,0.05)", borderRadius: "1px" }}
       >
         <span style={{ fontSize: "9px", color: "#64748b" }}>
-          linkedin.com/in/sarah-chen
+          linkedin.com/in/dana-mercer
         </span>
       </div>
     </div>
@@ -56,10 +56,10 @@ const MockupCard = () => (
         <div
           style={{ fontSize: "11px", fontWeight: 600, color: "var(--l-text)" }}
         >
-          Sarah Chen
+          Dana Mercer
         </div>
         <div style={{ fontSize: "9px", color: "var(--l-text-dim)" }}>
-          ML Engineer · Google DeepMind
+          Research engineer · Northstar Labs (fictional)
         </div>
       </div>
     </div>
@@ -79,7 +79,7 @@ const MockupCard = () => (
         Message Intent
       </p>
       <div className="flex gap-2 flex-wrap">
-        {["Networking", "Job Inquiry", "Partnership"].map((t, i) => (
+        {["Networking", "Job Inquiry", "Referral"].map((t, i) => (
           <span
             key={t}
             style={{
@@ -113,9 +113,9 @@ const MockupCard = () => (
           color: "var(--l-text-muted)",
         }}
       >
-        Hi Sarah - noticed your sparse attention paper from the DeepMind blog. I
-        work on similar inference problems at a smaller scale. Would love to
-        hear what surprised you most in production.
+        Hi Dana — your note on making smaller on-device models practical caught
+        my attention. I have worked on operational ML systems at a smaller
+        scale, and would value hearing how your team thinks about the tradeoffs.
       </p>
     </div>
 
@@ -136,7 +136,7 @@ const MockupCard = () => (
           cursor: "pointer",
         }}
       >
-        Copy Message
+        Review draft
       </button>
       <button
         type="button"
@@ -181,11 +181,11 @@ export default function HowItWorks() {
                   letterSpacing: "-0.02em",
                 }}
               >
-                A simple path from{" "}
+                A deliberate path from{" "}
                 <em
                   style={{ fontStyle: "italic", color: "var(--l-text-muted)" }}
                 >
-                  profile to draft.
+                  source to draft.
                 </em>
               </h2>
             </div>
@@ -258,7 +258,13 @@ export default function HowItWorks() {
           </div>
 
           {/* Right: UI mockup — P1 fix: visible on ALL screen sizes, stacks below steps on mobile */}
-          <div className="landing-section-reveal flex items-start justify-center md:justify-end">
+          <div className="landing-section-reveal flex flex-col items-center justify-start gap-4 md:items-end">
+            <p
+              className="text-[10px] font-bold uppercase tracking-[0.16em]"
+              style={{ color: "var(--l-text-dim)" }}
+            >
+              Illustrative workflow · fictional data
+            </p>
             <MockupCard />
           </div>
         </div>

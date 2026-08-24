@@ -5,28 +5,36 @@ import { Plus, Minus } from "lucide-react";
 
 const faqs = [
   {
-    q: "Does Aletheia send messages for me?",
-    a: "No. Aletheia drafts messages. It does not send messages, click buttons, submit forms, or take actions on your behalf.",
+    q: "What can I prepare with Aletheia?",
+    a: "Aletheia supports LinkedIn connection notes, cold email, LinkedIn InMail, follow-ups, referral requests, role-fit summaries, and grounded YC application answers.",
   },
   {
-    q: "Does Aletheia collect my LinkedIn password?",
-    a: "No. Aletheia does not ask for or collect LinkedIn credentials.",
+    q: "What does the extension access?",
+    a: "Aletheia works from supported LinkedIn and Apollo pages you open, plus the resume and application-profile context you choose in your Aletheia account. It does not ask for your LinkedIn password.",
   },
   {
-    q: "How does resume support work?",
-    a: "You upload resumes in your dashboard and choose one as your primary resume. Drafts can use that resume to reference your actual skills, projects, and experience.",
+    q: "How do resumes and evidence work?",
+    a: "You can manage multiple resumes and select a primary version. For YC application answers, Aletheia can also use the evidence you have confirmed in your application profile. That evidence is user-confirmed, not independently verified by Aletheia.",
   },
   {
-    q: "What can I draft with Aletheia?",
-    a: "You can draft LinkedIn connection notes, networking emails, follow-ups, referral requests, and role-fit replies.",
+    q: "Does Aletheia always get the draft right?",
+    a: "No. AI output can be incomplete, inaccurate, or not sound like you. Treat every draft as a starting point and check the facts, tone, and next step before you use it.",
   },
   {
-    q: "Do I have to send the draft?",
-    a: "No. You always review the draft first. You can edit, regenerate, copy, approve, or reject it.",
+    q: "Can Aletheia learn my writing preferences?",
+    a: "When you approve or reject drafts, that feedback can help Aletheia learn the wording and structure you prefer. You still review every new draft and make the final decision.",
   },
   {
-    q: "Where do I install Aletheia?",
-    a: "Aletheia is available through the official Chrome Web Store listing.",
+    q: "Does Aletheia fill or send messages?",
+    a: "You may choose to fill a reviewed draft into a supported message field. Aletheia never clicks Send, submits a form, auto-connects, or contacts anyone for you.",
+  },
+  {
+    q: "What does Aletheia cost today?",
+    a: "New accounts receive one 40-credit trial. Connection notes use 2 credits; cold email, InMail, and YC application answers use 4. Refill checkout is not currently available, and no paid plan is being offered on this site.",
+  },
+  {
+    q: "Where can I install Aletheia?",
+    a: "Aletheia is available through the official Chrome Web Store listing. You can also explore a clearly labeled illustrative example before installing.",
   },
   {
     q: "Is Aletheia affiliated with LinkedIn?",
