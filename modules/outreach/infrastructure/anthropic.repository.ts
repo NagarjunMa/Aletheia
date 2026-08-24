@@ -1,9 +1,14 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
+import {
+  coldEmailDraftSchema,
+  type ColdEmailDraft,
+} from "../domain/outreach-draft.types";
 
 export const CLAUDE_MODEL = "claude-sonnet-4-6";
 
 const EMAIL_DRAFT_TOOL_NAME = "return_email_draft";
+const COLD_EMAIL_DRAFT_TOOL_NAME = "return_cold_email_composition";
 
 export const emailDraftTool = {
   name: EMAIL_DRAFT_TOOL_NAME,
@@ -39,6 +44,51 @@ export const emailDraftTool = {
   },
 } as const;
 
+export const coldEmailDraftTool = {
+  name: COLD_EMAIL_DRAFT_TOOL_NAME,
+  description:
+    "Return semantic cold-email sections and source IDs for every candidate proof. Do not provide a final signature.",
+  input_schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      subject_line: { type: "string", minLength: 1, maxLength: 160 },
+      greeting: { type: "string", minLength: 1, maxLength: 80 },
+      target_opening: { type: "string", minLength: 1, maxLength: 500 },
+      candidate_positioning: { type: "string", minLength: 1, maxLength: 500 },
+      proof_points: {
+        type: "array",
+        maxItems: 2,
+        items: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            text: { type: "string", minLength: 1, maxLength: 420 },
+            source_ids: {
+              type: "array",
+              minItems: 1,
+              maxItems: 3,
+              items: { type: "string", minLength: 1, maxLength: 120 },
+            },
+          },
+          required: ["text", "source_ids"],
+        },
+      },
+      value_statement: { type: "string", minLength: 1, maxLength: 500 },
+      cta: { type: "string", minLength: 1, maxLength: 300 },
+    },
+    required: [
+      "subject_line",
+      "greeting",
+      "target_opening",
+      "candidate_positioning",
+      "proof_points",
+      "value_statement",
+      "cta",
+    ],
+  },
+} as const;
+
 const emailDraftToolInputSchema = z
   .object({
     subject_line: z.string().trim().min(1).max(160),
@@ -59,6 +109,7 @@ export async function createOutreachDraftMessage(input: {
   systemPrompt: string;
   userPrompt: string;
   useEmailDraftTool: boolean;
+  useStructuredColdEmailTool?: boolean;
 }) {
   return getAnthropic().messages.create(
     {
@@ -69,16 +120,40 @@ export async function createOutreachDraftMessage(input: {
       messages: [{ role: "user", content: input.userPrompt }],
       ...(input.useEmailDraftTool
         ? {
-            tools: [emailDraftTool],
+            tools: [
+              input.useStructuredColdEmailTool
+                ? coldEmailDraftTool
+                : emailDraftTool,
+            ],
             tool_choice: {
               type: "tool" as const,
-              name: EMAIL_DRAFT_TOOL_NAME,
+              name: input.useStructuredColdEmailTool
+                ? COLD_EMAIL_DRAFT_TOOL_NAME
+                : EMAIL_DRAFT_TOOL_NAME,
             },
           }
         : {}),
     },
     { timeout: 30_000 },
   );
+}
+
+export function getColdEmailDraftToolInput(
+  response: Anthropic.Messages.Message,
+): ColdEmailDraft {
+  const toolBlock = response.content.find(
+    (block) =>
+      block.type === "tool_use" &&
+      block.name === COLD_EMAIL_DRAFT_TOOL_NAME &&
+      typeof block.input === "object" &&
+      block.input !== null,
+  );
+  if (!toolBlock || toolBlock.type !== "tool_use") {
+    throw new Error(
+      "Claude did not return the required cold email composition tool",
+    );
+  }
+  return coldEmailDraftSchema.parse(toolBlock.input);
 }
 
 export function getEmailDraftToolInput(response: Anthropic.Messages.Message) {

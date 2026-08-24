@@ -20,6 +20,69 @@ Follow-up:
 
 ## Entries
 
+### 2026-08-23
+
+Branch: `main` (local Phase 1 and Phase 2 changes are uncommitted)
+
+Area: ALE-14 — Grounded cold email (ALE-21 through ALE-23 implementation)
+
+Problem: Cold email accepted a model-authored opaque body, then reconstructed it with heuristic and historically user-specific formatter repairs. Candidate claims had no verifiable source reference and the signature was not reliably server-owned.
+
+Decision: For cold email only, provide Claude with Phase 1-selected sources, require a forced semantic-composition tool with source IDs for every proof point, validate IDs and source-content overlap, and deterministically render the final body/signature from verified candidate identity. InMail keeps its existing body-only contract. The old free-form formatter is no longer used in the cold-email path.
+
+Files changed:
+
+- `modules/outreach/domain/outreach-draft.types.ts`
+- `modules/outreach/application/{validate-outreach-draft,render-cold-email}.ts` and tests
+- `modules/outreach/infrastructure/anthropic.repository.ts` and tests
+- cold-email prompt, generation orchestration, and route/credit regressions
+
+Tests/checks:
+
+- Full unit suite: 57 files and 675 tests passed
+- Lint, strict type-check, 13 guardrails, production build, and `git diff --check` passed
+
+Result: Cold-email candidate facts now enter the model only through selected grounding sources. Any unrecognized source ID or unsupported proof fails as a refunding `PARSE_FAILED` response. The outbound signature uses the authenticated candidate's stored name/LinkedIn URL or is omitted; the internal source ledger and identity never reach the public response.
+
+Follow-up:
+
+- Add the exact Nordnet golden fixture once the target/candidate source data is supplied or committed; no synthetic replacement was created.
+- Record the child issue/phase final summaries after the fixture regression is added.
+
+### 2026-08-23
+
+Branch: `main` (local worktree synchronized with `origin/main` before implementation)
+
+Area: ALE-13 — Phase 1 shared candidate-grounding foundation (ALE-17 through ALE-20)
+
+Problem: Candidate grounding was owned by the YC module, while legacy outreach had no caller-scoped candidate context, deterministic evidence selector, or pre-billing unavailable-context contract.
+
+Decision: Extract shared, server-only candidate contracts and the caller-JWT/RLS repository into `modules/candidate-context`; preserve YC behavior through narrow compatibility exports. Add a pure outreach selector with confirmed-evidence ranking, deterministic AI-target preference, exclusions, deduplication, escaping, channel limits, four fallback levels, and injection-safe degradation. Validate and prepare legacy outreach context before rate-limit or credit reservation, but do not inject selected sources into existing prompts until the approved later phase.
+
+Files changed:
+
+- `modules/candidate-context/**`
+- `modules/outreach/domain/outreach-grounding.types.ts`
+- `modules/outreach/application/{build-outreach-grounding-context,prepare-outreach-grounding-context,extension-generate.service}.ts`
+- YC shared-type/repository compatibility surfaces and focused tests
+- legacy generation route mapper and route/credit regression tests
+- `docs/progress.txt`
+
+Tests/checks:
+
+- Focused shared/YC/outreach/route/credit suite: 7 files and 92 tests passed
+- Full unit suite: 54 files and 667 tests passed
+- Guardrails: 13 tests passed
+- Lint and strict TypeScript check passed
+- Next.js production build passed (with the pre-existing stale Browserslist-data warning)
+- `git diff --check` passed
+
+Result: The Phase 1 code path is implemented locally. Candidate reads use the verified caller token and RLS; unconfirmed, cross-user, excluded, duplicate, oversized, and injection-sensitive candidate context is not selected; a repository/preparation failure returns `503 CANDIDATE_CONTEXT_UNAVAILABLE` before daily quota, credits, or Anthropic can be touched. Existing visible outreach prompt/output behavior remains unchanged.
+
+Follow-up:
+
+- Record actual validation/progress in ALE-13 and its child issues, then review and commit the scoped product changes. Do not include the pre-existing `AGENTS.md` or engineering-guide working-tree edits.
+
 ### 2026-08-22
 
 Branch: `fix/nak-36-credit-billing-migration`

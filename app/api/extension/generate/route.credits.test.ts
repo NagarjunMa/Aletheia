@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { makeRequest } from "@/__tests__/helpers/request";
+import { OutreachGroundingUnavailableError } from "@/modules/outreach/domain/outreach-grounding.types";
 
 const mockAuthGetUser = vi.hoisted(() => vi.fn());
 const mockRpc = vi.hoisted(() => vi.fn());
@@ -9,6 +10,7 @@ const mockEq = vi.hoisted(() => vi.fn());
 const mockMaybeSingle = vi.hoisted(() => vi.fn());
 const mockAnthropicCreate = vi.hoisted(() => vi.fn());
 const mockGetPrimaryResumeText = vi.hoisted(() => vi.fn());
+const mockPrepareOutreachGroundingContext = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/supabase/server", () => ({
   createBearerAuthClient: vi.fn(() => ({
@@ -23,6 +25,13 @@ vi.mock("@/lib/supabase/server", () => ({
 vi.mock("@/lib/resumes/service", () => ({
   getPrimaryResumeText: mockGetPrimaryResumeText,
 }));
+
+vi.mock(
+  "@/modules/outreach/application/prepare-outreach-grounding-context",
+  () => ({
+    prepareOutreachGroundingContext: mockPrepareOutreachGroundingContext,
+  }),
+);
 
 vi.mock("@anthropic-ai/sdk", () => {
   const AnthropicMock = vi.fn();
@@ -84,6 +93,7 @@ beforeEach(() => {
   mockMaybeSingle.mockReset();
   mockAnthropicCreate.mockReset();
   mockGetPrimaryResumeText.mockReset();
+  mockPrepareOutreachGroundingContext.mockReset();
 
   mockAuthGetUser.mockResolvedValue({
     data: { user: { id: "test-user-id", email: "user@example.com" } },
@@ -100,6 +110,18 @@ beforeEach(() => {
   mockAnthropicCreate.mockResolvedValue({
     content: [{ type: "text", text: "Hi Jane, nice to connect." }],
     usage: { input_tokens: 100, output_tokens: 40 },
+  });
+  mockPrepareOutreachGroundingContext.mockResolvedValue({
+    identity: { fullName: "Candidate Name", linkedinUrl: "" },
+    sources: [],
+    metadata: {
+      groundingLevel: "target_only",
+      fallbackReason: "no_resume_context",
+      selectedSourceCount: 0,
+      selectedEvidenceCount: 0,
+      selectedSourceKinds: [],
+      injectionSafeMode: false,
+    },
   });
   mockRpc.mockImplementation(async (name: string) => {
     if (name === "check_and_increment_rate_limit") {
@@ -140,6 +162,23 @@ beforeEach(() => {
 });
 
 describe("POST /api/extension/generate with credit billing enabled", () => {
+  it("does not reserve quota or credits when candidate context is unavailable", async () => {
+    mockPrepareOutreachGroundingContext.mockRejectedValueOnce(
+      new OutreachGroundingUnavailableError(),
+    );
+    const { POST } = await importRouteWithBillingEnabled();
+    const res = await POST(
+      makeRequest({
+        method: "POST",
+        headers: { authorization: "Bearer test" },
+        body: validPayload,
+      }),
+    );
+    expect(res.status).toBe(503);
+    expect(mockRpc).not.toHaveBeenCalled();
+    expect(mockAnthropicCreate).not.toHaveBeenCalled();
+  });
+
   it("reserves credits and returns billing metadata on success", async () => {
     const { POST } = await importRouteWithBillingEnabled();
 
