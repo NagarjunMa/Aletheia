@@ -6,6 +6,9 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "Status — Aletheia",
   description: "Current build version, commit SHA, and last deploy time.",
+  alternates: {
+    canonical: "/status",
+  },
 };
 
 type VersionPayload = {

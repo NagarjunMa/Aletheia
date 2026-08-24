@@ -36,12 +36,27 @@ test("landing exposes public trust resources and trial-only pricing @smoke", asy
   await expect(page.getByText("Pro", { exact: true })).toHaveCount(0);
 });
 
-test("public metadata uses the canonical domain @smoke", async ({ page }) => {
-  await page.goto("/");
-  await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
-    "href",
-    "https://www.aletheia.live",
-  );
+test("public metadata uses route-specific canonical URLs @smoke", async ({
+  page,
+}) => {
+  const publicRoutes = [
+    "/",
+    "/demo",
+    "/install",
+    "/status",
+    "/privacy",
+    "/terms",
+  ];
+
+  for (const route of publicRoutes) {
+    await page.goto(route);
+    const canonical = page.locator('link[rel="canonical"]');
+    await expect(canonical).toHaveCount(1);
+    await expect(canonical).toHaveAttribute(
+      "href",
+      `https://www.aletheia.live${route === "/" ? "" : route}`,
+    );
+  }
 });
 
 test("crawler metadata exposes only public canonical routes @smoke", async ({

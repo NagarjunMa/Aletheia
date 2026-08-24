@@ -9,6 +9,9 @@ export const metadata: Metadata = {
   description:
     "Terms governing your use of Aletheia. Acceptable use, LinkedIn trademark disclaimer, no warranty, liability cap, governing law.",
   robots: { index: true, follow: true },
+  alternates: {
+    canonical: "/terms",
+  },
 };
 
 const EFFECTIVE_DATE = "May 19, 2026";
