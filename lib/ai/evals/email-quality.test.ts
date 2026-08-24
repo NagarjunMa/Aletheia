@@ -1,4 +1,10 @@
 import { describe, expect, it } from "vitest";
+import type { CandidateGroundingSource } from "@/modules/candidate-context/domain/candidate-context.types";
+import type { ColdEmailDraft } from "@/modules/outreach/domain/outreach-draft.types";
+import {
+  OutreachDraftValidationError,
+  validateOutreachDraft,
+} from "@/modules/outreach/application/validate-outreach-draft";
 
 import goldenCases from "./email-golden-cases.json";
 import {
@@ -19,6 +25,7 @@ describe("email quality evals", () => {
     const result = evaluateEmailQuality(goldenCase.preferred, {
       mode: goldenCase.emailMode,
       rules: goldenCase.expectedRules,
+      context: goldenCase.qualityContext,
     });
 
     expect(result.passed).toBe(true);
@@ -52,6 +59,7 @@ describe("email quality evals", () => {
     const result = evaluateEmailQuality(goldenCase.generated, {
       mode: goldenCase.emailMode,
       rules: goldenCase.expectedRules,
+      context: goldenCase.qualityContext,
     });
 
     expect(violationRules(result)).toEqual(
@@ -98,5 +106,108 @@ describe("email quality evals", () => {
     expect(
       countEmailWords("Thanks,\nNagarjun\nlinkedin.com/in/nagarjun-mallesh"),
     ).toBe(2);
+  });
+
+  it("captures every observed Nordnet failure mode", () => {
+    const goldenCase = cases.find(
+      (candidate) => candidate.id === "nordnet-engineering-productivity-001",
+    );
+
+    expect(goldenCase).toBeDefined();
+    if (!goldenCase) {
+      throw new Error("Missing Nordnet engineering productivity golden case.");
+    }
+
+    const result = evaluateEmailQuality(goldenCase.generated, {
+      mode: goldenCase.emailMode,
+      rules: goldenCase.expectedRules,
+      context: goldenCase.qualityContext,
+    });
+
+    expect(violationRules(result)).toEqual(
+      expect.arrayContaining([
+        "has_concrete_ai_workflow_evidence",
+        "no_generic_ai_language",
+        "exploring_requires_confirmed_source",
+        "no_technology_inventory",
+        "no_orphan_technology_line",
+        "no_duplicate_candidate_claim",
+        "has_complete_or_omitted_signature",
+      ]),
+    );
+    expect(goldenCase.grounding?.selectedSources).toHaveLength(2);
+    for (const source of goldenCase.grounding?.selectedSources ?? []) {
+      expect(goldenCase.preferred).toContain(source.requiredPhrase);
+    }
+
+    const sources: CandidateGroundingSource[] =
+      goldenCase.grounding?.selectedSources.map((source) => ({
+        id: source.id,
+        type: source.kind,
+        label: source.label,
+        content: source.content,
+        priority: source.priority,
+      })) ?? [];
+    const draft: ColdEmailDraft = {
+      subject_line: "Reliable AI-assisted developer workflows",
+      greeting: "Morgan",
+      target_opening:
+        "Your Engineering Productivity team’s focus on reliable AI-assisted development caught my attention.",
+      candidate_positioning:
+        "I build backend systems that help engineering teams ship safely.",
+      proof_points: sources.map((source) => ({
+        text: source.content,
+        source_ids: [source.id],
+      })),
+      value_statement:
+        "That experience maps well to a team making AI assistance dependable for developers.",
+      cta: "Would you be open to a brief chat about the problems your team is prioritizing?",
+    };
+
+    expect(validateOutreachDraft({ draft, sources })).toEqual(draft);
+    expect(() =>
+      validateOutreachDraft({
+        draft: {
+          ...draft,
+          proof_points: [
+            { ...draft.proof_points[0]!, source_ids: ["evidence:unknown"] },
+          ],
+        },
+        sources,
+      }),
+    ).toThrow(OutreachDraftValidationError);
+  });
+
+  it("permits exploratory wording only when selected evidence supports it", () => {
+    const body =
+      "Hi Morgan,\n\nI am exploring AI-assisted developer workflows.\n\nBest,\nAvery Morgan";
+
+    expect(
+      evaluateEmailQuality(body, {
+        mode: "follow_up",
+        rules: ["exploring_requires_confirmed_source"],
+      }).passed,
+    ).toBe(false);
+    expect(
+      evaluateEmailQuality(body, {
+        mode: "follow_up",
+        rules: ["exploring_requires_confirmed_source"],
+        context: { allowsExploring: true },
+      }).passed,
+    ).toBe(true);
+  });
+
+  it("rejects inline signatures instead of treating them as omitted", () => {
+    const result = evaluateEmailQuality(
+      "Hi Morgan,\n\nA concise note.\n\nBest, Avery Morgan",
+      {
+        mode: "follow_up",
+        rules: ["has_complete_or_omitted_signature"],
+      },
+    );
+
+    expect(violationRules(result)).toContain(
+      "has_complete_or_omitted_signature",
+    );
   });
 });

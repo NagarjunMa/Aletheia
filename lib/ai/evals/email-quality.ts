@@ -15,7 +15,34 @@ export type EmailQualityRule =
   | "preserves_period_tokens"
   | "no_orphan_fragments"
   | "has_specific_low_friction_ask"
-  | "has_latest_experience_reference";
+  | "has_latest_experience_reference"
+  | "has_concrete_ai_workflow_evidence"
+  | "no_generic_ai_language"
+  | "exploring_requires_confirmed_source"
+  | "no_technology_inventory"
+  | "no_orphan_technology_line"
+  | "no_duplicate_candidate_claim"
+  | "has_complete_or_omitted_signature";
+
+export interface EmailQualityContext {
+  /** Whether a selected candidate source explicitly supports exploratory AI work. */
+  allowsExploring?: boolean;
+}
+
+export interface GoldenCandidateSource {
+  id: string;
+  kind: "evidence" | "profile" | "resume";
+  label: string;
+  content: string;
+  priority: 1 | 2 | 3;
+  /** Synthetic phrase that must be represented by the preferred output. */
+  requiredPhrase: string;
+}
+
+export interface GoldenEmailGrounding {
+  targetSummary: string;
+  selectedSources: GoldenCandidateSource[];
+}
 
 export interface GoldenEmailCase {
   id: string;
@@ -26,6 +53,8 @@ export interface GoldenEmailCase {
   generated: string;
   preferred: string;
   expectedRules: EmailQualityRule[];
+  qualityContext?: EmailQualityContext;
+  grounding?: GoldenEmailGrounding;
 }
 
 export interface EmailQualityEvaluation {
@@ -61,7 +90,30 @@ function pass(rule: EmailQualityRule) {
   return { passed: true as const, rule };
 }
 
-function checkRule(body: string, mode: EmailMode, rule: EmailQualityRule) {
+const TECHNOLOGY_TOKEN =
+  /\b(?:AWS|GCP|Azure|Terraform|Docker|Kubernetes|Python|TypeScript|JavaScript|React|Node\.js|Next\.js|FastAPI|PostgreSQL)\b/gi;
+
+function hasRepeatedCandidateSentence(body: string): boolean {
+  const words = body
+    .toLowerCase()
+    .match(/[a-z0-9]+/g)
+    ?.filter((word) => !["the", "and", "that", "with", "your"].includes(word));
+  if (!words || words.length < 10) {
+    return false;
+  }
+
+  const phrases = Array.from({ length: words.length - 4 }, (_, index) =>
+    words.slice(index, index + 5).join(" "),
+  );
+  return new Set(phrases).size !== phrases.length;
+}
+
+function checkRule(
+  body: string,
+  mode: EmailMode,
+  rule: EmailQualityRule,
+  context: EmailQualityContext,
+) {
   const normalized = body.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
   const paragraphs = splitEmailParagraphs(normalized);
 
@@ -194,15 +246,99 @@ function checkRule(body: string, mode: EmailMode, rule: EmailQualityRule) {
             "Expected latest/current experience with a concrete proof point.",
           );
     }
+
+    case "has_concrete_ai_workflow_evidence": {
+      const hasAction =
+        /\b(?:built|implemented|shipped|deployed|created)\b/i.test(normalized);
+      const hasAiSystem = /\b(?:AI|LLM|RAG|retrieval)\b/i.test(normalized);
+      const hasWorkflowDetail =
+        /\b(?:review|evaluation|verification|developer)\b/i.test(normalized);
+      return hasAction && hasAiSystem && hasWorkflowDetail
+        ? pass(rule)
+        : fail(
+            rule,
+            "Expected a concrete AI workflow with an action and operational detail.",
+          );
+    }
+
+    case "no_generic_ai_language": {
+      return /\b(?:AI\s+(?:enthusiast|expert|specialist)|passionate about (?:AI|artificial intelligence)|AI(?:-powered)? solutions|the future of AI)\b/i.test(
+        normalized,
+      )
+        ? fail(
+            rule,
+            "Email uses generic AI language instead of a concrete claim.",
+          )
+        : pass(rule);
+    }
+
+    case "exploring_requires_confirmed_source": {
+      return /\bexplor(?:ing|e|ation)\b/i.test(normalized) &&
+        !context.allowsExploring
+        ? fail(
+            rule,
+            "Exploratory language is unsupported by the selected candidate sources.",
+          )
+        : pass(rule);
+    }
+
+    case "no_technology_inventory": {
+      const hasInventory = normalized
+        .split(/[.!?]\s+|\n+/)
+        .some((line) => (line.match(TECHNOLOGY_TOKEN) ?? []).length >= 4);
+      return hasInventory
+        ? fail(rule, "Email contains a technology inventory instead of proof.")
+        : pass(rule);
+    }
+
+    case "no_orphan_technology_line": {
+      return normalized
+        .split("\n")
+        .some((line) =>
+          /^(?:AWS|GCP|Azure|Terraform|Docker|Kubernetes|Python|TypeScript|JavaScript|React|Node\.js|Next\.js|FastAPI|PostgreSQL)[.!?]?$/i.test(
+            line.trim(),
+          ),
+        )
+        ? fail(rule, "Email contains a technology token on its own line.")
+        : pass(rule);
+    }
+
+    case "no_duplicate_candidate_claim": {
+      return hasRepeatedCandidateSentence(normalized)
+        ? fail(rule, "Email repeats the same candidate claim.")
+        : pass(rule);
+    }
+
+    case "has_complete_or_omitted_signature": {
+      const hasClosing =
+        /(?:^|\n)(?:Best|Thanks|Regards|Sincerely)[,!]?(?:\s|$)/i.test(
+          normalized,
+        );
+      if (!hasClosing) {
+        return pass(rule);
+      }
+      return /(?:^|\n)(?:Best|Thanks|Regards|Sincerely),?\n[A-Z][A-Za-z'-]*(?:\s+[A-Z][A-Za-z'-]*){0,3}(?:\nhttps?:\/\/\S+)?$/i.test(
+        normalized,
+      )
+        ? pass(rule)
+        : fail(
+            rule,
+            "Signature must be complete on its own lines or omitted entirely.",
+          );
+    }
   }
 }
 
 export function evaluateEmailQuality(
   body: string,
-  options: { mode: EmailMode; rules: EmailQualityRule[] },
+  options: {
+    mode: EmailMode;
+    rules: EmailQualityRule[];
+    context?: EmailQualityContext | undefined;
+  },
 ): EmailQualityEvaluation {
   const results = options.rules.map((rule) =>
-    checkRule(body, options.mode, rule),
+    checkRule(body, options.mode, rule, options.context ?? {}),
   );
   const passedRules = results
     .filter((result) => result.passed)

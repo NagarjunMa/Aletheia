@@ -95,10 +95,7 @@
     "category": "cold_email",
     "emailMode": "follow_up",
     "intent": "job_inquiry",
-    "problemTags": [
-      "follow_up_context",
-      "missing_low_friction_ask"
-    ],
+    "problemTags": ["follow_up_context", "missing_low_friction_ask"],
     "generated": "Hi Eric, I wanted to follow up on my previous message about Virio. I am still interested in the role and think my background could be useful. Please let me know.",
     "preferred": "Hi Eric,\n\nFollowing up on my note about the Founding Infra Engineer role at Virio. I know your schedule is packed, so I will keep this brief.\n\nA quick look at the conversation so far:\nInfra Fit: My background maps to Terraform-managed AWS/GCP environments and monitoring pipelines.\nExecution Speed: I have reduced manual infrastructure setup work from days to minutes.\n\nI remain interested in the role and would be glad to share more context.\n\nLet me know if a brief chat would be useful.\n\nBest,\nNagarjun Mallesh\nlinkedin.com/in/nagarjun-mallesh",
     "expectedRules": [
@@ -108,6 +105,60 @@
       "word_count_within_mode_limit",
       "has_structured_proof_points",
       "has_specific_low_friction_ask"
+    ]
+  },
+  {
+    "id": "nordnet-engineering-productivity-001",
+    "category": "cold_email",
+    "emailMode": "initial_outreach",
+    "intent": "networking",
+    "problemTags": [
+      "generic_ai_language",
+      "unsupported_exploring",
+      "technology_inventory",
+      "orphaned_technology_line",
+      "repeated_candidate_claim",
+      "incomplete_signature"
+    ],
+    "qualityContext": {
+      "allowsExploring": false
+    },
+    "grounding": {
+      "targetSummary": "A synthetic engineering-productivity team is improving reliable AI-assisted developer workflows.",
+      "selectedSources": [
+        {
+          "id": "evidence:nordnet-ai-workflow",
+          "kind": "evidence",
+          "label": "AI workflow",
+          "content": "Built an internal developer-review workflow that retrieves service ownership guidance and verifies proposed changes before they reach engineers.",
+          "priority": 1,
+          "requiredPhrase": "developer-review workflow"
+        },
+        {
+          "id": "evidence:nordnet-operational-fit",
+          "kind": "evidence",
+          "label": "Operational fit",
+          "content": "Added evaluation checks and rollout monitoring so the team could measure failure patterns and improve the workflow.",
+          "priority": 1,
+          "requiredPhrase": "evaluation checks and rollout monitoring"
+        }
+      ]
+    },
+    "generated": "Hi Morgan,\n\nI am an AI enthusiast exploring AI. I have experience with AWS, GCP, Terraform, Docker, Python, TypeScript, and React.\n\nAWS\n\nI built an AI workflow. I built an AI workflow. Would you be open to a brief chat?\n\nBest,",
+    "preferred": "Hi Morgan,\n\nYour Engineering Productivity team’s focus on reliable AI-assisted development caught my attention. I build backend systems that help engineering teams ship safely. Balancing useful automation, clear ownership, and review quality is the kind of engineering problem I enjoy working through with product and platform partners.\n\nA quick look at my background:\nAI Workflow: Built an internal developer-review workflow that retrieves service ownership guidance and verifies proposed changes before they reach engineers.\nOperational Fit: Added evaluation checks and rollout monitoring so the team could measure failure patterns and improve the workflow.\n\nThat experience maps well to a team making AI assistance dependable for developers. Would you be open to a brief chat about the problems your team is prioritizing?\n\nBest,\nAvery Morgan\nhttps://linkedin.com/in/avery-morgan",
+    "expectedRules": [
+      "has_greeting_blank_line",
+      "has_2_to_5_paragraphs",
+      "not_wall_of_text",
+      "word_count_within_mode_limit",
+      "has_specific_low_friction_ask",
+      "has_concrete_ai_workflow_evidence",
+      "no_generic_ai_language",
+      "exploring_requires_confirmed_source",
+      "no_technology_inventory",
+      "no_orphan_technology_line",
+      "no_duplicate_candidate_claim",
+      "has_complete_or_omitted_signature"
     ]
   }
 ]
