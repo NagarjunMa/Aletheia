@@ -22,6 +22,43 @@ Follow-up:
 
 ### 2026-08-24
 
+Branch: `codex/chrome-store-1-0-9`
+
+Area: Chrome Web Store privacy and minimum-permission follow-up (1.0.9)
+
+Problem: The 1.0.8 Store draft still requested a nonfunctional `contextMenus` permission, while the public privacy policy did not yet describe affirmative profile-reading consent, local supported-page URL handling, or Chrome Web Store Limited Use compliance.
+
+Decision: Remove the dead context-menu permission and service-worker path instead of attempting to justify it. Update the public privacy policy to match the consent controls, distinguish LinkedIn reading from Apollo auto-fill, disclose local URL checks and user-supplied conversation context accurately, and add an explicit Limited Use statement. Bump all packaged extension versions to 1.0.9 and replace the Store draft package without submitting or publishing it.
+
+Files changed:
+
+- `app/privacy/page.tsx`
+- `ascendia-extension/manifest.json`
+- `ascendia-extension/package.json`
+- `ascendia-extension/package-lock.json`
+- `ascendia-extension/background/service-worker.js`
+- `ascendia-extension/background/service-worker-contract.test.ts`
+- `app/api/extension/version/route.test.ts`
+- `docs/chrome-web-store-submission.md`
+
+Tests/checks:
+
+- Root lint and TypeScript checks passed.
+- Root unit suite passed: 681 tests.
+- Guardrail suite passed: 13 tests.
+- Next.js production build passed, including `/privacy`.
+- Extension audit, lint, TypeScript checks, and build passed.
+- Extension suite passed: 147 tests.
+- Extension version policy passed for `1.0.8` to `1.0.9`.
+
+Result: Source changes are release-validated. The extension now requests one fewer permission, the privacy policy matches its consent and active-URL behavior, and version 1.0.9 is ready for a clean-commit package build.
+
+Follow-up:
+
+- Build the ZIP from the clean release commit, push the release branch, deploy the privacy policy after merge, and replace the Chrome Web Store draft package.
+
+### 2026-08-24
+
 Branch: `fix/store-submission-readiness`
 
 Area: Chrome Web Store release readiness (1.0.8)

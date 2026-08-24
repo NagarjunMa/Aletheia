@@ -39,6 +39,17 @@ describe("background service worker startup contract", () => {
     }
   });
 
+  it("does not request or use the nonfunctional context-menu surface", () => {
+    const manifest = JSON.parse(read("manifest.json")) as {
+      permissions?: string[];
+    };
+    const serviceWorker = read("background/service-worker.js");
+
+    expect(manifest.permissions).not.toContain("contextMenus");
+    expect(serviceWorker).not.toContain("chrome.contextMenus");
+    expect(serviceWorker).not.toContain("chrome.action.openPopup");
+  });
+
   it("bundles into a self-contained worker without runtime imports", async () => {
     const result = await build({
       entryPoints: [path.join(EXTENSION_ROOT, "background/service-worker.js")],

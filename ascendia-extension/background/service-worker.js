@@ -111,16 +111,6 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   chrome.alarms.create(CONFIG.TOKEN_REFRESH_ALARM, {
     periodInMinutes: CONFIG.TOKEN_REFRESH_INTERVAL_MIN,
   });
-
-  // Context menu setup (guard against duplicate IDs on update/reinstall)
-  chrome.contextMenus.removeAll(() => {
-    chrome.contextMenus.create({
-      id: "generateMessage",
-      title: "Generate message with Aletheia",
-      contexts: ["selection"],
-      documentUrlPatterns: ["https://www.linkedin.com/*"],
-    });
-  });
 });
 
 chrome.runtime.onStartup.addListener(() => {
@@ -754,16 +744,6 @@ async function logUsage(category) {
     console.warn("Failed to log usage:", error);
   }
 }
-
-chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  if (info.menuItemId === "generateMessage") {
-    try {
-      await chrome.action.openPopup();
-    } catch (error) {
-      console.log("Could not open popup programmatically");
-    }
-  }
-});
 
 // Error handling for unhandled promise rejections
 self.addEventListener("unhandledrejection", (event) => {

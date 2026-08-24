@@ -14,7 +14,7 @@ export const metadata: Metadata = {
   },
 };
 
-const EFFECTIVE_DATE = "May 19, 2026";
+const EFFECTIVE_DATE = "August 24, 2026";
 const CONTACT_EMAIL = "hello@aletheia.live";
 const OPERATOR_NAME = "Nagarjun Mallesh";
 const OPERATOR_LOCATION = "Boston, Massachusetts, United States";
@@ -63,9 +63,11 @@ export default function PrivacyPage() {
           <ul>
             <li>
               <strong>Selected supported-page context</strong> from the LinkedIn
-              or Apollo page you choose to reference — such as name, headline,
-              location, role, and profile or opportunity details. This is used
-              only when you request a draft.
+              profile you choose to reference — such as name, headline,
+              location, role, and profile details. This is read only after you
+              provide consent and is transmitted only when you request a draft.
+              On Apollo, Aletheia only places a draft you have reviewed into a
+              supported compose field; it does not extract Apollo profiles.
             </li>
             <li>
               <strong>
@@ -89,10 +91,18 @@ export default function PrivacyPage() {
             </li>
           </ul>
           <p>
+            The extension checks the active page URL locally to determine
+            whether the current page supports Aletheia’s profile-reading or fill
+            features. The URL is not retained as browsing history or transmitted
+            to Aletheia.
+          </p>
+          <p>
             We do <em>not</em> collect: payment card numbers through Aletheia,
-            LinkedIn passwords, LinkedIn cookies belonging to third parties, or
-            messages from people other than you. Aletheia currently provides a
-            trial only; refill checkout is not available.
+            LinkedIn passwords, or LinkedIn or Apollo cookies. We do not
+            automatically collect messages from other people. If you provide
+            prior conversation context for a follow-up, we process only the
+            context you choose to submit. Aletheia currently provides a trial
+            only; refill checkout is not available.
           </p>
         </Section>
 
@@ -160,9 +170,20 @@ export default function PrivacyPage() {
             use your message content to train any third-party AI model beyond
             the single request that generates your message.
           </p>
+          <p>
+            Aletheia’s use and transfer of information received through Chrome
+            APIs complies with the Chrome Web Store User Data Policy, including
+            the Limited Use requirements. We use this information only to
+            provide or improve Aletheia’s single user-facing purpose. We do not
+            use or transfer it for personalized advertising, sell it, use it for
+            creditworthiness or lending, or permit human access except with
+            explicit user consent for support, for security purposes, to comply
+            with applicable law, or in aggregated and anonymized form for
+            internal operations.
+          </p>
         </Section>
 
-        <Section title="4. Cookies and local storage">
+        <Section title="4. Cookies, local storage, and extension consent">
           <p>
             The web app sets only the cookies required for sign-in (Supabase
             session cookies). No advertising or cross-site tracking cookies.
@@ -174,10 +195,17 @@ export default function PrivacyPage() {
           </p>
           <p>
             The Chrome extension uses <code>chrome.storage.local</code> to
-            remember your sign-in token, extension preferences, and
-            accepted-message history on your own device. Your uploaded resumes
-            are stored in your Aletheia account rather than in Chrome local
-            storage.
+            remember your sign-in token, profile-reading consent, extension
+            preferences, and accepted-message history on your own device. Your
+            uploaded resumes are stored in your Aletheia account rather than in
+            Chrome local storage.
+          </p>
+          <p>
+            Before reading supported profile content, the extension presents an
+            in-product disclosure and requires your affirmative consent. You can
+            decline or later withdraw this consent in the extension settings.
+            When consent is declined or withdrawn, active profile readers stop
+            and extracted profile state is cleared.
           </p>
         </Section>
 
@@ -197,8 +225,10 @@ export default function PrivacyPage() {
               <strong>Correct</strong> inaccurate data in your account.
             </li>
             <li>
-              <strong>Withdraw consent</strong> by uninstalling the extension
-              and deleting your account.
+              <strong>Withdraw profile-reading consent</strong> in the extension
+              settings. You can stop all extension processing by uninstalling
+              it, and you can request deletion of the account data held by
+              Aletheia.
             </li>
             <li>
               <strong>Lodge a complaint</strong> with your local data protection
@@ -207,9 +237,9 @@ export default function PrivacyPage() {
           </ul>
           <p>
             If you are an EU/UK/Swiss resident, your rights under GDPR / UK GDPR
-            apply. Our legal basis for processing is your consent (when you
-            install and sign in) and our legitimate interest in operating the
-            service.
+            apply. Our legal basis for processing is your affirmative consent
+            for profile reading and requested drafts, and our legitimate
+            interest in securely operating the service.
           </p>
         </Section>
 
