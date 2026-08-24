@@ -223,7 +223,6 @@ Request body (Zod-validated — see `app/api/extension/generate/schema.ts`):
 ```typescript
 {
   profileMarkdown: string   // trim().min(10).max(10000) — LinkedIn profile innerText
-  profileUrl: string        // url().max(2048)
   resume?: string           // max 50000 chars
   jd?: string               // max 20000 chars
   category: 'linkedin_connection' | 'cold_email' | 'linkedin_inmail'

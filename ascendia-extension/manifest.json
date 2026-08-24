@@ -1,11 +1,10 @@
 {
   "manifest_version": 3,
-  "name": "Aletheia - Professional Message Drafts",
-  "version": "1.0.7",
-  "description": "Draft reviewed outreach messages and grounded YC application answers from context you choose.",
+  "name": "Aletheia - Review-First Professional Drafts",
+  "version": "1.0.8",
+  "description": "Draft professional introductions and application answers from context you choose. Review and edit every result before use.",
   "permissions": [
     "storage",
-    "activeTab",
     "contextMenus",
     "sidePanel",
     "alarms",

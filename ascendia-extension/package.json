@@ -1,7 +1,7 @@
 {
   "name": "aletheia-extension",
-  "version": "1.0.7",
-  "description": "Enhanced Aletheia Chrome Extension with enterprise-grade security and performance",
+  "version": "1.0.8",
+  "description": "Draft professional introductions and application answers from context you choose. Review and edit every result before use.",
   "private": true,
   "scripts": {
     "build": "tsc",

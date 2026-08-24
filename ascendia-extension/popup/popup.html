@@ -82,6 +82,38 @@
         </div>
       </div>
 
+      <section
+        id="profileConsent"
+        class="consent-panel"
+        aria-labelledby="profileConsentTitle"
+      >
+        <p class="consent-eyebrow">YOUR CONTEXT, YOUR CONTROL</p>
+        <h1 id="profileConsentTitle">Before Aletheia reads a profile</h1>
+        <p>
+          Aletheia can read visible details from the supported profile page you
+          open and send the selected context to Aletheia’s service to prepare a
+          draft. It uses your Aletheia session for authentication and never
+          reads your LinkedIn password or sends messages automatically.
+        </p>
+        <div class="consent-actions">
+          <button id="consentContinue" class="action-btn primary">
+            Continue
+          </button>
+          <button id="consentNotNow" class="action-btn secondary">
+            Not now
+          </button>
+        </div>
+        <a
+          class="consent-link"
+          href="https://www.aletheia.live/privacy"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Privacy policy
+        </a>
+        <p id="consentStatus" class="consent-status" role="status" aria-live="polite"></p>
+      </section>
+
       <!-- Reading Profile Banner -->
       <div
         id="readingProfile"

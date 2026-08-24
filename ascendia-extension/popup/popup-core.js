@@ -114,7 +114,6 @@ export function buildGeneratePayload(
   const isFollowUp = emailMode === "follow_up";
   return {
     profileMarkdown: profile.profileMarkdown,
-    profileUrl: profile.profileUrl,
     jd: isFollowUp ? "" : contextValue || "",
     conversationContext: isFollowUp ? contextValue || "" : "",
     category,

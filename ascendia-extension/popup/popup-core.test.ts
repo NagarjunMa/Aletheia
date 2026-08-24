@@ -144,7 +144,6 @@ describe("buildGeneratePayload", () => {
   it("assembles correct shape", () => {
     const profile = {
       profileMarkdown: "md",
-      profileUrl: "https://li.com/in/test",
     };
     const result = buildGeneratePayload(
       profile,
@@ -157,7 +156,6 @@ describe("buildGeneratePayload", () => {
     );
     expect(result).toEqual({
       profileMarkdown: "md",
-      profileUrl: "https://li.com/in/test",
       jd: "job desc",
       conversationContext: "",
       category: "cold_email",
@@ -170,7 +168,6 @@ describe("buildGeneratePayload", () => {
   it("uses the shared context textarea as conversationContext for follow-ups", () => {
     const profile = {
       profileMarkdown: "md",
-      profileUrl: "https://li.com/in/test",
     };
     const result = buildGeneratePayload(
       profile,
@@ -188,7 +185,7 @@ describe("buildGeneratePayload", () => {
   });
 
   it("defaults empty strings for missing optional fields", () => {
-    const profile = { profileMarkdown: "md", profileUrl: "url" };
+    const profile = { profileMarkdown: "md" };
     const result = buildGeneratePayload(
       profile,
       null,

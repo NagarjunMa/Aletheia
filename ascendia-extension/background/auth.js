@@ -172,13 +172,6 @@ async function _doFetchSessionFromWebApp(apiUrl) {
   // Method 2: Fallback — read cookies directly via chrome.cookies API
   console.log("[AUTH] Falling back to chrome.cookies.getAll...");
   const cookies = await chrome.cookies.getAll({ url: baseUrl });
-  console.log(
-    "[AUTH] All cookies for",
-    baseUrl,
-    ":",
-    cookies.map((c) => `${c.name}=${c.value.substring(0, 20)}...`).join(", ") ||
-      "(none)",
-  );
 
   // Match only `sb-<ref>-auth-token` and its `.0`/`.1` chunks. PKCE OAuth
   // verifiers (`sb-<ref>-auth-token-code-verifier`) share the substring
@@ -187,10 +180,7 @@ async function _doFetchSessionFromWebApp(apiUrl) {
     /^sb-[^=]+-auth-token(?:\.\d+)?$/.test(c.name),
   );
 
-  console.log(
-    "[AUTH] Auth cookies found:",
-    authCookies.map((c) => c.name).join(", ") || "(none)",
-  );
+  console.log("[AUTH] Aletheia session cookies found:", authCookies.length);
 
   if (authCookies.length === 0) {
     throw new Error(

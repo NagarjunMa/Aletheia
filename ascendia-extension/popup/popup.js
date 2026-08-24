@@ -16,6 +16,8 @@ let currentProfile = null;
 let currentOutput = null;
 const BACKGROUND_UNAVAILABLE_CODE = "BACKGROUND_UNAVAILABLE";
 const DEFAULT_API_URL = "https://www.aletheia.live";
+const PROFILE_EXTRACTION_CONSENT_KEY = "profileExtractionConsent";
+let profileMonitoringStarted = false;
 
 function normalizeApiUrl(apiUrl) {
   let value = String(apiUrl || "").trim();
@@ -70,20 +72,26 @@ function sendBackgroundMessage(message) {
 
 // Initialize popup when DOM is loaded
 document.addEventListener("DOMContentLoaded", async () => {
-  await initializePopup();
   setupEventListeners();
-  await checkLinkedInProfile();
-
-  // Re-check profile when active tab URL changes or user switches tabs
-  chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
-    if (changeInfo.status === "complete") checkLinkedInProfile();
-  });
-  chrome.tabs.onActivated.addListener(() => checkLinkedInProfile());
+  if (await hasProfileExtractionConsent()) {
+    await startProfileWorkflow();
+  } else {
+    showProfileConsent();
+  }
 
   // React to auth state changes (e.g., auth-bridge stores session while popup is open).
   // Full reload is the safest path: showAuthRequired() may have wiped #mainContent
   // contents, so a fresh DOM is needed to restore #jdInput, #category, etc.
   chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === "local" && changes[PROFILE_EXTRACTION_CONSENT_KEY]) {
+      if (changes[PROFILE_EXTRACTION_CONSENT_KEY].newValue !== true) {
+        currentProfile = null;
+        showProfileConsent(
+          "Profile reading is off. You can re-enable it from here at any time.",
+        );
+      }
+    }
+
     if (area === "local" && changes.aletheia_auth) {
       const before = changes.aletheia_auth.oldValue;
       const after = changes.aletheia_auth.newValue;
@@ -98,6 +106,37 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   });
 });
+
+async function hasProfileExtractionConsent() {
+  const stored = await chrome.storage.local.get(PROFILE_EXTRACTION_CONSENT_KEY);
+  return stored[PROFILE_EXTRACTION_CONSENT_KEY] === true;
+}
+
+function showProfileConsent(statusMessage = "") {
+  document.getElementById("profileConsent")?.classList.remove("hidden");
+  document.getElementById("readingProfile").style.display = "none";
+  document.getElementById("profileBanner")?.classList.add("hidden");
+  document.getElementById("noProfile")?.classList.add("hidden");
+  document.getElementById("mainContent")?.classList.add("hidden");
+  document.getElementById("consentStatus").textContent = statusMessage;
+}
+
+async function startProfileWorkflow() {
+  document.getElementById("profileConsent")?.classList.add("hidden");
+  await initializePopup();
+  await checkLinkedInProfile();
+  startProfileMonitoring();
+}
+
+function startProfileMonitoring() {
+  if (profileMonitoringStarted) return;
+  profileMonitoringStarted = true;
+
+  chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+    if (changeInfo.status === "complete") checkLinkedInProfile();
+  });
+  chrome.tabs.onActivated.addListener(() => checkLinkedInProfile());
+}
 
 async function initializePopup() {
   console.log("[POPUP] initializePopup: checking auth status...");
@@ -160,6 +199,20 @@ function setupEventListeners() {
   // Refresh button
   document.getElementById("refreshBtn").addEventListener("click", () => {
     checkLinkedInProfile(true);
+  });
+
+  document
+    .getElementById("consentContinue")
+    ?.addEventListener("click", async () => {
+      await chrome.storage.local.set({
+        [PROFILE_EXTRACTION_CONSENT_KEY]: true,
+      });
+      await startProfileWorkflow();
+    });
+  document.getElementById("consentNotNow")?.addEventListener("click", () => {
+    showProfileConsent(
+      "Profile reading is off. Select Continue when you are ready.",
+    );
   });
 
   // Generate button
@@ -405,6 +458,12 @@ async function checkLinkedInProfile(forceRefresh = false) {
   const readingBanner = document.getElementById("readingProfile");
   const refreshIcon = document.querySelector("#refreshBtn .refresh-icon");
   const category = document.getElementById("category")?.value;
+
+  if (!(await hasProfileExtractionConsent())) {
+    currentProfile = null;
+    showProfileConsent();
+    return;
+  }
 
   if (category === YC_APPLICATION_CATEGORY) {
     readingBanner.style.display = "none";

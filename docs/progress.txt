@@ -22,6 +22,34 @@ Follow-up:
 
 ### 2026-08-24
 
+Branch: `fix/store-submission-readiness`
+
+Area: Chrome Web Store release readiness (1.0.8)
+
+Problem: The package logged partial authentication-cookie values, started profile extraction without in-extension affirmative consent, sent an unnecessary profile URL, requested unused `activeTab`, exposed no fallback Store URL through the version endpoint, and lacked a clean, traceable release checklist.
+
+Decision: Remove sensitive cookie logging and the outbound `profileUrl` contract while preserving backward-compatible parsing for already-installed clients. Gate content extraction and popup profile checks on a locally stored affirmative consent flag, stop active readers immediately when consent is withdrawn, and expose that control in Settings. Bump the extension to 1.0.8, remove `activeTab`, use the review-first metadata, and retain the Store listing/screenshot tasks as an explicit publication checklist.
+
+Files changed:
+
+- Extension authentication, manifest, content reader, popup, Settings, version metadata, and focused regression tests
+- Extension generate schema/service/prompt contract and endpoint tests
+- Version endpoint fallback and Chrome Web Store submission checklist
+
+Tests/checks:
+
+- Root unit suite: 57 files / 681 tests passed
+- Extension focused suite: 4 files / 44 tests passed
+- Root lint, strict TypeScript, 13 guardrails, `git diff --check`, and extension version policy passed
+
+Result: Version 1.0.8 has no cookie-value logs, no automatic profile extraction before consent, a user withdrawal control, no outbound profile URL, no unused `activeTab` permission, and a non-null Store URL fallback. Packaging remains pending until this complete change set is committed cleanly.
+
+Follow-up:
+
+- Commit the release change set, rebuild the ZIP from that clean commit, and complete the Chrome Web Store Console listing, screenshots, and Privacy practices entries before upload.
+
+### 2026-08-24
+
 Branch: `feat/ale-33-landing-trust-seo`
 
 Area: ALE-33 — landing-page trust, positioning, and SEO refresh

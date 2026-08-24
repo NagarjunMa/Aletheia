@@ -35,19 +35,21 @@ describe("GET /api/extension/version", () => {
     expect(res.status).toBe(200);
     expect(body).toMatchObject({
       appVersion: "0.1.0",
-      extensionVersion: "1.0.7",
+      extensionVersion: "1.0.8",
       sha: "local",
       builtAt: "local",
-      chromeWebStoreUrl: null,
+      chromeWebStoreUrl:
+        "https://chromewebstore.google.com/detail/pneenlhefkghefjpaafgllkjkpfjnkgg",
       api: {
         currentVersion: "1",
         supportedVersions: ["1"],
       },
       extension: {
-        latestSourceVersion: "1.0.7",
+        latestSourceVersion: "1.0.8",
         publishedVersion: "1.0.2",
         minimumSupportedVersion: "1.0.2",
-        chromeWebStoreUrl: null,
+        chromeWebStoreUrl:
+          "https://chromewebstore.google.com/detail/pneenlhefkghefjpaafgllkjkpfjnkgg",
       },
     });
     expect(res.headers.get("Cache-Control")).toBe("no-store");
@@ -67,13 +69,13 @@ describe("GET /api/extension/version", () => {
     expect(res.status).toBe(200);
     expect(body).toMatchObject({
       appVersion: "0.1.0",
-      extensionVersion: "1.0.7",
+      extensionVersion: "1.0.8",
       sha: "1234567890ab",
       chromeWebStoreUrl:
         "https://chromewebstore.google.com/detail/aletheia/example",
     });
     expect(body.extension).toMatchObject({
-      latestSourceVersion: "1.0.7",
+      latestSourceVersion: "1.0.8",
       publishedVersion: "1.0.2",
       minimumSupportedVersion: "1.0.1",
     });

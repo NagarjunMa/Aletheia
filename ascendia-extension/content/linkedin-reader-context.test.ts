@@ -23,8 +23,8 @@ describe("linkedin-reader extension context guard", () => {
   it("cleans up the SPA watcher interval when the context is invalid", () => {
     expect(readerSource).toContain("let navigationInterval = null");
     expect(readerSource).toContain("clearInterval(navigationInterval)");
-    expect(readerSource).toContain(
-      "cleanup('navigation watcher: context invalid')",
+    expect(readerSource).toMatch(
+      /cleanup\(["']navigation watcher: context invalid["']\)/,
     );
   });
 

@@ -14,6 +14,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 // Production default - used when no custom URL has been saved
 const DEFAULT_API_URL = "https://www.aletheia.live";
 const BACKGROUND_UNAVAILABLE_CODE = "BACKGROUND_UNAVAILABLE";
+const PROFILE_EXTRACTION_CONSENT_KEY = "profileExtractionConsent";
 
 function sendBackgroundMessage(message) {
   return new Promise((resolve) => {
@@ -64,12 +65,17 @@ let currentSettings = {
   showNotifications: true,
   maxDailyUsage: 50,
 };
+let profileExtractionConsent = false;
 
 async function initializeSettings() {
   // Read the API base URL from chrome.storage.sync (shared across devices)
   const { apiBaseUrl } = await chrome.storage.sync.get("apiBaseUrl");
 
-  const stored = await chrome.storage.local.get(["apiUrl", "settings"]);
+  const stored = await chrome.storage.local.get([
+    "apiUrl",
+    "settings",
+    PROFILE_EXTRACTION_CONSENT_KEY,
+  ]);
 
   currentSettings = {
     ...currentSettings,
@@ -78,6 +84,7 @@ async function initializeSettings() {
     // Prefer sync storage, then local, then default
     apiUrl: normalizeApiUrl(apiBaseUrl || stored.apiUrl || DEFAULT_API_URL),
   };
+  profileExtractionConsent = stored[PROFILE_EXTRACTION_CONSENT_KEY] === true;
 
   updateStatusIndicators();
 }
@@ -122,6 +129,9 @@ function setupEventListeners() {
   document
     .getElementById("maxDailyUsage")
     .addEventListener("input", handleDailyUsageChange);
+  document
+    .getElementById("profileExtractionConsent")
+    .addEventListener("change", handleProfileExtractionConsentToggle);
 
   // Data Management
   document
@@ -168,6 +178,8 @@ async function loadUserSettings() {
     currentSettings.autoFillEnabled !== false;
   document.getElementById("showNotifications").checked =
     currentSettings.showNotifications !== false;
+  document.getElementById("profileExtractionConsent").checked =
+    profileExtractionConsent;
 
   // Range slider
   const dailyUsageSlider = document.getElementById("maxDailyUsage");
@@ -418,6 +430,29 @@ function handleDailyUsageChange(e) {
   document.getElementById("dailyUsageValue").textContent = e.target.value;
 }
 
+async function handleProfileExtractionConsentToggle(e) {
+  const nextConsent = e.target.checked;
+
+  try {
+    await chrome.storage.local.set({
+      [PROFILE_EXTRACTION_CONSENT_KEY]: nextConsent,
+    });
+    profileExtractionConsent = nextConsent;
+    showStatusMessage(
+      nextConsent
+        ? "Profile context reading enabled"
+        : "Profile context reading disabled",
+      "success",
+    );
+  } catch (error) {
+    e.target.checked = profileExtractionConsent;
+    showStatusMessage(
+      "Could not update profile-reading permission: " + error.message,
+      "error",
+    );
+  }
+}
+
 async function clearAllData() {
   const confirmed = confirm(
     "This will permanently delete all your settings, resume, and usage history. This action cannot be undone.\n\nAre you sure?",
@@ -437,6 +472,7 @@ async function clearAllData() {
       showNotifications: true,
       maxDailyUsage: 50,
     };
+    profileExtractionConsent = false;
 
     window.location.reload();
   } catch (error) {
@@ -467,6 +503,7 @@ async function exportUsageData() {
         autoFillEnabled: currentSettings.autoFillEnabled,
         showNotifications: currentSettings.showNotifications,
       },
+      profileExtractionConsent,
     };
 
     const blob = new Blob([JSON.stringify(exportData, null, 2)], {
@@ -532,6 +569,7 @@ async function resetToDefaults() {
     document.getElementById("apiUrlCustom").classList.add("hidden");
     document.getElementById("autoFillEnabled").checked = true;
     document.getElementById("showNotifications").checked = true;
+    document.getElementById("profileExtractionConsent").checked = false;
     document.getElementById("maxDailyUsage").value = 50;
     document.getElementById("dailyUsageValue").textContent = "50";
 
@@ -541,6 +579,8 @@ async function resetToDefaults() {
       showNotifications: true,
       maxDailyUsage: 50,
     };
+    profileExtractionConsent = false;
+    await chrome.storage.local.remove(PROFILE_EXTRACTION_CONSENT_KEY);
 
     showStatusMessage("Settings reset to defaults", "success");
   } catch (error) {

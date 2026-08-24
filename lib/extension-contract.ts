@@ -4,6 +4,8 @@ export const EXTENSION_VERSION_HEADER = "x-aletheia-extension-version";
 export const CURRENT_EXTENSION_API_VERSION = "1";
 export const SUPPORTED_EXTENSION_API_VERSIONS = ["1"] as const;
 export const LEGACY_EXTENSION_VERSION = "1.0.2";
+export const DEFAULT_CHROME_WEB_STORE_URL =
+  "https://chromewebstore.google.com/detail/pneenlhefkghefjpaafgllkjkpfjnkgg";
 
 const CHROME_VERSION_PATTERN = /^(0|[1-9]\d{0,4})(\.(0|[1-9]\d{0,4})){0,3}$/;
 const MAX_CHROME_VERSION_COMPONENT = 65_535;
@@ -39,8 +41,7 @@ type IncompatibleExtensionContract = {
 };
 
 export type ExtensionContractResult =
-  | CompatibleExtensionContract
-  | IncompatibleExtensionContract;
+  CompatibleExtensionContract | IncompatibleExtensionContract;
 
 function parseChromeVersion(version: string): number[] | null {
   if (!CHROME_VERSION_PATTERN.test(version)) return null;
@@ -101,8 +102,11 @@ export function getPublishedExtensionVersion(): string {
   );
 }
 
-export function getChromeWebStoreUrl(): string | null {
-  return process.env.NEXT_PUBLIC_CHROME_WEB_STORE_URL?.trim() || null;
+export function getChromeWebStoreUrl(): string {
+  return (
+    process.env.NEXT_PUBLIC_CHROME_WEB_STORE_URL?.trim() ||
+    DEFAULT_CHROME_WEB_STORE_URL
+  );
 }
 
 export function getExtensionContractResponseHeaders(): Record<string, string> {
