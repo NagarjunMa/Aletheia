@@ -58,11 +58,13 @@ export default function TermsPage() {
         <Section title="2. What the Service does">
           <p>
             Aletheia uses the profile or opportunity context you choose to
-            reference, combines it with your resume and intent, and produces a
-            draft connection note, networking email, follow-up, or role-fit
-            reply. You review the draft and decide whether to send it. The
-            Service does not send messages for you, does not auto-connect, and
-            does not collect or contact people on your behalf.
+            reference, combines it with your resume, application-profile
+            evidence where supported, and intent, and produces a draft
+            connection note, cold email, InMail, follow-up, referral request,
+            role-fit reply, or YC application answer. You review the draft and
+            decide whether to use it. The Service can optionally fill a reviewed
+            draft into a supported field, but does not send messages, submit
+            forms, auto-connect, or contact people on your behalf.
           </p>
         </Section>
 
@@ -161,10 +163,12 @@ export default function TermsPage() {
 
         <Section title="8. Fees">
           <p>
-            The free tier provides up to 30 generations per day at no cost. Paid
-            plans, if launched, will be governed by additional terms shown at
-            the point of purchase. No payment information is collected on the
-            current free tier.
+            New accounts receive one 40-credit trial. A connection note uses 2
+            credits; a cold email, InMail, or YC application answer uses 4.
+            Daily safeguards may limit use. Credits do not expire. Refill
+            checkout is not currently available, and no paid plan is being
+            offered through the Service at this time. No payment information is
+            collected by Aletheia.
           </p>
         </Section>
 

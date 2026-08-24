@@ -4,6 +4,8 @@ import Navbar from "@/components/landing/Navbar";
 import Hero from "@/components/landing/Hero";
 import WhyAletheia from "@/components/landing/WhyAletheia";
 import HowItWorks from "@/components/landing/HowItWorks";
+import Capabilities from "@/components/landing/Capabilities";
+import TrustProof from "@/components/landing/TrustProof";
 import Footer from "@/components/landing/Footer";
 import ShaderBackground from "@/components/ShaderBackground";
 
@@ -13,32 +15,32 @@ const FounderNote = dynamic(() => import("@/components/landing/FounderNote"));
 const CTA = dynamic(() => import("@/components/landing/CTA"));
 
 export const metadata: Metadata = {
-  title: "Aletheia — LinkedIn Message Drafts for Professional Networking",
+  title: "LinkedIn Messaging & Professional Outreach Assistant | Aletheia",
   description:
-    "Aletheia is a Chrome extension for drafting LinkedIn connection notes, networking emails, follow-ups, and role-fit replies. Use your resume and selected profile context, then review every draft before sending.",
+    "Compose thoughtful LinkedIn connection notes, polished InMail, tailored emails, and grounded YC application answers from context you choose. Review every draft before sending.",
   keywords: [
     "LinkedIn connection message",
-    "networking email",
+    "LinkedIn InMail",
+    "cold email",
     "professional outreach",
     "Chrome extension",
     "resume based drafts",
     "follow up email",
-    "role fit summary",
+    "YC application answers",
     "job search networking",
     "professional networking drafts",
   ],
   openGraph: {
-    title: "Aletheia — LinkedIn Message Drafts for Professional Networking",
+    title: "LinkedIn Messaging & Professional Outreach Assistant | Aletheia",
     description:
-      "Draft LinkedIn connection notes, networking emails, follow-ups, and role-fit replies from context you choose. Resume-aware, user-reviewed, and installed through Chrome.",
+      "Compose thoughtful LinkedIn connection notes, polished InMail, tailored emails, and grounded YC application answers from context you choose. Review every draft before sending.",
     type: "website",
-    images: [{ url: "/Aletheia.svg", width: 1200, height: 630 }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Aletheia — LinkedIn Message Drafts for Professional Networking",
+    title: "LinkedIn Messaging & Professional Outreach Assistant | Aletheia",
     description:
-      "Draft LinkedIn connection notes, networking emails, follow-ups, and role-fit replies from context you choose. Resume-aware, user-reviewed, and installed through Chrome.",
+      "Compose thoughtful LinkedIn connection notes, polished InMail, tailored emails, and grounded YC application answers from context you choose. Review every draft before sending.",
   },
 };
 
@@ -47,11 +49,15 @@ const jsonLd = {
   "@type": "SoftwareApplication",
   name: "Aletheia",
   description:
-    "Aletheia is a Chrome extension and web app that helps users draft professional networking messages from selected profile context, resume details, and outreach intent. Users review and edit every draft before sending.",
+    "Aletheia is a Chrome extension and web app that helps people prepare professional outreach and grounded application answers from context they choose. Users review and edit every draft before sending.",
   applicationCategory: "BusinessApplication",
   operatingSystem: "Chrome",
-  offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
-  softwareVersion: "1.0.0",
+  offers: {
+    "@type": "Offer",
+    price: "0",
+    priceCurrency: "USD",
+    name: "40-credit trial",
+  },
 };
 
 export default function Home() {
@@ -66,7 +72,9 @@ export default function Home() {
       <main>
         <Hero />
         <WhyAletheia />
+        <Capabilities />
         <HowItWorks />
+        <TrustProof />
         <Pricing />
         <FAQ />
         <FounderNote />

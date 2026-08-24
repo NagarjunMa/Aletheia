@@ -2,7 +2,7 @@ import Link from "next/link";
 
 const CHROME_WEB_STORE_URL =
   process.env.NEXT_PUBLIC_CHROME_WEB_STORE_URL ??
-  "https://chromewebstore.google.com/search/Aletheia";
+  "https://chromewebstore.google.com/detail/pneenlhefkghefjpaafgllkjkpfjnkgg";
 
 export default function CTA() {
   return (
@@ -27,21 +27,21 @@ export default function CTA() {
                 letterSpacing: "-0.02em",
               }}
             >
-              Install from the{" "}
-              <em style={{ fontStyle: "italic" }}>Chrome Web Store.</em>
+              Start with a{" "}
+              <em style={{ fontStyle: "italic" }}>draft you control.</em>
             </h2>
             <p
               className="mt-5 text-sm leading-relaxed"
               style={{ color: "var(--l-text-muted)", maxWidth: "48ch" }}
             >
-              Aletheia is available as a Chrome extension. Install it from the
-              official Chrome Web Store listing, sign in, add your primary
-              resume in the dashboard, and start drafting reviewed professional
-              messages.
+              Install Aletheia from the official Chrome Web Store, add the
+              source material you want to use, and refine every draft in your
+              own voice. It can fill a reviewed draft into a supported field,
+              but it never sends for you.
             </p>
 
             <p className="mt-6 text-xs" style={{ color: "var(--l-text-dim)" }}>
-              40 free credits · Browser-managed updates · User-reviewed drafts
+              40-credit trial · Browser-managed updates · No automated sending
             </p>
           </div>
 
@@ -86,7 +86,7 @@ export default function CTA() {
               }}
             >
               <Link href="/demo" style={{ color: "var(--l-text-dim)" }}>
-                See a real draft first →
+                View an illustrative example →
               </Link>
             </div>
           </div>

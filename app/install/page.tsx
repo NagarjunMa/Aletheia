@@ -6,12 +6,12 @@ import ShaderBackground from "@/components/ShaderBackground";
 
 const CHROME_WEB_STORE_URL =
   process.env.NEXT_PUBLIC_CHROME_WEB_STORE_URL ??
-  "https://chromewebstore.google.com/search/Aletheia";
+  "https://chromewebstore.google.com/detail/pneenlhefkghefjpaafgllkjkpfjnkgg";
 
 export const metadata: Metadata = {
   title: "Install Aletheia from the Chrome Web Store",
   description:
-    "Install the official Aletheia Chrome extension from the Chrome Web Store to draft reviewed LinkedIn connection notes, networking emails, follow-ups, and role-fit replies.",
+    "Install the official Aletheia Chrome extension to prepare reviewed LinkedIn connection notes, InMail, tailored emails, and grounded YC application answers.",
   robots: { index: true, follow: true },
 };
 
@@ -34,7 +34,7 @@ const STEPS: { title: string; body: string }[] = [
   },
   {
     title: "Draft and review",
-    body: "Open a supported profile or opportunity, choose your message type, generate a draft, and review it before sending.",
+    body: "Open a supported profile or opportunity, choose your message type, and review the draft before you use it. Optional auto-fill can place a reviewed draft in a supported field; it never sends or submits anything.",
   },
 ];
 
@@ -100,7 +100,7 @@ export default function InstallPage() {
               className="text-xs tracking-widest uppercase"
               style={{ color: "var(--l-text-dim)" }}
             >
-              See a sample draft first →
+              View an illustrative example →
             </Link>
           </div>
         </section>
@@ -172,9 +172,18 @@ export default function InstallPage() {
             style={{ color: "var(--l-text-muted)" }}
           >
             Aletheia creates drafts only. You review, edit, copy, approve, or
-            reject each message before deciding what to send.
+            reject each message before deciding what to send. It does not click
+            Send, submit forms, or contact people on your behalf.
           </p>
         </section>
+
+        <p
+          className="text-center text-xs"
+          style={{ color: "var(--l-text-dim)" }}
+        >
+          Includes one 40-credit trial. Refill checkout is not currently
+          available.
+        </p>
 
         <div className="mt-12 flex justify-center">
           <Link
