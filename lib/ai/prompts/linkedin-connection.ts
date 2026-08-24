@@ -477,7 +477,6 @@ import type { CandidateGroundingSource } from "@/modules/candidate-context/domai
 
 interface GenerateInput {
   profileMarkdown: string;
-  profileUrl: string;
   resume: string;
   additionalProjects?: string;
   jd?: string;

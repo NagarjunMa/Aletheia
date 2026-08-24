@@ -28,7 +28,6 @@ TypeScript, Rust, Distributed Systems`;
 
 const baseInput = {
   profileMarkdown,
-  profileUrl: "https://linkedin.com/in/janedoe",
   resume: "Software engineer with 5 years experience in distributed systems.",
   category: "linkedin_connection" as const,
   intent: "networking" as const,

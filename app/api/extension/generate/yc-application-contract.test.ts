@@ -21,7 +21,6 @@ const validJobDescription = `Founding software engineer at an early-stage AI com
 
 const legacyPayload = {
   profileMarkdown: "# Jane Doe\nSenior Software Engineer at Acme\nNew York, NY",
-  profileUrl: "https://linkedin.com/in/janedoe",
   resume: "Server and product engineering experience.",
   jd: "Existing optional target context.",
   conversationContext: "Existing conversation context.",

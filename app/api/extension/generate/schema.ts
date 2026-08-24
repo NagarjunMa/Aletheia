@@ -3,7 +3,6 @@ import { EMAIL_MODES } from "@/lib/ai/email-formatter";
 
 const legacyGenerateRequestFields = {
   profileMarkdown: z.string().trim().min(10).max(10000),
-  profileUrl: z.string().url().max(2048),
   resume: z.string().max(50000).nullish().default(""),
   jd: z.string().max(20000).nullish().default(""),
   conversationContext: z.string().max(12000).nullish().default(""),

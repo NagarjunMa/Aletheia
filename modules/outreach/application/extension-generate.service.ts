@@ -196,7 +196,6 @@ export async function POST(request: NextRequest) {
 
     const {
       profileMarkdown,
-      profileUrl,
       resume,
       jd,
       conversationContext,
@@ -341,7 +340,6 @@ export async function POST(request: NextRequest) {
         {
           userId: authResult.userId.substring(0, 12),
           reasons: injectionScan.reasons,
-          profileUrl,
           resumeChars: sanitizedResume.length,
           resumeForPromptChars: safeCandidateSummary.length,
           resumeSource,
@@ -374,7 +372,6 @@ export async function POST(request: NextRequest) {
     const systemPrompt = getSystemPrompt(category);
     const promptInput: GenerateInput = {
       profileMarkdown: cleanMarkdown,
-      profileUrl,
       resume: resumeForPrompt,
       jd: jdForPrompt,
       conversationContext: sanitizedConversationContext,

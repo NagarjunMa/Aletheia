@@ -51,7 +51,6 @@ describe("generate flow integration", () => {
     // 3. Build payload
     const profile = {
       profileMarkdown: "Jane is a senior engineer...".repeat(10),
-      profileUrl: "https://linkedin.com/in/jane",
     };
     const accepted = [
       { category: "linkedin_connection", body: "Hi Jane, loved your post!" },

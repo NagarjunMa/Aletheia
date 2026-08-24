@@ -2,11 +2,13 @@
 // Extracts LinkedIn profile text via innerText — no CSS selectors, no external libraries.
 // This approach is immune to LinkedIn DOM/class changes.
 
-(function() {
-  'use strict';
+(function () {
+  "use strict";
 
   if (window.__aletheiaLinkedInReaderInitialized) {
-    console.debug('LinkedIn Reader: Already initialized, skipping duplicate injection');
+    console.debug(
+      "LinkedIn Reader: Already initialized, skipping duplicate injection",
+    );
     return;
   }
   window.__aletheiaLinkedInReaderInitialized = true;
@@ -16,103 +18,145 @@
   let profileObserver = null;
   let navigationInterval = null;
   let cleanedUp = false;
+  let profileExtractionConsent = false;
+  let profileReaderActive = false;
+  const PROFILE_EXTRACTION_CONSENT_KEY = "profileExtractionConsent";
 
   // Initialize when page loads
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initializeProfileReader);
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initializeProfileReader);
   } else {
     initializeProfileReader();
   }
 
-  function initializeProfileReader() {
-    console.log('LinkedIn Reader: Initializing on page:', window.location.href);
+  async function initializeProfileReader() {
+    console.log("LinkedIn Reader: Initializing on page:", window.location.href);
 
     if (!isExtensionContextValid()) {
-      cleanup('initialize: context invalid');
+      cleanup("initialize: context invalid");
       return;
     }
 
+    registerMessageListener();
+    registerConsentListener();
+    const stored = await chrome.storage.local.get(
+      PROFILE_EXTRACTION_CONSENT_KEY,
+    );
+    profileExtractionConsent = stored[PROFILE_EXTRACTION_CONSENT_KEY] === true;
+
+    if (profileExtractionConsent) {
+      activateProfileReader();
+    } else {
+      console.log("LinkedIn Reader: Waiting for profile-reading consent");
+    }
+  }
+
+  function activateProfileReader() {
+    if (!profileExtractionConsent || profileReaderActive || cleanedUp) return;
     if (!isLinkedInProfilePage()) {
-      console.log('LinkedIn Reader: Not a LinkedIn profile page, exiting');
+      console.log(
+        "LinkedIn Reader: Not a LinkedIn profile page, staying inert",
+      );
       return;
     }
 
-    console.log('LinkedIn Reader: On LinkedIn profile page, setting up extraction');
-
-    // Wait for dynamic content, then extract
-    setTimeout(() => { extractAndNotifyProfile(); }, 1500);
+    profileReaderActive = true;
+    console.log(
+      "LinkedIn Reader: On LinkedIn profile page, setting up extraction",
+    );
+    setTimeout(() => {
+      extractAndNotifyProfile();
+    }, 1500);
     extractAndNotifyProfile();
 
     observeProfileChanges();
-    registerMessageListener();
     startNavigationWatcher();
-
-    console.log('LinkedIn Reader: Setup complete');
+    console.log("LinkedIn Reader: Setup complete");
   }
 
   function isLinkedInProfilePage() {
-    return window.location.pathname.startsWith('/in/') &&
-           window.location.hostname.includes('linkedin.com');
+    return (
+      window.location.pathname.startsWith("/in/") &&
+      window.location.hostname.includes("linkedin.com")
+    );
   }
 
   function extractLinkedInProfile() {
+    if (!profileExtractionConsent || !profileReaderActive) return null;
     try {
-      console.log('LinkedIn Reader: Starting extraction...');
+      console.log("LinkedIn Reader: Starting extraction...");
 
       // Extract name from page title — far more stable than CSS selectors.
       // LinkedIn title format: "John Smith - Software Engineer | LinkedIn"
-      const rawTitle = document.title || '';
-      const name = rawTitle.split(' - ')[0].replace(' | LinkedIn', '').trim() || null;
+      const rawTitle = document.title || "";
+      const name =
+        rawTitle.split(" - ")[0].replace(" | LinkedIn", "").trim() || null;
 
       if (!name) {
-        console.log('LinkedIn Reader: Could not extract name from document.title:', rawTitle);
+        console.log(
+          "LinkedIn Reader: Could not extract name from document.title:",
+          rawTitle,
+        );
         return null;
       }
 
       // Extract plain text from the main profile content area.
       // innerText requires no external library, is selector-independent,
       // and produces clean readable text Claude can parse directly.
-      const mainEl = document.querySelector('main') || document.body;
-      const profileMarkdown = (mainEl.innerText || '').replace(/\n{3,}/g, '\n\n').trim().slice(0, 8000);
+      const mainEl = document.querySelector("main") || document.body;
+      const profileMarkdown = (mainEl.innerText || "")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim()
+        .slice(0, 8000);
 
       if (profileMarkdown.length < 50) {
-        console.log('LinkedIn Reader: Content too short, page may not be loaded yet');
+        console.log(
+          "LinkedIn Reader: Content too short, page may not be loaded yet",
+        );
         return null;
       }
 
-      console.log('LinkedIn Reader: Extracted', profileMarkdown.length, 'chars for:', name);
+      console.log(
+        "LinkedIn Reader: Extracted",
+        profileMarkdown.length,
+        "chars for:",
+        name,
+      );
 
       return {
         name,
         profileMarkdown,
-        profileUrl: window.location.href,
-        extractedAt: Date.now()
+        extractedAt: Date.now(),
       };
-
     } catch (error) {
-      console.error('LinkedIn profile extraction error:', error);
+      console.error("LinkedIn profile extraction error:", error);
       return null;
     }
   }
 
   function extractAndNotifyProfile() {
-    if (cleanedUp) return;
+    if (cleanedUp || !profileExtractionConsent || !profileReaderActive) return;
 
     if (extractionTimeout) {
       clearTimeout(extractionTimeout);
     }
 
     extractionTimeout = setTimeout(() => {
-      if (cleanedUp) return;
+      if (cleanedUp || !profileExtractionConsent || !profileReaderActive)
+        return;
 
       const profile = extractLinkedInProfile();
 
-      if (profile && (!lastExtractedProfile || hasProfileChanged(profile, lastExtractedProfile))) {
+      if (
+        profile &&
+        (!lastExtractedProfile ||
+          hasProfileChanged(profile, lastExtractedProfile))
+      ) {
         lastExtractedProfile = profile;
 
         sendRuntimeMessage({
-          action: 'profileUpdated',
-          profile
+          action: "profileUpdated",
+          profile,
         });
       }
     }, 500);
@@ -120,9 +164,10 @@
 
   function hasProfileChanged(newProfile, oldProfile) {
     if (!oldProfile) return true;
-    return newProfile.name !== oldProfile.name ||
-           newProfile.profileUrl !== oldProfile.profileUrl ||
-           newProfile.profileMarkdown.length !== oldProfile.profileMarkdown.length;
+    return (
+      newProfile.name !== oldProfile.name ||
+      newProfile.profileMarkdown.length !== oldProfile.profileMarkdown.length
+    );
   }
 
   function observeProfileChanges() {
@@ -130,10 +175,13 @@
       let shouldReextract = false;
 
       for (const mutation of mutations) {
-        if (mutation.type === 'childList') {
+        if (mutation.type === "childList") {
           for (const node of Array.from(mutation.addedNodes)) {
             if (node.nodeType === Node.ELEMENT_NODE) {
-              if (node.matches?.('main, section') || node.querySelector?.('main, section')) {
+              if (
+                node.matches?.("main, section") ||
+                node.querySelector?.("main, section")
+              ) {
                 shouldReextract = true;
                 break;
               }
@@ -153,7 +201,9 @@
 
   function isExtensionContextValid() {
     try {
-      return typeof chrome !== 'undefined' && !!chrome.runtime && !!chrome.runtime.id;
+      return (
+        typeof chrome !== "undefined" && !!chrome.runtime && !!chrome.runtime.id
+      );
     } catch (error) {
       return false;
     }
@@ -162,8 +212,100 @@
   function cleanup(reason) {
     if (cleanedUp) return;
     cleanedUp = true;
-    if (reason) console.debug('LinkedIn Reader: cleanup:', reason);
+    if (reason) console.debug("LinkedIn Reader: cleanup:", reason);
 
+    stopProfileExtraction();
+
+    try {
+      if (isExtensionContextValid()) {
+        chrome.runtime.onMessage.removeListener(handleMessage);
+        chrome.storage.onChanged.removeListener(handleConsentChange);
+      }
+    } catch (error) {
+      // The extension context is already invalid; nothing else to clean up.
+    }
+
+    window.__aletheiaLinkedInReaderInitialized = false;
+  }
+
+  function sendRuntimeMessage(message) {
+    if (!isExtensionContextValid()) {
+      cleanup("extension context invalid");
+      return false;
+    }
+
+    try {
+      const sendPromise = chrome.runtime.sendMessage(message);
+      if (sendPromise && typeof sendPromise.catch === "function") {
+        sendPromise.catch((error) => {
+          if (/context invalidated/i.test(error?.message || "")) {
+            cleanup("async sendMessage: context invalidated");
+          } else {
+            console.debug(
+              "LinkedIn Reader: Could not send runtime message:",
+              error,
+            );
+          }
+        });
+      }
+      return true;
+    } catch (error) {
+      if (/context invalidated/i.test(error?.message || "")) {
+        cleanup("sendMessage threw: context invalidated");
+      } else {
+        console.debug(
+          "LinkedIn Reader: Could not send runtime message:",
+          error,
+        );
+      }
+      return false;
+    }
+  }
+
+  function registerMessageListener() {
+    if (!isExtensionContextValid()) {
+      cleanup("register listener: context invalid");
+      return;
+    }
+
+    try {
+      chrome.runtime.onMessage.addListener(handleMessage);
+    } catch (error) {
+      if (/context invalidated/i.test(error?.message || "")) {
+        cleanup("addListener threw: context invalidated");
+      } else {
+        console.debug(
+          "LinkedIn Reader: Could not register message listener:",
+          error,
+        );
+      }
+    }
+  }
+
+  function registerConsentListener() {
+    try {
+      chrome.storage.onChanged.addListener(handleConsentChange);
+    } catch (error) {
+      if (/context invalidated/i.test(error?.message || "")) {
+        cleanup("add storage listener: context invalidated");
+      }
+    }
+  }
+
+  function handleConsentChange(changes, areaName) {
+    if (areaName !== "local" || !changes[PROFILE_EXTRACTION_CONSENT_KEY])
+      return;
+
+    profileExtractionConsent =
+      changes[PROFILE_EXTRACTION_CONSENT_KEY].newValue === true;
+    if (profileExtractionConsent) {
+      activateProfileReader();
+    } else {
+      stopProfileExtraction();
+    }
+  }
+
+  function stopProfileExtraction() {
     if (extractionTimeout) {
       clearTimeout(extractionTimeout);
       extractionTimeout = null;
@@ -176,80 +318,34 @@
       profileObserver.disconnect();
       profileObserver = null;
     }
-
-    try {
-      if (isExtensionContextValid()) {
-        chrome.runtime.onMessage.removeListener(handleMessage);
-      }
-    } catch (error) {
-      // The extension context is already invalid; nothing else to clean up.
-    }
-
-    window.__aletheiaLinkedInReaderInitialized = false;
-  }
-
-  function sendRuntimeMessage(message) {
-    if (!isExtensionContextValid()) {
-      cleanup('extension context invalid');
-      return false;
-    }
-
-    try {
-      const sendPromise = chrome.runtime.sendMessage(message);
-      if (sendPromise && typeof sendPromise.catch === 'function') {
-        sendPromise.catch(error => {
-          if (/context invalidated/i.test(error?.message || '')) {
-            cleanup('async sendMessage: context invalidated');
-          } else {
-            console.debug('LinkedIn Reader: Could not send runtime message:', error);
-          }
-        });
-      }
-      return true;
-    } catch (error) {
-      if (/context invalidated/i.test(error?.message || '')) {
-        cleanup('sendMessage threw: context invalidated');
-      } else {
-        console.debug('LinkedIn Reader: Could not send runtime message:', error);
-      }
-      return false;
-    }
-  }
-
-  function registerMessageListener() {
-    if (!isExtensionContextValid()) {
-      cleanup('register listener: context invalid');
-      return;
-    }
-
-    try {
-      chrome.runtime.onMessage.addListener(handleMessage);
-    } catch (error) {
-      if (/context invalidated/i.test(error?.message || '')) {
-        cleanup('addListener threw: context invalidated');
-      } else {
-        console.debug('LinkedIn Reader: Could not register message listener:', error);
-      }
-    }
+    profileReaderActive = false;
+    lastExtractedProfile = null;
   }
 
   function handleMessage(message, sender, sendResponse) {
     try {
+      if (!profileExtractionConsent || !profileReaderActive) {
+        sendResponse({
+          success: false,
+          error: "Profile access requires consent.",
+        });
+        return true;
+      }
       switch (message.action) {
-        case 'getProfile': {
+        case "getProfile": {
           const profile = extractLinkedInProfile();
           sendResponse({ success: true, profile });
           break;
         }
-        case 'reextractProfile':
+        case "reextractProfile":
           extractAndNotifyProfile();
           sendResponse({ success: true });
           break;
         default:
-          sendResponse({ success: false, error: 'Unknown action' });
+          sendResponse({ success: false, error: "Unknown action" });
       }
     } catch (error) {
-      console.error('Message handling error:', error);
+      console.error("Message handling error:", error);
       sendResponse({ success: false, error: error.message });
     }
     return true;
@@ -261,8 +357,9 @@
     let lastUrl = window.location.href;
 
     navigationInterval = setInterval(() => {
+      if (!profileExtractionConsent || !profileReaderActive) return;
       if (!isExtensionContextValid()) {
-        cleanup('navigation watcher: context invalid');
+        cleanup("navigation watcher: context invalid");
         return;
       }
 
@@ -273,15 +370,14 @@
           setTimeout(extractAndNotifyProfile, 1500);
         } else {
           lastExtractedProfile = null;
-          sendRuntimeMessage({ action: 'profileUpdated', profile: null });
+          sendRuntimeMessage({ action: "profileUpdated", profile: null });
         }
       }
     }, 1000);
   }
 
-  window.addEventListener('pagehide', () => cleanup('pagehide'));
-  window.addEventListener('beforeunload', () => cleanup('beforeunload'));
+  window.addEventListener("pagehide", () => cleanup("pagehide"));
+  window.addEventListener("beforeunload", () => cleanup("beforeunload"));
 
-  console.log('Aletheia LinkedIn Profile Reader (Turndown) initialized');
-
+  console.log("Aletheia LinkedIn Profile Reader (Turndown) initialized");
 })();

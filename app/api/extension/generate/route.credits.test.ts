@@ -71,7 +71,6 @@ vi.mock("@/lib/ai/sanitizer", () => ({
 const validPayload = {
   profileMarkdown:
     "# Jane Doe\nSoftware Engineer at Acme Corp\nSan Francisco, CA",
-  profileUrl: "https://linkedin.com/in/janedoe",
   jd: "Backend engineer role with AWS and AI systems.",
   category: "linkedin_connection",
 };

@@ -152,7 +152,6 @@ beforeEach(() => {
 const validPayload = {
   profileMarkdown:
     "# Jane Doe\nSoftware Engineer at Acme Corp\nSan Francisco, CA",
-  profileUrl: "https://linkedin.com/in/janedoe",
   category: "linkedin_connection",
 };
 
@@ -198,7 +197,6 @@ describe("generateRequestSchema", () => {
     const result = generateRequestSchema.safeParse({
       profileMarkdown:
         "# Jane Doe\nSenior Engineer at Acme\nSan Francisco, CA\n\nPassionate about building things.",
-      profileUrl: "https://linkedin.com/in/janedoe",
       resume: "My resume content here.",
       jd: "Job description here.",
       conversationContext: "Previous thread here.",
@@ -235,19 +233,17 @@ describe("generateRequestSchema", () => {
   it("fails when profileMarkdown is too short (min 10 chars)", () => {
     const result = generateRequestSchema.safeParse({
       profileMarkdown: "short",
-      profileUrl: "https://linkedin.com/in/janedoe",
       category: "linkedin_connection",
     });
     expect(result.success).toBe(false);
   });
 
-  it("fails when profileUrl is not a valid URL", () => {
-    const result = generateRequestSchema.safeParse({
-      profileMarkdown: "# Jane Doe\nSoftware Engineer",
-      profileUrl: "not-a-url",
-      category: "linkedin_connection",
+  it("strips the obsolete profileUrl from backward-compatible requests", () => {
+    const result = generateRequestSchema.parse({
+      ...validPayload,
+      profileUrl: "https://linkedin.com/in/janedoe",
     });
-    expect(result.success).toBe(false);
+    expect(result).not.toHaveProperty("profileUrl");
   });
 
   it("fails when category is invalid", () => {
@@ -317,7 +313,6 @@ describe("generateRequestSchema", () => {
 
   it("fails when profileMarkdown is missing entirely", () => {
     const result = generateRequestSchema.safeParse({
-      profileUrl: "https://linkedin.com/in/janedoe",
       category: "linkedin_connection",
     });
     expect(result.success).toBe(false);
