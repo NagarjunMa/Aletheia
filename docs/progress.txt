@@ -20,6 +20,34 @@ Follow-up:
 
 ## Entries
 
+### 2026-08-24
+
+Branch: `test/ale-24-nordnet-cold-email-regressions`
+
+Area: ALE-24 — synthetic Nordnet cold-email quality regression
+
+Problem: The Phase 2 renderer prevented unverified claims at generation time, but the golden suite did not explicitly guard against the observed generic-AI, technology-inventory, orphan-token, repeated-claim, and incomplete-signature failure pattern.
+
+Decision: Add a synthetic engineering-productivity fixture with a synthetic selected-source ledger, then enforce invariant-based quality rules rather than a brittle whole-email snapshot. `exploring` is allowed only when the fixture context marks it as confirmed.
+
+Files changed:
+
+- `lib/ai/evals/email-golden-cases.json`
+- `lib/ai/evals/email-quality.ts` and tests
+- `modules/outreach/application/render-cold-email.test.ts`
+- `docs/evals/eval-log.md`
+
+Tests/checks:
+
+- Focused email-quality and cold-email renderer suite passed: 2 files / 23 tests
+- Full Phase 2 gate passed: 57 unit files / 681 tests, 13 guardrails, lint, strict TypeScript, production build, and `git diff --check`
+
+Result: The synthetic Nordnet case now verifies concrete AI workflow evidence, selected-source phrases, safe exploratory wording, compact evidence, and a server-owned complete signature. No real candidate or recruiter data is stored in the repository.
+
+Follow-up:
+
+- Commit and open the ALE-24 PR; the final validation record is complete.
+
 ### 2026-08-23
 
 Branch: `main` (local Phase 1 and Phase 2 changes are uncommitted)

@@ -21,10 +21,17 @@ One-line entries. No commentary unless decision required.
 
 ## Entries
 
+### 2026-08-24 — ALE-24 synthetic Nordnet regression
+
+- Prompt/schema/renderer: `2.0.0` / semantic cold-email composition / deterministic cold-email renderer
+- Fixture: synthetic engineering-productivity target and two synthetic confirmed evidence sources; no private candidate or recruiter data
+- Rules: concrete AI workflow evidence, unsupported `exploring`, generic AI phrasing, technology inventories, orphaned technology lines, repeated claims, and complete-or-omitted signature
+- Result: focused eval/renderer tests and the full Phase 2 gate passed: 57 unit files / 681 tests, 13 guardrails, lint, strict TypeScript, production build, and `git diff --check`
+
 ### 2026-MM-DD — Week N
 
 - Q1 overall approval: **% (linkedin_connection **%, cold_email **%, linkedin_inmail **%)
-- Q2 top rejection reason: **_ (_** count)
+- Q2 top rejection reason: **\_ (_** count)
 - Q4 prompt versions seen: 1.0.0 (\_\_%), ...
 - Q5 weekly trend: **\_ events, **% approval
 - Q6 p50/p95 generation latency: **_/_** ms
