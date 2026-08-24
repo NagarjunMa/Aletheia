@@ -6,6 +6,9 @@ export const metadata: Metadata = {
   title: "Illustrative example | Aletheia",
   description:
     "Explore a fictional, illustrative Aletheia workflow. See how selected context becomes a professional draft for you to review.",
+  alternates: {
+    canonical: "/demo",
+  },
 };
 
 export default function DemoPage() {

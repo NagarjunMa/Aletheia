@@ -13,6 +13,9 @@ export const metadata: Metadata = {
   description:
     "Install the official Aletheia Chrome extension to prepare reviewed LinkedIn connection notes, InMail, tailored emails, and grounded YC application answers.",
   robots: { index: true, follow: true },
+  alternates: {
+    canonical: "/install",
+  },
 };
 
 const STEPS: { title: string; body: string }[] = [

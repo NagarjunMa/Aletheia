@@ -9,6 +9,9 @@ export const metadata: Metadata = {
   description:
     "How Aletheia collects, stores, and processes data for reviewed professional message drafts, resume context, account data, and third-party processors.",
   robots: { index: true, follow: true },
+  alternates: {
+    canonical: "/privacy",
+  },
 };
 
 const EFFECTIVE_DATE = "May 19, 2026";

@@ -42,6 +42,9 @@ export const metadata: Metadata = {
     description:
       "Compose thoughtful LinkedIn connection notes, polished InMail, tailored emails, and grounded YC application answers from context you choose. Review every draft before sending.",
   },
+  alternates: {
+    canonical: "/",
+  },
 };
 
 const jsonLd = {
