@@ -48,4 +48,16 @@ describe("profile-reading consent contract", () => {
       "[PROFILE_EXTRACTION_CONSENT_KEY]: nextConsent",
     );
   });
+
+  it("ignores delayed profile updates unless consent is still active", () => {
+    expect(popupSource).toContain(
+      "async function handleProfileUpdated(profile)",
+    );
+    expect(popupSource).toContain(
+      "if (!(await hasProfileExtractionConsent())) return;",
+    );
+    expect(popupSource).toContain(
+      "void handleProfileUpdated(message.profile);",
+    );
+  });
 });
