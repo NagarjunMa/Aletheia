@@ -1487,15 +1487,21 @@ function showTemporaryMessage(message, type = "info") {
   }, 3000);
 }
 
-// Handle messages from content scripts
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+async function handleProfileUpdated(profile) {
+  if (!(await hasProfileExtractionConsent())) return;
+
+  currentProfile = profile;
+  if (profile) {
+    showProfileDetected(profile);
+    enableMainContent();
+  } else {
+    showNoProfile();
+  }
+}
+
+// Handle messages from content scripts.
+chrome.runtime.onMessage.addListener((message) => {
   if (message.action === "profileUpdated") {
-    currentProfile = message.profile;
-    if (message.profile) {
-      showProfileDetected(message.profile);
-      enableMainContent();
-    } else {
-      showNoProfile();
-    }
+    void handleProfileUpdated(message.profile);
   }
 });

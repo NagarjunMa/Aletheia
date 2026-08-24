@@ -44,6 +44,8 @@ Tests/checks:
 
 Result: Version 1.0.8 has no cookie-value logs, no automatic profile extraction before consent, a user withdrawal control, no outbound profile URL, no unused `activeTab` permission, and a non-null Store URL fallback. Packaging remains pending until this complete change set is committed cleanly.
 
+Post-review correction: Runtime `profileUpdated` messages now re-check persisted consent before they can restore profile state or the generation UI, preventing pre-update or in-flight content-script events from bypassing a declined or withdrawn consent choice. Root tests (681), extension tests (146), and both TypeScript checks passed.
+
 Follow-up:
 
 - Commit the release change set, rebuild the ZIP from that clean commit, and complete the Chrome Web Store Console listing, screenshots, and Privacy practices entries before upload.
