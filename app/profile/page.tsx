@@ -28,7 +28,6 @@ export default async function ProfilePage() {
   const displayName = profile?.full_name || user.email?.split("@")[0] || "User";
   const email = profile?.email || user.email || "";
   const avatarUrl = profile?.avatar_url;
-  const cplScore = profile?.cpl_score ?? 0;
   const memberSince = profile?.created_at
     ? new Date(profile.created_at).toLocaleDateString("en-US", {
         year: "numeric",
@@ -46,7 +45,7 @@ export default async function ProfilePage() {
     .slice(0, 2);
 
   return (
-    <div className="landing min-h-[100dvh] px-4 py-12 sm:px-6 lg:px-8">
+    <div className="product-shell min-h-[100dvh] px-4 py-12 sm:px-6 lg:px-8">
       <ShaderBackground />
       <div className="mx-auto max-w-2xl animate-fade-in">
         {/* Header */}
@@ -110,12 +109,11 @@ export default async function ProfilePage() {
             <DetailRow label="Full Name" value={displayName} />
             <DetailRow label="Email" value={email} />
             <DetailRow label="Member Since" value={memberSince} />
-            <DetailRow label="CPL Score" value={cplScore.toFixed(1)} />
           </div>
         </div>
 
         <section className="glass my-6 rounded-2xl p-6">
-          <p className="text-xs uppercase tracking-[0.18em] text-[#DAF1DE]/65">
+          <p className="text-xs uppercase tracking-[0.18em] text-accent">
             Candidate source of truth
           </p>
           <div className="mt-3 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">

@@ -25,11 +25,11 @@ const MockupCard = () => (
       border: "1px solid var(--l-border)",
       borderRadius: "1px",
       padding: "1.75rem",
-      animation: "float-card 6s ease-in-out infinite",
     }}
   >
     {/* Chrome bar */}
     <div
+      aria-hidden="true"
       className="mb-5 flex items-center gap-2 px-3 py-2"
       style={{ background: "var(--l-surface-2)", borderRadius: "1px" }}
     >
@@ -40,7 +40,7 @@ const MockupCard = () => (
         className="ml-2 h-4 flex-1 flex items-center px-2"
         style={{ background: "rgba(255,255,255,0.05)", borderRadius: "1px" }}
       >
-        <span style={{ fontSize: "9px", color: "#64748b" }}>
+        <span style={{ fontSize: "9px", color: "var(--l-text-dim)" }}>
           linkedin.com/in/dana-mercer
         </span>
       </div>
@@ -50,7 +50,10 @@ const MockupCard = () => (
     <div className="mb-5 flex items-center gap-3">
       <div
         className="h-10 w-10 rounded-full flex-shrink-0"
-        style={{ background: "linear-gradient(135deg, #235347, #0B2B26)" }}
+        style={{
+          background:
+            "linear-gradient(135deg, var(--ref-phthalo-600), var(--ref-phthalo-900))",
+        }}
       />
       <div>
         <div
@@ -86,8 +89,9 @@ const MockupCard = () => (
               fontSize: "9px",
               fontWeight: 600,
               padding: "3px 10px",
-              background: i === 0 ? "var(--l-blue)" : "var(--l-surface-2)",
-              color: i === 0 ? "#050806" : "var(--l-text-dim)",
+              background:
+                i === 0 ? "var(--l-accent-deep)" : "var(--l-surface-2)",
+              color: i === 0 ? "var(--l-text)" : "var(--l-text-dim)",
               borderRadius: "1px",
             }}
           >
@@ -119,9 +123,8 @@ const MockupCard = () => (
       </p>
     </div>
 
-    <div className="flex gap-2">
-      <button
-        type="button"
+    <div className="flex gap-2" aria-label="Illustrative draft controls">
+      <div
         style={{
           flex: 1,
           padding: "8px",
@@ -129,17 +132,16 @@ const MockupCard = () => (
           fontWeight: 700,
           letterSpacing: "0.12em",
           textTransform: "uppercase",
-          background: "var(--l-blue)",
-          color: "#050806",
+          background: "var(--l-accent-deep)",
+          color: "var(--l-text)",
           borderRadius: "1px",
           border: "none",
-          cursor: "pointer",
         }}
       >
         Review draft
-      </button>
-      <button
-        type="button"
+      </div>
+      <span
+        aria-hidden="true"
         style={{
           padding: "8px 12px",
           fontSize: "11px",
@@ -148,11 +150,10 @@ const MockupCard = () => (
           color: "var(--l-text-dim)",
           borderRadius: "1px",
           border: "none",
-          cursor: "pointer",
         }}
       >
         ↺
-      </button>
+      </span>
     </div>
   </div>
 );
@@ -173,7 +174,7 @@ export default function HowItWorks() {
               <span className="section-label mb-6 block">Process</span>
               <h2
                 style={{
-                  fontFamily: "var(--font-flaviotte), Playfair Display, serif",
+                  fontFamily: "var(--font-cormorant), Georgia, serif",
                   fontWeight: 900,
                   fontSize: "clamp(2rem, 4vw, 3rem)",
                   lineHeight: 1.1,
@@ -215,8 +216,7 @@ export default function HowItWorks() {
                   <div style={{ flexShrink: 0, width: 54 }}>
                     <span
                       style={{
-                        fontFamily:
-                          "var(--font-flaviotte), Playfair Display, serif",
+                        fontFamily: "var(--font-cormorant), Georgia, serif",
                         fontSize: "2.8rem",
                         fontWeight: 900,
                         color: "var(--l-border)",

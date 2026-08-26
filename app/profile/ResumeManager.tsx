@@ -178,7 +178,7 @@ export default function ResumeManager({ initialResumes, maxResumes }: Props) {
       {status.type !== "idle" && (
         <p
           className={`text-xs ${
-            status.type === "success" ? "text-emerald-400" : "text-red-400"
+            status.type === "success" ? "text-accent" : "text-red-400"
           }`}
           role={status.type === "error" ? "alert" : "status"}
         >
@@ -210,7 +210,7 @@ export default function ResumeManager({ initialResumes, maxResumes }: Props) {
                       {resume.label}
                     </h4>
                     {resume.is_primary && (
-                      <span className="rounded-full border border-emerald-400/40 px-2 py-0.5 text-[11px] uppercase tracking-widest text-emerald-300">
+                      <span className="rounded-full border border-accent/35 px-2 py-0.5 text-[11px] uppercase tracking-widest text-accent">
                         Primary
                       </span>
                     )}

@@ -1,25 +1,16 @@
 import type { Metadata } from "next";
-import { Inter, DM_Sans, Cormorant_Garamond } from "next/font/google";
+import { DM_Sans, Cormorant_Garamond } from "next/font/google";
 import localFont from "next/font/local";
 import { headers } from "next/headers";
 import "./globals.css";
 import { Providers } from "./providers";
 
-const inter = Inter({ subsets: ["latin"] });
 const dmSans = DM_Sans({ subsets: ["latin"], variable: "--font-dm-sans" });
 const cormorant = Cormorant_Garamond({
   subsets: ["latin"],
   weight: ["300", "400"],
   style: ["normal", "italic"],
   variable: "--font-cormorant",
-});
-
-const harmond = localFont({
-  src: "../public/fonts/Harmond-ExtraBoldExpanded.otf",
-  variable: "--font-harmond",
-  display: "swap",
-  weight: "800",
-  style: "normal",
 });
 
 const flaviotte = localFont({
@@ -93,7 +84,7 @@ export default async function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${inter.className} ${dmSans.variable} ${cormorant.variable} ${harmond.variable} ${flaviotte.variable} aurora-grain`}
+        className={`${dmSans.className} ${dmSans.variable} ${cormorant.variable} ${flaviotte.variable} aurora-grain`}
       >
         <Providers {...(nonce ? { nonce } : {})}>{children}</Providers>
       </body>

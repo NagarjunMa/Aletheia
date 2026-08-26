@@ -58,9 +58,9 @@ function ForgotPasswordForm() {
       <div className="min-h-screen flex items-center justify-center px-4">
         <div className="glass rounded-2xl p-8 w-full max-w-md animate-fade-in text-center">
           <div className="mb-4 flex items-center justify-center">
-            <div className="w-16 h-16 rounded-full bg-blue-500/20 flex items-center justify-center">
+            <div className="flex size-16 items-center justify-center rounded-full border border-accent/25 bg-accent/10">
               <svg
-                className="w-8 h-8 text-blue-400"
+                className="size-8 text-accent"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -85,14 +85,14 @@ function ForgotPasswordForm() {
             Didn&apos;t receive the email? Check your spam folder or{" "}
             <button
               onClick={() => setSent(false)}
-              className="text-[hsl(var(--primary))] hover:underline font-medium"
+              className="font-medium text-accent hover:underline"
             >
               try again
             </button>
           </p>
           <Link
             href={`/auth/login${source ? `?source=${source}` : ""}`}
-            className="text-sm text-[hsl(var(--primary))] hover:underline font-medium"
+            className="text-sm font-medium text-accent hover:underline"
           >
             &larr; Back to sign in
           </Link>
@@ -152,6 +152,7 @@ function ForgotPasswordForm() {
               onChange={(e) => setEmail(e.target.value)}
               required
               autoFocus
+              autoComplete="email"
               placeholder="you@example.com"
               className="w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--input))] pl-10 pr-4 py-2.5 text-sm text-white placeholder:text-[hsl(var(--muted-foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] transition-colors"
             />
@@ -167,7 +168,7 @@ function ForgotPasswordForm() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full rounded-lg bg-[hsl(var(--primary))] px-4 py-2.5 text-sm font-medium text-white hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] focus:ring-offset-2 focus:ring-offset-[#0a0a0a] disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+          className="w-full rounded-[10px] bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-[#367960] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50"
         >
           {loading ? "Sending..." : "Send reset link"}
         </button>
@@ -177,7 +178,7 @@ function ForgotPasswordForm() {
         Remember your password?{" "}
         <Link
           href={`/auth/login${source ? `?source=${source}` : ""}`}
-          className="text-[hsl(var(--primary))] hover:underline font-medium"
+          className="font-medium text-accent hover:underline"
         >
           Sign in
         </Link>

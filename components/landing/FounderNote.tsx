@@ -23,7 +23,7 @@ export default function FounderNote() {
         <h2
           className="landing-section-reveal mb-12"
           style={{
-            fontFamily: "var(--font-flaviotte), Playfair Display, serif",
+            fontFamily: "var(--font-cormorant), Georgia, serif",
             fontWeight: 800,
             fontSize: "clamp(1.8rem, 3.2vw, 2.6rem)",
             lineHeight: 1.18,
@@ -82,7 +82,7 @@ export default function FounderNote() {
             style={{
               background: "var(--l-surface-3)",
               border: "1px solid var(--l-border)",
-              fontFamily: "var(--font-flaviotte), Playfair Display, serif",
+              fontFamily: "var(--font-flaviotte), Georgia, serif",
               fontWeight: 700,
               fontSize: "0.95rem",
               letterSpacing: "0.05em",

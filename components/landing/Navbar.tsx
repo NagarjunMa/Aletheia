@@ -59,14 +59,18 @@ export default function Navbar() {
 
   useEffect(() => {
     document.body.style.overflow = mobileOpen ? "hidden" : "";
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobileOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
     return () => {
       document.body.style.overflow = "";
+      window.removeEventListener("keydown", onKeyDown);
     };
   }, [mobileOpen]);
 
-  const scrollTo = (href: string) => {
+  const closeMobileMenu = () => {
     setMobileOpen(false);
-    document.querySelector(href)?.scrollIntoView({ behavior: "smooth" });
   };
 
   return (
@@ -75,27 +79,19 @@ export default function Navbar() {
       ref={headerRef}
       className={`landing-navbar fixed top-0 left-0 right-0 z-50 ${scrolled ? "scrolled" : ""}`}
     >
-      <nav className="mx-auto flex max-w-7xl items-center justify-between px-5 sm:px-8 py-5">
+      <nav
+        className="mx-auto flex max-w-[90rem] items-center justify-between px-5 py-4 sm:px-8 lg:px-12"
+        aria-label="Primary navigation"
+      >
         {/* Logo — color driven by .landing-nav-logo CSS class */}
-        <button
-          type="button"
-          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-          className="flex items-center gap-2.5 cursor-pointer"
+        <Link
+          href="#hero"
+          className="landing-brand flex items-center gap-2.5"
+          aria-label="Aletheia home"
         >
           <Image src="/Aletheia.svg" alt="Aletheia" width={22} height={22} />
-          <span
-            className="landing-nav-logo"
-            style={{
-              fontFamily:
-                "var(--font-flaviotte), var(--font-cormorant), Georgia, serif",
-              fontWeight: 300,
-              fontSize: "1.35rem",
-              letterSpacing: "0.04em",
-            }}
-          >
-            Aletheia
-          </span>
-        </button>
+          <span className="landing-nav-logo">Aletheia</span>
+        </Link>
 
         {/* Desktop Nav — colors via .landing-nav-link */}
         <div className="hidden items-center gap-10 md:flex">
@@ -103,18 +99,11 @@ export default function Navbar() {
             const sectionId = link.href.replace("#", "");
             const isActive = activeSection === sectionId;
             return (
-              <button
-                type="button"
+              <a
                 key={link.href}
-                onClick={() => scrollTo(link.href)}
-                className={`landing-nav-link relative cursor-pointer ${isActive ? "active" : ""}`}
-                style={{
-                  fontSize: "0.7rem",
-                  fontWeight: 700,
-                  letterSpacing: "0.14em",
-                  textTransform: "uppercase",
-                  paddingBottom: "2px",
-                }}
+                href={link.href}
+                className={`landing-nav-link relative ${isActive ? "active" : ""}`}
+                aria-current={isActive ? "location" : undefined}
               >
                 {link.label}
                 {isActive && (
@@ -126,11 +115,11 @@ export default function Navbar() {
                       left: 0,
                       right: 0,
                       height: "1.5px",
-                      background: "var(--l-blue)",
+                      background: "var(--l-accent)",
                     }}
                   />
                 )}
-              </button>
+              </a>
             );
           })}
         </div>
@@ -166,10 +155,18 @@ export default function Navbar() {
           <button
             type="button"
             onClick={() => setMobileOpen(!mobileOpen)}
-            className="landing-menu-icon cursor-pointer p-1"
-            aria-label="Toggle menu"
+            className="landing-menu-icon"
+            aria-label={
+              mobileOpen ? "Close navigation menu" : "Open navigation menu"
+            }
+            aria-expanded={mobileOpen}
+            aria-controls="landing-mobile-navigation"
           >
-            {mobileOpen ? <X size={22} /> : <Menu size={22} />}
+            {mobileOpen ? (
+              <X size={22} aria-hidden="true" />
+            ) : (
+              <Menu size={22} aria-hidden="true" />
+            )}
           </button>
         </div>
       </nav>
@@ -179,20 +176,23 @@ export default function Navbar() {
           Close: items snap out with elastic.out + random rotation (snappy return,
           not the forward ease played backward). */}
       <div
+        id="landing-mobile-navigation"
         className={`landing-mobile-menu md:hidden px-5 sm:px-8 pb-6 pt-2 max-h-[calc(100dvh-64px)] overflow-y-auto ${
           mobileOpen ? "open" : ""
         }`}
+        aria-hidden={!mobileOpen}
       >
         {navLinks.map((link) => {
           const sectionId = link.href.replace("#", "");
           const isActive = activeSection === sectionId;
           return (
-            <button
-              type="button"
+            <a
               key={link.href}
+              href={link.href}
               data-mobile-item
-              onClick={() => scrollTo(link.href)}
-              className={`landing-nav-link block w-full py-3.5 text-left cursor-pointer ${isActive ? "active" : ""}`}
+              onClick={closeMobileMenu}
+              className={`landing-nav-link block w-full py-3.5 text-left ${isActive ? "active" : ""}`}
+              aria-current={isActive ? "location" : undefined}
               style={{
                 fontWeight: isActive ? 800 : 700,
                 fontSize: "0.68rem",
@@ -202,18 +202,20 @@ export default function Navbar() {
               }}
             >
               {isActive && (
-                <span style={{ color: "var(--l-blue)", marginRight: "0.5rem" }}>
+                <span
+                  style={{ color: "var(--l-accent)", marginRight: "0.5rem" }}
+                >
                   ·
                 </span>
               )}
               {link.label}
-            </button>
+            </a>
           );
         })}
         <div data-mobile-item className="mt-5">
           <Link
             href="/dashboard"
-            onClick={() => setMobileOpen(false)}
+            onClick={closeMobileMenu}
             className="btn-secondary"
             style={{
               width: "100%",

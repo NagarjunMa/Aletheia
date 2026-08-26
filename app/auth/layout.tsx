@@ -1,6 +1,5 @@
 "use client";
 
-import { motion } from "framer-motion";
 import Image from "next/image";
 import ShaderBackground from "@/components/ShaderBackground";
 
@@ -17,10 +16,10 @@ export default function AuthLayout({
 }) {
   return (
     <div
-      className="landing min-h-screen flex"
+      className="landing auth-shell min-h-screen flex"
       style={{
         background: "transparent",
-        fontFamily: "var(--font-flaviotte), 'DM Sans', sans-serif",
+        fontFamily: "var(--font-dm-sans), 'DM Sans', sans-serif",
       }}
     >
       {/* Shader background — shared with landing page */}
@@ -45,7 +44,7 @@ export default function AuthLayout({
       {/* ── Right: branding panel ─────────────────────────── */}
       <div
         className="hidden lg:flex lg:w-1/2 relative z-10 overflow-hidden items-center justify-center"
-        style={{ borderLeft: "1px solid rgba(209,242,235,0.08)" }}
+        style={{ borderLeft: "1px solid rgba(120,180,155,0.16)" }}
       >
         {/* Watermark */}
         <div
@@ -62,10 +61,10 @@ export default function AuthLayout({
         >
           <span
             style={{
-              fontFamily: "var(--font-flaviotte), Playfair Display, serif",
+              fontFamily: "var(--font-cormorant), Georgia, serif",
               fontSize: "28rem",
               fontWeight: 900,
-              color: "rgba(209,242,235,0.025)",
+              color: "rgba(120,180,155,0.035)",
               lineHeight: 1,
               fontStyle: "italic",
             }}
@@ -77,85 +76,65 @@ export default function AuthLayout({
         {/* Content */}
         <div className="relative z-10 max-w-md px-12">
           {/* Logo */}
-          <motion.div
-            className="flex items-center gap-3 mb-12"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.15 }}
-          >
+          <div className="flex items-center gap-3 mb-12">
             <Image src="/Aletheia.svg" alt="Aletheia" width={28} height={28} />
             <span
               style={{
-                fontFamily: "var(--font-flaviotte), Playfair Display, serif",
+                fontFamily: "var(--font-flaviotte), Georgia, serif",
                 fontWeight: 400,
                 fontSize: "1.25rem",
-                color: "#D1F2EB",
+                color: "#F7FAF9",
                 letterSpacing: "0.06em",
               }}
             >
               Aletheia
             </span>
-          </motion.div>
+          </div>
 
           {/* Headline */}
-          <motion.h2
+          <h2
             style={{
-              fontFamily: "var(--font-flaviotte), Playfair Display, serif",
-              fontWeight: 900,
+              fontFamily: "var(--font-cormorant), Georgia, serif",
+              fontWeight: 400,
               fontSize: "clamp(2rem, 3.5vw, 2.8rem)",
               lineHeight: 1.08,
               color: "#ffffff",
               letterSpacing: "-0.02em",
               marginBottom: "1.25rem",
             }}
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, delay: 0.25 }}
           >
             LinkedIn outreach that sounds{" "}
-            <em style={{ fontStyle: "italic", color: "#D1F2EB" }}>human.</em>
-          </motion.h2>
+            <em style={{ fontStyle: "italic", color: "#78B49B" }}>human.</em>
+          </h2>
 
           {/* Subtext */}
-          <motion.p
+          <p
             style={{
-              color: "rgba(209,242,235,0.68)",
+              color: "rgba(247,250,249,0.7)",
               fontSize: "0.875rem",
               lineHeight: 1.7,
               marginBottom: "2.5rem",
             }}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.35 }}
           >
             Reads the profile you have open, drafts a short personal note
             grounded in your resume — before you hit send.
-          </motion.p>
+          </p>
 
           {/* Feature bullets */}
-          <motion.div
+          <div
             style={{
-              borderTop: "1px solid rgba(209,242,235,0.1)",
+              borderTop: "1px solid rgba(120,180,155,0.18)",
               paddingTop: "1.75rem",
               display: "flex",
               flexDirection: "column",
               gap: "1rem",
             }}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.6, delay: 0.5 }}
           >
             {features.map((f, i) => (
-              <motion.div
-                key={i}
-                className="flex items-start gap-3"
-                initial={{ opacity: 0, x: -12 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.5, delay: 0.55 + i * 0.1 }}
-              >
+              <div key={i} className="flex items-start gap-3">
                 <span
                   style={{
-                    color: "#50C878",
+                    color: "#78B49B",
                     fontSize: "0.7rem",
                     marginTop: "2px",
                     flexShrink: 0,
@@ -165,58 +144,33 @@ export default function AuthLayout({
                 </span>
                 <span
                   style={{
-                    color: "rgba(209,242,235,0.66)",
+                    color: "rgba(247,250,249,0.7)",
                     fontSize: "0.8rem",
                     lineHeight: 1.6,
                   }}
                 >
                   {f.text}
                 </span>
-              </motion.div>
+              </div>
             ))}
-          </motion.div>
+          </div>
 
           {/* Social proof */}
-          <motion.div
+          <div
             className="glass-aurora"
             style={{ marginTop: "2.5rem", padding: "1.25rem" }}
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.75 }}
           >
             <p
               style={{
-                fontSize: "0.7rem",
-                color: "rgba(209,242,235,0.48)",
-                letterSpacing: "0.10em",
-                textTransform: "uppercase",
-                marginBottom: "0.75rem",
-              }}
-            >
-              Beta Access
-            </p>
-            <p
-              style={{
                 fontSize: "0.85rem",
-                color: "rgba(209,242,235,0.72)",
+                color: "rgba(247,250,249,0.76)",
                 lineHeight: 1.6,
-                fontStyle: "italic",
               }}
             >
-              &ldquo;This is the first tool where my recipients stopped asking
-              if I used AI.&rdquo;
+              Grounded drafts stay under your control from context selection to
+              final review.
             </p>
-            <p
-              style={{
-                fontSize: "0.7rem",
-                color: "rgba(209,242,235,0.48)",
-                marginTop: "0.5rem",
-                letterSpacing: "0.06em",
-              }}
-            >
-              — Beta Tester · Senior Account Executive
-            </p>
-          </motion.div>
+          </div>
         </div>
       </div>
     </div>

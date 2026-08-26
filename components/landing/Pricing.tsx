@@ -20,7 +20,7 @@ export default function Pricing() {
           </span>
           <h2
             style={{
-              fontFamily: "var(--font-flaviotte), Playfair Display, serif",
+              fontFamily: "var(--font-cormorant), Georgia, serif",
               fontWeight: 900,
               fontSize: "clamp(1.8rem, 3.8vw, 2.7rem)",
               lineHeight: 1.08,
@@ -58,7 +58,7 @@ export default function Pricing() {
               <p
                 className="mt-3 text-5xl"
                 style={{
-                  fontFamily: "var(--font-flaviotte), Playfair Display, serif",
+                  fontFamily: "var(--font-cormorant), Georgia, serif",
                   color: "var(--l-text)",
                   fontWeight: 900,
                   fontStyle: "italic",

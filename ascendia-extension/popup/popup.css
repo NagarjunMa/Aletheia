@@ -1,4 +1,4 @@
-/* Aletheia Extension — Luxury Evergreen Theme */
+/* Aletheia Extension — Phthalo Green Theme */
 
 /* ── Local font: Flaviotte (shared with web app) ────────────── */
 @font-face {
@@ -11,33 +11,38 @@
     url("../assets/fonts/Flaviotte.woff") format("woff");
 }
 
-/* Reference palette: ink, dark evergreen, deep emerald, emerald, mint. */
+/* Reference palette: black canvas, sampled Phthalo ramp, white text. */
 :root {
-  --green-deepest: #050806;
-  --green-dark: #080d0a;
-  --green-mid: #013220;
-  --green-border: #50c878;
-  --green-muted: #9dbdb4;
-  --green-lightest: #d1f2eb;
+  --green-deepest: #020403;
+  --green-dark: #091814;
+  --green-mid: #10291f;
+  --green-border: #5a9d82;
+  --green-muted: #aebdb7;
+  --green-lightest: #f7faf9;
 
   /* Semantic colour aliases (replaces old --primary-* slots) */
   --primary-900: var(--green-deepest);
   --primary-800: var(--green-dark);
   --primary-700: var(--green-mid);
   --primary-600: var(--green-border);
-  --primary-500: #3d9b5d;
+  --primary-500: #7e9189;
   /* mid-muted, for placeholder / disabled */
   --primary-400: var(--green-muted);
-  --primary-300: #b4d8cf;
+  --primary-300: #d0d8d4;
   /* slightly dimmed text */
-  --primary-200: #c5e6de;
+  --primary-200: #e1e6e4;
   --primary-100: var(--green-lightest);
-  --primary-50: #e6f8f4;
+  --primary-50: #ffffff;
 
-  --accent-600: #064c37;
-  --accent-500: #0b6e4f;
-  --accent-400: #50c878;
-  --accent-300: #8bdda6;
+  --accent-600: #1e4938;
+  --accent-500: #285d49;
+  --accent-400: #5a9d82;
+  --accent-300: #78b49b;
+
+  --action-bg: #285d49;
+  --action-hover: #367960;
+  --action-text: #f7faf9;
+  --focus-ring: #78b49b;
 
   /* Status Colors — keep familiar semantic meanings */
   --success-600: #1a5c3a;
@@ -53,9 +58,9 @@
   --error-400: #cc5a5a;
 
   /* Glassmorphism — teal-ambient glass surfaces */
-  --glass-bg: rgba(1, 50, 32, 0.22);
-  --glass-bg-strong: rgba(11, 110, 79, 0.2);
-  --glass-border: rgba(209, 242, 235, 0.12);
+  --glass-bg: rgba(9, 24, 20, 0.72);
+  --glass-bg-strong: rgba(16, 41, 31, 0.82);
+  --glass-border: rgba(120, 180, 155, 0.2);
   --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.7);
   --glass-shadow-hover: 0 12px 40px rgba(0, 0, 0, 0.85);
 
@@ -115,16 +120,16 @@ body {
   background:
     radial-gradient(
       ellipse 95% 58% at 12% 112%,
-      rgba(209, 242, 235, 0.4) 0%,
-      rgba(80, 200, 120, 0.28) 30%,
+      rgba(120, 180, 155, 0.28) 0%,
+      rgba(90, 157, 130, 0.22) 30%,
       transparent 70%
     ),
     radial-gradient(
       ellipse 80% 58% at 100% 94%,
-      rgba(11, 110, 79, 0.3) 0%,
+      rgba(40, 93, 73, 0.24) 0%,
       transparent 70%
     ),
-    linear-gradient(180deg, #050806 0%, #080d0a 54%, #013220 100%);
+    linear-gradient(180deg, #020403 0%, #091814 58%, #10291f 100%);
   overflow-x: hidden;
   position: relative;
   margin: 0;
@@ -320,7 +325,7 @@ body::after {
   padding: var(--space-4) var(--space-5);
   margin: var(--space-2) var(--space-3);
   background: rgba(35, 83, 71, 0.3);
-  border: 1px solid rgba(142, 182, 155, 0.25);
+  border: 1px solid rgba(120, 180, 155, 0.25);
   border-radius: var(--radius-lg);
   color: var(--green-muted);
   font-size: 13px;
@@ -330,7 +335,7 @@ body::after {
 .reading-spinner {
   width: 16px;
   height: 16px;
-  border: 2px solid rgba(142, 182, 155, 0.3);
+  border: 2px solid rgba(120, 180, 155, 0.3);
   border-top-color: var(--green-muted);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
@@ -398,14 +403,14 @@ body::after {
 
 .banner.success {
   background: rgba(35, 83, 71, 0.3);
-  border-color: rgba(142, 182, 155, 0.3);
+  border-color: rgba(120, 180, 155, 0.3);
   color: var(--green-lightest);
   box-shadow: 0 4px 16px rgba(5, 31, 32, 0.3);
 }
 
 .banner.warning {
   background: rgba(22, 56, 50, 0.8);
-  border-color: rgba(142, 182, 155, 0.3);
+  border-color: rgba(120, 180, 155, 0.3);
   color: var(--green-muted);
   box-shadow: none;
 }
@@ -494,7 +499,7 @@ textarea:focus,
   border-color: var(--accent-400);
   background: var(--glass-bg-strong);
   box-shadow:
-    0 0 0 3px rgba(80, 200, 120, 0.12),
+    0 0 0 3px rgba(90, 157, 130, 0.12),
     var(--glass-shadow);
 }
 
@@ -527,10 +532,10 @@ textarea::placeholder {
 .generate-btn {
   width: 100%;
   padding: var(--space-4) var(--space-6);
-  background: linear-gradient(135deg, #0b6e4f, #50c878);
-  border: 1px solid rgba(80, 200, 120, 0.6);
+  background: linear-gradient(135deg, var(--accent-600), var(--action-bg));
+  border: 1px solid rgba(120, 180, 155, 0.34);
   border-radius: var(--radius-xl);
-  color: #050806;
+  color: var(--action-text);
   font-weight: 600;
   font-size: 14px;
   font-family: var(--font-family);
@@ -543,7 +548,7 @@ textarea::placeholder {
   margin-bottom: var(--space-6);
   position: relative;
   overflow: hidden;
-  box-shadow: 0 8px 28px rgba(11, 110, 79, 0.28);
+  box-shadow: 0 8px 28px rgba(40, 93, 73, 0.34);
 }
 
 .generate-btn::before {
@@ -563,9 +568,9 @@ textarea::placeholder {
 }
 
 .generate-btn:hover:not(:disabled) {
-  background: linear-gradient(135deg, #50c878, #d1f2eb);
+  background: linear-gradient(135deg, var(--action-bg), var(--action-hover));
   transform: translateY(-2px);
-  box-shadow: 0 10px 34px rgba(80, 200, 120, 0.3);
+  box-shadow: 0 10px 34px rgba(90, 157, 130, 0.24);
 }
 
 .generate-btn:hover:not(:disabled)::before {
@@ -752,17 +757,13 @@ textarea::placeholder {
 }
 
 .action-btn.primary {
-  background: linear-gradient(135deg, var(--green-border), var(--green-muted));
-  color: var(--green-deepest);
-  border-color: var(--green-muted);
+  background: var(--action-bg);
+  color: var(--action-text);
+  border-color: rgba(120, 180, 155, 0.34);
 }
 
 .action-btn.primary:hover {
-  background: linear-gradient(
-    135deg,
-    var(--green-muted),
-    var(--green-lightest)
-  );
+  background: var(--action-hover);
   transform: translateY(-1px);
   box-shadow: var(--glass-shadow);
 }
@@ -789,7 +790,7 @@ textarea::placeholder {
 .validation-feedback {
   margin-top: var(--space-4);
   padding: var(--space-4);
-  background: rgba(1, 50, 32, 0.28);
+  background: rgba(16, 41, 31, 0.28);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-lg);
 }
@@ -921,11 +922,11 @@ textarea::placeholder {
 .feedback-btn.accept {
   background: rgba(35, 83, 71, 0.4);
   color: var(--green-lightest);
-  border-color: rgba(142, 182, 155, 0.4);
+  border-color: rgba(120, 180, 155, 0.4);
 }
 
 .feedback-btn.accept:hover {
-  background: rgba(142, 182, 155, 0.2);
+  background: rgba(120, 180, 155, 0.2);
   border-color: var(--green-muted);
   transform: translateY(-1px);
 }
@@ -999,9 +1000,9 @@ textarea::placeholder {
   display: inline-block;
   margin-top: var(--space-2);
   padding: var(--space-2) var(--space-4);
-  background: linear-gradient(135deg, var(--green-border), var(--green-muted));
-  color: var(--green-deepest);
-  border: 1px solid var(--green-muted);
+  background: var(--action-bg);
+  color: var(--action-text);
+  border: 1px solid rgba(120, 180, 155, 0.34);
   border-radius: var(--radius-md);
   font-size: 12px;
   font-weight: 600;
@@ -1011,11 +1012,7 @@ textarea::placeholder {
 }
 
 .reauth-btn:hover:not(:disabled) {
-  background: linear-gradient(
-    135deg,
-    var(--green-muted),
-    var(--green-lightest)
-  );
+  background: var(--action-hover);
   transform: translateY(-1px);
   box-shadow: var(--glass-shadow);
 }
@@ -1108,7 +1105,7 @@ textarea::placeholder {
 
 /* Enhanced Focus States */
 *:focus-visible {
-  outline: 2px solid var(--accent-400);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -1116,7 +1113,7 @@ button:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
-  outline: 2px solid var(--accent-400);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 

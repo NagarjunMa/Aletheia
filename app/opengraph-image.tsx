@@ -8,8 +8,9 @@ export default function OpenGraphImage() {
   return new ImageResponse(
     <div
       style={{
-        background: "#050806",
-        color: "#d1f2eb",
+        background:
+          "radial-gradient(circle at 12% 108%, #285D49 0%, #091814 28%, #020403 62%)",
+        color: "#f7faf9",
         display: "flex",
         height: "100%",
         width: "100%",
@@ -22,7 +23,7 @@ export default function OpenGraphImage() {
       <div
         style={{
           display: "flex",
-          color: "#50c878",
+          color: "#78b49b",
           fontSize: 26,
           letterSpacing: 4,
         }}
@@ -33,7 +34,7 @@ export default function OpenGraphImage() {
         <div
           style={{
             display: "flex",
-            color: "#50c878",
+            color: "#78b49b",
             fontSize: 22,
             letterSpacing: 2,
           }}
@@ -58,9 +59,9 @@ export default function OpenGraphImage() {
             key={step}
             style={{
               display: "flex",
-              border: "1px solid #1f4d39",
+              border: "1px solid #285d49",
               padding: "15px 20px",
-              color: "#d1f2eb",
+              color: "#f7faf9",
               fontSize: 21,
             }}
           >

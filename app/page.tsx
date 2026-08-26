@@ -7,6 +7,7 @@ import HowItWorks from "@/components/landing/HowItWorks";
 import Capabilities from "@/components/landing/Capabilities";
 import TrustProof from "@/components/landing/TrustProof";
 import Footer from "@/components/landing/Footer";
+import LandingMotion from "@/components/landing/LandingMotion";
 import ShaderBackground from "@/components/ShaderBackground";
 
 const Pricing = dynamic(() => import("@/components/landing/Pricing"));
@@ -65,14 +66,17 @@ const jsonLd = {
 
 export default function Home() {
   return (
-    <div className="landing">
+    <LandingMotion>
       <ShaderBackground />
+      <a className="landing-skip-link" href="#main-content">
+        Skip to content
+      </a>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
       <Navbar />
-      <main>
+      <main id="main-content">
         <Hero />
         <WhyAletheia />
         <Capabilities />
@@ -84,6 +88,6 @@ export default function Home() {
         <CTA />
       </main>
       <Footer />
-    </div>
+    </LandingMotion>
   );
 }
