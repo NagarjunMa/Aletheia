@@ -4,21 +4,21 @@ import { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { motion } from "framer-motion";
 import { Mail, Lock } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { ensureProfileAction } from "@/app/auth/actions";
 
 /* ── Shared theme tokens ─────────────────────────── */
 const T = {
-  bg: "#050806",
-  surface: "rgba(1, 50, 32, 0.20)",
-  surface2: "rgba(11, 110, 79, 0.18)",
-  text: "#D1F2EB",
-  muted: "#50C878",
-  dim: "rgba(209,242,235,0.52)",
-  border: "rgba(209,242,235,0.14)",
-  accent: "#50C878",
+  surface: "rgba(9, 24, 20, 0.72)",
+  surface2: "rgba(30, 73, 56, 0.58)",
+  text: "#F7FAF9",
+  muted: "#AEBDB7",
+  dim: "rgba(247,250,249,0.58)",
+  border: "rgba(120,180,155,0.24)",
+  accent: "#285D49",
+  accentText: "#78B49B",
+  focus: "#78B49B",
   error: "rgba(239,68,68,0.12)",
   errorText: "#f87171",
 };
@@ -28,11 +28,10 @@ const inputStyle: React.CSSProperties = {
   width: "100%",
   background: T.surface,
   border: `1px solid ${T.border}`,
-  borderRadius: 0,
+  borderRadius: 10,
   padding: "0.75rem 0.875rem 0.75rem 2.75rem",
   fontSize: "0.875rem",
   color: T.text,
-  outline: "none",
   transition: "border-color 0.2s ease",
 };
 
@@ -43,7 +42,7 @@ const labelStyle: React.CSSProperties = {
   fontWeight: 700,
   letterSpacing: "0.14em",
   textTransform: "uppercase",
-  color: T.muted,
+  color: T.accentText,
   marginBottom: "0.5rem",
 };
 
@@ -177,10 +176,7 @@ function LoginForm() {
   /* ── Extension success state ── */
   if (success) {
     return (
-      <motion.div
-        initial={{ opacity: 0, scale: 0.97 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.4 }}
+      <div
         style={{
           textAlign: "center",
           padding: "2rem",
@@ -193,8 +189,8 @@ function LoginForm() {
             width: 48,
             height: 48,
             margin: "0 auto 1.25rem",
-            background: "rgba(142,182,155,0.12)",
-            border: `1px solid rgba(142,182,155,0.25)`,
+            background: "rgba(90,157,130,0.12)",
+            border: `1px solid rgba(120,180,155,0.28)`,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -214,10 +210,10 @@ function LoginForm() {
         <h1
           style={{
             fontSize: "1.25rem",
-            fontWeight: 700,
             color: T.text,
             marginBottom: "0.5rem",
-            fontFamily: "var(--font-flaviotte), Playfair Display, serif",
+            fontFamily: "var(--font-cormorant), Georgia, serif",
+            fontWeight: 400,
           }}
         >
           Login successful
@@ -225,16 +221,12 @@ function LoginForm() {
         <p style={{ fontSize: "0.8rem", color: T.muted }}>
           This tab will close automatically. You can return to the extension.
         </p>
-      </motion.div>
+      </div>
     );
   }
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
-    >
+    <div>
       {/* Logo */}
       <div
         style={{
@@ -247,7 +239,7 @@ function LoginForm() {
         <Image src="/Aletheia.svg" alt="Aletheia" width={28} height={28} />
         <span
           style={{
-            fontFamily: "var(--font-flaviotte), Playfair Display, serif",
+            fontFamily: "var(--font-flaviotte), Georgia, serif",
             fontWeight: 400,
             fontSize: "1.2rem",
             color: T.text,
@@ -261,8 +253,8 @@ function LoginForm() {
       {/* Heading */}
       <h1
         style={{
-          fontFamily: "var(--font-flaviotte), Playfair Display, serif",
-          fontWeight: 900,
+          fontFamily: "var(--font-cormorant), Georgia, serif",
+          fontWeight: 400,
           fontSize: "clamp(1.8rem, 3vw, 2.2rem)",
           color: T.text,
           lineHeight: 1.1,
@@ -291,14 +283,16 @@ function LoginForm() {
               <Mail size={14} />
             </FieldIcon>
             <input
+              className="auth-control"
               id="email"
               type="email"
+              autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
               placeholder="you@example.com"
               style={inputStyle}
-              onFocus={(e) => (e.currentTarget.style.borderColor = T.accent)}
+              onFocus={(e) => (e.currentTarget.style.borderColor = T.focus)}
               onBlur={(e) => (e.currentTarget.style.borderColor = T.border)}
             />
           </div>
@@ -339,14 +333,16 @@ function LoginForm() {
               <Lock size={14} />
             </FieldIcon>
             <input
+              className="auth-control"
               id="password"
               type="password"
+              autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
               placeholder="••••••••"
               style={inputStyle}
-              onFocus={(e) => (e.currentTarget.style.borderColor = T.accent)}
+              onFocus={(e) => (e.currentTarget.style.borderColor = T.focus)}
               onBlur={(e) => (e.currentTarget.style.borderColor = T.border)}
             />
           </div>
@@ -354,9 +350,7 @@ function LoginForm() {
 
         {/* Error */}
         {error && (
-          <motion.div
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
+          <div
             style={{
               display: "flex",
               alignItems: "flex-start",
@@ -382,11 +376,12 @@ function LoginForm() {
               <line x1="12" y1="16" x2="12.01" y2="16" />
             </svg>
             <span>{error}</span>
-          </motion.div>
+          </div>
         )}
 
         {/* Submit */}
         <button
+          className="auth-control"
           type="submit"
           disabled={loading}
           style={{
@@ -394,8 +389,8 @@ function LoginForm() {
             padding: "0.85rem",
             background: loading ? T.surface2 : T.accent,
             border: `1px solid ${loading ? T.border : T.accent}`,
-            borderRadius: 0,
-            color: "#050806",
+            borderRadius: 10,
+            color: T.text,
             fontSize: "0.68rem",
             fontWeight: 800,
             letterSpacing: "0.15em",
@@ -448,15 +443,15 @@ function LoginForm() {
               padding: "0.7rem",
               background: "transparent",
               border: `1px solid ${T.border}`,
-              borderRadius: 0,
-              color: T.muted,
+              borderRadius: 10,
+              color: T.text,
               fontSize: "0.75rem",
               fontWeight: 600,
               cursor: "pointer",
               transition: "border-color 0.2s ease, color 0.2s ease",
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = T.accent;
+              e.currentTarget.style.borderColor = T.focus;
               e.currentTarget.style.color = T.text;
             }}
             onMouseLeave={(e) => {
@@ -510,11 +505,15 @@ function LoginForm() {
         Don&apos;t have an account?{" "}
         <Link
           href={`/auth/register${source ? `?source=${source}` : ""}`}
-          style={{ color: T.accent, fontWeight: 700, textDecoration: "none" }}
+          style={{
+            color: T.accentText,
+            fontWeight: 700,
+            textDecoration: "none",
+          }}
         >
           Sign up
         </Link>
       </p>
-    </motion.div>
+    </div>
   );
 }

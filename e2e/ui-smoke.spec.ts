@@ -17,7 +17,32 @@ test("login page renders @smoke", async ({ page }) => {
   expect(page.url()).toContain("/auth/login");
 });
 
-test("luxury evergreen theme renders without the legacy cyan wash @smoke", async ({
+test("login content is visually available without an animation dependency @smoke", async ({
+  page,
+}) => {
+  await page.goto("/auth/login");
+
+  await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
+
+  const hasHiddenAncestor = await page.locator("form").evaluate((form) => {
+    let element: HTMLElement | null = form as HTMLElement;
+    while (element) {
+      const style = getComputedStyle(element);
+      if (style.opacity === "0" || style.visibility === "hidden") return true;
+      element = element.parentElement;
+    }
+    return false;
+  });
+
+  expect(hasHiddenAncestor).toBe(false);
+  await expect(
+    page.getByText(
+      /grounded drafts stay under your control from context selection to final review/i,
+    ),
+  ).toBeVisible();
+});
+
+test("Phthalo theme renders without the legacy cyan wash @smoke", async ({
   page,
 }) => {
   await page.goto("/auth/login");
@@ -36,12 +61,12 @@ test("luxury evergreen theme renders without the legacy cyan wash @smoke", async
   });
 
   expect(theme).toMatchObject({
-    ink: "#050806",
-    evergreen: "#013220",
-    emerald: "#50c878",
-    mint: "#d1f2eb",
+    ink: "#020403",
+    evergreen: "#10291f",
+    emerald: "#5a9d82",
+    mint: "#f7faf9",
   });
-  expect(theme.shaderBackground).toContain("rgba(80, 200, 120");
+  expect(theme.shaderBackground).toContain("rgba(120, 180, 155");
   expect(theme.shaderBackground).not.toContain("rgb(112, 184, 200)");
 });
 

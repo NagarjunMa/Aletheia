@@ -6,13 +6,6 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
-type CreditPack = {
-  id: string;
-  name: string;
-  credits: number;
-  priceUsd: number;
-};
-
 type LedgerRow = {
   id: string;
   delta: number;
@@ -29,7 +22,6 @@ type CreditSummary = {
   lifetimeCreditsPurchased: number;
   lifetimeCreditsUsed: number;
   creditExpiry: null;
-  packs: CreditPack[];
   ledger: LedgerRow[];
 };
 
@@ -71,12 +63,6 @@ export default function CreditsPanel({ className }: { className?: string }) {
     };
   }, []);
 
-  const packs = summary?.packs ?? [
-    { id: "starter", name: "Starter", credits: 60, priceUsd: 5 },
-    { id: "plus", name: "Plus", credits: 100, priceUsd: 7 },
-    { id: "pro", name: "Pro", credits: 500, priceUsd: 20 },
-  ];
-
   return (
     <Card
       className={cn(
@@ -86,7 +72,7 @@ export default function CreditsPanel({ className }: { className?: string }) {
     >
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary">
+          <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-accent/25 bg-accent/10 text-accent">
             {isLoading ? (
               <RefreshCw className="h-4 w-4 animate-spin" aria-hidden={true} />
             ) : (
@@ -118,27 +104,26 @@ export default function CreditsPanel({ className }: { className?: string }) {
         )}
       </div>
 
-      <div className="mt-auto pt-7">
-        <p className="mb-3 text-[0.64rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-          Credit packs
-        </p>
-        <div className="grid grid-cols-3 gap-2">
-          {packs.map((pack) => (
-            <div
-              key={pack.id}
-              className="rounded-lg border border-border/60 bg-background/30 p-3"
-            >
-              <p className="text-xs text-muted-foreground">{pack.name}</p>
-              <p className="mt-1 text-sm font-semibold text-foreground">
-                ${pack.priceUsd}
-                <span className="ml-1 font-normal text-muted-foreground">
-                  · {pack.credits}
-                </span>
-              </p>
-            </div>
-          ))}
-        </div>
+      <div className="mt-auto grid grid-cols-2 gap-2 pt-7">
+        <CreditFact label="Used" value={summary?.lifetimeCreditsUsed ?? 0} />
+        <CreditFact
+          label="Added"
+          value={summary?.lifetimeCreditsPurchased ?? 0}
+        />
       </div>
     </Card>
+  );
+}
+
+function CreditFact({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-lg border border-border/60 bg-background/30 p-3">
+      <p className="text-[0.64rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+        {label}
+      </p>
+      <p className="mt-2 text-lg font-semibold tabular-nums text-foreground">
+        {value.toLocaleString()}
+      </p>
+    </div>
   );
 }

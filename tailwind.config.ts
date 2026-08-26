@@ -19,7 +19,9 @@ const config = {
     },
     extend: {
       fontFamily: {
-        "eagle-lake": ["Eagle Lake", "cursive"],
+        sans: ["var(--font-dm-sans)", "DM Sans", "system-ui", "sans-serif"],
+        serif: ["var(--font-cormorant)", "Georgia", "serif"],
+        brand: ["var(--font-flaviotte)", "Georgia", "serif"],
       },
       fontSize: {
         "fluid-xs": "clamp(0.75rem, calc(0.7rem + 0.25vw), 0.875rem)",
@@ -67,14 +69,14 @@ const config = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
-        // Legacy aliases, remapped to the canonical evergreen palette.
+        // Compatibility aliases, remapped to the canonical Phthalo palette.
         aletheia: {
-          primary: "#013220",
-          "primary-light": "#0B6E4F",
-          "primary-dark": "#050806",
-          accent: "#50C878",
-          "accent-light": "#D1F2EB",
-          "accent-dark": "#0B6E4F",
+          primary: "#10291F",
+          "primary-light": "#285D49",
+          "primary-dark": "#020403",
+          accent: "#5A9D82",
+          "accent-light": "#F7FAF9",
+          "accent-dark": "#285D49",
 
           // Glass Morphism Colors
           glass: "rgba(255, 255, 255, 0.05)",
@@ -82,48 +84,48 @@ const config = {
           "glass-border": "rgba(255, 255, 255, 0.1)",
 
           // Background System
-          bg: "#050806",
-          "bg-light": "#080D0A",
-          "bg-lighter": "#013220",
+          bg: "#020403",
+          "bg-light": "#091814",
+          "bg-lighter": "#10291F",
 
           // Text System
-          text: "#D1F2EB",
-          "text-muted": "#9DBDB4",
-          "text-dim": "#668078",
+          text: "#F7FAF9",
+          "text-muted": "#AEBDB7",
+          "text-dim": "#7E9189",
 
           // Surface Colors
-          surface: "#0A1A12",
-          "surface-light": "#0D281C",
-          "surface-hover": "#123824",
+          surface: "#091814",
+          "surface-light": "#10291F",
+          "surface-hover": "#1E4938",
 
           // Status Colors
           success: "#10b981", // Emerald
           warning: "#f59e0b", // Amber
           error: "#ef4444", // Red
-          info: "#50C878",
+          info: "#5A9D82",
         },
 
-        // New landing page colors (Aletheia-inspired)
+        // Deprecated names retained until all legacy class names are removed.
         ambient: {
-          blue: "#50C878",
-          "blue-light": "#D1F2EB",
-          "blue-dark": "#0B6E4F",
+          blue: "#5A9D82",
+          "blue-light": "#F7FAF9",
+          "blue-dark": "#285D49",
         },
 
         // Aletheia Chat UI Theme
         aletheia2: {
-          accent: "#50C878",
-          "accent-light": "#D1F2EB",
-          "accent-dark": "#0B6E4F",
-          bg: "#050806",
-          "bg-light": "#080D0A",
-          "bg-dark": "#013220",
-          text: "#D1F2EB",
-          "text-muted": "#D1F2EBB3",
-          "text-dim": "#D1F2EB66",
-          "text-faint": "#D1F2EB33",
+          accent: "#5A9D82",
+          "accent-light": "#F7FAF9",
+          "accent-dark": "#285D49",
+          bg: "#020403",
+          "bg-light": "#091814",
+          "bg-dark": "#10291F",
+          text: "#F7FAF9",
+          "text-muted": "#F7FAF9B3",
+          "text-dim": "#F7FAF966",
+          "text-faint": "#F7FAF933",
           glass: "rgba(0, 0, 0, 0.7)",
-          "glass-border": "rgba(209, 242, 235, 0.1)",
+          "glass-border": "rgba(120, 180, 155, 0.18)",
         },
         cortex: {
           orange: "#FF6B35",

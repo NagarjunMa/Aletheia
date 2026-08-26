@@ -20,6 +20,85 @@ Follow-up:
 
 ## Entries
 
+### 2026-08-26
+
+Branch: `feat/ale-35-landing-aesthetics`
+
+Area: ALE-35 / ALE-36 — Phthalo Green visual system across web application and extension source
+
+Problem: The landing/auth redesign and the broader ALE-35 product-surface work were sharing global tokens while the extension still carried a separate aqua/blue-biased palette. That made parallel work vulnerable to visual overwrite and left dashboard facts, recovery routes, Settings status colors, Store-release documentation, and extension surfaces inconsistent with the approved black/Phthalo/white reference.
+
+Decision: Reconcile the in-flight branch against `origin/main` before editing; both pointed to `e652ef2`, so no code-history overwrite existed. Centralize the sampled reference as a restrained screen palette (`#020403`, `#091814`, `#10291F`, `#1E4938`, `#285D49`, `#367960`, `#5A9D82`, `#78B49B`, `#F7FAF9`, `#AEBDB7`) and expose it through semantic shadcn/Tailwind roles. Keep DM Sans for UI/body, Cormorant Garamond for editorial display, and Flaviotte for brand marks. Preserve the landing GSAP work, add keyboard-visible focus and reduced-motion behavior, use a separate `product-shell` for authenticated pages, remove fabricated dashboard credit packs and the internal CPL presentation, and mirror only the visual layer in the extension. Reserve extension version 1.0.10 without changing permissions, authentication, consent, extraction, network behavior, or uploading a Store package.
+
+Files changed:
+
+- Shared web system: `app/{globals.css,layout.tsx,opengraph-image.tsx,global-error.tsx}`, `tailwind.config.ts`
+- Landing: `app/page.tsx`, `components/landing/*`, `components/landing/LandingMotion.tsx`, `components/ui/badge.tsx`
+- Authentication: `app/auth/{layout,login/page,register/page,forgot-password/page,reset-password/page}.tsx`
+- Product surfaces: `app/{dashboard,profile,settings}/**`
+- Extension theme/version: `ascendia-extension/{manifest.json,package.json,package-lock.json}`, `popup/popup.css`, `settings/settings.css`, `content/auto-filler.js`, `popup/theme.test.ts`
+- Release/version alignment: `app/api/extension/version/route.test.ts`, `docs/chrome-web-store-submission.md`
+- Durable design/testing context: `README.md`, `docs/agents/engineering-guide.md`, `e2e/{landing-content,ui-smoke}.spec.ts`, `docs/progress.txt`
+
+Tests/checks:
+
+- Root ESLint passed.
+- Strict root TypeScript check passed.
+- Root unit suite passed: 57 files / 681 tests.
+- AI guardrail suite passed: 1 file / 13 tests.
+- Production Next.js build passed.
+- Landing/auth Playwright suite passed: 12 tests, including mobile containment and reduced motion.
+- Extension ESLint and TypeScript checks passed.
+- Extension unit suite passed: 15 files / 149 tests.
+- Extension production build and moderate-level dependency audit passed with 0 vulnerabilities.
+- Extension version policy passed for 1.0.9 → 1.0.10.
+- Desktop landing, mobile login, extension popup, and extension settings screenshots were inspected locally; `git diff --check` passed.
+
+Result: The web application now uses a consistent near-black canvas, layered Phthalo surfaces and ambient fields, accessible off-white text, and brighter Phthalo highlights instead of the previous blue/aqua emphasis. Landing GSAP motion and the ALE-35 dashboard/auth work coexist without overwriting each other. The extension source carries the same visual contract at 1.0.10, while its behavior and Store state remain untouched.
+
+Follow-up:
+
+- Review the uncommitted combined diff and commit/open the PR only when requested.
+- Build the distributable extension ZIP only from a clean commit; do not upload 1.0.10 until its Store release is explicitly authorized.
+
+### 2026-08-24
+
+Branch: `feat/ale-35-landing-aesthetics`
+
+Area: ALE-35 — landing-page editorial evergreen aesthetic and authentication visual reliability
+
+Problem: The landing page had the approved ALE-33 trust/content narrative but still used one decorative font for nearly every role, a centered generic hero, duplicate CSS entrance animations, fake-interactive controls in the illustrative workflow, and navigation semantics that did not fully match web interface guidance. The sign-in and registration surfaces also relied on Framer Motion entry states that remained at zero opacity in browser rendering, hiding otherwise functional authentication controls.
+
+Decision: Keep ALE-33 copy and product boundaries intact while giving the public page a landing-only “editorial aurora” system: Cormorant Garamond display typography, DM Sans body/UI typography, Flaviotte limited to brand marks, a near-black/deep-evergreen canvas with one restrained mint field, an asymmetric hero with a factual selected-context ledger, and a single scoped GSAP orchestration. Use `@gsap/react` cleanup, core transform/autoAlpha tweens, IntersectionObserver section movement, and `gsap.matchMedia()` to disable motion under `prefers-reduced-motion`. Render authentication content statically rather than making access to it dependent on a client-side entrance animation, and replace an unsupported testimonial with factual review-first product language. Leave dashboard/profile and the extension unchanged.
+
+Files changed:
+
+- `app/page.tsx`
+- `app/globals.css`
+- `components/landing/{LandingMotion,Hero,Navbar,FAQ,Footer,HowItWorks}.tsx`
+- Landing typography references in `Capabilities`, `WhyAletheia`, `TrustProof`, `Pricing`, `FounderNote`, and `CTA`
+- `app/auth/{layout,login/page,register/page}.tsx`
+- `e2e/{landing-content,ui-smoke}.spec.ts`
+- `docs/progress.txt`
+
+Tests/checks:
+
+- Focused and full ESLint passed.
+- Strict TypeScript check passed.
+- Unit suite passed: 57 files / 681 tests.
+- Landing and UI Playwright smoke suite passed: 12 tests.
+- Production build passed.
+- Manual screenshots reviewed at desktop and 390×844; no mobile horizontal overflow.
+- Reduced-motion Playwright regression verifies visible, untransformed hero content.
+- `git diff --check` passed before final documentation update; extension diff remained empty.
+
+Result: The landing page now has a distinctive editorial composition, coherent evergreen hierarchy, deterministic GSAP motion, semantic same-page navigation, a working skip link, visible focus treatments, connected FAQ regions, and non-interactive illustrative controls. Sign-in and registration content now remains visible at desktop and mobile sizes without depending on Framer Motion, and the auth panel uses factual review-first language. Dashboard/profile styles remain unchanged and no extension file changed.
+
+Follow-up:
+
+- Complete ALE-35 dashboard/profile phase in a separate implementation pass.
+- Re-run final diff and validation after review changes, then commit and open the ALE-35 PR when requested.
+
 ### 2026-08-24
 
 Branch: `codex/chrome-store-1-0-9`

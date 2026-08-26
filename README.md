@@ -82,7 +82,7 @@ aletheia/
 │   ├── ShaderBackground.tsx     ← Full-viewport evergreen gradient backdrop reused across application surfaces
 │   └── AuroraBackground.tsx     ← Legacy CSS aurora shards. No active importers; kept on disk
 │
-├── public/fonts/                ← Local fonts (Flaviotte primary, Harmond extra-bold expanded)
+├── public/fonts/                ← Local brand font assets
 │
 ├── ascendia-extension/assets/fonts/  ← Same Flaviotte bundled into extension for popup + settings
 │
@@ -430,23 +430,21 @@ Single visual language across landing, auth, dashboard, profile, settings, priva
 **Background — `components/ShaderBackground.tsx`**
 
 - Layered CSS radial gradients with a restrained animated drift and grain overlay.
-- Palette: `#050806`, `#013220`, `#0B6E4F`, `#50C878`, and `#D1F2EB`.
+- Palette: `#020403` canvas, `#091814` and `#1E4938` surfaces, `#285D49` action, `#367960` hover, `#78B49B` highlight/focus, `#F7FAF9` text, and `#AEBDB7` muted text.
 - Mounted fixed (`inset:0`, `z-index:-1`) so all sections sit translucent above it.
 - Extension popup + settings use a static radial-gradient approximation of the same palette (no WebGL inside the popup to keep the bundle light).
 
 **Typography**
 
-- Display + body: **Flaviotte** (custom, `public/fonts/Flaviotte.woff2`).
-- Registered via `next/font/local` in `app/layout.tsx` as `--font-flaviotte`.
-- Fallbacks: Playfair Display (serif accents), Cormorant Garamond (Aletheia wordmark legacy), DM Sans (sans body).
-- Every inline `fontFamily` leads with `var(--font-flaviotte)` before the fallback chain.
+- Body/UI: **DM Sans**. Editorial display: **Cormorant Garamond**. Brand mark: **Flaviotte** (`public/fonts/Flaviotte.woff2`).
+- Registered in `app/layout.tsx` as `--font-dm-sans`, `--font-cormorant`, and `--font-flaviotte`.
+- Flaviotte is intentionally reserved for the Aletheia wordmark rather than long-form copy or interface controls.
 - Extension mirrors the font via `@font-face` in `popup/popup.css` + `settings/settings.css`, sourcing `ascendia-extension/assets/fonts/Flaviotte.{woff2,woff}`.
 
-**Primary CTA — `.btn-primary` ("Aurora Veil")**
+**Primary CTA — `.btn-primary`**
 
-- Deep teal gradient `#1c2d36 → #182830 → #121e26`, 1px cyan rim, 2px corner radius.
-- Idle: 4.2s ambient halo breath (layered box-shadows pulsing 0.18→0.32 opacity, up to 60px outer reach).
-- Hover: bottom-up cyan aurora wash via `::before` (screen blend), single-pass hairline scan via `::after`, text picks up cyan glow, rim brightens, lifts 1px, halo speeds to 2.4s with 140px reach.
+- Deep Phthalo gradient `#1E4938 → #285D49`, restrained white rim, white label, and the shared 12px radius.
+- Hover: bottom-up green ambient wash, one restrained white light pass, and a 1px lift without persistent decorative motion.
 - `:active` 0.985 scale snap, `:focus-visible` double-ring outline, `prefers-reduced-motion` static fallback.
 
 **Navbar glass — GSAP ScrollTrigger**

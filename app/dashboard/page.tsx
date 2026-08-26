@@ -35,9 +35,7 @@ import {
 } from "@/lib/resumes/service";
 
 type FeedbackCategory =
-  | "linkedin_connection"
-  | "cold_email"
-  | "linkedin_inmail";
+  "linkedin_connection" | "cold_email" | "linkedin_inmail";
 
 type FeedbackMetadata = {
   category?: unknown;
@@ -127,7 +125,7 @@ export default async function DashboardPage() {
       .eq("user_id", user.id),
     supabase
       .from("generated_drafts")
-      .select("id, content, cpl_score, draft_type, is_accepted, created_at")
+      .select("id, content, draft_type, is_accepted, created_at")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(5),
@@ -150,7 +148,6 @@ export default async function DashboardPage() {
   const todayUsage = rateLimitResult.data?.request_count ?? 0;
   const totalDrafts = draftsResult.count ?? 0;
   const recentDrafts = recentResult.data ?? [];
-  const cplScore = profile?.cpl_score ?? 0;
   const feedbackRows = feedbackResult.data ?? [];
   const totalMessages = feedbackResult.count ?? feedbackRows.length;
   const resumes = resumesResult;
@@ -203,14 +200,14 @@ export default async function DashboardPage() {
   );
 
   return (
-    <div className="landing min-h-[100dvh] px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
+    <div className="product-shell min-h-[100dvh] px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
       <ShaderBackground />
       <main className="mx-auto max-w-7xl animate-fade-in">
         <header className="mb-8 flex flex-col gap-5 border-b border-border/70 pb-7 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <div className="mb-3 flex items-center gap-3">
               <span className="h-px w-8 bg-primary" aria-hidden="true" />
-              <p className="text-[0.68rem] font-semibold uppercase tracking-[0.26em] text-primary">
+              <p className="text-[0.68rem] font-semibold uppercase tracking-[0.26em] text-accent">
                 Workspace overview
               </p>
             </div>
@@ -254,7 +251,10 @@ export default async function DashboardPage() {
                   label="Draft archive"
                   value={totalDrafts.toLocaleString()}
                 />
-                <StatBlock label="CPL score" value={cplScore.toFixed(1)} />
+                <StatBlock
+                  label="Reviewed drafts"
+                  value={reviewedCount.toLocaleString()}
+                />
               </div>
 
               <div className="mt-7">
@@ -318,7 +318,7 @@ export default async function DashboardPage() {
                 </p>
                 <Link
                   href="#candidate-profile"
-                  className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-primary transition-colors hover:text-foreground"
+                  className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-accent transition-colors hover:text-foreground"
                 >
                   {applicationReadiness.ready
                     ? "Review application profile"
@@ -369,16 +369,11 @@ export default async function DashboardPage() {
                             {draft.is_accepted && (
                               <>
                                 <span aria-hidden="true">·</span>
-                                <span className="text-primary">Approved</span>
+                                <span className="text-accent">Approved</span>
                               </>
                             )}
                           </div>
                         </div>
-                        {draft.cpl_score != null && (
-                          <Badge variant="outline">
-                            {Math.round(draft.cpl_score)} CPL
-                          </Badge>
-                        )}
                       </div>
                     </article>
                   ))}
@@ -394,7 +389,7 @@ export default async function DashboardPage() {
                   </p>
                   <Link
                     href="/profile"
-                    className="mt-5 inline-flex w-fit items-center gap-2 text-sm font-semibold text-primary hover:text-foreground"
+                    className="mt-5 inline-flex w-fit items-center gap-2 text-sm font-semibold text-accent hover:text-foreground"
                   >
                     Add a resume
                     <ArrowRight className="h-4 w-4" aria-hidden="true" />
@@ -503,7 +498,7 @@ export default async function DashboardPage() {
           <div className="mb-7 max-w-3xl">
             <div className="mb-3 flex items-center gap-3">
               <span className="h-px w-8 bg-primary" aria-hidden="true" />
-              <p className="text-[0.68rem] font-semibold uppercase tracking-[0.26em] text-primary">
+              <p className="text-[0.68rem] font-semibold uppercase tracking-[0.26em] text-accent">
                 Candidate source of truth
               </p>
             </div>
@@ -560,7 +555,7 @@ function TileHeader({
 }) {
   return (
     <div className="flex items-center gap-3">
-      <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary">
+      <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-accent/25 bg-accent/10 text-accent">
         <Icon className="h-5 w-5" aria-hidden={true} />
       </span>
       <p className="text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
@@ -611,11 +606,11 @@ function ActionLink({
       className="group flex items-center justify-between gap-3 rounded-lg border border-border/65 bg-background/30 px-3.5 py-3 text-sm font-semibold text-foreground transition-colors hover:border-primary/30 hover:bg-secondary/60"
     >
       <span className="flex items-center gap-3">
-        <Icon className="h-4 w-4 text-primary" aria-hidden={true} />
+        <Icon className="h-4 w-4 text-accent" aria-hidden={true} />
         {children}
       </span>
       <ArrowRight
-        className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary"
+        className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-accent"
         aria-hidden={true}
       />
     </Link>
@@ -638,7 +633,7 @@ function HealthMetric({
       <Icon
         className={cn(
           "mb-3 h-4 w-4 text-muted-foreground",
-          tone === "positive" && "text-primary",
+          tone === "positive" && "text-accent",
           tone === "negative" && "text-rose-300",
         )}
         aria-hidden="true"

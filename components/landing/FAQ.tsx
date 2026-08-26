@@ -60,7 +60,7 @@ export default function FAQ() {
             <span className="section-label mb-5 block">FAQ</span>
             <h2
               style={{
-                fontFamily: "var(--font-flaviotte), Playfair Display, serif",
+                fontFamily: "var(--font-cormorant), Georgia, serif",
                 fontWeight: 900,
                 fontSize: "clamp(2rem, 4vw, 3rem)",
                 lineHeight: 1.08,
@@ -100,8 +100,10 @@ export default function FAQ() {
                 onClick={() => setOpen(open === i ? null : i)}
                 className="flex w-full items-center justify-between py-6 text-left cursor-pointer group"
                 aria-expanded={open === i}
+                aria-controls={`faq-panel-${i}`}
               >
                 <span
+                  id={`faq-question-${i}`}
                   className="text-xs font-bold tracking-widest uppercase pr-8"
                   style={{
                     color: open === i ? "var(--l-text)" : "var(--l-text-muted)",
@@ -111,13 +113,20 @@ export default function FAQ() {
                   {faq.q}
                 </span>
                 <span style={{ color: "var(--l-blue)", flexShrink: 0 }}>
-                  {open === i ? <Minus size={14} /> : <Plus size={14} />}
+                  {open === i ? (
+                    <Minus size={14} aria-hidden="true" />
+                  ) : (
+                    <Plus size={14} aria-hidden="true" />
+                  )}
                 </span>
               </button>
 
               <div
+                id={`faq-panel-${i}`}
                 className={`landing-faq-panel ${open === i ? "open" : ""}`}
                 aria-hidden={open !== i}
+                aria-labelledby={`faq-question-${i}`}
+                role="region"
               >
                 <p
                   className="pb-8 text-sm leading-relaxed"

@@ -17,7 +17,9 @@ describe("auto-filler DOM safety", () => {
 
   it("builds fill notifications with DOM nodes instead of HTML templates", () => {
     expect(autoFillerSource).not.toContain("notification.innerHTML = `");
-    expect(autoFillerSource).toContain("document.createElement('small')");
+    expect(autoFillerSource).toMatch(
+      /document\.createElement\(["']small["']\)/,
+    );
     expect(autoFillerSource).toContain(
       "count.textContent = `${result.filled.length} field(s) completed`",
     );

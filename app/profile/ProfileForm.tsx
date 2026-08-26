@@ -90,7 +90,7 @@ export default function ProfileForm({
           {pending ? "Saving…" : "Save"}
         </button>
         {status === "saved" && (
-          <span className="text-xs text-emerald-400" role="status">
+          <span className="text-xs text-accent" role="status">
             Saved.
           </span>
         )}

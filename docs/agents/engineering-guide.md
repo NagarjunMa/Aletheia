@@ -62,21 +62,21 @@ Chrome Extension (MV3)              Next.js Web App
 
 ## Tech Stack
 
-| Layer             | Technology                                           | Notes                                                                                                                          |
-| ----------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| Framework         | Next.js 16 (App Router)                              | SSR, API routes, proxy, Vercel                                                                                                 |
-| UI                | React 19, Tailwind CSS, Radix UI, shadcn/ui          | Dark mode via class strategy                                                                                                   |
-| Forms             | React Hook Form + Zod                                | Validation at API boundary                                                                                                     |
-| Database          | Supabase (PostgreSQL + Auth + RLS)                   | `createClient()` for browser, `createServiceClient()` for admin                                                                |
-| AI                | Anthropic Claude (`claude-sonnet-4-6`)               | `@anthropic-ai/sdk`                                                                                                            |
-| Auth              | Supabase Auth SSR                                    | Bearer token (extension), cookies (web)                                                                                        |
-| Extension         | Chrome Manifest V3                                   | Service worker, content scripts, popup                                                                                         |
-| Logging           | Pino → stdout                                        | JSON to stdout, picked up by Vercel logs                                                                                       |
-| Error Tracking    | Sentry                                               | Client + server + edge configs                                                                                                 |
-| Animation         | Framer Motion + GSAP (`gsap@^3.15`, `ScrollTrigger`) | Framer for landing reveals; GSAP for navbar scroll-glass + mobile menu timelines                                               |
-| Visual background | Layered CSS gradients                                | `components/ShaderBackground.tsx` mounts the shared near-black and evergreen northern-lights backdrop                          |
-| Typography        | Flaviotte (display + body)                           | Local via `next/font/local` from `public/fonts/Flaviotte.woff2`. Bundled into extension at `ascendia-extension/assets/fonts/`. |
-| Testing           | Vitest (unit), Playwright (E2E)                      |                                                                                                                                |
+| Layer             | Technology                                  | Notes                                                                                                 |
+| ----------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Framework         | Next.js 16 (App Router)                     | SSR, API routes, proxy, Vercel                                                                        |
+| UI                | React 19, Tailwind CSS, Radix UI, shadcn/ui | Dark mode via class strategy                                                                          |
+| Forms             | React Hook Form + Zod                       | Validation at API boundary                                                                            |
+| Database          | Supabase (PostgreSQL + Auth + RLS)          | `createClient()` for browser, `createServiceClient()` for admin                                       |
+| AI                | Anthropic Claude (`claude-sonnet-4-6`)      | `@anthropic-ai/sdk`                                                                                   |
+| Auth              | Supabase Auth SSR                           | Bearer token (extension), cookies (web)                                                               |
+| Extension         | Chrome Manifest V3                          | Service worker, content scripts, popup                                                                |
+| Logging           | Pino → stdout                               | JSON to stdout, picked up by Vercel logs                                                              |
+| Error Tracking    | Sentry                                      | Client + server + edge configs                                                                        |
+| Animation         | GSAP (`gsap@^3.15`, `@gsap/react`)          | Scoped landing choreography with responsive and reduced-motion fallbacks                              |
+| Visual background | Layered CSS gradients                       | `components/ShaderBackground.tsx` mounts the shared near-black and evergreen northern-lights backdrop |
+| Typography        | DM Sans + Cormorant Garamond + Flaviotte    | DM Sans for body/UI, Cormorant for editorial display, and local Flaviotte for the brand mark.         |
+| Testing           | Vitest (unit), Playwright (E2E)             |                                                                                                       |
 
 ---
 
@@ -180,9 +180,9 @@ Copy `.env.local.example` → `.env.local` for local dev. Never commit secrets.
 - Add `.max()` limits on all Zod string/array fields to prevent memory exhaustion via oversized payloads
 - Log full user IDs in telemetry spans (for audit trails) but truncate to 12 chars in log messages (for privacy)
 - Write a test for every new feature or non-trivial code change. Co-locate the test file with the source (`sanitizer.test.ts` next to `sanitizer.ts`). Minor fixes (typos, config tweaks, copy changes, dependency bumps) are exempt. For any change touching `lib/ai/`, guardrail tests are mandatory and must pass before merge.
-- Use `<ShaderBackground />` (from `components/ShaderBackground.tsx`) for every authenticated or landing surface that needs the brand background. Wrap the page root in `className="landing"` so theme tokens (`--l-*`) resolve.
-- Lead every `font-family` declaration with `var(--font-flaviotte)` before any Playfair / Cormorant / DM Sans fallback. Body default is already set in `app/globals.css` — only override inline when a component needs a specific stack.
-- Mirror palette + typography in the Chrome extension: import Flaviotte via `@font-face` from `ascendia-extension/assets/fonts/`, with `#050806`, `#013220`, `#0B6E4F`, `#50C878`, and `#D1F2EB` as the canonical palette.
+- Use `<ShaderBackground />` (from `components/ShaderBackground.tsx`) for every authenticated or landing surface that needs the brand background. Use `className="landing"` for the public editorial surface and `className="product-shell"` for authenticated product surfaces.
+- Use DM Sans for body/UI copy, Cormorant Garamond for editorial display text, and Flaviotte only for the Aletheia brand mark. Body defaults are registered in `app/layout.tsx` and `app/globals.css`.
+- Mirror the semantic Phthalo palette in the Chrome extension: `#020403` canvas, `#091814` raised surface, `#1E4938` elevated surface, `#285D49` action, `#367960` hover, `#78B49B` highlight/focus, `#F7FAF9` primary text, and `#AEBDB7` muted text. Import Flaviotte via `@font-face` from `ascendia-extension/assets/fonts/` for the extension brand treatment.
 
 ### DON'T
 

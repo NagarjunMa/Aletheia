@@ -122,7 +122,7 @@ function ResetPasswordForm() {
           </p>
           <Link
             href={`/auth/forgot-password${source ? `?source=${source}` : ""}`}
-            className="inline-block rounded-lg bg-[hsl(var(--primary))] px-6 py-2.5 text-sm font-medium text-white hover:brightness-110 transition-all"
+            className="inline-block rounded-[10px] bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-[#367960]"
           >
             Request new link
           </Link>
@@ -137,9 +137,9 @@ function ResetPasswordForm() {
       <div className="min-h-screen flex items-center justify-center px-4">
         <div className="glass rounded-2xl p-8 w-full max-w-md animate-fade-in text-center">
           <div className="mb-4 flex items-center justify-center">
-            <div className="w-16 h-16 rounded-full bg-emerald-500/20 flex items-center justify-center">
+            <div className="flex size-16 items-center justify-center rounded-full border border-accent/25 bg-accent/10">
               <svg
-                className="w-8 h-8 text-emerald-400"
+                className="size-8 text-accent"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -162,7 +162,7 @@ function ResetPasswordForm() {
           </p>
           <Link
             href={`/auth/login${source ? `?source=${source}` : ""}`}
-            className="inline-block rounded-lg bg-[hsl(var(--primary))] px-6 py-2.5 text-sm font-medium text-white hover:brightness-110 transition-all"
+            className="inline-block rounded-[10px] bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-[#367960]"
           >
             Sign in
           </Link>
@@ -237,6 +237,7 @@ function ResetPasswordForm() {
               onChange={(e) => setPassword(e.target.value)}
               required
               autoFocus
+              autoComplete="new-password"
               placeholder="••••••••"
               minLength={8}
               className="w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--input))] pl-10 pr-4 py-2.5 text-sm text-white placeholder:text-[hsl(var(--muted-foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] transition-colors"
@@ -259,6 +260,7 @@ function ResetPasswordForm() {
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
+              autoComplete="new-password"
               placeholder="••••••••"
               minLength={8}
               className="w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--input))] pl-10 pr-4 py-2.5 text-sm text-white placeholder:text-[hsl(var(--muted-foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] transition-colors"
@@ -275,7 +277,7 @@ function ResetPasswordForm() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full rounded-lg bg-[hsl(var(--primary))] px-4 py-2.5 text-sm font-medium text-white hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] focus:ring-offset-2 focus:ring-offset-[#0a0a0a] disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+          className="w-full rounded-[10px] bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-[#367960] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50"
         >
           {loading ? "Updating..." : "Update password"}
         </button>

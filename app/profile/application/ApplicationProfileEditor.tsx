@@ -68,7 +68,7 @@ const STAGE_LABELS: Record<(typeof TARGET_COMPANY_STAGES)[number], string> = {
 };
 
 const inputClass =
-  "mt-2 w-full rounded-lg border border-[#DAF1DE]/15 bg-[#06191d]/52 px-3.5 py-3 text-sm text-white outline-none transition placeholder:text-[#CBEFEB]/35 focus:border-[#DAF1DE]/38 focus:ring-2 focus:ring-[#DAF1DE]/10";
+  "mt-2 w-full rounded-lg border border-accent/20 bg-background/55 px-3.5 py-3 text-sm text-foreground outline-none transition-[border-color,box-shadow,background-color] placeholder:text-muted-foreground/60 focus:border-accent/55 focus:ring-2 focus:ring-accent/15";
 
 export default function ApplicationProfileEditor({
   initialProfile,
@@ -238,8 +238,8 @@ export default function ApplicationProfileEditor({
                       key={stage}
                       className={`cursor-pointer rounded-full border px-3.5 py-2 text-sm transition ${
                         checked
-                          ? "border-[#DAF1DE]/40 bg-[#DAF1DE]/18 text-white"
-                          : "border-[#DAF1DE]/13 bg-[#06191d]/38 text-[#CBEFEB]/68 hover:border-[#DAF1DE]/26"
+                          ? "border-accent/40 bg-accent/18 text-white"
+                          : "border-accent/13 bg-background/38 text-muted-foreground hover:border-accent/26"
                       }`}
                     >
                       <input
@@ -412,7 +412,7 @@ export default function ApplicationProfileEditor({
 
         <details
           id="evidence"
-          className="group scroll-mt-6 rounded-xl border border-border/70 bg-card/75 shadow-[0_18px_55px_rgba(4,18,22,0.16)] backdrop-blur-xl transition-colors open:border-primary/25 open:bg-card"
+          className="group scroll-mt-6 rounded-xl border border-border/70 bg-card/75 shadow-[0_18px_55px_rgba(2,4,3,0.16)] backdrop-blur-xl transition-colors open:border-primary/25 open:bg-card"
         >
           <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-5 marker:content-none sm:px-6 [&::-webkit-details-marker]:hidden">
             <span>
@@ -424,7 +424,7 @@ export default function ApplicationProfileEditor({
                 stories that support your claims.
               </span>
             </span>
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-background/35 text-muted-foreground transition group-open:rotate-180 group-open:border-primary/25 group-open:text-primary">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-background/35 text-muted-foreground transition group-open:rotate-180 group-open:border-accent/30 group-open:text-accent">
               <ChevronDown className="h-4 w-4" aria-hidden={true} />
             </span>
           </summary>
@@ -470,9 +470,9 @@ export default function ApplicationProfileEditor({
 
             <div className="mt-6 grid gap-3">
               {evidence.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-[#DAF1DE]/22 bg-[#06191d]/32 p-6">
+                <div className="rounded-lg border border-dashed border-accent/22 bg-background/32 p-6">
                   <p className="font-semibold text-white">No evidence yet.</p>
-                  <p className="mt-2 text-sm leading-6 text-[#CBEFEB]/68">
+                  <p className="mt-2 text-sm leading-6 text-muted-foreground">
                     Start with a measurable achievement or your most difficult
                     technical project. Two confirmed stories unlock generation
                     readiness; five strong achievements create better coverage.
@@ -486,7 +486,7 @@ export default function ApplicationProfileEditor({
                   return (
                     <article
                       key={item.id}
-                      className="rounded-lg border border-[#DAF1DE]/13 bg-[#06191d]/42 p-4"
+                      className="rounded-lg border border-accent/13 bg-background/42 p-4"
                     >
                       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                         <button
@@ -495,7 +495,7 @@ export default function ApplicationProfileEditor({
                           className="min-w-0 text-left"
                         >
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-xs uppercase tracking-[0.14em] text-[#DAF1DE]/58">
+                            <span className="text-xs uppercase tracking-[0.14em] text-accent/58">
                               {option?.label ?? item.kind}
                             </span>
                             <EvidenceStatus confirmed={item.confirmed} />
@@ -503,7 +503,7 @@ export default function ApplicationProfileEditor({
                           <h3 className="mt-2 text-base font-semibold text-white">
                             {item.title}
                           </h3>
-                          <p className="mt-1 line-clamp-2 text-sm leading-6 text-[#CBEFEB]/68">
+                          <p className="mt-1 line-clamp-2 text-sm leading-6 text-muted-foreground">
                             {item.outcome || item.actions}
                           </p>
                         </button>
@@ -511,7 +511,7 @@ export default function ApplicationProfileEditor({
                           <button
                             type="button"
                             onClick={() => setEditor(item)}
-                            className="rounded-lg border border-[#DAF1DE]/14 px-3 py-2 text-xs font-semibold text-white hover:bg-[#DAF1DE]/10"
+                            className="rounded-lg border border-accent/14 px-3 py-2 text-xs font-semibold text-white hover:bg-accent/10"
                           >
                             Edit
                           </button>
@@ -536,10 +536,10 @@ export default function ApplicationProfileEditor({
       </div>
 
       <aside className="lg:sticky lg:top-6 lg:h-fit">
-        <div className="rounded-xl border border-[#DAF1DE]/18 bg-[#06191d]/58 p-5 shadow-[0_24px_70px_rgba(4,18,22,0.3)] backdrop-blur-2xl">
+        <div className="rounded-xl border border-accent/18 bg-background/58 p-5 shadow-[0_24px_70px_rgba(2,4,3,0.3)] backdrop-blur-2xl">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-xs uppercase tracking-[0.18em] text-[#DAF1DE]/60">
+              <p className="text-xs uppercase tracking-[0.18em] text-accent/60">
                 Application readiness
               </p>
               <p className="mt-2 text-4xl font-bold text-white">
@@ -548,7 +548,7 @@ export default function ApplicationProfileEditor({
             </div>
             {readiness.ready ? (
               <CheckCircle2
-                className="h-6 w-6 text-emerald-300"
+                className="h-6 w-6 text-accent"
                 aria-label="Ready"
               />
             ) : (
@@ -560,11 +560,11 @@ export default function ApplicationProfileEditor({
           </div>
           <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/8">
             <div
-              className="h-full rounded-full bg-[#DAF1DE]/78 transition-[width]"
+              className="h-full rounded-full bg-accent/78 transition-[width]"
               style={{ width: `${readiness.completionPercent}%` }}
             />
           </div>
-          <p className="mt-4 text-sm leading-6 text-[#CBEFEB]/72">
+          <p className="mt-4 text-sm leading-6 text-muted-foreground">
             {readiness.ready
               ? "Your profile meets the minimum evidence threshold for grounded application answers."
               : "Complete the essentials before generating application answers."}
@@ -585,12 +585,12 @@ export default function ApplicationProfileEditor({
             />
           )}
 
-          <div className="mt-5 rounded-lg border border-[#DAF1DE]/12 bg-[#DAF1DE]/7 p-4">
+          <div className="mt-5 rounded-lg border border-accent/12 bg-accent/7 p-4">
             <div className="flex items-center gap-2 text-sm font-semibold text-white">
-              <ShieldCheck className="h-4 w-4 text-[#DAF1DE]" />
+              <ShieldCheck className="h-4 w-4 text-accent" />
               Grounding contract
             </div>
-            <p className="mt-2 text-xs leading-5 text-[#CBEFEB]/64">
+            <p className="mt-2 text-xs leading-5 text-muted-foreground">
               Aletheia may select and rephrase confirmed facts. It must not
               create metrics, employers, projects, or experience you did not
               provide.
@@ -599,7 +599,7 @@ export default function ApplicationProfileEditor({
 
           <a
             href="#evidence"
-            className="mt-4 flex items-center justify-between text-sm font-semibold text-[#DAF1DE] hover:text-white"
+            className="mt-4 flex items-center justify-between text-sm font-semibold text-accent hover:text-white"
           >
             Review evidence
             <ChevronRight className="h-4 w-4" aria-hidden={true} />
@@ -636,7 +636,7 @@ function ProfileSection({
       id={`candidate-${category.id}`}
       open={isOpen}
       onToggle={(event) => setIsOpen(event.currentTarget.open)}
-      className="group scroll-mt-6 rounded-xl border border-border/70 bg-card/75 shadow-[0_18px_55px_rgba(4,18,22,0.16)] backdrop-blur-xl transition-colors open:border-primary/25 open:bg-card"
+      className="group scroll-mt-6 rounded-xl border border-border/70 bg-card/75 shadow-[0_18px_55px_rgba(2,4,3,0.16)] backdrop-blur-xl transition-colors open:border-primary/25 open:bg-card"
     >
       <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-5 marker:content-none sm:px-6 [&::-webkit-details-marker]:hidden">
         <span>
@@ -647,7 +647,7 @@ function ProfileSection({
             {category.description}
           </span>
         </span>
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-background/35 text-muted-foreground transition group-open:rotate-180 group-open:border-primary/25 group-open:text-primary">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-background/35 text-muted-foreground transition group-open:rotate-180 group-open:border-accent/30 group-open:text-accent">
           <ChevronDown className="h-4 w-4" aria-hidden={true} />
         </span>
       </summary>
@@ -735,7 +735,7 @@ function TextAreaField({
         <label htmlFor={id} className="text-sm font-semibold text-white">
           {label}
         </label>
-        <span className="text-[11px] text-[#CBEFEB]/45">
+        <span className="text-[11px] text-muted-foreground">
           {value.length.toLocaleString()} / {maxLength.toLocaleString()}
         </span>
       </div>
@@ -777,7 +777,7 @@ function ListField({
         <label htmlFor={id} className="text-sm font-semibold text-white">
           {label}
         </label>
-        <span className="text-[11px] text-[#CBEFEB]/45">{hint}</span>
+        <span className="text-[11px] text-muted-foreground">{hint}</span>
       </div>
       <textarea
         id={id}
@@ -815,14 +815,14 @@ function EvidenceEditor({
   return (
     <form
       onSubmit={onSubmit}
-      className="mt-6 rounded-xl border border-[#DAF1DE]/22 bg-[#06191d]/55 p-5"
+      className="mt-6 rounded-xl border border-accent/22 bg-background/55 p-5"
     >
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-sm font-semibold text-white">
             {value.id ? "Edit evidence story" : "New evidence story"}
           </p>
-          <p className="mt-1 text-xs text-[#CBEFEB]/60">
+          <p className="mt-1 text-xs text-muted-foreground">
             Specific actions and verifiable outcomes are more useful than a
             polished summary.
           </p>
@@ -831,7 +831,7 @@ function EvidenceEditor({
           type="button"
           aria-label="Close evidence editor"
           onClick={onCancel}
-          className="rounded-lg border border-[#DAF1DE]/12 p-2 text-[#CBEFEB]/72 hover:bg-[#DAF1DE]/10"
+          className="rounded-lg border border-accent/12 p-2 text-muted-foreground hover:bg-accent/10"
         >
           <X className="h-4 w-4" aria-hidden={true} />
         </button>
@@ -862,7 +862,7 @@ function EvidenceEditor({
               </option>
             ))}
           </select>
-          <p className="mt-2 text-xs leading-5 text-[#CBEFEB]/55">
+          <p className="mt-2 text-xs leading-5 text-muted-foreground">
             {
               EVIDENCE_KIND_OPTIONS.find(
                 (option) => option.value === value.kind,
@@ -939,18 +939,18 @@ function EvidenceEditor({
         </div>
       </div>
 
-      <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-lg border border-[#DAF1DE]/14 bg-[#DAF1DE]/7 p-4">
+      <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-lg border border-accent/14 bg-accent/7 p-4">
         <input
           type="checkbox"
           checked={value.confirmed}
           onChange={(event) => update("confirmed", event.target.checked)}
-          className="mt-0.5 h-4 w-4 accent-[#DAF1DE]"
+          className="mt-0.5 h-4 w-4 accent-[#285D49]"
         />
         <span>
           <span className="block text-sm font-semibold text-white">
             Confirm this evidence is accurate
           </span>
-          <span className="mt-1 block text-xs leading-5 text-[#CBEFEB]/60">
+          <span className="mt-1 block text-xs leading-5 text-muted-foreground">
             Every claim, metric, link, and description can be defended in an
             interview. Unconfirmed stories remain saved but do not count toward
             generation readiness.
@@ -962,7 +962,7 @@ function EvidenceEditor({
         <button
           type="submit"
           disabled={pending}
-          className="inline-flex items-center gap-2 rounded-lg bg-[#DAF1DE] px-4 py-2.5 text-sm font-bold text-[#102428] hover:bg-white disabled:opacity-55"
+          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-primary-foreground transition-[background-color,opacity] hover:bg-[#367960] disabled:opacity-55"
         >
           <Save className="h-4 w-4" aria-hidden={true} />
           {pending ? "Saving…" : "Save evidence"}
@@ -970,7 +970,7 @@ function EvidenceEditor({
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-lg border border-[#DAF1DE]/16 px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#DAF1DE]/10"
+          className="rounded-lg border border-accent/16 px-4 py-2.5 text-sm font-semibold text-white hover:bg-accent/10"
         >
           Cancel
         </button>
@@ -981,7 +981,7 @@ function EvidenceEditor({
 
 function EvidenceStatus({ confirmed }: { confirmed: boolean }) {
   return confirmed ? (
-    <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300/22 bg-emerald-300/8 px-2 py-0.5 text-[11px] text-emerald-200">
+    <span className="inline-flex items-center gap-1 rounded-full border border-accent/25 bg-accent/10 px-2 py-0.5 text-[11px] text-accent">
       <CheckCircle2 className="h-3 w-3" aria-hidden={true} /> Confirmed
     </span>
   ) : (
@@ -997,7 +997,7 @@ function NoticeMessage({ notice }: { notice: Notice }) {
     <p
       role={notice.type === "error" ? "alert" : "status"}
       className={`text-sm ${
-        notice.type === "error" ? "text-rose-200" : "text-emerald-200"
+        notice.type === "error" ? "text-rose-200" : "text-accent"
       }`}
     >
       {notice.message}
@@ -1016,18 +1016,18 @@ function ReadinessList({
 }) {
   return (
     <div className="mt-5">
-      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#DAF1DE]/58">
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent/58">
         {title}
       </p>
       <ul className="mt-2 space-y-2">
         {items.map((item) => (
           <li
             key={item}
-            className="flex items-start gap-2 text-xs leading-5 text-[#CBEFEB]/70"
+            className="flex items-start gap-2 text-xs leading-5 text-muted-foreground"
           >
             <span
               className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${
-                tone === "required" ? "bg-amber-200" : "bg-[#DAF1DE]/65"
+                tone === "required" ? "bg-amber-200" : "bg-accent/65"
               }`}
             />
             {item}

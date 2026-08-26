@@ -59,7 +59,7 @@ export default function InstallPage() {
             style={{
               color: "var(--l-text)",
               lineHeight: 1.1,
-              fontFamily: "var(--font-flaviotte), Playfair Display, serif",
+              fontFamily: "var(--font-cormorant), Georgia, serif",
             }}
           >
             Install Aletheia
@@ -113,7 +113,7 @@ export default function InstallPage() {
             className="mb-8 font-serif text-3xl"
             style={{
               color: "var(--l-text)",
-              fontFamily: "var(--font-flaviotte), Playfair Display, serif",
+              fontFamily: "var(--font-cormorant), Georgia, serif",
             }}
           >
             Start in 5 steps
@@ -131,9 +131,9 @@ export default function InstallPage() {
                 <span
                   className="flex h-8 w-8 shrink-0 items-center justify-center text-sm font-bold"
                   style={{
-                    background: "rgba(112,184,200,0.12)",
+                    background: "rgba(90,157,130,0.12)",
                     color: "var(--l-blue)",
-                    border: "1px solid rgba(112,184,200,0.25)",
+                    border: "1px solid rgba(120,180,155,0.26)",
                   }}
                 >
                   {i + 1}
@@ -160,8 +160,8 @@ export default function InstallPage() {
         <section
           className="p-6"
           style={{
-            background: "rgba(112,184,200,0.06)",
-            border: "1px solid rgba(112,184,200,0.18)",
+            background: "rgba(90,157,130,0.07)",
+            border: "1px solid rgba(120,180,155,0.2)",
           }}
         >
           <p

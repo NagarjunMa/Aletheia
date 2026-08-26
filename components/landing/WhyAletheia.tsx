@@ -48,7 +48,7 @@ export default function WhyAletheia() {
             <span className="section-label mb-5 block">Why Aletheia</span>
             <h2
               style={{
-                fontFamily: "var(--font-flaviotte), Playfair Display, serif",
+                fontFamily: "var(--font-cormorant), Georgia, serif",
                 fontWeight: 900,
                 fontSize: "clamp(2rem, 4vw, 3rem)",
                 lineHeight: 1.08,
@@ -98,6 +98,7 @@ export default function WhyAletheia() {
                     <Icon
                       size={18}
                       strokeWidth={1.5}
+                      aria-hidden="true"
                       style={{ color: "var(--l-blue)" }}
                     />
                   </div>
@@ -119,8 +120,7 @@ export default function WhyAletheia() {
                 <h3
                   className="mb-4 text-xl"
                   style={{
-                    fontFamily:
-                      "var(--font-flaviotte), Playfair Display, serif",
+                    fontFamily: "var(--font-cormorant), Georgia, serif",
                     fontWeight: 700,
                     color: "var(--l-text)",
                     lineHeight: 1.25,

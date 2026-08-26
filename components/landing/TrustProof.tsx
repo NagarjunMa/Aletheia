@@ -28,7 +28,7 @@ export default function TrustProof() {
             </span>
             <h2
               style={{
-                fontFamily: "var(--font-flaviotte), Playfair Display, serif",
+                fontFamily: "var(--font-cormorant), Georgia, serif",
                 fontWeight: 900,
                 fontSize: "clamp(2rem, 4vw, 3rem)",
                 lineHeight: 1.08,

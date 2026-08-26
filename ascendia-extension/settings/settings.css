@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════════════════════════
-   Aletheia Extension Settings — Luxury Evergreen Theme
-   Matches the web palette: #050806 → #013220 with #50C878 light
-   Typography: Flaviotte (UI + brand) with DM Sans / Playfair fallback
+   Aletheia Extension Settings — Phthalo Green Theme
+   Matches the web palette: #020403 → #10291F with Phthalo ambient light
+   Typography: Flaviotte (UI + brand) with DM Sans / Georgia fallback
    ═══════════════════════════════════════════════════════════════ */
 
 @font-face {
@@ -16,28 +16,32 @@
 
 /* ── Design Tokens ────────────────────────────────────────────────────────── */
 :root {
-  --ink: #050806;
-  --evergreen: #013220;
-  --emerald-deep: #0b6e4f;
-  --emerald: #50c878;
-  --mint: #d1f2eb;
+  --ink: #020403;
+  --evergreen: #10291f;
+  --emerald-deep: #285d49;
+  --emerald: #5a9d82;
+  --mint: #f7faf9;
 
   --bg: var(--ink);
-  --bg-alt: #080d0a;
-  --surface: rgba(1, 50, 32, 0.22);
-  --surface-2: rgba(11, 110, 79, 0.16);
-  --surface-3: rgba(80, 200, 120, 0.11);
+  --bg-alt: #091814;
+  --surface: rgba(9, 24, 20, 0.74);
+  --surface-2: rgba(16, 41, 31, 0.76);
+  --surface-3: rgba(90, 157, 130, 0.11);
 
   --text: var(--mint);
-  --text-muted: #9dbdb4;
-  --text-dim: rgba(209, 242, 235, 0.48);
+  --text-muted: #aebdb7;
+  --text-dim: rgba(247, 250, 249, 0.58);
 
-  --accent: var(--emerald);
-  --accent-bright: var(--mint);
+  --accent: #78b49b;
+  --accent-bright: #aebdb7;
+  --action-bg: #285d49;
+  --action-hover: #367960;
+  --action-text: #f7faf9;
+  --focus-ring: #78b49b;
 
   /* Borders — aurora glass */
-  --border: rgba(209, 242, 235, 0.12);
-  --border-dim: rgba(209, 242, 235, 0.06);
+  --border: rgba(120, 180, 155, 0.2);
+  --border-dim: rgba(120, 180, 155, 0.09);
 
   /* Status */
   --success: #4ade80;
@@ -48,7 +52,7 @@
   --font-ui:
     "Flaviotte", "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI",
     system-ui, sans-serif;
-  --font-brand: "Flaviotte", "Playfair Display", Georgia, serif;
+  --font-brand: "Flaviotte", Georgia, serif;
   --font-mono: "SF Mono", Monaco, "Cascadia Code", Consolas, monospace;
 
   /* Transitions */
@@ -56,6 +60,11 @@
   --normal: 240ms ease-out;
 
   --radius: 10px;
+}
+
+*:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
 }
 
 /* ── Reset ─────────────────────────────────────────────────── */
@@ -74,16 +83,16 @@ body {
   background:
     radial-gradient(
       ellipse 90% 58% at 10% 108%,
-      rgba(209, 242, 235, 0.42) 0%,
-      rgba(80, 200, 120, 0.27) 30%,
+      rgba(120, 180, 155, 0.28) 0%,
+      rgba(90, 157, 130, 0.22) 30%,
       transparent 70%
     ),
     radial-gradient(
       ellipse 72% 54% at 95% 90%,
-      rgba(11, 110, 79, 0.3) 0%,
+      rgba(40, 93, 73, 0.24) 0%,
       transparent 72%
     ),
-    linear-gradient(180deg, #050806 0%, #080d0a 54%, #013220 100%);
+    linear-gradient(180deg, #020403 0%, #091814 58%, #10291f 100%);
   color: var(--text);
   line-height: 1.6;
   min-height: 100vh;
@@ -183,7 +192,7 @@ body::after {
   letter-spacing: 0.1em;
   padding: 0.3rem 0.8rem;
   border: 1px solid var(--border);
-  background: rgba(142, 182, 155, 0.05);
+  background: rgba(120, 180, 155, 0.05);
 }
 
 /* ── Main Content ──────────────────────────────────────────── */
@@ -266,7 +275,7 @@ h3 {
 }
 
 .status-card:hover {
-  border-color: rgba(142, 182, 155, 0.35);
+  border-color: rgba(120, 180, 155, 0.35);
   background: var(--surface-3);
 }
 
@@ -371,11 +380,11 @@ label strong {
   outline: none;
   border-color: var(--accent);
   background: var(--surface-3);
-  box-shadow: 0 0 0 2px rgba(80, 200, 120, 0.12);
+  box-shadow: 0 0 0 2px rgba(90, 157, 130, 0.12);
 }
 
 .text-input:hover:not(:focus) {
-  border-color: rgba(142, 182, 155, 0.3);
+  border-color: rgba(120, 180, 155, 0.3);
 }
 
 .text-input::placeholder {
@@ -451,7 +460,7 @@ textarea.text-input {
   background: linear-gradient(
     90deg,
     transparent,
-    rgba(218, 241, 222, 0.15),
+    rgba(247, 250, 249, 0.15),
     transparent
   );
   transform: skewX(-15deg);
@@ -470,16 +479,16 @@ textarea.text-input {
 
 /* Primary */
 .action-btn.primary {
-  background: var(--accent);
-  color: var(--bg);
-  border-color: var(--accent);
+  background: var(--action-bg);
+  color: var(--action-text);
+  border-color: rgba(120, 180, 155, 0.34);
 }
 
 .action-btn.primary:hover {
-  background: var(--accent-bright);
-  border-color: var(--accent-bright);
-  color: var(--bg);
-  box-shadow: 0 0 18px rgba(80, 200, 120, 0.25);
+  background: var(--action-hover);
+  border-color: var(--accent);
+  color: var(--action-text);
+  box-shadow: 0 0 18px rgba(90, 157, 130, 0.22);
 }
 
 /* Secondary */
@@ -514,7 +523,7 @@ textarea.text-input {
 
 /* ── Upload Area ───────────────────────────────────────────── */
 .upload-area {
-  border: 1px dashed rgba(142, 182, 155, 0.3);
+  border: 1px dashed rgba(120, 180, 155, 0.3);
   padding: 3rem 2rem;
   text-align: center;
   cursor: pointer;
@@ -654,7 +663,7 @@ textarea.text-input {
   width: 18px;
   height: 18px;
   flex-shrink: 0;
-  border: 1.5px solid rgba(142, 182, 155, 0.3);
+  border: 1.5px solid rgba(120, 180, 155, 0.3);
   border-radius: var(--radius);
   background: var(--surface-2);
   position: relative;
@@ -704,12 +713,12 @@ textarea.text-input {
   border-radius: 0;
   cursor: pointer;
   border: 2px solid var(--bg);
-  box-shadow: 0 0 6px rgba(142, 182, 155, 0.4);
+  box-shadow: 0 0 6px rgba(120, 180, 155, 0.4);
   transition: box-shadow var(--fast);
 }
 
 .range-input::-webkit-slider-thumb:hover {
-  box-shadow: 0 0 12px rgba(142, 182, 155, 0.6);
+  box-shadow: 0 0 12px rgba(120, 180, 155, 0.6);
 }
 
 .range-input::-moz-range-thumb {
@@ -719,7 +728,7 @@ textarea.text-input {
   border-radius: 0;
   cursor: pointer;
   border: 2px solid var(--bg);
-  box-shadow: 0 0 6px rgba(142, 182, 155, 0.4);
+  box-shadow: 0 0 6px rgba(120, 180, 155, 0.4);
 }
 
 .range-labels {
@@ -739,8 +748,8 @@ textarea.text-input {
 
 /* ── Info Card ──────────────────────────────────────────────── */
 .info-card {
-  background: rgba(11, 110, 79, 0.1);
-  border: 1px solid rgba(209, 242, 235, 0.12);
+  background: rgba(40, 93, 73, 0.1);
+  border: 1px solid rgba(247, 250, 249, 0.12);
   padding: 1.25rem;
   display: flex;
   gap: 1rem;
@@ -789,7 +798,7 @@ textarea.text-input {
 .save-section {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-top: 1px solid rgba(80, 200, 120, 0.3);
+  border-top: 1px solid rgba(90, 157, 130, 0.3);
   padding: 1.5rem 2rem;
   position: sticky;
   bottom: 0;
@@ -946,7 +955,7 @@ textarea.text-input {
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(142, 182, 155, 0.35);
+  background: rgba(120, 180, 155, 0.35);
 }
 
 /* ── Responsive ─────────────────────────────────────────────── */

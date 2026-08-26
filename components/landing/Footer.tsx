@@ -1,5 +1,3 @@
-"use client";
-
 import Image from "next/image";
 import Link from "next/link";
 
@@ -28,15 +26,6 @@ const linkClasses =
   "cursor-pointer text-[10px] font-bold tracking-widest uppercase transition-colors duration-150";
 
 export default function Footer() {
-  const scrollTo = (href: string) => {
-    if (typeof window === "undefined") return;
-    if (window.location.pathname !== "/") {
-      window.location.assign(`/${href}`);
-      return;
-    }
-    document.querySelector(href)?.scrollIntoView({ behavior: "smooth" });
-  };
-
   return (
     <footer
       className="relative px-5 sm:px-8 py-12"
@@ -76,14 +65,13 @@ export default function Footer() {
                   {link.label}
                 </Link>
               ) : (
-                <button
-                  type="button"
+                <a
                   key={link.href}
-                  onClick={() => scrollTo(link.href)}
+                  href={link.href}
                   className={`${linkClasses} text-[var(--l-text-dim)] hover:text-[var(--l-text)] transition-colors duration-150`}
                 >
                   {link.label}
-                </button>
+                </a>
               ),
             )}
             <a

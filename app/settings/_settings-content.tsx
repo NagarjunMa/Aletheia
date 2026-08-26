@@ -31,9 +31,9 @@ function formalityLabel(score: number): string {
 }
 
 function formalityColor(score: number): string {
-  if (score <= 33) return "text-emerald-400";
-  if (score <= 66) return "text-blue-400";
-  return "text-violet-400";
+  if (score <= 33) return "text-muted-foreground";
+  if (score <= 66) return "text-accent";
+  return "text-foreground";
 }
 
 export default function SettingsContent() {
@@ -300,9 +300,7 @@ export default function SettingsContent() {
 
         {/* Save */}
         <div className="flex items-center justify-end gap-3">
-          {savedMsg && (
-            <span className="text-sm text-emerald-400">{savedMsg}</span>
-          )}
+          {savedMsg && <span className="text-sm text-accent">{savedMsg}</span>}
           <button
             onClick={handleSave}
             disabled={saving}

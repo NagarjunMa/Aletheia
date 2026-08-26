@@ -1,231 +1,137 @@
-import { Fragment } from "react";
+import {
+  ArrowDown,
+  ArrowUpRight,
+  FileCheck2,
+  MessageSquareText,
+  ShieldCheck,
+} from "lucide-react";
 
-// Word-level stagger: split each headline line into individual words.
-const headlineLines: Array<{ words: string[]; italic?: boolean }> = [
-  { words: ["Bring", "the", "right", "context"] },
-  { words: ["to", "every", "professional"] },
-  { words: ["introduction."], italic: true },
+const contextRows = [
+  {
+    icon: MessageSquareText,
+    label: "Profile",
+    value: "The page you opened",
+  },
+  {
+    icon: FileCheck2,
+    label: "Evidence",
+    value: "Your selected resume and profile",
+  },
+  {
+    icon: ShieldCheck,
+    label: "Control",
+    value: "Review before anything is placed",
+  },
 ];
-
-/**
- * Brush-stroke SVG underline on the accent word, drawn with CSS stroke animation.
- * Luxury evergreen theme: stroke is emerald #50C878.
- */
-function AccentUnderline({ delay = 0 }: { delay?: number }) {
-  return (
-    <svg
-      viewBox="0 0 160 12"
-      width="100%"
-      height="12"
-      preserveAspectRatio="none"
-      style={{
-        position: "absolute",
-        bottom: "-6px",
-        left: 0,
-        right: 0,
-        overflow: "visible",
-      }}
-      aria-hidden
-    >
-      <path
-        className="landing-hero-underline-path"
-        d="M4 8 Q40 4 80 8 Q120 12 156 6"
-        fill="none"
-        stroke="#50C878"
-        strokeWidth="2.5"
-        strokeLinecap="round"
-        style={{ animationDelay: `${delay}s` }}
-      />
-    </svg>
-  );
-}
 
 export default function Hero() {
   return (
-    <section
-      id="hero"
-      className="relative flex flex-col items-center justify-center px-5 sm:px-8 pt-28 pb-16"
-      style={{
-        background: "var(--l-bg)",
-        minHeight: "88vh",
-        overflow: "hidden",
-      }}
-    >
-      {/* ── Radial vignette — keeps center text readable ── */}
+    <section id="hero" className="landing-hero">
       <div
-        aria-hidden
-        style={{
-          position: "absolute",
-          inset: 0,
-          background:
-            "radial-gradient(ellipse 70% 60% at 50% 50%, transparent 30%, var(--l-bg) 100%)",
-          pointerEvents: "none",
-          zIndex: 1,
-        }}
+        className="landing-hero-aurora"
+        data-hero-aurora
+        aria-hidden="true"
       />
+      <div className="landing-hero-grid" aria-hidden="true" />
 
-      {/* ── Ambient glow blobs ── */}
-      <div
-        aria-hidden
-        style={{
-          position: "absolute",
-          top: "15%",
-          left: "10%",
-          width: "420px",
-          height: "420px",
-          background:
-            "radial-gradient(circle, rgba(142,182,155,0.06) 0%, transparent 70%)",
-          pointerEvents: "none",
-          zIndex: 1,
-        }}
-      />
-      <div
-        aria-hidden
-        style={{
-          position: "absolute",
-          bottom: "20%",
-          right: "8%",
-          width: "350px",
-          height: "350px",
-          background:
-            "radial-gradient(circle, rgba(35,83,71,0.12) 0%, transparent 70%)",
-          pointerEvents: "none",
-          zIndex: 1,
-        }}
-      />
+      <div className="landing-hero-shell">
+        <div className="landing-hero-copy">
+          <div className="landing-hero-kicker" data-landing-hero-item>
+            <span>Aletheia</span>
+            <span aria-hidden="true">/</span>
+            <span>Review-first professional writing</span>
+          </div>
 
-      {/* ── Content layer ── */}
-      <div
-        className="relative mx-auto max-w-5xl w-full text-center"
-        style={{ zIndex: 2 }}
-      >
-        {/* Eyebrow badge */}
-        <div className="landing-hero-reveal mb-10 flex justify-center">
-          <span className="section-label">
-            Review-first writing for professional outreach
-          </span>
+          <h1 className="landing-hero-title" data-landing-hero-item>
+            <span>Bring the right</span>
+            <span>
+              <em>context</em> to every
+            </span>
+            <span>professional</span>
+            <span>introduction.</span>
+          </h1>
+
+          <div className="landing-hero-support" data-landing-hero-item>
+            <p>
+              Aletheia helps you shape thoughtful LinkedIn connection notes,
+              considered InMail, tailored emails, and evidence-grounded
+              application answers. It draws from the profile or opportunity you
+              choose and the experience you have recorded, then gives you a
+              draft to refine in your own voice.
+            </p>
+
+            <div className="landing-hero-actions">
+              <a href="/install" className="btn-primary">
+                Get Aletheia on Chrome
+                <ArrowUpRight size={15} strokeWidth={1.8} aria-hidden="true" />
+              </a>
+              <a href="/demo" className="btn-secondary">
+                View an illustrative example
+              </a>
+            </div>
+
+            <p className="landing-hero-assurance">
+              Official Chrome Web Store install
+              <span aria-hidden="true">·</span>
+              No LinkedIn password
+              <span aria-hidden="true">·</span>
+              Never clicks Send
+            </p>
+          </div>
         </div>
 
-        {/* ── Headline — word-by-word stagger ── */}
-        <h1
-          aria-label="Bring the right context to every professional introduction."
-          style={{
-            fontFamily:
-              "var(--font-flaviotte), Playfair Display, Georgia, serif",
-            color: "var(--l-text)",
-            lineHeight: 1.06,
-            fontWeight: 900,
-            fontSize: "clamp(2.4rem, 5.5vw, 5rem)",
-            letterSpacing: "-0.02em",
-          }}
+        <aside
+          className="landing-context-ledger"
+          data-landing-hero-item
+          aria-label="How Aletheia prepares a review-first draft"
         >
-          {headlineLines.map((line, lineIdx) => {
-            const isAccentLine = lineIdx === 1;
-            const lineDelay = 0.18 + lineIdx * 0.15;
+          <div className="landing-context-ledger-topline">
+            <span>Selected context</span>
+            <span>01—03</span>
+          </div>
 
-            return (
-              <span
-                key={lineIdx}
-                className="block"
-                style={{
-                  fontStyle: line.italic ? "italic" : "normal",
-                }}
-              >
-                {line.words.map((word, wordIdx) => {
-                  const isHuman = isAccentLine && word === "from";
-                  const wDelay = lineDelay + wordIdx * 0.07;
+          <div className="landing-context-ledger-heading">
+            <span className="landing-context-mark" aria-hidden="true">
+              A
+            </span>
+            <div>
+              <p>Context stays bounded.</p>
+              <p>Judgment stays yours.</p>
+            </div>
+          </div>
 
-                  return (
-                    <Fragment key={wordIdx}>
-                      <span
-                        className="landing-hero-word"
-                        style={{
-                          display: "inline-block",
-                          position: "relative",
-                          animationDelay: `${wDelay}s`,
-                        }}
-                      >
-                        {isHuman && <AccentUnderline delay={wDelay + 0.5} />}
-                        {word}
-                      </span>
-                      {wordIdx < line.words.length - 1 ? " " : null}
-                    </Fragment>
-                  );
-                })}
-              </span>
-            );
-          })}
-        </h1>
+          <dl className="landing-context-list">
+            {contextRows.map(({ icon: Icon, label, value }, index) => (
+              <div key={label} className="landing-context-row">
+                <dt>
+                  <span>{String(index + 1).padStart(2, "0")}</span>
+                  <Icon size={16} strokeWidth={1.5} aria-hidden="true" />
+                  {label}
+                </dt>
+                <dd>{value}</dd>
+              </div>
+            ))}
+          </dl>
 
-        {/* Subheadline */}
-        <p
-          className="landing-hero-reveal mx-auto mt-8 max-w-2xl text-lg"
-          style={{ color: "var(--l-text)", opacity: 0.82, lineHeight: 1.7 }}
-        >
-          Aletheia helps you shape thoughtful LinkedIn connection notes,
-          considered InMail, tailored emails, and evidence-grounded application
-          answers. It draws from the profile or opportunity you choose and the
-          experience you have recorded, then gives you a draft to refine in your
-          own voice.
-        </p>
-
-        {/* CTAs */}
-        <div className="landing-hero-reveal mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
-          <a href="/install" className="btn-primary">
-            Get Aletheia on Chrome
-          </a>
-          <a href="/demo" className="btn-secondary">
-            View an illustrative example
-          </a>
-        </div>
-
-        {/* Launch info */}
-        <p
-          className="landing-hero-reveal mt-6 text-xs"
-          style={{ color: "var(--l-text-dim)", letterSpacing: "0.05em" }}
-        >
-          Official Chrome Web Store install · No LinkedIn password · No
-          automated sending
-        </p>
-
-        <p
-          className="landing-hero-reveal mt-2 text-[10px] tracking-widest uppercase"
-          style={{ color: "var(--l-text-dim)" }}
-        >
-          Reads supported pages you open · Can fill a reviewed draft · Never
-          clicks Send
-        </p>
+          <div className="landing-context-result">
+            <div>
+              <span className="landing-context-status" aria-hidden="true" />
+              Draft ready for review
+            </div>
+            <p>Edit · copy · optional supported-field fill</p>
+          </div>
+        </aside>
       </div>
 
-      {/* Scroll indicator */}
-      <div
-        className="landing-scroll-indicator mt-10 flex flex-col items-center"
-        aria-hidden
-        style={{ zIndex: 2 }}
+      <a
+        href="#features"
+        className="landing-hero-scroll"
+        data-landing-hero-item
+        aria-label="Continue to why Aletheia"
       >
-        <div
-          style={{
-            width: 22,
-            height: 36,
-            border: "1.5px solid rgba(142,182,155,0.4)",
-            borderRadius: 11,
-            display: "flex",
-            alignItems: "flex-start",
-            justifyContent: "center",
-            padding: "5px",
-          }}
-        >
-          <div
-            className="landing-scroll-dot"
-            style={{
-              width: 4,
-              height: 8,
-              background: "rgba(142,182,155,0.5)",
-              borderRadius: 2,
-            }}
-          />
-        </div>
-      </div>
+        <span>Explore</span>
+        <ArrowDown size={15} strokeWidth={1.5} aria-hidden="true" />
+      </a>
     </section>
   );
 }
