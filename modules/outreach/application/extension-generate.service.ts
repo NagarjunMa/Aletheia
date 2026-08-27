@@ -55,6 +55,7 @@ import {
   CLAUDE_MODEL,
   createOutreachDraftMessage,
   getColdEmailDraftToolInput,
+  getLinkedinConnectionDraftToolInput,
   getAnthropicApiErrorStatus,
   getEmailDraftToolInput,
   isAnthropicTimeoutError,
@@ -73,6 +74,7 @@ import {
 import { generateYcApplication } from "@/modules/application-answer/application/generate-yc-application.service";
 import { prepareOutreachGroundingContext } from "./prepare-outreach-grounding-context";
 import { renderColdEmail } from "./render-cold-email";
+import { renderLinkedinConnection } from "./render-linkedin-connection";
 import { validateOutreachDraft } from "./validate-outreach-draft";
 
 const log = createLogger("generate-route");
@@ -380,7 +382,7 @@ export async function POST(request: NextRequest) {
       emailMode,
       acceptedExamples: sanitizedExamples || [],
     };
-    if (category === "cold_email") {
+    if (category === "cold_email" || category === "linkedin_connection") {
       promptInput.candidateSources = preparedGrounding.sources;
     }
     if (styleProfile) {
@@ -396,13 +398,10 @@ export async function POST(request: NextRequest) {
       userPrompt,
       useEmailDraftTool: shouldUseEmailDraftTool,
       useStructuredColdEmailTool: category === "cold_email",
+      useStructuredLinkedinConnectionTool: category === "linkedin_connection",
     });
 
     const processingTime = Date.now() - startTime;
-    const textBlock = response.content.find((block) => block.type === "text");
-    const rawContent =
-      textBlock && textBlock.type === "text" ? textBlock.text : "";
-
     const tokenUsage = response.usage;
     const totalTokens = tokenUsage.input_tokens + tokenUsage.output_tokens;
 
@@ -627,78 +626,84 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // For LinkedIn connections - apply AI fingerprint detection and sanitization
-    if (!rawContent) {
-      log.error(
-        { contentTypes: response.content.map((b) => b.type) },
-        "Claude returned no text content block",
-      );
-      throw new Error("No text content in Claude response");
-    }
-    const basicSanitization = sanitize(stripModelPreambleAndSuffix(rawContent));
-    const enhancedSanitization = await sanitizeForLinkedIn(basicSanitization);
-    const sanitizedContent = enhancedSanitization.success
-      ? enhancedSanitization.sanitizedContent
-      : basicSanitization;
-
-    const linkedinPatterns =
-      enhancedSanitization.aiFingerprints?.detectedPatterns ?? [];
-    if (linkedinPatterns.length) {
-      log.info(
-        {
-          patterns: linkedinPatterns,
-          category: validatedData.category,
+    // Connection notes are rendered exclusively from a validated semantic
+    // composition. Unlike the legacy path, invalid or overlength output is
+    // refunded instead of being cut after generation.
+    try {
+      const draft = getLinkedinConnectionDraftToolInput(response);
+      const sanitizedCta = sanitize(stripModelPreambleAndSuffix(draft.cta));
+      const rendered = renderLinkedinConnection({
+        draft: {
+          ...draft,
+          target_observation: sanitize(
+            stripModelPreambleAndSuffix(draft.target_observation),
+          ),
+          candidate_relevance: draft.candidate_relevance
+            ? {
+                ...draft.candidate_relevance,
+                text: sanitize(
+                  stripModelPreambleAndSuffix(draft.candidate_relevance.text),
+                ),
+              }
+            : null,
+          cta: sanitizedCta,
         },
-        "AI fingerprints stripped in LinkedIn connection generation",
-      );
-    }
-
-    let finalContent = sanitizedContent;
-
-    if (finalContent.length > 300) {
-      const within300 = finalContent.substring(0, 300);
-      const lastPeriod = within300.lastIndexOf(".");
-
-      if (lastPeriod > 150) {
-        finalContent = finalContent.substring(0, lastPeriod + 1).trim();
-      } else {
-        const lastSpace = within300.lastIndexOf(" ");
-        finalContent = finalContent
-          .substring(0, lastSpace > 0 ? lastSpace : 297)
-          .trim();
+        sources: preparedGrounding.sources,
+      });
+      const enhancedSanitization = await sanitizeForLinkedIn(rendered.body);
+      const body = enhancedSanitization.success
+        ? enhancedSanitization.sanitizedContent.trim()
+        : rendered.body;
+      if (body.length > 300 || !body.endsWith(sanitizedCta)) {
+        throw new Error(
+          "Sanitization invalidated connection-note CTA or limit",
+        );
       }
 
-      log.info(
-        { truncatedLength: finalContent.length },
-        "LinkedIn message truncated at sentence boundary",
+      reservedUserId = undefined;
+      reservedCredit = undefined;
+      return NextResponse.json(
+        {
+          success: true,
+          body,
+          category,
+          character_count: body.length,
+          usage: tokenUsage,
+          processingTime,
+          evalMetadata: {
+            ...evalMetadata,
+            hasCandidateRelevance: rendered.hasCandidateRelevance,
+          },
+          ...(CREDIT_BILLING_ENABLED
+            ? {
+                billingMode,
+                creditCost,
+                creditsRemaining,
+                unlimitedCredits: unlimitedCreditUser,
+              }
+            : {}),
+        },
+        { headers: { ...corsHeaders, ...rateLimitHeaders } },
+      );
+    } catch (parseError) {
+      log.warn(
+        { err: parseError, category },
+        "Failed to validate LinkedIn connection composition",
+      );
+      if (reservedCredit) {
+        await refundCreditReservation(reservedCredit, "parse_failed");
+        reservedCredit = undefined;
+      }
+      await releaseRateLimitReservation(authResult.userId);
+      reservedUserId = undefined;
+      return NextResponse.json(
+        {
+          error: "Generation format error, please retry",
+          code: "PARSE_FAILED",
+        },
+        { status: 502, headers: { ...corsHeaders, ...rateLimitHeaders } },
       );
     }
-
-    // Mark slot consumed — successful response, no refund needed.
-    reservedUserId = undefined;
-    reservedCredit = undefined;
-    return NextResponse.json(
-      {
-        success: true,
-        body: finalContent,
-        category,
-        character_count: finalContent.length,
-        usage: tokenUsage,
-        processingTime,
-        evalMetadata,
-        ...(CREDIT_BILLING_ENABLED
-          ? {
-              billingMode,
-              creditCost,
-              creditsRemaining,
-              unlimitedCredits: unlimitedCreditUser,
-            }
-          : {}),
-      },
-      {
-        headers: { ...corsHeaders, ...rateLimitHeaders },
-      },
-    );
   } catch (error) {
     log.error({ err: error }, "Extension generation error");
 

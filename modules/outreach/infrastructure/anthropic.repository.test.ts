@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   coldEmailDraftTool,
   getColdEmailDraftToolInput,
+  getLinkedinConnectionDraftToolInput,
+  linkedinConnectionDraftTool,
 } from "./anthropic.repository";
 
 const message = (input: unknown) =>
@@ -38,6 +40,62 @@ describe("cold email Anthropic tool", () => {
         message({
           ...valid,
           proof_points: [{ text: "Proof", source_ids: [] }],
+        }),
+      ),
+    ).toThrow();
+  });
+});
+
+describe("LinkedIn connection Anthropic tool", () => {
+  const connection = {
+    target_observation: "Your developer tooling work stood out.",
+    candidate_relevance: {
+      text: "I built an LLM review workflow for engineers.",
+      source_ids: ["evidence:1"],
+    },
+    cta: "Open to a brief chat?",
+  };
+
+  it("forces the bounded provenance-aware connection contract", () => {
+    const connectionMessage = (input: unknown) =>
+      ({
+        content: [
+          {
+            type: "tool_use",
+            name: "return_linkedin_connection_composition",
+            input,
+          },
+        ],
+      }) as never;
+    expect(linkedinConnectionDraftTool.name).toBe(
+      "return_linkedin_connection_composition",
+    );
+    expect(
+      getLinkedinConnectionDraftToolInput(connectionMessage(connection)),
+    ).toEqual(connection);
+  });
+
+  it("allows only an explicit null relevance for target-only fallback", () => {
+    const connectionMessage = (input: unknown) =>
+      ({
+        content: [
+          {
+            type: "tool_use",
+            name: "return_linkedin_connection_composition",
+            input,
+          },
+        ],
+      }) as never;
+    expect(
+      getLinkedinConnectionDraftToolInput(
+        connectionMessage({ ...connection, candidate_relevance: null }),
+      ).candidate_relevance,
+    ).toBeNull();
+    expect(() =>
+      getLinkedinConnectionDraftToolInput(
+        connectionMessage({
+          ...connection,
+          candidate_relevance: { text: "Unsupported", source_ids: [] },
         }),
       ),
     ).toThrow();

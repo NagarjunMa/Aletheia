@@ -32,3 +32,31 @@ export const coldEmailDraftSchema = z
 
 export type ColdEmailProofPoint = z.infer<typeof coldEmailProofPointSchema>;
 export type ColdEmailDraft = z.infer<typeof coldEmailDraftSchema>;
+
+export const LINKEDIN_CONNECTION_MAX_CHARACTERS = 300;
+
+const linkedinConnectionRelevanceSchema = z
+  .object({
+    text: boundedSection(220),
+    source_ids: z.array(z.string().trim().min(1).max(120)).min(1).max(1),
+  })
+  .strict();
+
+/**
+ * Server-only semantic composition for a connection note. A null relevance
+ * section is the explicit target-only fallback; it cannot imply candidate fit.
+ */
+export const linkedinConnectionDraftSchema = z
+  .object({
+    target_observation: boundedSection(220),
+    candidate_relevance: linkedinConnectionRelevanceSchema.nullable(),
+    cta: boundedSection(140),
+  })
+  .strict();
+
+export type LinkedinConnectionRelevance = z.infer<
+  typeof linkedinConnectionRelevanceSchema
+>;
+export type LinkedinConnectionDraft = z.infer<
+  typeof linkedinConnectionDraftSchema
+>;

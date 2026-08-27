@@ -70,6 +70,31 @@ describe("cold-email grounding prompt", () => {
   });
 });
 
+describe("LinkedIn connection grounding prompt", () => {
+  it("uses selected sources and an explicit target-only fallback", () => {
+    const grounded = buildPrompt({
+      ...baseInput,
+      candidateSources: [
+        {
+          id: "evidence:workflow",
+          type: "evidence",
+          label: "LLM workflow",
+          content: "Built an LLM-assisted review workflow.",
+          priority: 1,
+        },
+      ],
+    });
+    expect(grounded).toContain("CANDIDATE_GROUNDING");
+    expect(grounded).toContain('id="evidence:workflow"');
+    expect(grounded).not.toContain(baseInput.resume);
+    expect(LINKEDIN_CONNECTION_PROMPT).toContain("candidate_relevance");
+
+    const targetOnly = buildPrompt({ ...baseInput, candidateSources: [] });
+    expect(targetOnly).toContain("No verified candidate facts are available");
+    expect(targetOnly).not.toContain(baseInput.resume);
+  });
+});
+
 describe("sanitize", () => {
   it("returns clean text unchanged", () => {
     const text =
@@ -139,19 +164,15 @@ describe("sanitize", () => {
 });
 
 describe("buildPrompt", () => {
-  it("includes USER_BACKGROUND section when resume is provided", () => {
+  it("uses candidate grounding rather than raw resume text for connection notes", () => {
     const prompt = buildPrompt(baseInput);
-    expect(prompt).toContain("USER_BACKGROUND");
-    expect(prompt).toContain(baseInput.resume);
+    expect(prompt).toContain("CANDIDATE_GROUNDING");
+    expect(prompt).not.toContain(baseInput.resume);
   });
 
-  it("includes USER_BACKGROUND fallback when no resume provided", () => {
+  it("uses explicit target-only fallback when no candidate source is provided", () => {
     const prompt = buildPrompt({ ...baseInput, resume: "" });
-    expect(prompt).toContain("USER_BACKGROUND");
-    expect(prompt).toContain("No candidate background details are available");
-    expect(prompt).toContain(
-      "Do NOT mention missing resume, missing background, or attachment status.",
-    );
+    expect(prompt).toContain("No verified candidate facts are available");
   });
 
   it("always includes TARGET_PROFILE section with the Markdown content", () => {
@@ -400,7 +421,7 @@ describe("COLD_EMAIL_PROMPT subject line policy", () => {
   ];
 
   it("tracks the prompt behavior change with a new version", () => {
-    expect(PROMPT_VERSION).toBe("2.0.0");
+    expect(PROMPT_VERSION).toBe("3.0.0");
   });
 
   it("documents scenario-specific email modes", () => {
@@ -456,8 +477,10 @@ describe("COLD_EMAIL_PROMPT subject line policy", () => {
   });
 
   it("documents LinkedIn connection note polish rules", () => {
-    expect(LINKEDIN_CONNECTION_PROMPT).toContain("HARD LIMIT: 300 characters");
-    expect(LINKEDIN_CONNECTION_PROMPT).toContain("Hi [FirstName],");
+    expect(LINKEDIN_CONNECTION_PROMPT).toContain(
+      "render to 300 characters or fewer",
+    );
+    expect(LINKEDIN_CONNECTION_PROMPT).toContain("candidate_relevance");
     expect(LINKEDIN_CONNECTION_PROMPT).toContain("Use complete grammar");
     expect(LINKEDIN_CONNECTION_PROMPT).toContain(
       "I'd like to explore whether there's a fit on your team.",

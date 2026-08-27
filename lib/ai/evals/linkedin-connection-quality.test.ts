@@ -28,4 +28,16 @@ describe("LinkedIn connection quality evals", () => {
     expect(result.passed).toBe(false);
     expect(result.violations.length).toBeGreaterThan(0);
   });
+
+  it("flags a note whose CTA is cut off before the final section", () => {
+    const result = evaluateLinkedInConnectionQuality(
+      "Your developer tooling work stood out. I built an LLM review workflow. Open to a brief",
+      ["has_final_cta"],
+    );
+
+    expect(result.passed).toBe(false);
+    expect(result.violations).toEqual([
+      expect.objectContaining({ rule: "has_final_cta" }),
+    ]);
+  });
 });
