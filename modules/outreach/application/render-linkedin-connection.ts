@@ -1,0 +1,99 @@
+import type { CandidateGroundingSource } from "@/modules/candidate-context/domain/candidate-context.types";
+import {
+  LINKEDIN_CONNECTION_MAX_CHARACTERS,
+  type LinkedinConnectionDraft,
+} from "../domain/outreach-draft.types";
+
+export class LinkedinConnectionValidationError extends Error {
+  constructor() {
+    super("Generated LinkedIn connection note could not be verified");
+    this.name = "LinkedinConnectionValidationError";
+  }
+}
+
+const STOP_WORDS = new Set([
+  "a",
+  "an",
+  "and",
+  "as",
+  "at",
+  "be",
+  "by",
+  "for",
+  "from",
+  "in",
+  "is",
+  "it",
+  "of",
+  "on",
+  "or",
+  "that",
+  "the",
+  "to",
+  "with",
+  "you",
+  "your",
+]);
+
+function normalize(value: string): string {
+  return value.replace(/\s+/gu, " ").trim();
+}
+
+function tokens(value: string): string[] {
+  return (
+    value
+      .normalize("NFKC")
+      .toLocaleLowerCase("en-US")
+      .match(/[\p{L}\p{N}+#.]{2,}/gu)
+      ?.filter((token) => !STOP_WORDS.has(token)) ?? []
+  );
+}
+
+function validateRelevance(
+  draft: LinkedinConnectionDraft,
+  sources: CandidateGroundingSource[],
+): void {
+  if (!draft.candidate_relevance) return;
+  const byId = new Map(sources.map((source) => [source.id, source]));
+  const supporting = draft.candidate_relevance.source_ids.map((id) =>
+    byId.get(id),
+  );
+  if (supporting.some((source) => !source)) {
+    throw new LinkedinConnectionValidationError();
+  }
+  const sourceTokens = new Set(
+    supporting.flatMap((source) => tokens(source!.content)),
+  );
+  const claimTokens = tokens(draft.candidate_relevance.text);
+  if (
+    claimTokens.length > 0 &&
+    !claimTokens.some((token) => sourceTokens.has(token))
+  ) {
+    throw new LinkedinConnectionValidationError();
+  }
+}
+
+/** Validates provenance and deterministically composes a complete note. */
+export function renderLinkedinConnection(input: {
+  draft: LinkedinConnectionDraft;
+  sources: CandidateGroundingSource[];
+}): { body: string; characterCount: number; hasCandidateRelevance: boolean } {
+  validateRelevance(input.draft, input.sources);
+  const observation = normalize(input.draft.target_observation);
+  const relevance = input.draft.candidate_relevance
+    ? normalize(input.draft.candidate_relevance.text)
+    : "";
+  const cta = normalize(input.draft.cta);
+  if (!observation || !cta || (input.draft.candidate_relevance && !relevance)) {
+    throw new LinkedinConnectionValidationError();
+  }
+  const body = [observation, relevance, cta].filter(Boolean).join(" ");
+  if (body.length > LINKEDIN_CONNECTION_MAX_CHARACTERS || !body.endsWith(cta)) {
+    throw new LinkedinConnectionValidationError();
+  }
+  return {
+    body,
+    characterCount: body.length,
+    hasCandidateRelevance: Boolean(input.draft.candidate_relevance),
+  };
+}

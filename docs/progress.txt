@@ -22,6 +22,35 @@ Follow-up:
 
 ### 2026-08-26
 
+Branch: `feat/ale-25-grounded-linkedin-connection`
+
+Area: ALE-25 — grounded LinkedIn connection notes
+
+Problem: Connection notes accepted an opaque Claude text block and silently truncated it after generation, which could remove the CTA and left candidate-relevance claims without a verifiable source.
+
+Decision: Replace the raw-text path with a forced semantic tool containing a target observation, optional source-backed candidate relevance, and CTA. Render the complete note deterministically, validate a single selected source reference plus content overlap, and reject/refund missing, malformed, post-sanitization-invalid, or over-300-character output instead of truncating it. Use an explicit `null` relevance field for target-only fallback.
+
+Files changed:
+
+- Connection prompt, structured Anthropic repository tool/parser, generation service, and outreach draft types
+- `modules/outreach/application/render-linkedin-connection.ts` and focused tests
+- Prompt, API route, credit-billing, and Anthropic-tool regression tests
+
+Tests/checks:
+
+- Focused connection suite: 6 files / 129 tests passed
+- Full unit suite: 58 files / 689 tests passed
+- Guardrails: 13 tests passed
+- Root lint, strict TypeScript, production build, and `git diff --check` passed
+
+Result: Successful LinkedIn connection notes now contain a complete CTA, remain within 300 characters without destructive truncation, and expose no source IDs or raw candidate context. Candidate relevance can appear only when a selected source validates it; target-only drafts cannot invent candidate fit.
+
+Follow-up:
+
+- Update ALE-25 validation/handoff, then commit and open the scoped Phase 3.1 PR when requested.
+
+### 2026-08-26
+
 Branch: `feat/ale-35-landing-aesthetics`
 
 Area: ALE-35 / ALE-36 — Phthalo Green visual system across web application and extension source

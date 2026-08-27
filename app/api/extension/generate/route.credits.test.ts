@@ -75,6 +75,19 @@ const validPayload = {
   category: "linkedin_connection",
 };
 
+function connectionCompositionBlock() {
+  return {
+    type: "tool_use",
+    id: "toolu_linkedin_connection",
+    name: "return_linkedin_connection_composition",
+    input: {
+      target_observation: "Your engineering work stood out.",
+      candidate_relevance: null,
+      cta: "Open to a brief chat?",
+    },
+  };
+}
+
 async function importRouteWithBillingEnabled() {
   vi.resetModules();
   vi.stubEnv("CREDIT_BILLING_ENABLED", "true");
@@ -107,7 +120,7 @@ beforeEach(() => {
     source: "user_resumes",
   });
   mockAnthropicCreate.mockResolvedValue({
-    content: [{ type: "text", text: "Hi Jane, nice to connect." }],
+    content: [connectionCompositionBlock()],
     usage: { input_tokens: 100, output_tokens: 40 },
   });
   mockPrepareOutreachGroundingContext.mockResolvedValue({

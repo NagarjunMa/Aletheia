@@ -3,7 +3,8 @@ export type LinkedInConnectionQualityRule =
   | "under_300_chars"
   | "complete_grammar"
   | "has_specific_context"
-  | "has_polished_ask";
+  | "has_polished_ask"
+  | "has_final_cta";
 
 export interface GoldenLinkedInConnectionCase {
   id: string;
@@ -62,6 +63,16 @@ function checkRule(text: string, rule: LinkedInConnectionQualityRule) {
         )
         ? pass(rule)
         : fail(rule, "Expected a polished, low-friction ask.");
+
+    case "has_final_cta":
+      return /(?:whether there(?:'s|’s| is) a fit on your team|open to a brief chat|glad to share more context if helpful|whether (?:you're|you’re) open to discussing referrals)[?.]$/i.test(
+        normalized,
+      )
+        ? pass(rule)
+        : fail(
+            rule,
+            "Expected the complete CTA to remain at the end of the note.",
+          );
   }
 }
 

@@ -3,12 +3,16 @@ import { z } from "zod";
 import {
   coldEmailDraftSchema,
   type ColdEmailDraft,
+  linkedinConnectionDraftSchema,
+  type LinkedinConnectionDraft,
 } from "../domain/outreach-draft.types";
 
 export const CLAUDE_MODEL = "claude-sonnet-4-6";
 
 const EMAIL_DRAFT_TOOL_NAME = "return_email_draft";
 const COLD_EMAIL_DRAFT_TOOL_NAME = "return_cold_email_composition";
+const LINKEDIN_CONNECTION_DRAFT_TOOL_NAME =
+  "return_linkedin_connection_composition";
 
 export const emailDraftTool = {
   name: EMAIL_DRAFT_TOOL_NAME,
@@ -89,6 +93,40 @@ export const coldEmailDraftTool = {
   },
 } as const;
 
+export const linkedinConnectionDraftTool = {
+  name: LINKEDIN_CONNECTION_DRAFT_TOOL_NAME,
+  description:
+    "Return a complete LinkedIn connection-note composition. Use candidate_relevance only when it is directly supported by one selected candidate source; otherwise return null.",
+  input_schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      target_observation: { type: "string", minLength: 1, maxLength: 220 },
+      candidate_relevance: {
+        anyOf: [
+          { type: "null" },
+          {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              text: { type: "string", minLength: 1, maxLength: 220 },
+              source_ids: {
+                type: "array",
+                minItems: 1,
+                maxItems: 1,
+                items: { type: "string", minLength: 1, maxLength: 120 },
+              },
+            },
+            required: ["text", "source_ids"],
+          },
+        ],
+      },
+      cta: { type: "string", minLength: 1, maxLength: 140 },
+    },
+    required: ["target_observation", "candidate_relevance", "cta"],
+  },
+} as const;
+
 const emailDraftToolInputSchema = z
   .object({
     subject_line: z.string().trim().min(1).max(160),
@@ -110,7 +148,20 @@ export async function createOutreachDraftMessage(input: {
   userPrompt: string;
   useEmailDraftTool: boolean;
   useStructuredColdEmailTool?: boolean;
+  useStructuredLinkedinConnectionTool?: boolean;
 }) {
+  const tool = input.useStructuredColdEmailTool
+    ? coldEmailDraftTool
+    : input.useStructuredLinkedinConnectionTool
+      ? linkedinConnectionDraftTool
+      : emailDraftTool;
+  const toolName = input.useStructuredColdEmailTool
+    ? COLD_EMAIL_DRAFT_TOOL_NAME
+    : input.useStructuredLinkedinConnectionTool
+      ? LINKEDIN_CONNECTION_DRAFT_TOOL_NAME
+      : EMAIL_DRAFT_TOOL_NAME;
+  const requiresTool =
+    input.useEmailDraftTool || input.useStructuredLinkedinConnectionTool;
   return getAnthropic().messages.create(
     {
       model: CLAUDE_MODEL,
@@ -118,18 +169,12 @@ export async function createOutreachDraftMessage(input: {
       temperature: 0.8,
       system: input.systemPrompt,
       messages: [{ role: "user", content: input.userPrompt }],
-      ...(input.useEmailDraftTool
+      ...(requiresTool
         ? {
-            tools: [
-              input.useStructuredColdEmailTool
-                ? coldEmailDraftTool
-                : emailDraftTool,
-            ],
+            tools: [tool],
             tool_choice: {
               type: "tool" as const,
-              name: input.useStructuredColdEmailTool
-                ? COLD_EMAIL_DRAFT_TOOL_NAME
-                : EMAIL_DRAFT_TOOL_NAME,
+              name: toolName,
             },
           }
         : {}),
@@ -154,6 +199,24 @@ export function getColdEmailDraftToolInput(
     );
   }
   return coldEmailDraftSchema.parse(toolBlock.input);
+}
+
+export function getLinkedinConnectionDraftToolInput(
+  response: Anthropic.Messages.Message,
+): LinkedinConnectionDraft {
+  const toolBlock = response.content.find(
+    (block) =>
+      block.type === "tool_use" &&
+      block.name === LINKEDIN_CONNECTION_DRAFT_TOOL_NAME &&
+      typeof block.input === "object" &&
+      block.input !== null,
+  );
+  if (!toolBlock || toolBlock.type !== "tool_use") {
+    throw new Error(
+      "Claude did not return the required LinkedIn connection composition tool",
+    );
+  }
+  return linkedinConnectionDraftSchema.parse(toolBlock.input);
 }
 
 export function getEmailDraftToolInput(response: Anthropic.Messages.Message) {
