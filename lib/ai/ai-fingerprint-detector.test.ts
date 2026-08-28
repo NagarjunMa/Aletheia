@@ -27,6 +27,27 @@ describe("detectAIFingerprints", () => {
     expect(result.detectedPatterns).toContain("em_dash_usage");
   });
 
+  it("rewrites a spaced double hyphen used as prose punctuation", () => {
+    const result = detectAIFingerprints(
+      "I built the workflow -- then supported the release.",
+      "general",
+    );
+
+    expect(result.detectedPatterns).toContain("spaced_double_hyphen");
+    expect(result.sanitizedContent).toBe(
+      "I built the workflow - then supported the release.",
+    );
+  });
+
+  it("preserves command flags, versions, and technical hyphenation", () => {
+    const text =
+      "Run deploy --help with TypeScript 5.6.0 for an event-driven service.";
+    const result = detectAIFingerprints(text, "general");
+
+    expect(result.detectedPatterns).not.toContain("spaced_double_hyphen");
+    expect(result.sanitizedContent).toBe(text);
+  });
+
   it('detects "would you be open to" pattern (ai_politeness)', () => {
     const text = "Would you be open to a quick chat about this?";
     const result = detectAIFingerprints(text, "general");

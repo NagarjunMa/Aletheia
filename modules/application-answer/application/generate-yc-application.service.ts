@@ -6,7 +6,7 @@ import {
   ycApplicationReadinessFailureSchema,
   type YcApplicationRequest,
 } from "@/app/api/extension/generate/schema";
-import { sanitizeAIOutput } from "@/lib/ai/sanitizer";
+import { createLogger } from "@/lib/logger";
 import {
   buildYcApplicationPrompt,
   YC_APPLICATION_PROMPT_VERSION,
@@ -40,11 +40,17 @@ import {
 } from "../infrastructure/anthropic-yc.repository";
 import { prepareYcGroundingContext } from "./prepare-yc-grounding-context";
 import {
+  sanitizeYcApplicationOutput,
+  type SanitizedYcApplicationOutput,
+  YcApplicationOutputSanitizationError,
+} from "./sanitize-yc-application-output";
+import {
   validateYcApplicationOutput,
   YcApplicationOutputValidationError,
 } from "./validate-yc-application-output";
 
 type RateLimitResult = Awaited<ReturnType<typeof checkGenerationRateLimit>>;
+const log = createLogger("yc-application-generation");
 
 export type GenerateYcApplicationDependencies = {
   prepareGrounding: (_input: {
@@ -69,7 +75,9 @@ export type GenerateYcApplicationDependencies = {
   parseMessage: (
     _message: Awaited<ReturnType<typeof createYcApplicationDraft>>,
   ) => YcApplicationToolOutput;
-  sanitizeOutput: (_body: string) => Promise<string>;
+  sanitizeOutput: (
+    _output: YcApplicationToolOutput,
+  ) => Promise<SanitizedYcApplicationOutput>;
   now: () => number;
   randomUuid: () => string;
   model: string;
@@ -89,23 +97,7 @@ const defaultDependencies: GenerateYcApplicationDependencies = {
   refundCredits: refundCreditReservation,
   createMessage: createYcApplicationDraft,
   parseMessage: getYcApplicationToolInput,
-  sanitizeOutput: async (body) => {
-    const result = await sanitizeAIOutput(body, {
-      maxLength: 3_000,
-      preserveFormatting: true,
-      removeProfanity: true,
-      validateEncoding: true,
-      detectAIFingerprints: false,
-      platform: "general",
-      humanize: false,
-    });
-    if (!result.success || !result.sanitizedContent) {
-      throw new YcApplicationOutputValidationError(
-        "Generated answer failed output sanitization",
-      );
-    }
-    return result.sanitizedContent;
-  },
+  sanitizeOutput: sanitizeYcApplicationOutput,
   now: Date.now,
   randomUuid: randomUUID,
   model: CLAUDE_MODEL,
@@ -274,10 +266,19 @@ export async function generateYcApplication(
     });
     const processingTime = dependencies.now() - startedAt;
     const parsed = dependencies.parseMessage(message);
-    const sanitizedBody = await dependencies.sanitizeOutput(parsed.body);
+    const sanitized = await dependencies.sanitizeOutput(parsed);
+    if (sanitized.metadata.fingerprintPatternCount > 0) {
+      log.info(
+        {
+          fingerprintPatternCount: sanitized.metadata.fingerprintPatternCount,
+          fingerprintPatterns: sanitized.metadata.fingerprintPatterns,
+        },
+        "Application answer AI fingerprints sanitized",
+      );
+    }
     const validated = validateYcApplicationOutput({
       context,
-      output: { ...parsed, body: sanitizedBody },
+      output: sanitized.output,
     });
     const generationId = dependencies.randomUuid();
     const selectedSourceIds = [
@@ -331,6 +332,7 @@ export async function generateYcApplication(
   } catch (error) {
     const outputInvalid =
       error instanceof YcApplicationOutputValidationError ||
+      error instanceof YcApplicationOutputSanitizationError ||
       error instanceof YcApplicationStructuredOutputError ||
       (modelRequested && error instanceof z.ZodError);
     const timeout = isAnthropicTimeoutError(error);
