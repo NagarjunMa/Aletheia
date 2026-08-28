@@ -22,6 +22,38 @@ Follow-up:
 
 ### 2026-08-26
 
+Branch: `feat/ale-39-claim-safe-application-sanitization`
+
+Area: ALE-39 — claim-safe AI-fingerprint sanitation for application answers
+
+Problem: Application answers disabled AI-fingerprint humanization and sanitized only the generated body. Any body-only rewrite could desynchronize the source-backed claim ledger, whose claims must remain verbatim in the final answer.
+
+Decision: Add a structured sanitation boundary that applies the same general-platform safety and fingerprint policy to the body and every claim before validation. Reject empty, truncated, or desynchronized structured output; then retain the existing grounding, source, metric, framing, word-count, credit, and rate-limit validation. Add a narrowly scoped spaced-double-hyphen prose rule that does not affect command flags, version strings, or technical hyphenation. Log only detected pattern names and counts, never generated or candidate content.
+
+Files changed:
+
+- `modules/application-answer/application/sanitize-yc-application-output.ts` plus unit and guardrail tests
+- Application generation service and service regressions
+- AI fingerprint detector and focused detector tests
+- YC application prompt/version, golden sanitation fixture, and prompt tests
+- `docs/progress.txt`
+
+Tests/checks:
+
+- Focused application, validator, contract, prompt, and detector suite: 7 files / 94 tests passed
+- Full unit suite: 59 files / 697 tests passed
+- Guardrails: 2 files / 15 tests passed
+- Root lint, strict TypeScript, production build, and `git diff --check` passed
+
+Result: Successful application answers now remove observed AI-style punctuation and configured formulaic language without weakening grounding validation. The sanitized claim ledger remains aligned with the final body; sanitation failures refund the existing reservation and return the existing invalid-output response. No extension, billing, authentication, database, migration, or multi-question workflow changed.
+
+Follow-up:
+
+- Review the uncommitted ALE-39 diff, then commit and open the scoped PR when requested.
+- ALE-37 can consume this merged claim-safe sanitation boundary; ALE-38 remains its separate latency dependency.
+
+### 2026-08-26
+
 Branch: `feat/ale-25-grounded-linkedin-connection`
 
 Area: ALE-25 — grounded LinkedIn connection notes

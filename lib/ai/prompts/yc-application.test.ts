@@ -47,7 +47,7 @@ function groundingContext(
 
 describe("YC application prompt", () => {
   it("freezes a dedicated prompt version and grounded output rules", () => {
-    expect(YC_APPLICATION_PROMPT_VERSION).toBe("yc-1.0.0");
+    expect(YC_APPLICATION_PROMPT_VERSION).toBe("yc-1.1.0");
     expect(YC_APPLICATION_SYSTEM_PROMPT).toContain("50 to 150 words");
     expect(YC_APPLICATION_SYSTEM_PROMPT).toContain("source_ids");
     expect(YC_APPLICATION_SYSTEM_PROMPT).toContain(
@@ -55,6 +55,9 @@ describe("YC application prompt", () => {
     );
     expect(YC_APPLICATION_SYSTEM_PROMPT).toContain(
       "Do not write a greeting, signature, or call to action",
+    );
+    expect(YC_APPLICATION_SYSTEM_PROMPT).toContain(
+      "Do not use em dashes, spaced double hyphens",
     );
   });
 

@@ -31,6 +31,12 @@ export const AI_FINGERPRINT_PATTERNS: AIFingerprintPattern[] = [
     name: "ellipsis_character",
     description: "AI uses Unicode ellipsis instead of three periods",
   },
+  {
+    pattern: /(\p{L})\s+--\s+(\p{L})/gu,
+    replacement: "$1 - $2",
+    name: "spaced_double_hyphen",
+    description: "AI-style spaced double hyphen used as prose punctuation",
+  },
 
   // Politeness formulas
   {

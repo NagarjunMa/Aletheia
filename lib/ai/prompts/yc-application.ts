@@ -1,7 +1,7 @@
 import { scanForInjection } from "./injection-heuristic";
 import type { YcGroundingContext } from "@/modules/application-answer/domain/yc-grounding.types";
 
-export const YC_APPLICATION_PROMPT_VERSION = "yc-1.0.0";
+export const YC_APPLICATION_PROMPT_VERSION = "yc-1.1.0";
 
 export const YC_APPLICATION_SYSTEM_PROMPT = `You write concise answers for startup job application forms.
 
@@ -23,6 +23,7 @@ ANSWER RULES:
 - Use a natural first-person professional voice with concrete actions and outcomes.
 - Do not write a greeting, signature, or call to action.
 - Do not use cold-email framing, bracket placeholders, unsupported praise, or claim to be the perfect candidate.
+- Use direct, plain, candidate-specific language. Do not use em dashes, spaced double hyphens, formulaic transitions, or corporate buzzwords.
 - Do not include source IDs, labels, analysis, explanations, or word counts in the body.
 
 OUTPUT:

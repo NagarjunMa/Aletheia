@@ -6,6 +6,7 @@ import {
   generateYcApplication,
   type GenerateYcApplicationDependencies,
 } from "./generate-yc-application.service";
+import { YcApplicationOutputSanitizationError } from "./sanitize-yc-application-output";
 
 const answer =
   "I build reliable TypeScript services from ambiguous requirements and carry them through production. In a recent customer workflow, I designed the architecture, shipped the service, and operated it after launch. That experience fits an early-stage team because I move quickly, stay close to users, and take responsibility for outcomes across the full delivery cycle.";
@@ -79,7 +80,10 @@ function dependencies(
         },
       ],
     }),
-    sanitizeOutput: vi.fn().mockImplementation(async (body: string) => body),
+    sanitizeOutput: vi.fn().mockImplementation(async (output) => ({
+      output,
+      metadata: { fingerprintPatternCount: 0, fingerprintPatterns: [] },
+    })),
     now: vi.fn().mockReturnValueOnce(1_000).mockReturnValueOnce(1_125),
     randomUuid: vi.fn().mockReturnValue("33333333-3333-4333-8333-333333333333"),
     model: "claude-test-model",
@@ -161,7 +165,7 @@ describe("generateYcApplication", () => {
       creditsRemaining: 36,
       evalMetadata: {
         generationId: "33333333-3333-4333-8333-333333333333",
-        promptVersion: "yc-1.0.0",
+        promptVersion: "yc-1.1.0",
         model: "claude-test-model",
         category: "yc_application",
         profileFieldCount: 2,
@@ -181,6 +185,15 @@ describe("generateYcApplication", () => {
     );
     expect(deps.refundCredits).not.toHaveBeenCalled();
     expect(deps.releaseRateLimit).not.toHaveBeenCalled();
+    expect(deps.sanitizeOutput).toHaveBeenCalledWith({
+      body: answer,
+      claims: [
+        {
+          text: answer,
+          sourceIds: ["evidence:11111111-1111-4111-8111-111111111111"],
+        },
+      ],
+    });
   });
 
   it("refunds both reservations when the model output fails validation", async () => {
@@ -223,6 +236,38 @@ describe("generateYcApplication", () => {
       parseMessage: vi.fn().mockImplementation(() => {
         throw new YcApplicationStructuredOutputError();
       }),
+    });
+
+    const response = await generateYcApplication(
+      {
+        caller,
+        request,
+        corsHeaders: {},
+        applicationBaseUrl: "https://www.aletheia.live",
+      },
+      deps,
+    );
+
+    expect(response.status).toBe(502);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "YC_OUTPUT_INVALID",
+    });
+    expect(deps.refundCredits).toHaveBeenCalledWith(
+      expect.objectContaining({ amount: 4 }),
+      "yc_output_invalid",
+    );
+    expect(deps.releaseRateLimit).toHaveBeenCalledWith(caller.userId);
+  });
+
+  it("refunds the batch when claim-safe sanitation rejects output", async () => {
+    const deps = dependencies({
+      sanitizeOutput: vi
+        .fn()
+        .mockRejectedValue(
+          new YcApplicationOutputSanitizationError(
+            "Sanitized claim text must appear verbatim in the answer",
+          ),
+        ),
     });
 
     const response = await generateYcApplication(
