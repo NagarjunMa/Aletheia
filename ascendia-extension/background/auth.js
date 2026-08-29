@@ -22,6 +22,17 @@ function normalizeApiUrl(apiUrl) {
   return value;
 }
 
+function createAuthFailure(
+  message,
+  { code = "AUTH_REQUIRED", status = 401, cause } = {},
+) {
+  const error = new Error(message);
+  error.code = code;
+  error.status = status;
+  error.authCause = cause || code;
+  return error;
+}
+
 // ─── Storage helpers ───
 
 async function getStoredAuth() {
@@ -151,14 +162,22 @@ async function _doFetchSessionFromWebApp(apiUrl) {
 
     // Propagate 401 status so callers can apply backoff
     if (response.status === 401) {
-      const err = new Error(errorBody.error || "Unauthorized");
-      err.status = 401;
+      const err = createAuthFailure(
+        errorBody.error || "Not authenticated. Please reconnect the extension.",
+        {
+          code: errorBody.code || "SESSION_UNAVAILABLE",
+          status: response.status,
+          cause: errorBody.cause,
+        },
+      );
       err.retryAfter = parseInt(response.headers.get("Retry-After"), 10) || 0;
-      if (errorBody.code === "refresh_token_already_used") {
+      if (
+        errorBody.code === "SESSION_REFRESH_REJECTED" ||
+        errorBody.code === "refresh_token_already_used"
+      ) {
         console.log(
-          "[AUTH] refresh_token_already_used — clearing stale stored auth",
+          "[AUTH] stale web-app session rejected — clearing stored auth",
         );
-        err.code = "refresh_token_already_used";
         await clearAuth();
       }
       throw err;
@@ -183,8 +202,9 @@ async function _doFetchSessionFromWebApp(apiUrl) {
   console.log("[AUTH] Aletheia session cookies found:", authCookies.length);
 
   if (authCookies.length === 0) {
-    throw new Error(
+    throw createAuthFailure(
       "No active session found. Please log in to the web app first.",
+      { code: "SESSION_UNAVAILABLE" },
     );
   }
 
@@ -220,8 +240,9 @@ async function _doFetchSessionFromWebApp(apiUrl) {
     try {
       session = JSON.parse(atob(candidate.slice(7)));
     } catch (e) {
-      throw new Error(
-        "Could not parse base64- prefixed session cookie. Please log in again.",
+      throw createAuthFailure(
+        "Could not read the web-app session. Please log in again.",
+        { code: "SESSION_COOKIE_INVALID" },
       );
     }
   } else {
@@ -231,15 +252,19 @@ async function _doFetchSessionFromWebApp(apiUrl) {
       try {
         session = JSON.parse(atob(candidate));
       } catch (e2) {
-        throw new Error(
-          "Could not parse session from cookies. Please log in again.",
+        throw createAuthFailure(
+          "Could not read the web-app session. Please log in again.",
+          { code: "SESSION_COOKIE_INVALID" },
         );
       }
     }
   }
 
   if (!session || !session.access_token) {
-    throw new Error("Invalid session data in cookies. Please log in again.");
+    throw createAuthFailure(
+      "Could not read the web-app session. Please log in again.",
+      { code: "SESSION_COOKIE_INVALID" },
+    );
   }
 
   // Fetch Supabase config for token refresh
@@ -397,7 +422,10 @@ async function _doRefreshToken(auth) {
 
 // ─── Main entry point ───
 
-export async function getValidAccessToken(apiUrl) {
+export async function getValidAccessToken(
+  apiUrl,
+  { allowSessionFetch = true } = {},
+) {
   apiUrl = normalizeApiUrl(apiUrl);
   console.log("[AUTH] getValidAccessToken for", apiUrl);
   let auth = await getStoredAuth();
@@ -431,6 +459,14 @@ export async function getValidAccessToken(apiUrl) {
     }
   }
 
+  if (!allowSessionFetch) {
+    await clearAuth();
+    throw createAuthFailure(
+      "Not authenticated. Please reconnect the extension.",
+      { cause: "STORED_AUTH_UNAVAILABLE" },
+    );
+  }
+
   // Fall back to fetching a new session from the web app
   try {
     console.log("[AUTH] Trying to fetch session from web app cookies...");
@@ -445,10 +481,13 @@ export async function getValidAccessToken(apiUrl) {
     );
     // Clear stale auth
     await clearAuth();
-    throw new Error(
-      'Not authenticated. Please log in to the Aletheia web app and click "Connect" in the extension. (' +
-        fetchError.message +
-        ")",
+    throw createAuthFailure(
+      'Not authenticated. Please log in to the Aletheia web app and click "Connect" in the extension.',
+      {
+        code: fetchError.code || "AUTH_REQUIRED",
+        status: fetchError.status || 401,
+        cause: fetchError.authCause || fetchError.code,
+      },
     );
   }
 }

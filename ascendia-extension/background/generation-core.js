@@ -22,6 +22,9 @@ export function serializeGenerationError(error) {
     ...(error?.code || details.code
       ? { code: error?.code || details.code }
       : {}),
+    ...(error?.authCause || details.cause
+      ? { cause: error?.authCause || details.cause }
+      : {}),
     ...(Array.isArray(details.missingFields)
       ? { missingFields: details.missingFields }
       : {}),

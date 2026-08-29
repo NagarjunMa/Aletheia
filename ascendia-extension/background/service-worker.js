@@ -17,6 +17,7 @@ import {
   buildGenerationRequestData,
   serializeGenerationError,
 } from "./generation-core.js";
+import { generateWithAuthRecovery } from "./generate-auth-recovery.js";
 
 // In-flight guard: prevents duplicate authenticate calls from opening multiple tabs
 let authenticatePromise = null;
@@ -409,34 +410,28 @@ async function handleLogout() {
 
 async function handleGenerateRequest(payload) {
   const url = await getEffectiveApiUrl();
-  const MAX_AUTH_ATTEMPTS = 3;
+  const { accepted = [] } = await chrome.storage.local.get("accepted");
+  const relevantExamples = accepted
+    .filter((item) => item.category === payload.category)
+    .map((item) => item.body || item.message)
+    .slice(-3);
+  const requestData = buildGenerationRequestData(payload, relevantExamples);
+  let usageChecked = false;
 
-  for (let attempt = 0; attempt < MAX_AUTH_ATTEMPTS; attempt++) {
-    try {
-      // Get valid access token (handles refresh automatically)
-      const accessToken = await getValidAccessToken(url);
-
-      console.log(
-        `[SW] handleGenerateRequest attempt ${attempt}: using API URL:`,
-        url,
-      );
-
-      // Check daily usage limit (client-side advisory only) — only on first attempt
-      if (attempt === 0) {
+  const response = await generateWithAuthRecovery({
+    // Keep session exchange in the recovery state machine: a generation has
+    // one silent exchange, rather than an implicit fetch on every token read.
+    getAccessToken: () =>
+      getValidAccessToken(url, { allowSessionFetch: false }),
+    recoverSilently: () => clearAuthAndFetchFresh(url),
+    clearAuth,
+    authenticateInteractively: handleAuthenticate,
+    generate: async (accessToken) => {
+      if (!usageChecked) {
         await checkUsageLimit();
+        usageChecked = true;
       }
-
-      // Get accepted examples for style learning
-      const { accepted = [] } = await chrome.storage.local.get("accepted");
-      const relevantExamples = accepted
-        .filter((item) => item.category === payload.category)
-        .map((item) => item.body || item.message)
-        .slice(-3);
-
-      const requestData = buildGenerationRequestData(payload, relevantExamples);
-
-      // Make API request with Bearer token
-      const response = await makeAPIRequest(
+      const result = await makeAPIRequest(
         "/api/extension/generate",
         {
           method: "POST",
@@ -449,111 +444,23 @@ async function handleGenerateRequest(payload) {
         url,
       );
 
-      if (!response.success) {
+      if (!result.success) {
         const responseError = new Error(
-          response.message || response.error || "API request failed",
+          result.message || result.error || "API request failed",
         );
-        responseError.code = response.code;
-        responseError.apiResponse = response;
+        responseError.status = result.status;
+        responseError.code = result.code;
+        responseError.authCause = result.cause;
+        responseError.apiResponse = result;
         throw responseError;
       }
 
-      await logUsage(payload.category);
-      return response;
-    } catch (error) {
-      console.error(
-        `[SW] handleGenerateRequest attempt ${attempt} error:`,
-        error.message,
-      );
+      return result;
+    },
+  });
 
-      const isAuthError =
-        error.message.includes("401") ||
-        error.message.includes("Unauthorized") ||
-        error.message.includes("Not authenticated") ||
-        error.message.includes("Session expired");
-
-      if (!isAuthError) {
-        // Non-auth errors: don't retry, surface immediately
-        if (
-          error.status === 402 ||
-          error.code === "INSUFFICIENT_CREDITS" ||
-          error.message.includes("402")
-        ) {
-          throw new Error(
-            error.message ||
-              "You are out of credits. Buy more credits in the Aletheia dashboard.",
-          );
-        }
-        if (
-          error.message.includes("429") ||
-          error.message.includes("Rate limit") ||
-          error.message.includes("Daily limit")
-        ) {
-          throw new Error("Rate limit exceeded. Please try again later.");
-        }
-        if (
-          error.message.includes("NetworkError") ||
-          error.message.includes("fetch")
-        ) {
-          throw new Error(
-            "Network error. Please check your internet connection.",
-          );
-        }
-        throw error;
-      }
-
-      // Auth error retry logic
-      if (attempt === 0) {
-        // Attempt 1: Silently re-fetch session from web app cookies
-        console.log(
-          "[SW] handleGenerateRequest: 401 on attempt 0, silently re-fetching session...",
-        );
-        try {
-          await clearAuthAndFetchFresh(url);
-          console.log(
-            "[SW] handleGenerateRequest: ✓ fresh session obtained, retrying...",
-          );
-          continue; // retry with new token
-        } catch (refreshErr) {
-          console.warn(
-            "[SW] handleGenerateRequest: silent re-fetch failed:",
-            refreshErr.message,
-          );
-          // Fall through to attempt 1
-        }
-      }
-
-      if (attempt === 1) {
-        // Attempt 2: Open login tab, wait for user to authenticate
-        console.log(
-          "[SW] handleGenerateRequest: 401 on attempt 1, clearing auth and triggering interactive login...",
-        );
-        await clearAuth();
-        try {
-          await handleAuthenticate();
-          console.log(
-            "[SW] handleGenerateRequest: ✓ user re-authenticated, retrying...",
-          );
-          continue; // retry with new token
-        } catch (authErr) {
-          console.error(
-            "[SW] handleGenerateRequest: interactive login failed:",
-            authErr.message,
-          );
-        }
-      }
-
-      // All attempts exhausted
-      throw new Error(
-        "AUTH_FAILED: Not authenticated. Please log in to the Aletheia web app and connect the extension.",
-      );
-    }
-  }
-
-  // Should never reach here, but just in case
-  throw new Error(
-    "AUTH_FAILED: Authentication failed after multiple attempts.",
-  );
+  await logUsage(payload.category);
+  return response;
 }
 
 async function makeAPIRequest(endpoint, options = {}, baseUrl = null) {
@@ -599,6 +506,7 @@ async function makeAPIRequest(endpoint, options = {}, baseUrl = null) {
         );
         apiError.status = response.status;
         apiError.code = errorBody?.code;
+        apiError.authCause = errorBody?.cause;
         apiError.updateUrl = errorBody?.chromeWebStoreUrl;
         apiError.apiResponse = errorBody;
         throw apiError;

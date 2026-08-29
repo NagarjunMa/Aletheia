@@ -1,6 +1,6 @@
 # Chrome Web Store submission checklist
 
-Use this checklist for the next 1.0.10 submission. The source version has been reserved for the Phthalo visual-system release; do not upload a ZIP until it is built from a clean commit.
+Use this checklist for the next 1.0.11 submission. The source version includes the bounded extension-auth recovery release; do not upload a ZIP until it is built from a clean commit.
 
 ## Store listing
 
@@ -18,6 +18,13 @@ Use this checklist for the next 1.0.10 submission. The source version has been r
 ## Release verification
 
 - Upload `ascendia-extension/dist/aletheia-extension.zip` and retain its adjacent `.version.json` checksum record.
-- Confirm the artifact reports version `1.0.10` and a Git source without the `-dirty` suffix.
+- Confirm the artifact reports version `1.0.11` and a Git source without the `-dirty` suffix.
 - Configure `NEXT_PUBLIC_CHROME_WEB_STORE_URL` in production to `https://chromewebstore.google.com/detail/pneenlhefkghefjpaafgllkjkpfjnkgg` and redeploy before publication. The application now also uses that URL as its safe fallback.
-- Update `CHROME_WEB_STORE_PUBLISHED_VERSION` only after Chrome approves and publishes 1.0.10.
+- Update `CHROME_WEB_STORE_PUBLISHED_VERSION` only after Chrome approves and publishes 1.0.11.
+
+## Authentication recovery verification
+
+- Verify a valid stored token generates without opening a login tab.
+- Verify a rejected generation makes one silent session exchange, then opens a single interactive sign-in if the exchange cannot recover the session.
+- Verify the final retry returns a user-safe `AUTH_REQUIRED` or `AUTH_TIMEOUT` response with no token, cookie, or session values in the UI or logs.
+- Keep the session route cookie bridge read-only for this release: the route intentionally leaves `setAll()` empty, so it does not attempt Supabase cookie rotation from an extension-origin request. Any change to cookie rotation needs a separate, official-Supabase-documented review.

@@ -59,4 +59,21 @@ describe("generation background bridge", () => {
       applicationProfileUrl: "https://www.aletheia.live/profile/application",
     });
   });
+
+  it("preserves a stable auth-recovery cause without exposing credentials", () => {
+    const error = Object.assign(new Error("AUTH_REQUIRED: reconnect"), {
+      status: 401,
+      code: "AUTH_REQUIRED",
+      authCause: "SESSION_UNAVAILABLE",
+    });
+
+    expect(serializeGenerationError(error)).toEqual({
+      success: false,
+      error: "AUTH_REQUIRED: reconnect",
+      message: "AUTH_REQUIRED: reconnect",
+      status: 401,
+      code: "AUTH_REQUIRED",
+      cause: "SESSION_UNAVAILABLE",
+    });
+  });
 });

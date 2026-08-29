@@ -20,6 +20,37 @@ Follow-up:
 
 ## Entries
 
+### 2026-08-28
+
+Branch: `fix/ale-40-extension-auth-recovery`
+
+Area: ALE-40 — extension authentication recovery for generation
+
+Problem: A failed silent session exchange inside the service worker's generation retry loop threw before the interactive authentication branch could run. The popup's authentication error action also assumed the original generation screen still existed, so it could not render a recovery control on the setup screen.
+
+Decision: Replace the loop with a dependency-injected, bounded recovery state machine: use stored/refreshable auth, make one silent web-app session exchange, then allow one interactive sign-in and one final generation retry. Use stable `AUTH_REQUIRED` / `AUTH_TIMEOUT` error codes with 401 status and a safe cause. The session route returns stable `SESSION_*` reason codes without exposing Supabase error text. Keep the extension session cookie bridge read-only (`setAll()` remains intentionally empty); cookie rotation is out of scope until a separately documented Supabase review.
+
+Files changed:
+
+- `ascendia-extension/background/{service-worker,auth,generation-core,generate-auth-recovery}.{js,test.ts}` and contract coverage
+- `ascendia-extension/popup/{popup,popup-core}.{js,test.ts}` plus setup-screen recovery coverage
+- `app/api/extension/session/{route,route.test}.ts`
+- Extension release metadata: manifest, package, and lockfile version `1.0.11`
+- `README.md`, Store submission checklist, and `docs/progress.txt`
+
+Tests/checks:
+
+- Extension unit suite: 17 files / 161 tests passed.
+- Root unit suite: 59 files / 697 tests passed; guardrails: 2 files / 15 tests passed.
+- Extension lint/type-check, root lint/type-check, production build, extension version policy (`1.0.10 → 1.0.11`), and `git diff --check` passed.
+
+Result: Generation auth can now move deterministically from silent recovery to interactive sign-in instead of terminating early. The setup screen presents a working re-authentication action, and session failures remain structured and safe to display. No cookie values, access tokens, refresh tokens, or session objects were added to logs or UI. No extension ZIP was built or uploaded.
+
+Follow-up:
+
+- Manually verify valid-token, stale-session, and interactive sign-in recovery against the deployed web app before producing any Store ZIP.
+- Build/upload a Store artifact only from a clean committed release and only with explicit publication authorization.
+
 ### 2026-08-26
 
 Branch: `feat/ale-39-claim-safe-application-sanitization`

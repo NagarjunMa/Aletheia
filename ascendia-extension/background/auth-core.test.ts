@@ -369,6 +369,29 @@ describe("fetchSessionFromServer", () => {
     ).rejects.toThrow("Unauthorized");
   });
 
+  it("preserves the route's stable 401 code and cause", async () => {
+    const fetcher = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      statusText: "Unauthorized",
+      headers: { get: () => null },
+      json: () =>
+        Promise.resolve({
+          error: "Your Aletheia session needs to be reconnected.",
+          code: "SESSION_UNAVAILABLE",
+          cause: "NO_ACTIVE_SESSION",
+        }),
+    });
+
+    await expect(
+      fetchSessionFromServer("https://app.com", fetcher),
+    ).rejects.toMatchObject({
+      status: 401,
+      code: "SESSION_UNAVAILABLE",
+      authCause: "NO_ACTIVE_SESSION",
+    });
+  });
+
   it("throws when response missing access_token", async () => {
     const fetcher = vi.fn().mockResolvedValue({
       ok: true,
@@ -468,6 +491,11 @@ describe("isAuthError", () => {
 
   it('detects "Not authenticated"', () => {
     expect(isAuthError("Not authenticated")).toBe(true);
+  });
+
+  it("detects stable auth and session codes", () => {
+    expect(isAuthError("AUTH_REQUIRED")).toBe(true);
+    expect(isAuthError("SESSION_UNAVAILABLE")).toBe(true);
   });
 
   it("returns false for non-auth errors", () => {

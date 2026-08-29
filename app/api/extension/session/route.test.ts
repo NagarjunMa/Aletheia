@@ -127,7 +127,11 @@ describe("GET /api/extension/session", () => {
       const res = await GET(makeRequest());
       expect(res.status).toBe(401);
       const body = await res.json();
-      expect(body.error).toMatch(/Not authenticated/);
+      expect(body).toMatchObject({
+        error: "Your Aletheia session needs to be reconnected.",
+        code: "SESSION_REFRESH_REJECTED",
+        cause: "SESSION_REFRESH_FAILED",
+      });
     });
 
     it("returns 401 and specific code when getSession hits refresh_token_already_used", async () => {
@@ -143,8 +147,10 @@ describe("GET /api/extension/session", () => {
       const res = await GET(makeRequest());
       expect(res.status).toBe(401);
       const body = await res.json();
-      expect(body.code).toBe("refresh_token_already_used");
-      expect(body.error).toMatch(/Session expired/);
+      expect(body).toMatchObject({
+        code: "SESSION_REFRESH_REJECTED",
+        cause: "REFRESH_TOKEN_ALREADY_USED",
+      });
     });
 
     it("returns 401 when getSession returns no session (user logged out)", async () => {
@@ -155,6 +161,10 @@ describe("GET /api/extension/session", () => {
 
       const res = await GET(makeRequest());
       expect(res.status).toBe(401);
+      await expect(res.json()).resolves.toMatchObject({
+        code: "SESSION_UNAVAILABLE",
+        cause: "NO_ACTIVE_SESSION",
+      });
     });
   });
 
@@ -172,6 +182,10 @@ describe("GET /api/extension/session", () => {
 
       const res = await GET(makeRequest());
       expect(res.status).toBe(401);
+      await expect(res.json()).resolves.toMatchObject({
+        code: "SESSION_USER_INVALID",
+        cause: "USER_VALIDATION_FAILED",
+      });
     });
 
     it("returns 401 with specific code when getUser hits refresh_token_already_used", async () => {
@@ -186,7 +200,10 @@ describe("GET /api/extension/session", () => {
       const res = await GET(makeRequest());
       expect(res.status).toBe(401);
       const body = await res.json();
-      expect(body.code).toBe("refresh_token_already_used");
+      expect(body).toMatchObject({
+        code: "SESSION_REFRESH_REJECTED",
+        cause: "REFRESH_TOKEN_ALREADY_USED",
+      });
     });
   });
 

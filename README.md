@@ -280,7 +280,9 @@ The zip is **gitignored** and written to `ascendia-extension/dist/`; it is not s
 | `popup/popup-core.js`             | Pure functions: parsing, payload building, char counts            |
 | `scripts/build-extension-zip.mjs` | jszip pipeline → `ascendia-extension/dist/aletheia-extension.zip` |
 
-**Session bridge:** Extension uses Bearer token. On first use, fetches via `GET /api/extension/session` (cookie auth), stores in `chrome.storage.local`, refreshes via alarm every 20 min.
+**Session bridge:** Extension uses a Bearer token. On first use, it exchanges the web-app session through `GET /api/extension/session`, stores the result in `chrome.storage.local`, and refreshes proactively every 20 minutes. A failed generation follows one bounded recovery path: silent web-app session exchange, one interactive sign-in, then one final generation retry. Session failures expose only stable `AUTH_*` / `SESSION_*` codes, never token or cookie data.
+
+**Auth recovery workaround:** In the same Chrome profile, open `https://www.aletheia.live` and sign in. If the extension still shows a stale connection, disconnect it, select **Connect to Aletheia**, and retry only after it reports connected.
 
 **Host permissions:** `linkedin.com`, `app.apollo.io`, `localhost:3000`, `*.vercel.app`
 
