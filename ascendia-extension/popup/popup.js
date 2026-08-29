@@ -1153,22 +1153,29 @@ function hideError() {
   document.getElementById("errorMessage")?.classList.add("hidden");
   document.getElementById("errorDetails")?.classList.add("hidden");
   document.getElementById("errorAction")?.classList.add("hidden");
+  document.getElementById("authError")?.classList.add("hidden");
 }
 
 function showAuthError(message) {
-  const errorEl = document.getElementById("errorMessage");
-  const errorText = document.getElementById("errorText");
+  const errorEl =
+    document.getElementById("errorMessage") ||
+    document.getElementById("authError");
+  const errorText =
+    document.getElementById("errorText") ||
+    document.getElementById("authErrorText");
 
   if (!errorEl || !errorText) {
     console.warn("showAuthError: error elements not in DOM:", message);
     return;
   }
 
-  // Strip the AUTH_FAILED: prefix for display
-  const displayMsg = message.replace(/^AUTH_FAILED:\s*/, "");
+  // Stable worker codes are useful to clients, but not useful UI copy.
+  const displayMsg = message.replace(
+    /^AUTH_(?:FAILED|REQUIRED|TIMEOUT):\s*/,
+    "",
+  );
 
-  errorText.textContent = "";
-  errorText.textContent = displayMsg + " ";
+  errorText.replaceChildren(document.createTextNode(displayMsg + " "));
 
   const reauthBtn = document.createElement("button");
   reauthBtn.className = "reauth-btn";
@@ -1182,19 +1189,18 @@ function showAuthError(message) {
       const result = await sendBackgroundMessage({ action: "authenticate" });
       if (result?.success) {
         hideError();
-        await initializePopup();
-        await checkLinkedInProfile();
+        window.location.reload();
       } else {
         reauthBtn.textContent = "Re-authenticate";
         reauthBtn.disabled = false;
-        showError(
+        showAuthError(
           result?.error || "Re-authentication failed. Please try again.",
         );
       }
     } catch (err) {
       reauthBtn.textContent = "Re-authenticate";
       reauthBtn.disabled = false;
-      showError("Re-authentication failed. Please try again.");
+      showAuthError("Re-authentication failed. Please try again.");
     }
   });
 

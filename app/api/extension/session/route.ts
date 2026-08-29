@@ -29,6 +29,22 @@ function checkSessionRateLimit(ip: string): boolean {
   return true;
 }
 
+function sessionUnauthorizedResponse(
+  corsHeaders: Record<string, string>,
+  code:
+    "SESSION_UNAVAILABLE" | "SESSION_REFRESH_REJECTED" | "SESSION_USER_INVALID",
+  cause: string,
+) {
+  return NextResponse.json(
+    {
+      error: "Your Aletheia session needs to be reconnected.",
+      code,
+      cause,
+    },
+    { status: 401, headers: corsHeaders },
+  );
+}
+
 // Cleanup stale entries every 5 minutes to prevent memory leak
 setInterval(() => {
   const now = Date.now();
@@ -120,33 +136,27 @@ export async function GET(request: NextRequest) {
 
     if (sessionError) {
       if (sessionError.code === "refresh_token_already_used") {
-        log.info("refresh_token_already_used on getSession, returning 401");
-        return NextResponse.json(
-          {
-            error: "Session expired. Please log in again.",
-            code: "refresh_token_already_used",
-          },
-          { status: 401, headers: corsHeaders },
+        log.info("Stale refresh token rejected on getSession");
+        return sessionUnauthorizedResponse(
+          corsHeaders,
+          "SESSION_REFRESH_REJECTED",
+          "REFRESH_TOKEN_ALREADY_USED",
         );
       }
       log.info("getSession error, returning 401");
-      return NextResponse.json(
-        {
-          error:
-            "Not authenticated. Please log in to the Aletheia web app first.",
-        },
-        { status: 401, headers: corsHeaders },
+      return sessionUnauthorizedResponse(
+        corsHeaders,
+        "SESSION_REFRESH_REJECTED",
+        "SESSION_REFRESH_FAILED",
       );
     }
 
     if (!session) {
       log.info("No session, returning 401");
-      return NextResponse.json(
-        {
-          error:
-            "Not authenticated. Please log in to the Aletheia web app first.",
-        },
-        { status: 401, headers: corsHeaders },
+      return sessionUnauthorizedResponse(
+        corsHeaders,
+        "SESSION_UNAVAILABLE",
+        "NO_ACTIVE_SESSION",
       );
     }
 
@@ -163,21 +173,17 @@ export async function GET(request: NextRequest) {
 
     if (userError || !user) {
       if (userError?.code === "refresh_token_already_used") {
-        return NextResponse.json(
-          {
-            error: "Session expired. Please log in again.",
-            code: "refresh_token_already_used",
-          },
-          { status: 401, headers: corsHeaders },
+        return sessionUnauthorizedResponse(
+          corsHeaders,
+          "SESSION_REFRESH_REJECTED",
+          "REFRESH_TOKEN_ALREADY_USED",
         );
       }
       log.info("Not authenticated, returning 401");
-      return NextResponse.json(
-        {
-          error:
-            "Not authenticated. Please log in to the Aletheia web app first.",
-        },
-        { status: 401, headers: corsHeaders },
+      return sessionUnauthorizedResponse(
+        corsHeaders,
+        "SESSION_USER_INVALID",
+        "USER_VALIDATION_FAILED",
       );
     }
 

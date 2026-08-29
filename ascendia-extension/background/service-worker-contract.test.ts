@@ -70,11 +70,18 @@ describe("background service worker startup contract", () => {
   it("preserves structured generation errors for actionable popup recovery", () => {
     const serviceWorker = read("background/service-worker.js");
     const generationCore = read("background/generation-core.js");
+    const authRecovery = read("background/generate-auth-recovery.js");
 
     expect(serviceWorker).toContain("serializeGenerationError(error)");
     expect(serviceWorker).toMatch(/from ["']\.\/generation-core\.js["']/);
+    expect(serviceWorker).toMatch(
+      /from ["']\.\/generate-auth-recovery\.js["']/,
+    );
+    expect(serviceWorker).toContain("allowSessionFetch: false");
     expect(generationCore).toContain("applicationProfileUrl");
+    expect(generationCore).toContain("authCause");
     expect(generationCore).toContain("missingFields");
     expect(generationCore).toContain("recommendedFields");
+    expect(authRecovery).toContain("generateWithAuthRecovery");
   });
 });

@@ -345,6 +345,12 @@ describe("isAuthError", () => {
     expect(isAuthError("Unauthorized")).toBe(true);
   });
 
+  it("detects stable auth recovery codes", () => {
+    expect(isAuthError("AUTH_REQUIRED: Please reconnect")).toBe(true);
+    expect(isAuthError("AUTH_TIMEOUT: Sign-in timed out")).toBe(true);
+    expect(isAuthError("SESSION_UNAVAILABLE")).toBe(true);
+  });
+
   it("returns false for null/undefined", () => {
     expect(isAuthError(null)).toBe(false);
     expect(isAuthError(undefined)).toBe(false);

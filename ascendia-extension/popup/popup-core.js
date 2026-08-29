@@ -282,6 +282,9 @@ export function isAuthError(message) {
     lower.includes("not authenticated") ||
     lower.includes("unauthorized") ||
     lower.includes("auth_failed") ||
+    lower.includes("auth_required") ||
+    lower.includes("auth_timeout") ||
+    lower.includes("session_") ||
     lower.includes("session expired") ||
     lower.includes("please log in")
   );
