@@ -76,4 +76,19 @@ describe("generation background bridge", () => {
       cause: "SESSION_UNAVAILABLE",
     });
   });
+
+  it("preserves the server request ID across failed generation responses", () => {
+    const error = Object.assign(new Error("HTTP 500"), {
+      status: 500,
+      code: "GENERATION_FAILED",
+      requestId: "123e4567-e89b-42d3-a456-426614174000",
+    });
+
+    expect(serializeGenerationError(error)).toMatchObject({
+      success: false,
+      status: 500,
+      code: "GENERATION_FAILED",
+      requestId: "123e4567-e89b-42d3-a456-426614174000",
+    });
+  });
 });

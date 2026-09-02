@@ -20,6 +20,36 @@ Follow-up:
 
 ## Entries
 
+### 2026-08-29
+
+Branch: `feat/ale-41-first-party-observability`
+
+Area: ALE-41 — privacy-safe first-party observability
+
+Problem: Server and extension logging did not share correlation identifiers or enforce a common privacy boundary, leaving generation failures hard to reconstruct and vulnerable to ad-hoc sensitive logging.
+
+Decision: Start with a shared redaction/identifier contract before changing process flows. Use UUID-only correlation IDs, bounded/control-character-safe strings, recursively dropped sensitive fields, Pino/edge JSON output, and an extension-local session buffer capped at 80 events for one hour. No external transport, telemetry dependency, or diagnostic upload is introduced.
+
+Files changed:
+
+- `lib/{logging-core,logger,logger.edge}.ts` and logger tests
+- `proxy.ts`
+- `ascendia-extension/lib/{logger-core,logger,logger.test}.js`
+- Extension popup, service worker, and auth operation-ID propagation plus runtime-contract tests
+- `modules/outreach/application/extension-generate.service.ts` request lifecycle completion events
+- `docs/agents/engineering-guide.md` and `docs/progress.txt`
+
+Tests/checks:
+
+- Focused server logger tests, root type-check/lint, focused extension logger/contract tests, extension type-check/lint, and extension bundle build passed.
+
+Result: The safe logging foundation and popup → worker → first-party request operation ID are implemented. Extension diagnostics serialize local storage writes, carry proxy request IDs through success and failure responses, and the generate route records the real terminal response status; the proxy records only forwarding. Server-route and process-boundary coverage remains in progress.
+
+Follow-up:
+
+- Add request lifecycle events to every API route and inherited stage logging to generation/auth/repository boundaries.
+- Complete the coverage matrix, privacy audit, and full validation before review.
+
 ### 2026-08-28
 
 Branch: `fix/ale-40-extension-auth-recovery`

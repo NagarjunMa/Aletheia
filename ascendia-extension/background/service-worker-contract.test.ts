@@ -78,6 +78,8 @@ describe("background service worker startup contract", () => {
       /from ["']\.\/generate-auth-recovery\.js["']/,
     );
     expect(serviceWorker).toContain("allowSessionFetch: false");
+    expect(serviceWorker).toContain('"X-Aletheia-Operation-Id"');
+    expect(serviceWorker).toContain("createExtensionLogger");
     expect(generationCore).toContain("applicationProfileUrl");
     expect(generationCore).toContain("authCause");
     expect(generationCore).toContain("missingFields");

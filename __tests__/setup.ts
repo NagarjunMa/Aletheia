@@ -8,13 +8,22 @@ vi.mock("@/lib/logger", () => ({
     info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
+    child: () => ({
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      child: vi.fn(),
+    }),
   }),
   createRequestLogger: () => ({
     debug: vi.fn(),
     info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
+    child: vi.fn(),
   }),
+  startTimedStage: () => vi.fn(),
 }));
 
 // ─── Required env vars for all route handler tests ────────────────────────────

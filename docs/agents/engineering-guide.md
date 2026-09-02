@@ -215,6 +215,18 @@ Copy `.env.local.example` → `.env.local` for local dev. Never commit secrets.
 
 ## Key API Contracts
 
+---
+
+## First-Party Observability
+
+Use only the existing Pino JSON stdout logger on Node routes, the edge JSON logger in `proxy.ts`, and the local extension logger. Do not add a remote telemetry transport or send extension diagnostics over the network.
+
+Every side-effecting request, auth, database, model, sanitation, storage, or runtime-message boundary emits structured `event`, `stage`, `outcome`, `durationMs`, `status`, and `errorCode` fields when available. Carry validated UUID `requestId` and `operationId` values through first-party boundaries. The extension uses `X-Aletheia-Operation-Id`; the proxy returns `x-request-id` and preserves the operation ID.
+
+Never log Authorization headers, cookies, tokens, secrets, session objects, request or response bodies, URLs with query strings, email addresses, prompts, source context, or generated drafts. `lib/logger.ts`, `lib/logger.edge.ts`, and `ascendia-extension/lib/logger-core.js` are the mandatory redaction boundary; callers must pass safe codes, counts, booleans, categories, and bounded identifiers only.
+
+The extension diagnostic buffer is local-only in `chrome.storage.session`, capped at 80 redacted events with one-hour expiry. It is not readable by content pages through the logger, is never uploaded, and exists only to retain pre-request evidence across MV3 worker suspension. To correlate an operation, filter Chrome extension console/session diagnostics by `operationId`, then Vercel stdout by `operationId` and `requestId`.
+
 **POST `/api/extension/generate`** — main generation endpoint
 Auth: Bearer token (JWT) | Rate limit: `EXTENSION_DAILY_LIMIT` req/day/user (default 30, `extension_rate_limits` table)
 

@@ -21,4 +21,12 @@ describe("extension runtime messaging diagnostics", () => {
     expect(source).toContain("The extension background service is unavailable");
     expect(source).not.toContain("void chrome.runtime.lastError");
   });
+
+  it("preserves a generation operation ID across popup runtime messages", () => {
+    expect(popupSource).toContain("createOperationId");
+    expect(popupSource).toContain(
+      "const correlatedMessage = { ...message, operationId }",
+    );
+    expect(popupSource).toContain('action: "generate"');
+  });
 });

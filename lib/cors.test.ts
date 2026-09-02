@@ -212,6 +212,9 @@ describe("getCorsHeaders", () => {
       expect(headers["Access-Control-Allow-Headers"]).toContain(
         "X-Aletheia-Extension-Version",
       );
+      expect(headers["Access-Control-Allow-Headers"]).toContain(
+        "X-Aletheia-Operation-Id",
+      );
       expect(headers["Access-Control-Expose-Headers"]).toContain(
         "X-Aletheia-Minimum-Extension-Version",
       );

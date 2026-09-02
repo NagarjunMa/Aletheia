@@ -18,6 +18,9 @@ import {
   serializeGenerationError,
 } from "./generation-core.js";
 import { generateWithAuthRecovery } from "./generate-auth-recovery.js";
+import { createExtensionLogger, createOperationId } from "../lib/logger.js";
+
+const log = createExtensionLogger("service-worker");
 
 // In-flight guard: prevents duplicate authenticate calls from opening multiple tabs
 let authenticatePromise = null;
@@ -160,17 +163,33 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 
 // Message handler
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  console.log(
-    "[SW] Message received:",
-    message.action,
-    "from:",
-    sender.url?.substring(0, 60) || sender.id,
-  );
+  const operationId = createOperationId(message.operationId);
+  const messageStartedAt = Date.now();
+  log.info("runtime.message.start", { operationId, action: message.action });
 
   if (message.action === "generate") {
-    handleGenerateRequest(message.payload)
-      .then((result) => sendResponse(result))
-      .catch((error) => sendResponse(serializeGenerationError(error)));
+    handleGenerateRequest(message.payload, operationId)
+      .then((result) => {
+        log.info("runtime.message.complete", {
+          operationId,
+          action: message.action,
+          outcome: "success",
+          durationMs: Date.now() - messageStartedAt,
+        });
+        sendResponse({ ...result, operationId });
+      })
+      .catch((error) => {
+        const result = serializeGenerationError(error);
+        log.warn("runtime.message.complete", {
+          operationId,
+          action: message.action,
+          outcome: "failure",
+          durationMs: Date.now() - messageStartedAt,
+          errorCode: result.code,
+          status: result.status,
+        });
+        sendResponse({ ...result, operationId });
+      });
     return true;
   }
 
@@ -408,7 +427,7 @@ async function handleLogout() {
   return { success: true, message: "Disconnected from Aletheia" };
 }
 
-async function handleGenerateRequest(payload) {
+async function handleGenerateRequest(payload, operationId) {
   const url = await getEffectiveApiUrl();
   const { accepted = [] } = await chrome.storage.local.get("accepted");
   const relevantExamples = accepted
@@ -422,8 +441,8 @@ async function handleGenerateRequest(payload) {
     // Keep session exchange in the recovery state machine: a generation has
     // one silent exchange, rather than an implicit fetch on every token read.
     getAccessToken: () =>
-      getValidAccessToken(url, { allowSessionFetch: false }),
-    recoverSilently: () => clearAuthAndFetchFresh(url),
+      getValidAccessToken(url, { allowSessionFetch: false, operationId }),
+    recoverSilently: () => clearAuthAndFetchFresh(url, operationId),
     clearAuth,
     authenticateInteractively: handleAuthenticate,
     generate: async (accessToken) => {
@@ -442,6 +461,7 @@ async function handleGenerateRequest(payload) {
           body: JSON.stringify(requestData),
         },
         url,
+        operationId,
       );
 
       if (!result.success) {
@@ -463,7 +483,12 @@ async function handleGenerateRequest(payload) {
   return response;
 }
 
-async function makeAPIRequest(endpoint, options = {}, baseUrl = null) {
+async function makeAPIRequest(
+  endpoint,
+  options = {},
+  baseUrl = null,
+  operationId,
+) {
   const url = (baseUrl || CONFIG.DEFAULT_API_URL) + endpoint;
   let lastError;
 
@@ -478,7 +503,10 @@ async function makeAPIRequest(endpoint, options = {}, baseUrl = null) {
 
       const response = await fetch(url, {
         ...options,
-        headers: getAletheiaRequestHeaders(options.headers || {}),
+        headers: getAletheiaRequestHeaders({
+          ...(options.headers || {}),
+          ...(operationId ? { "X-Aletheia-Operation-Id": operationId } : {}),
+        }),
         signal: controller.signal,
       });
 
@@ -506,6 +534,7 @@ async function makeAPIRequest(endpoint, options = {}, baseUrl = null) {
         );
         apiError.status = response.status;
         apiError.code = errorBody?.code;
+        apiError.requestId = response.headers.get("x-request-id") || undefined;
         apiError.authCause = errorBody?.cause;
         apiError.updateUrl = errorBody?.chromeWebStoreUrl;
         apiError.apiResponse = errorBody;
@@ -518,7 +547,10 @@ async function makeAPIRequest(endpoint, options = {}, baseUrl = null) {
         status: response.status,
       });
 
-      return data;
+      return {
+        ...data,
+        requestId: response.headers.get("x-request-id") || undefined,
+      };
     } catch (error) {
       lastError = error;
       console.warn(`API request attempt ${attempt} failed:`, error.message);
