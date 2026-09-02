@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { createLogger } from "@/lib/logger";
+import type { SafeLogger } from "@/lib/logger";
 import {
   analyzeStyle,
   mergeStylePatterns,
@@ -11,13 +11,12 @@ import {
   createBearerServiceClient,
 } from "@/lib/supabase/server";
 import { getCorsHeaders } from "@/lib/cors";
+import { withRequestLifecycle } from "@/lib/request-lifecycle";
 import {
   evaluateExtensionContract,
   getExtensionContractResponseHeaders,
 } from "@/lib/extension-contract";
 import { feedbackSchema } from "./schema";
-
-const log = createLogger("extension-feedback");
 
 // Lazy factory functions — avoid module-level instantiation at build time
 function getSupabaseService() {
@@ -32,6 +31,7 @@ function getSupabaseAuth() {
 
 async function authenticateRequest(
   request: NextRequest,
+  log: SafeLogger,
 ): Promise<{ userId: string; email: string } | null> {
   const authHeader = request.headers.get("authorization");
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -46,7 +46,10 @@ async function authenticateRequest(
   } = await getSupabaseAuth().auth.getUser(accessToken);
 
   if (error || !user) {
-    log.info({ err: error?.message }, "Token validation failed");
+    log.info(
+      { errorCode: "EXTENSION_TOKEN_INVALID" },
+      "Token validation failed",
+    );
     return null;
   }
 
@@ -56,6 +59,12 @@ async function authenticateRequest(
 // ─── POST handler ───
 
 export async function POST(request: NextRequest) {
+  return withRequestLifecycle("extension-feedback", request, (log) =>
+    handlePost(request, log),
+  );
+}
+
+async function handlePost(request: NextRequest, log: SafeLogger) {
   const corsHeaders = {
     ...getCorsHeaders(request, {
       allowCredentials: true,
@@ -74,7 +83,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Auth
-    const authResult = await authenticateRequest(request);
+    const authResult = await authenticateRequest(request, log);
     if (!authResult) {
       return NextResponse.json(
         { error: "Unauthorized", message: "Valid Bearer token required" },
@@ -98,7 +107,7 @@ export async function POST(request: NextRequest) {
         userId: authResult.userId.substring(0, 12),
         approved,
         category,
-        rejectionReason,
+        hasRejectionReason: Boolean(rejectionReason),
         promptVersion: evalMetadata?.promptVersion,
         apiVersion: contract.apiVersion,
         extensionVersion: contract.extensionVersion,
@@ -129,7 +138,7 @@ export async function POST(request: NextRequest) {
 
     if (insertErr) {
       log.error(
-        { err: insertErr },
+        { errorCode: "FEEDBACK_PERSIST_FAILED" },
         "Failed to persist user_feedback row — eval signal lost",
       );
     }
@@ -146,14 +155,21 @@ export async function POST(request: NextRequest) {
       message,
       approved,
       category,
+      log,
       subjectLine,
-    ).catch((err) => {
-      log.error({ err }, "Background style processing failed");
+    ).catch(() => {
+      log.error(
+        { errorCode: "STYLE_FEEDBACK_BACKGROUND_FAILED" },
+        "Background style processing failed",
+      );
     });
 
     return response;
   } catch (error) {
-    log.error({ err: error }, "Feedback endpoint error");
+    log.error(
+      { errorCode: "EXTENSION_FEEDBACK_FAILED" },
+      "Feedback endpoint error",
+    );
 
     if (error instanceof z.ZodError) {
       return NextResponse.json(
@@ -176,6 +192,7 @@ async function processStyleFeedback(
   message: string,
   approved: boolean,
   category: string,
+  log: SafeLogger,
   subjectLine?: string,
 ) {
   // Fetch existing preferences
@@ -186,7 +203,10 @@ async function processStyleFeedback(
     .maybeSingle();
 
   if (fetchErr) {
-    log.error({ err: fetchErr }, "Failed to fetch user_preferences");
+    log.error(
+      { errorCode: "STYLE_PREFERENCES_READ_FAILED" },
+      "Failed to fetch user_preferences",
+    );
     return;
   }
 
@@ -212,7 +232,7 @@ async function processStyleFeedback(
     if (rpcErr) {
       // Fallback: non-atomic upsert (acceptable for style data — eventual consistency)
       log.warn(
-        { err: rpcErr },
+        { errorCode: "STYLE_APPROVED_INCREMENT_FAILED" },
         "Atomic increment RPC unavailable, falling back to upsert",
       );
       const currentCount = (prefs?.approved_message_count ?? 0) as number;
@@ -228,7 +248,10 @@ async function processStyleFeedback(
         );
 
       if (upsertErr) {
-        log.error({ err: upsertErr }, "Failed to upsert style_patterns");
+        log.error(
+          { errorCode: "STYLE_PATTERNS_UPSERT_FAILED" },
+          "Failed to upsert style_patterns",
+        );
       } else {
         log.info(
           { userId: userId.substring(0, 8), approvedCount: currentCount + 1 },
@@ -250,7 +273,7 @@ async function processStyleFeedback(
 
     if (rpcErr) {
       log.warn(
-        { err: rpcErr },
+        { errorCode: "STYLE_REJECTED_INCREMENT_FAILED" },
         "Atomic increment RPC unavailable, falling back to upsert",
       );
       const currentCount = (prefs?.rejected_message_count ?? 0) as number;
@@ -266,7 +289,7 @@ async function processStyleFeedback(
 
       if (upsertErr) {
         log.error(
-          { err: upsertErr },
+          { errorCode: "STYLE_REJECTED_UPSERT_FAILED" },
           "Failed to increment rejected_message_count",
         );
       }

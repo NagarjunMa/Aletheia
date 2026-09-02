@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
-import { createLogger } from "@/lib/logger";
+import type { SafeLogger } from "@/lib/logger";
 import { getCorsHeaders, isApprovedExtensionRequest } from "@/lib/cors";
 import { getExtensionContractResponseHeaders } from "@/lib/extension-contract";
-
-const log = createLogger("extension-session");
+import { withRequestLifecycle } from "@/lib/request-lifecycle";
 
 export const dynamic = "force-dynamic";
 
@@ -67,8 +66,14 @@ export async function OPTIONS(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
+  return withRequestLifecycle("extension-session", request, (log) =>
+    handleGet(request, log),
+  );
+}
+
+async function handleGet(request: NextRequest, log: SafeLogger) {
   log.info(
-    { origin: request.headers.get("origin") },
+    { hasOrigin: Boolean(request.headers.get("origin")) },
     "GET /api/extension/session",
   );
   // The SW fetches with credentials: 'include'. Browsers strip the cookies
@@ -107,9 +112,10 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Log all cookies for debugging (names only, not values)
-    const cookieNames = request.cookies.getAll().map((c) => c.name);
-    log.debug({ cookies: cookieNames }, "Cookies present");
+    log.debug(
+      { cookieCount: request.cookies.getAll().length },
+      "Cookies present",
+    );
 
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -130,7 +136,10 @@ export async function GET(request: NextRequest) {
       error: sessionError,
     } = await supabase.auth.getSession();
     log.info(
-      { expiresAt: session?.expires_at, err: sessionError?.message },
+      {
+        expiresAt: session?.expires_at,
+        errorCode: sessionError ? "SESSION_LOOKUP_FAILED" : undefined,
+      },
       session ? "getSession success" : "getSession failed",
     );
 
@@ -167,7 +176,10 @@ export async function GET(request: NextRequest) {
       error: userError,
     } = await supabase.auth.getUser(session.access_token);
     log.info(
-      { userId: user?.id?.substring(0, 8), err: userError?.message },
+      {
+        userId: user?.id?.substring(0, 8),
+        errorCode: userError ? "SESSION_USER_LOOKUP_FAILED" : undefined,
+      },
       user ? "getUser success" : "getUser failed",
     );
 
@@ -212,8 +224,8 @@ export async function GET(request: NextRequest) {
         headers: corsHeaders,
       },
     );
-  } catch (error) {
-    log.error({ err: error }, "Internal error");
+  } catch {
+    log.error({ errorCode: "SESSION_EXCHANGE_FAILED" }, "Internal error");
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500, headers: corsHeaders },

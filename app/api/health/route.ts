@@ -1,11 +1,14 @@
-import { NextResponse } from "next/server";
-import { createLogger } from "@/lib/logger";
+import { NextRequest, NextResponse } from "next/server";
+import type { SafeLogger } from "@/lib/logger";
+import { withRequestLifecycle } from "@/lib/request-lifecycle";
 
 export const dynamic = "force-dynamic";
 
-const log = createLogger("health");
+export async function GET(request: NextRequest) {
+  return withRequestLifecycle("health", request, handleGet);
+}
 
-export async function GET() {
+async function handleGet(log: SafeLogger) {
   log.debug("Health check");
   return NextResponse.json({
     status: "ok",

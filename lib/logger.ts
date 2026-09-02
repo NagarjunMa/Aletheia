@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import {
   LOG_SCHEMA_VERSION,
   createCorrelationId,
+  normalizeLogString,
   safeDurationMs,
   sanitizeLogFields,
   type SafeLogFields,
@@ -35,9 +36,9 @@ function writeLog(
   message?: string,
 ) {
   const safeMessage =
-    typeof message === "string" ? message.slice(0, 160) : undefined;
+    typeof message === "string" ? normalizeLogString(message) : undefined;
   if (typeof fields === "string") {
-    logger[level](fields.slice(0, 160));
+    logger[level](normalizeLogString(fields) ?? "");
     return;
   }
   logger[level](

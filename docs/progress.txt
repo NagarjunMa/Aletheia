@@ -20,6 +20,59 @@ Follow-up:
 
 ## Entries
 
+### 2026-09-02
+
+Branch: `feat/ale-41-observability-api-coverage`
+
+Area: ALE-41 — API request lifecycle coverage
+
+Problem: The first observability increment correlated extension generation, but the remaining API handlers did not consistently emit a request start and one terminal outcome.
+
+Decision: Add `withRequestLifecycle()` as a response-preserving App Router wrapper. It creates the validated request logger, records bounded start/terminal events with the actual HTTP status and duration, and logs only a stable code for unexpected failures. Preflight handlers remain uninstrumented because they are side-effect-free.
+
+Files changed:
+
+- `lib/request-lifecycle.{ts,test.ts}`
+- API route handlers and focused tests for auth, billing, extension config/feedback/session/version, feedback, health, resume, and settings endpoints
+
+Tests/checks:
+
+- Focused API lifecycle suite: 13 files / 120 tests passed.
+- Root type-check, lint, Prettier, and `git diff --check` passed.
+
+Result: Every listed API request handler now records one safe start and one terminal HTTP outcome without changing response status or body contracts.
+
+Follow-up:
+
+- Extend the same scoped logging pattern through additional downstream auth, database, model, and sanitation/repository boundaries.
+- Complete the process-boundary coverage matrix and privacy/overhead audit.
+
+### 2026-09-02
+
+Branch: `feat/ale-41-observability-api-coverage`
+
+Area: ALE-41 — observability privacy and correlation hardening
+
+Problem: Request lifecycle events were safe, but route-internal events did not inherit their request context. The logger also accepted raw error fields and did not normalize direct message strings consistently.
+
+Decision: Pass the scoped `SafeLogger` into instrumented API handlers and the generation service, including asynchronous style-feedback work. Replace the duplicate generation observer with the shared lifecycle wrapper. Drop `err` and `error` fields at the mandatory logger boundary, replace affected call sites with stable `errorCode` values, and normalize direct messages in both Node and edge loggers.
+
+Files changed:
+
+- `lib/{logging-core,logger,logger.edge,request-lifecycle}.{ts,test.ts}`
+- API routes, generation service, Supabase/profile logging call sites, and `docs/progress.txt`
+
+Tests/checks:
+
+- Focused lifecycle/logger/API suite: 14 files / 133 tests passed.
+- Root type-check passed.
+
+Result: Correlated route and generation-service logs now share validated request/operation IDs without emitting raw error values or unnormalized direct messages. No response contracts or remote telemetry behavior changed.
+
+Follow-up:
+
+- Commit and open the scoped ALE-41 pull request after the completed lint, full-suite, production-build, and read-only review checks.
+
 ### 2026-08-29
 
 Branch: `feat/ale-41-first-party-observability`

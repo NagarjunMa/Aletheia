@@ -113,7 +113,7 @@ export async function saveCandidateProfileCategory(
     log.error(
       {
         category: parsedCategory.data,
-        err: error.message,
+        errorCode: "CANDIDATE_PROFILE_CATEGORY_UPSERT_FAILED",
         userId: user.id.substring(0, 12),
       },
       "Candidate profile category save failed",
@@ -172,7 +172,10 @@ export async function saveCandidateEvidence(
 
   if (result.error) {
     log.error(
-      { err: result.error.message, userId: user.id.substring(0, 12) },
+      {
+        errorCode: "CANDIDATE_EVIDENCE_SAVE_FAILED",
+        userId: user.id.substring(0, 12),
+      },
       "Candidate evidence save failed",
     );
     return validationError(
@@ -209,7 +212,10 @@ export async function deleteCandidateEvidence(
 
   if (error) {
     log.error(
-      { err: error.message, userId: user.id.substring(0, 12) },
+      {
+        errorCode: "CANDIDATE_EVIDENCE_DELETE_FAILED",
+        userId: user.id.substring(0, 12),
+      },
       "Candidate evidence delete failed",
     );
     return validationError(

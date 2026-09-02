@@ -4,12 +4,11 @@ import {
   createBearerAuthClient,
   createBearerServiceClient,
 } from "@/lib/supabase/server";
-import { createLogger } from "@/lib/logger";
+import type { SafeLogger } from "@/lib/logger";
 import { getCorsHeaders } from "@/lib/cors";
+import { withRequestLifecycle } from "@/lib/request-lifecycle";
 
 export const dynamic = "force-dynamic";
-
-const log = createLogger("auth-me");
 
 const DAILY_LIMIT = Number(process.env.EXTENSION_DAILY_LIMIT) || 30;
 
@@ -66,6 +65,12 @@ async function getUsage(
 // ─── GET handler ───
 
 export async function GET(request: NextRequest) {
+  return withRequestLifecycle("auth-me", request, (log) =>
+    handleGet(request, log),
+  );
+}
+
+async function handleGet(request: NextRequest, log: SafeLogger) {
   const corsHeaders = getCorsHeaders(request, {
     allowCredentials: true,
     methods: "GET, OPTIONS",
@@ -80,10 +85,7 @@ export async function GET(request: NextRequest) {
     const authHeader = request.headers.get("authorization");
     if (authHeader?.startsWith("Bearer ")) {
       const accessToken = authHeader.slice(7);
-      log.debug(
-        { tokenPrefix: accessToken.substring(0, 8) },
-        "Validating Bearer token",
-      );
+      log.debug({ hasBearerToken: true }, "Validating Bearer token");
       const {
         data: { user },
         error,
@@ -99,7 +101,10 @@ export async function GET(request: NextRequest) {
           "Authenticated",
         );
       } else {
-        log.debug({ err: error?.message }, "Bearer token validation failed");
+        log.debug(
+          { errorCode: "BEARER_TOKEN_INVALID" },
+          "Bearer token validation failed",
+        );
       }
     }
 
@@ -121,7 +126,10 @@ export async function GET(request: NextRequest) {
           "Authenticated",
         );
       } else {
-        log.debug({ err: error?.message }, "Cookie session invalid");
+        log.debug(
+          { errorCode: "COOKIE_SESSION_INVALID" },
+          "Cookie session invalid",
+        );
       }
     }
 
@@ -155,8 +163,8 @@ export async function GET(request: NextRequest) {
       },
       { headers: corsHeaders },
     );
-  } catch (error) {
-    log.error({ err: error }, "/api/auth/me error");
+  } catch {
+    log.error({ errorCode: "AUTH_ME_FAILED" }, "/api/auth/me error");
     return NextResponse.json(
       { authenticated: false },
       { status: 500, headers: corsHeaders },

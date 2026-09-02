@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import {
   CREDIT_PACKS,
@@ -6,11 +6,14 @@ import {
   grantTrialCreditsOnce,
   isUnlimitedCreditUser,
 } from "@/lib/billing/credits";
-import { createLogger } from "@/lib/logger";
+import type { SafeLogger } from "@/lib/logger";
+import { withRequestLifecycle } from "@/lib/request-lifecycle";
 
-const log = createLogger("billing-credits");
+export async function GET(request: NextRequest) {
+  return withRequestLifecycle("billing-credits", request, handleGet);
+}
 
-export async function GET() {
+async function handleGet(log: SafeLogger) {
   try {
     const supabase = await createClient();
     const {
@@ -51,7 +54,10 @@ export async function GET() {
 
     if (ledgerError) {
       log.error(
-        { err: ledgerError, userId: user.id.substring(0, 12) },
+        {
+          errorCode: "CREDIT_LEDGER_READ_FAILED",
+          userId: user.id.substring(0, 12),
+        },
         "Failed to fetch credit ledger",
       );
       return NextResponse.json(
@@ -69,8 +75,11 @@ export async function GET() {
       packs: Object.values(CREDIT_PACKS),
       ledger: ledger ?? [],
     });
-  } catch (err) {
-    log.error({ err }, "Credit summary endpoint failed");
+  } catch {
+    log.error(
+      { errorCode: "CREDIT_SUMMARY_FAILED" },
+      "Credit summary endpoint failed",
+    );
     return NextResponse.json(
       { error: "Failed to fetch credits" },
       { status: 500 },

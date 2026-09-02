@@ -110,6 +110,16 @@ describe("createRequestLogger", () => {
     ).toEqual({ nested: { safeCount: 2 }, status: 401 });
   });
 
+  it("drops raw error values regardless of their field name", () => {
+    expect(
+      sanitizeLogFields({
+        err: "private upstream failure",
+        error: new Error("private database failure"),
+        errorCode: "DATABASE_QUERY_FAILED",
+      }),
+    ).toEqual({ errorCode: "DATABASE_QUERY_FAILED" });
+  });
+
   it("bounds strings and removes log-injection control characters", () => {
     const value = `safe\n${"x".repeat(200)}`;
     expect(sanitizeLogFields({ label: value }).label).toHaveLength(160);
