@@ -102,20 +102,22 @@ function needsRefresh(auth) {
 
 let _fetchSessionPromise = null;
 
-export async function fetchSessionFromWebApp(apiUrl) {
+export async function fetchSessionFromWebApp(apiUrl, operationId) {
   if (_fetchSessionPromise) {
     console.log(
       "[AUTH] fetchSessionFromWebApp: already in-flight, coalescing...",
     );
     return _fetchSessionPromise;
   }
-  _fetchSessionPromise = _doFetchSessionFromWebApp(apiUrl).finally(() => {
-    _fetchSessionPromise = null;
-  });
+  _fetchSessionPromise = _doFetchSessionFromWebApp(apiUrl, operationId).finally(
+    () => {
+      _fetchSessionPromise = null;
+    },
+  );
   return _fetchSessionPromise;
 }
 
-async function _doFetchSessionFromWebApp(apiUrl) {
+async function _doFetchSessionFromWebApp(apiUrl, operationId) {
   const baseUrl = normalizeApiUrl(apiUrl);
   console.log(
     "[AUTH] fetchSessionFromWebApp: calling",
@@ -127,7 +129,9 @@ async function _doFetchSessionFromWebApp(apiUrl) {
     const response = await fetch(`${baseUrl}/api/extension/session`, {
       method: "GET",
       credentials: "include",
-      headers: getAletheiaRequestHeaders(),
+      headers: getAletheiaRequestHeaders(
+        operationId ? { "X-Aletheia-Operation-Id": operationId } : {},
+      ),
     });
 
     console.log("[AUTH] Session endpoint response:", response.status);
@@ -424,7 +428,7 @@ async function _doRefreshToken(auth) {
 
 export async function getValidAccessToken(
   apiUrl,
-  { allowSessionFetch = true } = {},
+  { allowSessionFetch = true, operationId } = {},
 ) {
   apiUrl = normalizeApiUrl(apiUrl);
   console.log("[AUTH] getValidAccessToken for", apiUrl);
@@ -470,7 +474,7 @@ export async function getValidAccessToken(
   // Fall back to fetching a new session from the web app
   try {
     console.log("[AUTH] Trying to fetch session from web app cookies...");
-    const sessionData = await fetchSessionFromWebApp(apiUrl);
+    const sessionData = await fetchSessionFromWebApp(apiUrl, operationId);
     await storeAuth(sessionData);
     console.log("[AUTH] ✓ Using session from web app cookies");
     return sessionData.access_token;
@@ -773,13 +777,13 @@ function pollUntilSession(apiUrl, tabId, timeoutAt) {
 
 // ─── Clear auth and fetch fresh session ───
 
-export async function clearAuthAndFetchFresh(apiUrl) {
+export async function clearAuthAndFetchFresh(apiUrl, operationId) {
   apiUrl = normalizeApiUrl(apiUrl);
   console.log(
     "[AUTH] clearAuthAndFetchFresh: clearing stored auth and fetching fresh session",
   );
   await clearAuth();
-  const sessionData = await fetchSessionFromWebApp(apiUrl);
+  const sessionData = await fetchSessionFromWebApp(apiUrl, operationId);
   await storeAuth(sessionData);
   console.log(
     "[AUTH] clearAuthAndFetchFresh: ✓ fresh session for",

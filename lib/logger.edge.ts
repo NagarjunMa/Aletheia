@@ -1,6 +1,12 @@
+import {
+  LOG_SCHEMA_VERSION,
+  createCorrelationId,
+  sanitizeLogFields,
+} from "./logging-core";
+
 // Edge Runtime-compatible logger — console only, no pino, no Node.js streams.
 // Used exclusively by proxy.ts at the Next.js network boundary.
-// API routes use lib/logger.ts (Node.js runtime, pino + Loki).
+// API routes use lib/logger.ts (Node.js runtime, pino JSON stdout).
 
 type LogObj = Record<string, unknown>;
 
@@ -12,12 +18,19 @@ function makeEdgeLogger(module: string) {
   ) {
     const entry =
       typeof obj === "string"
-        ? { level, module, msg: obj, time: new Date().toISOString() }
+        ? {
+            level,
+            module,
+            logSchemaVersion: LOG_SCHEMA_VERSION,
+            msg: obj.slice(0, 160),
+            time: new Date().toISOString(),
+          }
         : {
             level,
             module,
-            ...obj,
-            msg: msg ?? "",
+            logSchemaVersion: LOG_SCHEMA_VERSION,
+            ...sanitizeLogFields(obj),
+            msg: msg?.slice(0, 160) ?? "",
             time: new Date().toISOString(),
           };
     const line = JSON.stringify(entry);
@@ -37,4 +50,19 @@ function makeEdgeLogger(module: string) {
 
 export function createLogger(module: string) {
   return makeEdgeLogger(module);
+}
+
+export function getEdgeCorrelationIds(headers: Headers) {
+  return {
+    requestId: createCorrelationId(
+      headers.get("x-request-id"),
+      crypto.randomUUID,
+    ),
+    operationId: headers.get("x-aletheia-operation-id")
+      ? createCorrelationId(
+          headers.get("x-aletheia-operation-id"),
+          crypto.randomUUID,
+        )
+      : undefined,
+  };
 }

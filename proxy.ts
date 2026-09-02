@@ -4,7 +4,7 @@
 
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { createLogger } from "@/lib/logger.edge";
+import { createLogger, getEdgeCorrelationIds } from "@/lib/logger.edge";
 
 const log = createLogger("proxy");
 
@@ -48,29 +48,47 @@ function createNonce() {
 
 export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
+  const startedAt = Date.now();
+  const { requestId, operationId } = getEdgeCorrelationIds(request.headers);
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-request-id", requestId);
+  if (operationId) requestHeaders.set("x-aletheia-operation-id", operationId);
   const isAuthRelated =
     pathname.startsWith("/auth") || pathname.startsWith("/api/extension");
 
   if (isAuthRelated) {
-    log.debug(
-      { method: request.method, pathname, search: request.nextUrl.search },
-      "Auth-related request",
+    log.info(
+      {
+        event: "request.start",
+        requestId,
+        operationId,
+        method: request.method,
+        path: pathname,
+      },
+      "Request started",
     );
   }
 
-  // Generate a unique request ID for log correlation across the full request lifecycle.
-  // Downstream routes read this via request.headers.get('x-request-id').
-  const requestId = request.headers.get("x-request-id") ?? crypto.randomUUID();
-  const requestHeaders = new Headers(request.headers);
-  requestHeaders.set("x-request-id", requestId);
-
   let response = createForwardedResponse(requestHeaders, requestId);
+  if (operationId) response.headers.set("x-aletheia-operation-id", operationId);
 
   // These routes must be able to respond without auth provider configuration.
   // In CI smoke tests and external uptime checks, /api/health should still work
   // even when Supabase env vars are intentionally absent.
   if (AUTH_BYPASS_PATHS.has(pathname)) {
     addBasicSecurityHeaders(response);
+    if (isAuthRelated) {
+      log.info(
+        {
+          event: "request.forwarded",
+          requestId,
+          operationId,
+          outcome: "success",
+          durationMs: Date.now() - startedAt,
+        },
+        "Request forwarded",
+      );
+    }
     return response;
   }
 
@@ -102,7 +120,17 @@ export async function proxy(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (isAuthRelated) {
-    log.debug({ user: user?.email, errorCode: error?.code }, "getUser result");
+    log.info(
+      {
+        event: "auth.complete",
+        requestId,
+        operationId,
+        outcome: error ? "failure" : "success",
+        errorCode: error?.code,
+        durationMs: Date.now() - startedAt,
+      },
+      "Authentication check completed",
+    );
   }
 
   // Handle stale refresh token (caused by concurrent requests racing to refresh)
@@ -122,6 +150,20 @@ export async function proxy(request: NextRequest) {
         { status: 401 },
       );
       res.headers.set("Retry-After", "2");
+      res.headers.set("x-request-id", requestId);
+      if (operationId) res.headers.set("x-aletheia-operation-id", operationId);
+      log.warn(
+        {
+          event: "request.complete",
+          requestId,
+          operationId,
+          outcome: "failure",
+          status: 401,
+          errorCode: "SESSION_REFRESH_REJECTED",
+          durationMs: Date.now() - startedAt,
+        },
+        "Request completed",
+      );
       return res;
     }
 
@@ -161,7 +203,11 @@ export async function proxy(request: NextRequest) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/auth/login";
     loginUrl.searchParams.set("redirectTo", request.nextUrl.pathname);
-    return NextResponse.redirect(loginUrl);
+    const redirect = NextResponse.redirect(loginUrl);
+    redirect.headers.set("x-request-id", requestId);
+    if (operationId)
+      redirect.headers.set("x-aletheia-operation-id", operationId);
+    return redirect;
   }
 
   // Redirect authenticated users away from login/register pages (but NOT reset-password or forgot-password)
@@ -185,7 +231,10 @@ export async function proxy(request: NextRequest) {
   }
 
   if (isAuthRoute && isExtensionLogin) {
-    log.debug({ user: user?.email }, "Extension login: allowing auth page");
+    log.debug(
+      { event: "auth.extension_login", requestId, operationId },
+      "Extension login allowed",
+    );
   }
 
   addBasicSecurityHeaders(response);
@@ -223,6 +272,19 @@ export async function proxy(request: NextRequest) {
   ].join("; ");
 
   response.headers.set("Content-Security-Policy", cspHeader);
+
+  if (isAuthRelated) {
+    log.info(
+      {
+        event: "request.forwarded",
+        requestId,
+        operationId,
+        outcome: "success",
+        durationMs: Date.now() - startedAt,
+      },
+      "Request forwarded",
+    );
+  }
 
   return response;
 }

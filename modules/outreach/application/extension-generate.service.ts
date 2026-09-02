@@ -26,7 +26,7 @@ import {
   reserveGenerationCredits,
 } from "@/lib/billing/credits";
 import { z } from "zod";
-import { createLogger } from "@/lib/logger";
+import { createLogger, createRequestLogger } from "@/lib/logger";
 import {
   CURRENT_EXTENSION_API_VERSION,
   evaluateExtensionContract,
@@ -79,7 +79,49 @@ import { validateOutreachDraft } from "./validate-outreach-draft";
 
 const log = createLogger("generate-route");
 
+async function observeExtensionRequest(
+  request: NextRequest,
+  handler: () => Promise<Response>,
+) {
+  const requestLog = createRequestLogger("generate-route", request);
+  const startedAt = Date.now();
+  requestLog.info(
+    { event: "request.start", outcome: "started" },
+    "Extension request started",
+  );
+
+  try {
+    const response = await handler();
+    requestLog.info(
+      {
+        event: "request.complete",
+        outcome: response.ok ? "success" : "failure",
+        status: response.status,
+        durationMs: Date.now() - startedAt,
+      },
+      "Extension request completed",
+    );
+    return response;
+  } catch (error) {
+    requestLog.error(
+      {
+        event: "request.complete",
+        outcome: "failure",
+        status: 500,
+        errorCode: "UNHANDLED_REQUEST_ERROR",
+        durationMs: Date.now() - startedAt,
+      },
+      "Extension request failed unexpectedly",
+    );
+    throw error;
+  }
+}
+
 export async function POST(request: NextRequest) {
+  return observeExtensionRequest(request, () => handlePost(request));
+}
+
+async function handlePost(request: NextRequest) {
   const corsHeaders = createGenerateCorsHeaders(request);
 
   // Tracks whether the rate-limit slot was reserved for this user; set
@@ -796,6 +838,10 @@ export async function POST(request: NextRequest) {
 
 // GET endpoint for health check with Bearer token validation
 export async function GET(request: NextRequest) {
+  return observeExtensionRequest(request, () => handleGet(request));
+}
+
+async function handleGet(request: NextRequest) {
   const corsHeaders = createGenerateCorsHeaders(request);
 
   try {

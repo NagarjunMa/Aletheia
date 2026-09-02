@@ -11,6 +11,7 @@ import {
   parseGenerationResponse,
   validateGenerationInput,
 } from "./popup-core.js";
+import { createExtensionLogger, createOperationId } from "../lib/logger.js";
 
 let currentProfile = null;
 let currentOutput = null;
@@ -18,6 +19,7 @@ const BACKGROUND_UNAVAILABLE_CODE = "BACKGROUND_UNAVAILABLE";
 const DEFAULT_API_URL = "https://www.aletheia.live";
 const PROFILE_EXTRACTION_CONSENT_KEY = "profileExtractionConsent";
 let profileMonitoringStarted = false;
+const log = createExtensionLogger("popup");
 
 function normalizeApiUrl(apiUrl) {
   let value = String(apiUrl || "").trim();
@@ -37,15 +39,22 @@ async function getConfiguredApiUrl() {
 }
 
 function sendBackgroundMessage(message) {
+  const operationId = createOperationId(message.operationId);
+  const correlatedMessage = { ...message, operationId };
+  log.info("runtime.message.start", { operationId, action: message.action });
   return new Promise((resolve) => {
     try {
-      chrome.runtime.sendMessage(message, (response) => {
+      chrome.runtime.sendMessage(correlatedMessage, (response) => {
         const runtimeError = chrome.runtime.lastError;
         if (runtimeError || response === undefined) {
           const detail =
             runtimeError?.message ||
             "The background worker returned no response.";
-          console.error(`[POPUP] ${message.action} failed:`, detail);
+          log.error("runtime.message.failure", {
+            operationId,
+            action: message.action,
+            errorCode: BACKGROUND_UNAVAILABLE_CODE,
+          });
           resolve({
             success: false,
             authenticated: false,
@@ -55,10 +64,20 @@ function sendBackgroundMessage(message) {
           });
           return;
         }
-        resolve(response);
+        log.info("runtime.message.complete", {
+          operationId,
+          action: message.action,
+          outcome: response?.success === false ? "failure" : "success",
+          errorCode: response?.code,
+        });
+        resolve({ ...response, operationId });
       });
     } catch (error) {
-      console.error(`[POPUP] ${message.action} could not be sent:`, error);
+      log.error("runtime.message.failure", {
+        operationId,
+        action: message.action,
+        errorCode: BACKGROUND_UNAVAILABLE_CODE,
+      });
       resolve({
         success: false,
         authenticated: false,
@@ -607,17 +626,36 @@ async function generateMessage() {
       questionValue,
     );
 
+    const operationId = createOperationId();
+    const generationStartedAt = Date.now();
+    log.info("generation.start", { operationId, category });
     const response = await sendBackgroundMessage({
       action: "generate",
       payload,
+      operationId,
     });
 
     if (response.success) {
+      log.info("generation.complete", {
+        operationId,
+        category,
+        outcome: "success",
+        durationMs: Date.now() - generationStartedAt,
+        requestId: response.requestId,
+      });
       currentOutput = response;
       displayOutput(response);
       await storeGeneration(response);
       await incrementUsageCount();
     } else {
+      log.warn("generation.complete", {
+        operationId,
+        category,
+        outcome: "failure",
+        durationMs: Date.now() - generationStartedAt,
+        errorCode: response.code,
+        status: response.status,
+      });
       const presentation = getGenerationErrorPresentation(response);
       const errMsg = presentation.message;
       if (isAuthError(errMsg)) {
