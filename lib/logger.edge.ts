@@ -1,6 +1,7 @@
 import {
   LOG_SCHEMA_VERSION,
   createCorrelationId,
+  normalizeLogString,
   sanitizeLogFields,
 } from "./logging-core";
 
@@ -22,7 +23,7 @@ function makeEdgeLogger(module: string) {
             level,
             module,
             logSchemaVersion: LOG_SCHEMA_VERSION,
-            msg: obj.slice(0, 160),
+            msg: normalizeLogString(obj) ?? "",
             time: new Date().toISOString(),
           }
         : {
@@ -30,7 +31,7 @@ function makeEdgeLogger(module: string) {
             module,
             logSchemaVersion: LOG_SCHEMA_VERSION,
             ...sanitizeLogFields(obj),
-            msg: msg?.slice(0, 160) ?? "",
+            msg: normalizeLogString(msg) ?? "",
             time: new Date().toISOString(),
           };
     const line = JSON.stringify(entry);

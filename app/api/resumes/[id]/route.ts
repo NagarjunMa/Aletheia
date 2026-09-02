@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { createLogger } from "@/lib/logger";
+import type { SafeLogger } from "@/lib/logger";
 import { getCorsHeaders } from "@/lib/cors";
+import { withRequestLifecycle } from "@/lib/request-lifecycle";
 import {
   deleteUserResume,
   renameUserResume,
   setPrimaryUserResume,
 } from "@/lib/resumes/service";
-
-const log = createLogger("resume-detail-api");
 
 const patchSchema = z
   .object({
@@ -36,7 +35,17 @@ async function requireUser() {
 
 export async function PATCH(
   request: NextRequest,
+  context: { params: Promise<{ id: string }> },
+) {
+  return withRequestLifecycle("resume-detail-api", request, (log) =>
+    handlePatch(request, context, log),
+  );
+}
+
+async function handlePatch(
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
+  log: SafeLogger,
 ) {
   const corsHeaders = getCorsHeaders(request, {
     allowCredentials: true,
@@ -79,9 +88,13 @@ export async function PATCH(
       { success: true, resume },
       { headers: corsHeaders },
     );
-  } catch (err) {
+  } catch {
     log.warn(
-      { err, userId: user.id.substring(0, 12), resumeId: id },
+      {
+        errorCode: "RESUME_UPDATE_FAILED",
+        userId: user.id.substring(0, 12),
+        resumeId: id,
+      },
       "Resume update failed",
     );
     return NextResponse.json(
@@ -93,7 +106,17 @@ export async function PATCH(
 
 export async function DELETE(
   request: NextRequest,
+  context: { params: Promise<{ id: string }> },
+) {
+  return withRequestLifecycle("resume-detail-api", request, (log) =>
+    handleDelete(request, context, log),
+  );
+}
+
+async function handleDelete(
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
+  log: SafeLogger,
 ) {
   const corsHeaders = getCorsHeaders(request, {
     allowCredentials: true,
@@ -115,9 +138,13 @@ export async function DELETE(
       { success: true, ...result },
       { headers: corsHeaders },
     );
-  } catch (err) {
+  } catch {
     log.warn(
-      { err, userId: user.id.substring(0, 12), resumeId: id },
+      {
+        errorCode: "RESUME_DELETE_FAILED",
+        userId: user.id.substring(0, 12),
+        resumeId: id,
+      },
       "Resume delete failed",
     );
     return NextResponse.json(

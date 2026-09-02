@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { getCorsHeaders } from "@/lib/cors";
+import { withRequestLifecycle } from "@/lib/request-lifecycle";
 import {
   CURRENT_EXTENSION_API_VERSION,
   getChromeWebStoreUrl,
@@ -27,6 +28,12 @@ async function readJson<T>(filePath: string): Promise<T> {
 }
 
 export async function GET(request: NextRequest) {
+  return withRequestLifecycle("extension-version", request, () =>
+    handleGet(request),
+  );
+}
+
+async function handleGet(request: NextRequest) {
   const corsHeaders = getCorsHeaders(request, { methods: "GET, OPTIONS" });
   const root = process.cwd();
 

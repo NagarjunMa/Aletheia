@@ -1,10 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCorsHeaders } from "@/lib/cors";
+import { withRequestLifecycle } from "@/lib/request-lifecycle";
 
 const DEPRECATED_MESSAGE =
   "Resume parsing has moved to /api/resumes. Upload resumes from the dashboard.";
 
 export async function POST(request: NextRequest) {
+  return withRequestLifecycle("profile-parse-resume", request, () =>
+    handlePost(request),
+  );
+}
+
+async function handlePost(request: NextRequest) {
   return NextResponse.json(
     {
       error: DEPRECATED_MESSAGE,

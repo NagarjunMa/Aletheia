@@ -126,7 +126,10 @@ export async function getUser() {
   } = await supabase.auth.getUser();
 
   if (error) {
-    log.error({ err: error.message }, "Error getting user");
+    log.error(
+      { errorCode: "SUPABASE_USER_LOOKUP_FAILED" },
+      "Error getting user",
+    );
     return null;
   }
 
@@ -151,7 +154,10 @@ export async function getUserProfile(userId?: string) {
     .single();
 
   if (error) {
-    log.error({ err: error.message }, "Error getting profile");
+    log.error(
+      { errorCode: "SUPABASE_PROFILE_LOOKUP_FAILED" },
+      "Error getting profile",
+    );
     return null;
   }
 
@@ -198,7 +204,10 @@ export async function ensureUserProfile(user: User) {
     .single();
 
   if (error) {
-    log.error({ err: error.message }, "Error creating profile");
+    log.error(
+      { errorCode: "SUPABASE_PROFILE_CREATE_FAILED" },
+      "Error creating profile",
+    );
     throw error;
   }
 

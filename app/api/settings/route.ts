@@ -1,13 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { createLogger } from "@/lib/logger";
+import type { SafeLogger } from "@/lib/logger";
 import { getCorsHeaders } from "@/lib/cors";
+import { withRequestLifecycle } from "@/lib/request-lifecycle";
 import { settingsSchema } from "./schema";
 import { listUserResumes } from "@/lib/resumes/service";
 
-const log = createLogger("settings-api");
-
 export async function PATCH(request: NextRequest) {
+  return withRequestLifecycle("settings-api", request, (log) =>
+    handlePatch(request, log),
+  );
+}
+
+async function handlePatch(request: NextRequest, log: SafeLogger) {
   const corsHeaders = getCorsHeaders(request, {
     allowCredentials: true,
     methods: "GET, PATCH, OPTIONS",
@@ -20,7 +25,10 @@ export async function PATCH(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (authError || !user) {
-    log.info({ err: authError?.message }, "Unauthenticated settings request");
+    log.info(
+      { errorCode: "SETTINGS_AUTH_REQUIRED" },
+      "Unauthenticated settings request",
+    );
     return NextResponse.json(
       { error: "Unauthorized" },
       { status: 401, headers: corsHeaders },
@@ -47,7 +55,8 @@ export async function PATCH(request: NextRequest) {
     log.info(
       {
         userId: user.id.substring(0, 8),
-        errors: parsed.error.flatten().fieldErrors,
+        invalidFieldCount: Object.keys(parsed.error.flatten().fieldErrors)
+          .length,
       },
       "Settings validation failed",
     );
@@ -78,7 +87,10 @@ export async function PATCH(request: NextRequest) {
     .single();
 
   if (error) {
-    log.error({ err: error.message }, "Failed to update user preferences");
+    log.error(
+      { errorCode: "SETTINGS_UPDATE_FAILED" },
+      "Failed to update user preferences",
+    );
     return NextResponse.json(
       { error: "Failed to update settings" },
       { status: 500, headers: corsHeaders },
@@ -96,6 +108,12 @@ export async function PATCH(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
+  return withRequestLifecycle("settings-api", request, (log) =>
+    handleGet(request, log),
+  );
+}
+
+async function handleGet(request: NextRequest, log: SafeLogger) {
   const corsHeaders = getCorsHeaders(request, {
     allowCredentials: true,
     methods: "GET, PATCH, OPTIONS",
@@ -108,7 +126,10 @@ export async function GET(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (authError || !user) {
-    log.info({ err: authError?.message }, "Unauthenticated GET /api/settings");
+    log.info(
+      { errorCode: "SETTINGS_AUTH_REQUIRED" },
+      "Unauthenticated GET /api/settings",
+    );
     return NextResponse.json(
       { error: "Unauthorized" },
       { status: 401, headers: corsHeaders },
@@ -129,15 +150,21 @@ export async function GET(request: NextRequest) {
   let resumes: Awaited<ReturnType<typeof listUserResumes>> = [];
   try {
     resumes = await listUserResumes(supabase, user.id);
-  } catch (resumeError) {
+  } catch {
     log.warn(
-      { err: resumeError, userId: user.id.substring(0, 8) },
+      {
+        errorCode: "RESUME_METADATA_READ_FAILED",
+        userId: user.id.substring(0, 8),
+      },
       "Failed to fetch resume metadata",
     );
   }
 
   if (error) {
-    log.error({ err: error.message }, "Failed to fetch profile settings");
+    log.error(
+      { errorCode: "SETTINGS_PROFILE_READ_FAILED" },
+      "Failed to fetch profile settings",
+    );
     return NextResponse.json(
       { error: "Failed to fetch settings" },
       { status: 500, headers: corsHeaders },

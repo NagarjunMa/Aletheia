@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { makeRequest } from "@/__tests__/helpers/request";
 
 const mockGetUser = vi.hoisted(() => vi.fn());
 const mockGrantTrialCreditsOnce = vi.hoisted(() => vi.fn());
@@ -85,14 +86,14 @@ describe("GET /api/billing/credits", () => {
       error: { message: "No session" },
     });
 
-    const res = await GET();
+    const res = await GET(makeRequest({ method: "GET" }));
 
     expect(res.status).toBe(401);
     await expect(res.json()).resolves.toEqual({ error: "Unauthorized" });
   });
 
   it("returns the credit account, no-expiry packs, and recent ledger", async () => {
-    const res = await GET();
+    const res = await GET(makeRequest({ method: "GET" }));
     const body = await res.json();
 
     expect(res.status).toBe(200);
@@ -129,7 +130,7 @@ describe("GET /api/billing/credits", () => {
     });
     mockIsUnlimitedCreditUser.mockReturnValue(true);
 
-    const res = await GET();
+    const res = await GET(makeRequest({ method: "GET" }));
     const body = await res.json();
 
     expect(res.status).toBe(200);
@@ -151,7 +152,7 @@ describe("GET /api/billing/credits", () => {
       error: { message: "database unavailable" },
     });
 
-    const res = await GET();
+    const res = await GET(makeRequest({ method: "GET" }));
 
     expect(res.status).toBe(500);
     await expect(res.json()).resolves.toEqual({
@@ -162,7 +163,7 @@ describe("GET /api/billing/credits", () => {
   it("returns 500 when credit account hydration fails", async () => {
     mockEnsureCreditAccount.mockRejectedValue(new Error("rpc unavailable"));
 
-    const res = await GET();
+    const res = await GET(makeRequest({ method: "GET" }));
 
     expect(res.status).toBe(500);
     await expect(res.json()).resolves.toEqual({

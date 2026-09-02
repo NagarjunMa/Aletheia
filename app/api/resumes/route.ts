@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { createLogger } from "@/lib/logger";
+import type { SafeLogger } from "@/lib/logger";
 import { getCorsHeaders } from "@/lib/cors";
+import { withRequestLifecycle } from "@/lib/request-lifecycle";
 import {
   listUserResumes,
   uploadUserResume,
   MAX_RESUMES_PER_USER,
 } from "@/lib/resumes/service";
-
-const log = createLogger("resumes-api");
 
 async function requireUser() {
   const supabase = await createClient();
@@ -25,6 +24,12 @@ async function requireUser() {
 }
 
 export async function GET(request: NextRequest) {
+  return withRequestLifecycle("resumes-api", request, (log) =>
+    handleGet(request, log),
+  );
+}
+
+async function handleGet(request: NextRequest, log: SafeLogger) {
   const corsHeaders = getCorsHeaders(request, {
     allowCredentials: true,
     methods: "GET, POST, OPTIONS",
@@ -49,9 +54,9 @@ export async function GET(request: NextRequest) {
       },
       { headers: corsHeaders },
     );
-  } catch (err) {
+  } catch {
     log.error(
-      { err, userId: user.id.substring(0, 12) },
+      { errorCode: "RESUME_LIST_FAILED", userId: user.id.substring(0, 12) },
       "Failed to list resumes",
     );
     return NextResponse.json(
@@ -62,6 +67,12 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  return withRequestLifecycle("resumes-api", request, (log) =>
+    handlePost(request, log),
+  );
+}
+
+async function handlePost(request: NextRequest, log: SafeLogger) {
   const corsHeaders = getCorsHeaders(request, {
     allowCredentials: true,
     methods: "GET, POST, OPTIONS",
@@ -131,7 +142,11 @@ export async function POST(request: NextRequest) {
             : 500;
 
     log.warn(
-      { err: message, userId: user.id.substring(0, 12), status },
+      {
+        errorCode: "RESUME_UPLOAD_FAILED",
+        userId: user.id.substring(0, 12),
+        status,
+      },
       "Resume upload failed",
     );
 

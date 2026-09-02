@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createBearerServiceClient } from "@/lib/supabase/server";
-import { createLogger } from "@/lib/logger";
-
-const log = createLogger("feedback");
+import type { SafeLogger } from "@/lib/logger";
+import { withRequestLifecycle } from "@/lib/request-lifecycle";
 
 const feedbackSchema = z.object({
   name: z.string().min(2).max(100),
@@ -17,6 +16,10 @@ function getSupabaseAdmin() {
 }
 
 export async function POST(req: NextRequest) {
+  return withRequestLifecycle("feedback", req, (log) => handlePost(req, log));
+}
+
+async function handlePost(req: NextRequest, log: SafeLogger) {
   try {
     const body = await req.json();
 
@@ -29,7 +32,10 @@ export async function POST(req: NextRequest) {
     const parsed = feedbackSchema.safeParse(body);
     if (!parsed.success) {
       log.info(
-        { errors: parsed.error.flatten().fieldErrors },
+        {
+          invalidFieldCount: Object.keys(parsed.error.flatten().fieldErrors)
+            .length,
+        },
         "Feedback validation failed",
       );
       return NextResponse.json({ error: "Invalid input" }, { status: 400 });
@@ -47,7 +53,10 @@ export async function POST(req: NextRequest) {
     });
 
     if (error) {
-      log.error({ err: error }, "Feedback insert error");
+      log.error(
+        { errorCode: "FEEDBACK_INSERT_FAILED" },
+        "Feedback insert error",
+      );
       return NextResponse.json(
         { error: "Failed to save feedback" },
         { status: 500 },

@@ -50,7 +50,10 @@ export async function updateProfile(
 
   if (error) {
     log.error(
-      { err: error.message, userId: user.id.substring(0, 12) },
+      {
+        errorCode: "PROFILE_SETTINGS_UPDATE_FAILED",
+        userId: user.id.substring(0, 12),
+      },
       "Profile update failed",
     );
     return {

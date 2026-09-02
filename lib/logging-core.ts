@@ -5,7 +5,7 @@ const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PROHIBITED_FIELD_PATTERN =
   /authorization|cookie|token|secret|password|api.?key|session|prompt|completion|message|body|profile|resume|job.?description|question|answer|email|user.?metadata|content|draft|headers?|url|search/i;
-const SAFE_ERROR_FIELDS = new Set(["code", "status", "name"]);
+const ERROR_FIELD_PATTERN = /^(?:err|error)$/i;
 
 export type SafeLogFields = Record<string, unknown>;
 
@@ -23,6 +23,10 @@ export function normalizeLogString(value: unknown): string | undefined {
 
 function isProhibitedField(key: string) {
   return PROHIBITED_FIELD_PATTERN.test(key);
+}
+
+function isErrorField(key: string) {
+  return ERROR_FIELD_PATTERN.test(key);
 }
 
 function sanitizeValue(value: unknown, depth: number): unknown {
@@ -62,7 +66,9 @@ export function sanitizeLogFields(
 ): SafeLogFields {
   const result: SafeLogFields = {};
   for (const [key, value] of Object.entries(fields)) {
-    if (isProhibitedField(key) && !SAFE_ERROR_FIELDS.has(key)) continue;
+    // Error values can contain upstream response bodies, user input, and
+    // credentials. Callers must emit a stable errorCode instead.
+    if (isErrorField(key) || isProhibitedField(key)) continue;
     const safeKey = normalizeLogString(key);
     if (!safeKey) continue;
     const safeValue = sanitizeValue(value, depth);

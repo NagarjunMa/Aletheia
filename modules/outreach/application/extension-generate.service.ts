@@ -26,7 +26,8 @@ import {
   reserveGenerationCredits,
 } from "@/lib/billing/credits";
 import { z } from "zod";
-import { createLogger, createRequestLogger } from "@/lib/logger";
+import type { SafeLogger } from "@/lib/logger";
+import { withRequestLifecycle } from "@/lib/request-lifecycle";
 import {
   CURRENT_EXTENSION_API_VERSION,
   evaluateExtensionContract,
@@ -77,51 +78,13 @@ import { renderColdEmail } from "./render-cold-email";
 import { renderLinkedinConnection } from "./render-linkedin-connection";
 import { validateOutreachDraft } from "./validate-outreach-draft";
 
-const log = createLogger("generate-route");
-
-async function observeExtensionRequest(
-  request: NextRequest,
-  handler: () => Promise<Response>,
-) {
-  const requestLog = createRequestLogger("generate-route", request);
-  const startedAt = Date.now();
-  requestLog.info(
-    { event: "request.start", outcome: "started" },
-    "Extension request started",
-  );
-
-  try {
-    const response = await handler();
-    requestLog.info(
-      {
-        event: "request.complete",
-        outcome: response.ok ? "success" : "failure",
-        status: response.status,
-        durationMs: Date.now() - startedAt,
-      },
-      "Extension request completed",
-    );
-    return response;
-  } catch (error) {
-    requestLog.error(
-      {
-        event: "request.complete",
-        outcome: "failure",
-        status: 500,
-        errorCode: "UNHANDLED_REQUEST_ERROR",
-        durationMs: Date.now() - startedAt,
-      },
-      "Extension request failed unexpectedly",
-    );
-    throw error;
-  }
-}
-
 export async function POST(request: NextRequest) {
-  return observeExtensionRequest(request, () => handlePost(request));
+  return withRequestLifecycle("generate-route", request, (log) =>
+    handlePost(request, log),
+  );
 }
 
-async function handlePost(request: NextRequest) {
+async function handlePost(request: NextRequest, log: SafeLogger) {
   const corsHeaders = createGenerateCorsHeaders(request);
 
   // Tracks whether the rate-limit slot was reserved for this user; set
@@ -209,8 +172,11 @@ async function handlePost(request: NextRequest) {
     let styleProfile: StylePatterns | undefined;
     try {
       styleProfile = await getUserStyleProfile(authResult.userId);
-    } catch (err) {
-      log.warn({ err }, "Failed to fetch style profile, continuing without it");
+    } catch {
+      log.warn(
+        { errorCode: "STYLE_PROFILE_READ_FAILED" },
+        "Failed to fetch style profile, continuing without it",
+      );
     }
 
     // 3. Rate limiting (per user, persistent). Reservation is atomic.
@@ -322,9 +288,12 @@ async function handlePost(request: NextRequest) {
         resumeForGeneration = resume;
         resumeSource = "legacy_payload";
       }
-    } catch (err) {
+    } catch {
       log.warn(
-        { err, userId: authResult.userId.substring(0, 12) },
+        {
+          errorCode: "PRIMARY_RESUME_READ_FAILED",
+          userId: authResult.userId.substring(0, 12),
+        },
         "Failed to hydrate primary resume",
       );
       if (resume?.trim()) {
@@ -345,9 +314,12 @@ async function handlePost(request: NextRequest) {
             "Hydrated jd from profile DB",
           );
         }
-      } catch (err) {
+      } catch {
         log.warn(
-          { err, userId: authResult.userId.substring(0, 12) },
+          {
+            errorCode: "TARGET_JOB_DESCRIPTION_READ_FAILED",
+            userId: authResult.userId.substring(0, 12),
+          },
           "Failed to hydrate jd from profile DB",
         );
       }
@@ -535,9 +507,9 @@ async function handlePost(request: NextRequest) {
           },
           { headers: { ...corsHeaders, ...rateLimitHeaders } },
         );
-      } catch (parseError) {
+      } catch {
         log.warn(
-          { err: parseError, category },
+          { errorCode: "COLD_EMAIL_VALIDATION_FAILED", category },
           "Failed to validate cold email composition",
         );
         if (reservedCredit) {
@@ -639,9 +611,9 @@ async function handlePost(request: NextRequest) {
             headers: { ...corsHeaders, ...rateLimitHeaders },
           },
         );
-      } catch (parseError) {
+      } catch {
         log.warn(
-          { err: parseError },
+          { errorCode: "EMAIL_DRAFT_VALIDATION_FAILED" },
           "Failed to validate email draft tool response",
         );
 
@@ -727,9 +699,9 @@ async function handlePost(request: NextRequest) {
         },
         { headers: { ...corsHeaders, ...rateLimitHeaders } },
       );
-    } catch (parseError) {
+    } catch {
       log.warn(
-        { err: parseError, category },
+        { errorCode: "LINKEDIN_DRAFT_VALIDATION_FAILED", category },
         "Failed to validate LinkedIn connection composition",
       );
       if (reservedCredit) {
@@ -747,7 +719,10 @@ async function handlePost(request: NextRequest) {
       );
     }
   } catch (error) {
-    log.error({ err: error }, "Extension generation error");
+    log.error(
+      { errorCode: "EXTENSION_GENERATION_FAILED" },
+      "Extension generation error",
+    );
 
     if (reservedCredit) {
       await refundCreditReservation(
@@ -838,10 +813,12 @@ async function handlePost(request: NextRequest) {
 
 // GET endpoint for health check with Bearer token validation
 export async function GET(request: NextRequest) {
-  return observeExtensionRequest(request, () => handleGet(request));
+  return withRequestLifecycle("generate-route", request, (log) =>
+    handleGet(request, log),
+  );
 }
 
-async function handleGet(request: NextRequest) {
+async function handleGet(request: NextRequest, log: SafeLogger) {
   const corsHeaders = createGenerateCorsHeaders(request);
 
   try {
@@ -869,9 +846,12 @@ async function handleGet(request: NextRequest) {
         source: primaryResume.source,
         parsed_text_chars: primaryResume.text.length,
       };
-    } catch (err) {
+    } catch {
       log.warn(
-        { err, userId: authResult.userId.substring(0, 12) },
+        {
+          errorCode: "PRIMARY_RESUME_STATUS_READ_FAILED",
+          userId: authResult.userId.substring(0, 12),
+        },
         "Failed to fetch resume status",
       );
     }
@@ -893,8 +873,8 @@ async function handleGet(request: NextRequest) {
         headers: corsHeaders,
       },
     );
-  } catch (error) {
-    log.error({ err: error }, "GET endpoint error");
+  } catch {
+    log.error({ errorCode: "EXTENSION_HEALTH_FAILED" }, "GET endpoint error");
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500, headers: corsHeaders },
