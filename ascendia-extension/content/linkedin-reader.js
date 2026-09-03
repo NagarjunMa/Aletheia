@@ -6,9 +6,6 @@
   "use strict";
 
   if (window.__aletheiaLinkedInReaderInitialized) {
-    console.debug(
-      "LinkedIn Reader: Already initialized, skipping duplicate injection",
-    );
     return;
   }
   window.__aletheiaLinkedInReaderInitialized = true;
@@ -22,6 +19,15 @@
   let profileReaderActive = false;
   const PROFILE_EXTRACTION_CONSENT_KEY = "profileExtractionConsent";
 
+  function reportDiagnostic(event, fields = {}) {
+    try {
+      if (!isExtensionContextValid()) return;
+      void chrome.runtime.sendMessage({ action: "diagnostic", event, fields });
+    } catch {
+      // Diagnostics must never interfere with user-selected profile reading.
+    }
+  }
+
   // Initialize when page loads
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", initializeProfileReader);
@@ -30,8 +36,6 @@
   }
 
   async function initializeProfileReader() {
-    console.log("LinkedIn Reader: Initializing on page:", window.location.href);
-
     if (!isExtensionContextValid()) {
       cleanup("initialize: context invalid");
       return;
@@ -47,23 +51,17 @@
     if (profileExtractionConsent) {
       activateProfileReader();
     } else {
-      console.log("LinkedIn Reader: Waiting for profile-reading consent");
+      reportDiagnostic("profile_reader.consent_pending");
     }
   }
 
   function activateProfileReader() {
     if (!profileExtractionConsent || profileReaderActive || cleanedUp) return;
     if (!isLinkedInProfilePage()) {
-      console.log(
-        "LinkedIn Reader: Not a LinkedIn profile page, staying inert",
-      );
       return;
     }
 
     profileReaderActive = true;
-    console.log(
-      "LinkedIn Reader: On LinkedIn profile page, setting up extraction",
-    );
     setTimeout(() => {
       extractAndNotifyProfile();
     }, 1500);
@@ -71,7 +69,7 @@
 
     observeProfileChanges();
     startNavigationWatcher();
-    console.log("LinkedIn Reader: Setup complete");
+    reportDiagnostic("profile_reader.initialized", { outcome: "success" });
   }
 
   function isLinkedInProfilePage() {
@@ -84,8 +82,6 @@
   function extractLinkedInProfile() {
     if (!profileExtractionConsent || !profileReaderActive) return null;
     try {
-      console.log("LinkedIn Reader: Starting extraction...");
-
       // Extract name from page title — far more stable than CSS selectors.
       // LinkedIn title format: "John Smith - Software Engineer | LinkedIn"
       const rawTitle = document.title || "";
@@ -93,10 +89,10 @@
         rawTitle.split(" - ")[0].replace(" | LinkedIn", "").trim() || null;
 
       if (!name) {
-        console.log(
-          "LinkedIn Reader: Could not extract name from document.title:",
-          rawTitle,
-        );
+        reportDiagnostic("profile_reader.extraction_failed", {
+          outcome: "failure",
+          errorCode: "PROFILE_NAME_UNAVAILABLE",
+        });
         return null;
       }
 
@@ -110,26 +106,23 @@
         .slice(0, 8000);
 
       if (profileMarkdown.length < 50) {
-        console.log(
-          "LinkedIn Reader: Content too short, page may not be loaded yet",
-        );
+        reportDiagnostic("profile_reader.extraction_failed", {
+          outcome: "failure",
+          errorCode: "PROFILE_CONTENT_UNAVAILABLE",
+        });
         return null;
       }
-
-      console.log(
-        "LinkedIn Reader: Extracted",
-        profileMarkdown.length,
-        "chars for:",
-        name,
-      );
 
       return {
         name,
         profileMarkdown,
         extractedAt: Date.now(),
       };
-    } catch (error) {
-      console.error("LinkedIn profile extraction error:", error);
+    } catch {
+      reportDiagnostic("profile_reader.extraction_failed", {
+        outcome: "failure",
+        errorCode: "PROFILE_EXTRACTION_FAILED",
+      });
       return null;
     }
   }
@@ -153,6 +146,10 @@
           hasProfileChanged(profile, lastExtractedProfile))
       ) {
         lastExtractedProfile = profile;
+        reportDiagnostic("profile_reader.extraction_complete", {
+          outcome: "success",
+          contentLength: profile.profileMarkdown.length,
+        });
 
         sendRuntimeMessage({
           action: "profileUpdated",
@@ -212,7 +209,8 @@
   function cleanup(reason) {
     if (cleanedUp) return;
     cleanedUp = true;
-    if (reason) console.debug("LinkedIn Reader: cleanup:", reason);
+    if (reason)
+      reportDiagnostic("profile_reader.cleanup", { outcome: "success" });
 
     stopProfileExtraction();
 
@@ -241,10 +239,10 @@
           if (/context invalidated/i.test(error?.message || "")) {
             cleanup("async sendMessage: context invalidated");
           } else {
-            console.debug(
-              "LinkedIn Reader: Could not send runtime message:",
-              error,
-            );
+            reportDiagnostic("profile_reader.message_failed", {
+              outcome: "failure",
+              errorCode: "RUNTIME_MESSAGE_FAILED",
+            });
           }
         });
       }
@@ -253,10 +251,10 @@
       if (/context invalidated/i.test(error?.message || "")) {
         cleanup("sendMessage threw: context invalidated");
       } else {
-        console.debug(
-          "LinkedIn Reader: Could not send runtime message:",
-          error,
-        );
+        reportDiagnostic("profile_reader.message_failed", {
+          outcome: "failure",
+          errorCode: "RUNTIME_MESSAGE_FAILED",
+        });
       }
       return false;
     }
@@ -274,10 +272,10 @@
       if (/context invalidated/i.test(error?.message || "")) {
         cleanup("addListener threw: context invalidated");
       } else {
-        console.debug(
-          "LinkedIn Reader: Could not register message listener:",
-          error,
-        );
+        reportDiagnostic("profile_reader.message_failed", {
+          outcome: "failure",
+          errorCode: "RUNTIME_LISTENER_FAILED",
+        });
       }
     }
   }
@@ -345,7 +343,10 @@
           sendResponse({ success: false, error: "Unknown action" });
       }
     } catch (error) {
-      console.error("Message handling error:", error);
+      reportDiagnostic("profile_reader.message_failed", {
+        outcome: "failure",
+        errorCode: "PROFILE_MESSAGE_HANDLING_FAILED",
+      });
       sendResponse({ success: false, error: error.message });
     }
     return true;
@@ -378,6 +379,4 @@
 
   window.addEventListener("pagehide", () => cleanup("pagehide"));
   window.addEventListener("beforeunload", () => cleanup("beforeunload"));
-
-  console.log("Aletheia LinkedIn Profile Reader (Turndown) initialized");
 })();

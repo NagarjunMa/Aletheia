@@ -1,9 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Tables } from "@/lib/database/types";
+import { createLogger, startTimedStage, type SafeLogger } from "@/lib/logger";
 import { parseResumeFile, validateResumeFile } from "./parser";
 
 export const RESUME_BUCKET = "user-resumes";
 export const MAX_RESUMES_PER_USER = 5;
+const log = createLogger("resume-service");
 
 export type ResumeListItem = Pick<
   Tables<"user_resumes">,
@@ -75,31 +77,43 @@ export async function listUserResumes(
 export async function getPrimaryResumeText(
   supabase: Supabase,
   userId: string,
+  logger: SafeLogger = log,
 ): Promise<{ text: string; source: "user_resumes" | "profiles" | "none" }> {
-  const { data: primary, error: primaryError } = await supabase
-    .from("user_resumes")
-    .select("parsed_text")
-    .eq("user_id", userId)
-    .eq("is_primary", true)
-    .maybeSingle();
+  const complete = startTimedStage(logger, "repository.primary_resume_read", {
+    userId,
+  });
+  try {
+    const { data: primary, error: primaryError } = await supabase
+      .from("user_resumes")
+      .select("parsed_text")
+      .eq("user_id", userId)
+      .eq("is_primary", true)
+      .maybeSingle();
 
-  if (primaryError) throw primaryError;
-  if (primary?.parsed_text?.trim()) {
-    return { text: primary.parsed_text, source: "user_resumes" };
+    if (primaryError) throw primaryError;
+    if (primary?.parsed_text?.trim()) {
+      complete("success", { source: "user_resumes", hasText: true });
+      return { text: primary.parsed_text, source: "user_resumes" };
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("resume")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (profileError) throw profileError;
+    if (profile?.resume?.trim()) {
+      complete("success", { source: "profiles", hasText: true });
+      return { text: profile.resume, source: "profiles" };
+    }
+
+    complete("success", { source: "none", hasText: false });
+    return { text: "", source: "none" };
+  } catch (error) {
+    complete("failure", { errorCode: "PRIMARY_RESUME_READ_FAILED" });
+    throw error;
   }
-
-  const { data: profile, error: profileError } = await supabase
-    .from("profiles")
-    .select("resume")
-    .eq("id", userId)
-    .maybeSingle();
-
-  if (profileError) throw profileError;
-  if (profile?.resume?.trim()) {
-    return { text: profile.resume, source: "profiles" };
-  }
-
-  return { text: "", source: "none" };
 }
 
 export async function uploadUserResume(
@@ -125,6 +139,10 @@ export async function uploadUserResume(
   const isPrimary =
     existing.length === 0 || !existing.some((r) => r.is_primary);
 
+  const completeUpload = startTimedStage(log, "storage.resume_upload", {
+    userId,
+    fileSize: file.size,
+  });
   const { error: uploadError } = await supabase.storage
     .from(RESUME_BUCKET)
     .upload(storagePath, file, {
@@ -133,8 +151,19 @@ export async function uploadUserResume(
       upsert: false,
     });
 
-  if (uploadError) throw uploadError;
+  if (uploadError) {
+    completeUpload("failure", { errorCode: "RESUME_STORAGE_UPLOAD_FAILED" });
+    throw uploadError;
+  }
+  completeUpload("success");
 
+  const completeRecord = startTimedStage(
+    log,
+    "repository.resume_record_create",
+    {
+      userId,
+    },
+  );
   const { data, error: insertError } = await supabase
     .from("user_resumes")
     .insert({
@@ -155,9 +184,11 @@ export async function uploadUserResume(
 
   if (insertError) {
     await supabase.storage.from(RESUME_BUCKET).remove([storagePath]);
+    completeRecord("failure", { errorCode: "RESUME_RECORD_CREATE_FAILED" });
     throw insertError;
   }
 
+  completeRecord("success");
   return { resume: toListItem(data), truncated: parsed.truncated };
 }
 
@@ -233,19 +264,39 @@ export async function deleteUserResume(
   if (fetchError) throw fetchError;
 
   if (resume.storage_path) {
+    const completeRemove = startTimedStage(log, "storage.resume_delete", {
+      userId,
+    });
     const { error: removeError } = await supabase.storage
       .from(RESUME_BUCKET)
       .remove([resume.storage_path]);
-    if (removeError) throw removeError;
+    if (removeError) {
+      completeRemove("failure", { errorCode: "RESUME_STORAGE_DELETE_FAILED" });
+      throw removeError;
+    }
+    completeRemove("success");
   }
 
+  const completeRecordDelete = startTimedStage(
+    log,
+    "repository.resume_record_delete",
+    {
+      userId,
+    },
+  );
   const { error: deleteError } = await supabase
     .from("user_resumes")
     .delete()
     .eq("user_id", userId)
     .eq("id", resumeId);
 
-  if (deleteError) throw deleteError;
+  if (deleteError) {
+    completeRecordDelete("failure", {
+      errorCode: "RESUME_RECORD_DELETE_FAILED",
+    });
+    throw deleteError;
+  }
+  completeRecordDelete("success");
 
   if (!resume.is_primary) {
     return { promoted_resume_id: null };

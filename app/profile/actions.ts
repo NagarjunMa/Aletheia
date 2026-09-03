@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { createLogger } from "@/lib/logger";
+import { createLogger, startTimedStage } from "@/lib/logger";
 
 const log = createLogger("profile-actions");
 
@@ -32,14 +32,20 @@ export async function updateProfile(
   }
 
   const supabase = await createClient();
+  const completeAuth = startTimedStage(log, "profile.settings.auth_lookup");
   const {
     data: { user },
     error: authErr,
   } = await supabase.auth.getUser();
   if (authErr || !user) {
+    completeAuth("failure", { errorCode: "AUTH_REQUIRED", status: 401 });
     return { ok: false, error: "auth required" };
   }
+  completeAuth("success");
 
+  const completeUpdate = startTimedStage(log, "profile.settings.update", {
+    userId: user.id,
+  });
   const { error } = await supabase
     .from("profiles")
     .update({
@@ -49,6 +55,9 @@ export async function updateProfile(
     .eq("id", user.id);
 
   if (error) {
+    completeUpdate("failure", {
+      errorCode: "PROFILE_SETTINGS_UPDATE_FAILED",
+    });
     log.error(
       {
         errorCode: "PROFILE_SETTINGS_UPDATE_FAILED",
@@ -61,5 +70,6 @@ export async function updateProfile(
       error: "Could not save profile. Please try again.",
     };
   }
+  completeUpdate("success");
   return { ok: true };
 }

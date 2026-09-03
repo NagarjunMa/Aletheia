@@ -6,8 +6,8 @@ const authSource = readFileSync(new URL("./auth.js", import.meta.url), "utf8");
 describe("auth logging", () => {
   it("does not log cookie values or partial cookie values", () => {
     expect(authSource).not.toContain("c.value.substring");
-    expect(authSource).toContain(
-      'console.log("[AUTH] Aletheia session cookies found:", authCookies.length);',
-    );
+    expect(authSource).not.toContain("console.");
+    expect(authSource).toContain('log.info("auth.cookie_lookup.complete"');
+    expect(authSource).toContain("cookieCount: authCookies.length");
   });
 });

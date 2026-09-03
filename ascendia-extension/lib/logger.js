@@ -43,7 +43,7 @@ export function flushExtensionDiagnostics() {
 
 export function createExtensionLogger(module, { persist = true } = {}) {
   function log(level, event, fields = {}) {
-    const entry = buildDiagnosticEvent({ module, level, event, ...fields });
+    const entry = buildDiagnosticEvent({ module, level, event, fields });
     const line = JSON.stringify(entry);
     if (level === "error") console.error(line);
     else if (level === "warn") console.warn(line);
@@ -58,5 +58,29 @@ export function createExtensionLogger(module, { persist = true } = {}) {
     info: (event, fields) => log("info", event, fields),
     warn: (event, fields) => log("warn", event, fields),
     error: (event, fields) => log("error", event, fields),
+  };
+}
+
+/**
+ * Emits the same entry and terminal events as the server-side timed-stage
+ * helper. Diagnostics remain local to the extension and every field passes
+ * through logger-core redaction before it reaches the console or session
+ * buffer.
+ */
+export function startExtensionTimedStage(logger, stage, fields = {}) {
+  const startedAt = Date.now();
+  logger.info("stage.start", {
+    stage,
+    outcome: "started",
+    ...fields,
+  });
+
+  return (outcome, terminalFields = {}) => {
+    logger.info("stage.complete", {
+      stage,
+      outcome,
+      durationMs: Math.max(0, Date.now() - startedAt),
+      ...terminalFields,
+    });
   };
 }

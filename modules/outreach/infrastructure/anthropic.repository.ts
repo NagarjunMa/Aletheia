@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
+import { createLogger, startTimedStage, type SafeLogger } from "@/lib/logger";
 import {
   coldEmailDraftSchema,
   type ColdEmailDraft,
@@ -8,6 +9,7 @@ import {
 } from "../domain/outreach-draft.types";
 
 export const CLAUDE_MODEL = "claude-sonnet-4-6";
+const log = createLogger("outreach-anthropic-repository");
 
 const EMAIL_DRAFT_TOOL_NAME = "return_email_draft";
 const COLD_EMAIL_DRAFT_TOOL_NAME = "return_cold_email_composition";
@@ -149,7 +151,12 @@ export async function createOutreachDraftMessage(input: {
   useEmailDraftTool: boolean;
   useStructuredColdEmailTool?: boolean;
   useStructuredLinkedinConnectionTool?: boolean;
+  logger?: SafeLogger;
 }) {
+  const stageLogger = input.logger ?? log;
+  const complete = startTimedStage(stageLogger, "model.outreach_generate", {
+    model: CLAUDE_MODEL,
+  });
   const tool = input.useStructuredColdEmailTool
     ? coldEmailDraftTool
     : input.useStructuredLinkedinConnectionTool
@@ -162,25 +169,39 @@ export async function createOutreachDraftMessage(input: {
       : EMAIL_DRAFT_TOOL_NAME;
   const requiresTool =
     input.useEmailDraftTool || input.useStructuredLinkedinConnectionTool;
-  return getAnthropic().messages.create(
-    {
-      model: CLAUDE_MODEL,
-      max_tokens: 600,
-      temperature: 0.8,
-      system: input.systemPrompt,
-      messages: [{ role: "user", content: input.userPrompt }],
-      ...(requiresTool
-        ? {
-            tools: [tool],
-            tool_choice: {
-              type: "tool" as const,
-              name: toolName,
-            },
-          }
-        : {}),
-    },
-    { timeout: 30_000 },
-  );
+  try {
+    const response = await getAnthropic().messages.create(
+      {
+        model: CLAUDE_MODEL,
+        max_tokens: 600,
+        temperature: 0.8,
+        system: input.systemPrompt,
+        messages: [{ role: "user", content: input.userPrompt }],
+        ...(requiresTool
+          ? {
+              tools: [tool],
+              tool_choice: {
+                type: "tool" as const,
+                name: toolName,
+              },
+            }
+          : {}),
+      },
+      { timeout: 30_000 },
+    );
+    complete("success", {
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+    });
+    return response;
+  } catch (error) {
+    complete("failure", {
+      errorCode: isAnthropicTimeoutError(error)
+        ? "MODEL_TIMEOUT"
+        : "MODEL_REQUEST_FAILED",
+    });
+    throw error;
+  }
 }
 
 export function getColdEmailDraftToolInput(

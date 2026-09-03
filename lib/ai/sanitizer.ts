@@ -6,7 +6,7 @@ import {
   detectAIFingerprints,
   type AIFingerprintResult,
 } from "./ai-fingerprint-detector";
-import { createLogger } from "@/lib/logger";
+import { createLogger, startTimedStage } from "@/lib/logger";
 
 const log = createLogger("sanitizer");
 
@@ -146,9 +146,14 @@ export async function sanitizeAIOutput(
   const warnings: string[] = [];
   let sanitizedContent = content;
   const originalLength = content.length;
+  const complete = startTimedStage(log, "ai.output_sanitization", {
+    platform,
+    inputLength: originalLength,
+  });
 
   try {
     if (!content || typeof content !== "string") {
+      complete("failure", { errorCode: "SANITIZATION_INPUT_INVALID" });
       return {
         success: false,
         sanitizedContent: "",
@@ -165,6 +170,7 @@ export async function sanitizeAIOutput(
     );
 
     if (blockedMatches) {
+      complete("failure", { errorCode: "SANITIZATION_CONTENT_BLOCKED" });
       return {
         success: false,
         sanitizedContent: "",
@@ -280,7 +286,7 @@ export async function sanitizeAIOutput(
       warnings.push("Content was completely removed during sanitization");
     }
 
-    return {
+    const result = {
       success: true,
       sanitizedContent,
       originalLength,
@@ -289,8 +295,15 @@ export async function sanitizeAIOutput(
       warnings,
       aiFingerprints,
     };
-  } catch (error) {
-    log.error({ err: error }, "Sanitization error");
+    complete("success", {
+      outputLength: result.sanitizedLength,
+      modificationCount: result.modificationsApplied.length,
+      warningCount: result.warnings.length,
+    });
+    return result;
+  } catch (_error) {
+    complete("failure", { errorCode: "SANITIZATION_FAILED" });
+    log.error({ errorCode: "SANITIZATION_FAILED" }, "Sanitization error");
     return {
       success: false,
       sanitizedContent: "",

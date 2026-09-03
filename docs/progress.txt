@@ -22,6 +22,41 @@ Follow-up:
 
 ### 2026-09-02
 
+Branch: `feat/ale-41a-observability-stage-coverage`
+
+Area: ALE-41A privacy-safe observability completion
+
+Problem: The merged API lifecycle coverage did not yet capture all remaining process boundaries. Extension auth and content scripts still wrote direct, potentially sensitive console output. Server actions, repository calls, storage operations, model requests, candidate-context reads, and output sanitization lacked consistent duration and terminal outcome records.
+
+Decision: Reuse the existing first-party logger only. Add redacted timed-stage records at each remaining boundary, preserve the request-scoped logger through the extension generation and YC model paths, and route content-script events through an allowlisted worker message instead of granting content scripts a separate telemetry transport. The worker accepts only safe event names and bounded fields; profile text, URLs, payloads, and arbitrary caller fields are discarded.
+
+Audit: The extension buffer remains local-only, time-limited to one hour, and capped at 80 events. Successful LinkedIn reader diagnostics are emitted only when the extracted profile changes, avoiding a diagnostic per DOM mutation. No observability path makes a network request or blocks a user-facing workflow.
+
+Files changed:
+
+- `ascendia-extension/lib/logger.js`
+- `ascendia-extension/background/{auth,service-worker}.js`
+- `ascendia-extension/content/{linkedin-reader,auto-filler}.js`
+- `app/auth/actions.ts`, `app/profile/actions.ts`, and `app/profile/application/actions.ts`
+- outreach, YC, candidate-context, resume, candidate-profile, and sanitizer services/repositories
+- associated extension logger/auth tests
+
+Tests/checks:
+
+- `npm run lint`, `npm run type-check`, and `npm run test:guardrails -- --run` — passed.
+- `npm run test -- --run` — 60 files, 705 tests passed.
+- `npm --prefix ascendia-extension run lint`, `type-check`, and `test` — 18 files, 169 tests passed.
+- `npm run check:extension-version -- origin/main` — verified `1.0.12` → `1.0.13` for packaged changes.
+- `npm run build:extension` — generated local `1.0.13` ZIP; `npm run build` — passed.
+
+Result: The extension diagnostic buffer now retains caller fields correctly after redaction, including operation IDs, stage, outcome, duration, status, and stable error codes. Auth, generation, content-script, server-action, database/storage, model, candidate-context, and sanitization boundaries emit safe terminal records without logging secrets, user content, URLs, cookies, tokens, or email addresses.
+
+Follow-up:
+
+- Run the full repository validation suite and inspect the packaged extension diagnostics in a manually loaded build before merging.
+
+### 2026-09-02
+
 Branch: `feat/ale-41-observability-api-coverage`
 
 Area: ALE-41 — API request lifecycle coverage

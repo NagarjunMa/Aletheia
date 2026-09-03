@@ -6,7 +6,7 @@ import {
   ycApplicationReadinessFailureSchema,
   type YcApplicationRequest,
 } from "@/app/api/extension/generate/schema";
-import { createLogger } from "@/lib/logger";
+import { createLogger, startTimedStage, type SafeLogger } from "@/lib/logger";
 import {
   buildYcApplicationPrompt,
   YC_APPLICATION_PROMPT_VERSION,
@@ -152,23 +152,37 @@ export async function generateYcApplication(
     request: YcApplicationRequest;
     corsHeaders: Record<string, string>;
     applicationBaseUrl: string;
+    logger?: SafeLogger;
   },
   dependencies: GenerateYcApplicationDependencies = defaultDependencies,
 ) {
+  const operationLog = input.logger ?? log;
   let rateReserved = false;
   let reservedCredit:
     { userId: string; reservationId: string; amount: number } | undefined;
   let modelRequested = false;
 
   try {
-    const context = await dependencies.prepareGrounding({
-      caller: {
-        userId: input.caller.userId,
-        accessToken: input.caller.accessToken,
-      },
-      question: input.request.question,
-      jobDescription: input.request.jd,
-    });
+    const completeGrounding = startTimedStage(
+      operationLog,
+      "yc.grounding_load",
+      { userId: input.caller.userId },
+    );
+    let context: YcGroundingContext;
+    try {
+      context = await dependencies.prepareGrounding({
+        caller: {
+          userId: input.caller.userId,
+          accessToken: input.caller.accessToken,
+        },
+        question: input.request.question,
+        jobDescription: input.request.jd,
+      });
+    } catch (error) {
+      completeGrounding("failure", { errorCode: "YC_GROUNDING_UNAVAILABLE" });
+      throw error;
+    }
+    completeGrounding("success", { ready: context.readiness.ready });
 
     if (!context.readiness.ready) {
       const response = ycApplicationReadinessFailureSchema.parse({
@@ -188,8 +202,23 @@ export async function generateYcApplication(
       });
     }
 
-    const rate = await dependencies.checkRateLimit(input.caller.userId);
+    const completeRateLimit = startTimedStage(
+      operationLog,
+      "yc.rate_limit_reserve",
+      { userId: input.caller.userId },
+    );
+    let rate: RateLimitResult;
+    try {
+      rate = await dependencies.checkRateLimit(input.caller.userId);
+    } catch (error) {
+      completeRateLimit("failure", { errorCode: "RATE_LIMIT_RPC_FAILED" });
+      throw error;
+    }
     if (!rate.allowed) {
+      completeRateLimit("failure", {
+        errorCode: "DAILY_LIMIT_REACHED",
+        status: 429,
+      });
       return NextResponse.json(
         {
           success: false,
@@ -208,6 +237,7 @@ export async function generateYcApplication(
         },
       );
     }
+    completeRateLimit("success", { remainingRequests: rate.remainingRequests });
     rateReserved = true;
 
     let billingMode: "credits" | "unlimited_developer" = "unlimited_developer";
@@ -263,6 +293,7 @@ export async function generateYcApplication(
     const message = await dependencies.createMessage({
       systemPrompt: prompt.systemPrompt,
       userPrompt: prompt.userPrompt,
+      logger: operationLog,
     });
     const processingTime = dependencies.now() - startedAt;
     const parsed = dependencies.parseMessage(message);

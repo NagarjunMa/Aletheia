@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { createLogger, startTimedStage, type SafeLogger } from "@/lib/logger";
 import {
   mapCandidateEvidenceRow,
   mapCandidateProfileRow,
@@ -15,6 +16,7 @@ const PROFILE_FIELDS =
 
 const EVIDENCE_FIELDS =
   "id,user_id,kind,title,context,actions,outcome,metrics,skills,links,confirmed_at,sort_order,created_at,updated_at" as const;
+const log = createLogger("candidate-context-repository");
 
 export class CandidateContextRepositoryError extends Error {
   constructor() {
@@ -25,6 +27,7 @@ export class CandidateContextRepositoryError extends Error {
 
 export type CandidateContextRepositoryDependencies = {
   createCallerClient?: (_accessToken: string) => SupabaseClient<Database>;
+  logger?: SafeLogger;
 };
 
 /**
@@ -36,6 +39,11 @@ export async function loadCandidateGroundingData(
   caller: CandidateContextCaller,
   dependencies: CandidateContextRepositoryDependencies = {},
 ): Promise<CandidateGroundingData> {
+  const complete = startTimedStage(
+    dependencies.logger ?? log,
+    "repository.candidate_context_load",
+    { userId: caller.userId },
+  );
   let supabase: SupabaseClient<Database>;
 
   try {
@@ -43,6 +51,7 @@ export async function loadCandidateGroundingData(
       caller.accessToken,
     );
   } catch {
+    complete("failure", { errorCode: "CANDIDATE_CONTEXT_CLIENT_FAILED" });
     throw new CandidateContextRepositoryError();
   }
 
@@ -80,6 +89,7 @@ export async function loadCandidateGroundingData(
     resumeResult.error ||
     legacyProfileResult.error
   ) {
+    complete("failure", { errorCode: "CANDIDATE_CONTEXT_QUERY_FAILED" });
     throw new CandidateContextRepositoryError();
   }
 
@@ -100,7 +110,7 @@ export async function loadCandidateGroundingData(
         ? { text: legacyResume, source: "profiles" as const }
         : { text: "", source: "none" as const };
 
-    return {
+    const result = {
       identity: {
         fullName: legacyProfileResult.data?.full_name?.trim() ?? "",
         linkedinUrl: profile.linkedinUrl,
@@ -109,7 +119,13 @@ export async function loadCandidateGroundingData(
       confirmedEvidence,
       resume,
     };
+    complete("success", {
+      evidenceCount: confirmedEvidence.length,
+      resumeSource: result.resume.source,
+    });
+    return result;
   } catch {
+    complete("failure", { errorCode: "CANDIDATE_CONTEXT_MAPPING_FAILED" });
     throw new CandidateContextRepositoryError();
   }
 }

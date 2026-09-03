@@ -4,6 +4,15 @@
 (function () {
   "use strict";
 
+  function reportDiagnostic(event, fields = {}) {
+    try {
+      if (!chrome?.runtime?.id) return;
+      void chrome.runtime.sendMessage({ action: "diagnostic", event, fields });
+    } catch {
+      // Diagnostics are optional and must not interfere with filling fields.
+    }
+  }
+
   // Auto-fill configuration for different platforms
   const PLATFORM_CONFIGS = {
     apollo: {
@@ -52,10 +61,11 @@
     // Set up visual feedback system
     addStylesForFeedback();
 
-    console.log(
-      "Aletheia Auto-filler initialized for:",
-      window.location.hostname,
-    );
+    reportDiagnostic("auto_filler.initialized", {
+      platform: window.location.hostname.includes("apollo.io")
+        ? "apollo"
+        : "linkedin",
+    });
   }
 
   function handleAutoFillRequest(message, sender, sendResponse) {
@@ -65,9 +75,18 @@
 
     try {
       const result = performAutoFill(message.data);
+      reportDiagnostic("auto_filler.complete", {
+        outcome: "success",
+        platform: window.location.hostname.includes("apollo.io")
+          ? "apollo"
+          : "linkedin",
+      });
       sendResponse({ success: true, result });
     } catch (error) {
-      console.error("Auto-fill error:", error);
+      reportDiagnostic("auto_filler.complete", {
+        outcome: "failure",
+        errorCode: "AUTO_FILL_FAILED",
+      });
       sendResponse({
         success: false,
         error: error.message || "Auto-fill failed",
@@ -468,13 +487,15 @@
 
       // Re-initialize on navigation for SPAs
       setTimeout(() => {
-        console.log("Aletheia Auto-filler: Page changed, re-initializing...");
+        reportDiagnostic("auto_filler.initialized", {
+          platform: window.location.hostname.includes("apollo.io")
+            ? "apollo"
+            : "linkedin",
+        });
       }, 1000);
     }
   };
 
   // Watch for navigation changes (important for SPAs like Apollo and LinkedIn)
   setInterval(checkForNavigation, 1000);
-
-  console.log("Aletheia Auto-filler Content Script loaded");
 })();

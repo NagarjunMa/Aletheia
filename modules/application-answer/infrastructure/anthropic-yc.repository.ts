@@ -1,8 +1,10 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
+import { createLogger, startTimedStage, type SafeLogger } from "@/lib/logger";
 import { CLAUDE_MODEL } from "@/modules/outreach/infrastructure/anthropic.repository";
 
 const YC_APPLICATION_TOOL_NAME = "return_yc_application_answer";
+const log = createLogger("yc-anthropic-repository");
 
 export const ycApplicationTool = {
   name: YC_APPLICATION_TOOL_NAME,
@@ -140,14 +142,30 @@ export async function createYcApplicationMessage(input: {
 export async function createYcApplicationDraft(input: {
   systemPrompt: string;
   userPrompt: string;
+  logger?: SafeLogger;
 }) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     throw new Error("ANTHROPIC_API_KEY environment variable is not set");
   }
 
-  return createYcApplicationMessage({
-    anthropic: new Anthropic({ apiKey }),
-    ...input,
-  });
+  const complete = startTimedStage(
+    input.logger ?? log,
+    "model.yc_application_generate",
+    { model: CLAUDE_MODEL },
+  );
+  try {
+    const response = await createYcApplicationMessage({
+      anthropic: new Anthropic({ apiKey }),
+      ...input,
+    });
+    complete("success", {
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+    });
+    return response;
+  } catch (error) {
+    complete("failure", { errorCode: "MODEL_REQUEST_FAILED" });
+    throw error;
+  }
 }
