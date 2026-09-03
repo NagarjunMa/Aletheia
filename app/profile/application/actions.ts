@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { createLogger } from "@/lib/logger";
+import { createLogger, startTimedStage } from "@/lib/logger";
 import {
   candidateEvidenceInputSchema,
   candidateProfileInputSchema,
@@ -93,14 +93,24 @@ export async function saveCandidateProfileCategory(
   }
 
   const supabase = await createClient();
+  const completeAuth = startTimedStage(log, "candidate_profile.auth_lookup", {
+    category: parsedCategory.data,
+  });
   const {
     data: { user },
     error: authError,
   } = await supabase.auth.getUser();
   if (authError || !user) {
+    completeAuth("failure", { errorCode: "AUTH_REQUIRED", status: 401 });
     return validationError("Authentication required");
   }
+  completeAuth("success", { userId: user.id });
 
+  const completeWrite = startTimedStage(
+    log,
+    "candidate_profile.category_upsert",
+    { category: parsedCategory.data, userId: user.id },
+  );
   const { error } = await supabase.from("candidate_profiles").upsert(
     {
       user_id: user.id,
@@ -110,6 +120,9 @@ export async function saveCandidateProfileCategory(
   );
 
   if (error) {
+    completeWrite("failure", {
+      errorCode: "CANDIDATE_PROFILE_CATEGORY_UPSERT_FAILED",
+    });
     log.error(
       {
         category: parsedCategory.data,
@@ -123,6 +136,7 @@ export async function saveCandidateProfileCategory(
     );
   }
 
+  completeWrite("success");
   refreshCandidateProfilePages();
   return { ok: true };
 }
@@ -138,13 +152,16 @@ export async function saveCandidateEvidence(
   }
 
   const supabase = await createClient();
+  const completeAuth = startTimedStage(log, "candidate_evidence.auth_lookup");
   const {
     data: { user },
     error: authError,
   } = await supabase.auth.getUser();
   if (authError || !user) {
+    completeAuth("failure", { errorCode: "AUTH_REQUIRED", status: 401 });
     return validationError("Authentication required");
   }
+  completeAuth("success", { userId: user.id });
 
   const evidence = parsed.data;
   const payload = {
@@ -160,6 +177,10 @@ export async function saveCandidateEvidence(
     sort_order: evidence.sortOrder,
   };
 
+  const completeWrite = startTimedStage(log, "candidate_evidence.save", {
+    userId: user.id,
+    operation: evidence.id ? "update" : "insert",
+  });
   const result = evidence.id
     ? await supabase
         .from("candidate_evidence")
@@ -171,6 +192,7 @@ export async function saveCandidateEvidence(
         .insert({ ...payload, user_id: user.id });
 
   if (result.error) {
+    completeWrite("failure", { errorCode: "CANDIDATE_EVIDENCE_SAVE_FAILED" });
     log.error(
       {
         errorCode: "CANDIDATE_EVIDENCE_SAVE_FAILED",
@@ -183,6 +205,7 @@ export async function saveCandidateEvidence(
     );
   }
 
+  completeWrite("success");
   refreshCandidateProfilePages();
   return { ok: true };
 }
@@ -196,14 +219,20 @@ export async function deleteCandidateEvidence(
   }
 
   const supabase = await createClient();
+  const completeAuth = startTimedStage(log, "candidate_evidence.auth_lookup");
   const {
     data: { user },
     error: authError,
   } = await supabase.auth.getUser();
   if (authError || !user) {
+    completeAuth("failure", { errorCode: "AUTH_REQUIRED", status: 401 });
     return validationError("Authentication required");
   }
+  completeAuth("success", { userId: user.id });
 
+  const completeDelete = startTimedStage(log, "candidate_evidence.delete", {
+    userId: user.id,
+  });
   const { error } = await supabase
     .from("candidate_evidence")
     .delete()
@@ -211,6 +240,9 @@ export async function deleteCandidateEvidence(
     .eq("user_id", user.id);
 
   if (error) {
+    completeDelete("failure", {
+      errorCode: "CANDIDATE_EVIDENCE_DELETE_FAILED",
+    });
     log.error(
       {
         errorCode: "CANDIDATE_EVIDENCE_DELETE_FAILED",
@@ -223,6 +255,7 @@ export async function deleteCandidateEvidence(
     );
   }
 
+  completeDelete("success");
   refreshCandidateProfilePages();
   return { ok: true };
 }

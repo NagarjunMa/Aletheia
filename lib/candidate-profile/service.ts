@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Tables } from "@/lib/database/types";
+import { createLogger, startTimedStage, type SafeLogger } from "@/lib/logger";
 import {
   candidateProfileInputSchema,
   type CandidateEvidenceInput,
@@ -18,6 +19,7 @@ const PROFILE_FIELDS =
 
 const EVIDENCE_FIELDS =
   "id,user_id,kind,title,context,actions,outcome,metrics,skills,links,confirmed_at,sort_order,created_at,updated_at" as const;
+const log = createLogger("candidate-profile-service");
 
 export function mapCandidateProfileRow(
   row: Tables<"candidate_profiles"> | null,
@@ -64,7 +66,15 @@ export function mapCandidateEvidenceRow(
 export async function getCandidateApplicationProfile(
   supabase: SupabaseClient<Database>,
   userId: string,
+  logger: SafeLogger = log,
 ): Promise<CandidateApplicationProfile> {
+  const complete = startTimedStage(
+    logger,
+    "repository.candidate_profile_read",
+    {
+      userId,
+    },
+  );
   const [profileResult, evidenceResult] = await Promise.all([
     supabase
       .from("candidate_profiles")
@@ -80,10 +90,11 @@ export async function getCandidateApplicationProfile(
   ]);
 
   if (profileResult.error || evidenceResult.error) {
+    complete("failure", { errorCode: "CANDIDATE_PROFILE_READ_FAILED" });
     throw new Error("Could not load application profile");
   }
 
-  return {
+  const result = {
     profile: mapCandidateProfileRow(
       profileResult.data as Tables<"candidate_profiles"> | null,
     ),
@@ -91,4 +102,6 @@ export async function getCandidateApplicationProfile(
       (evidenceResult.data ?? []) as Tables<"candidate_evidence">[]
     ).map(mapCandidateEvidenceRow),
   };
+  complete("success", { evidenceCount: result.evidence.length });
+  return result;
 }

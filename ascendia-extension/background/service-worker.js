@@ -18,9 +18,29 @@ import {
   serializeGenerationError,
 } from "./generation-core.js";
 import { generateWithAuthRecovery } from "./generate-auth-recovery.js";
-import { createExtensionLogger, createOperationId } from "../lib/logger.js";
+import {
+  createExtensionLogger,
+  createOperationId,
+  startExtensionTimedStage,
+} from "../lib/logger.js";
 
 const log = createExtensionLogger("service-worker");
+const CONTENT_DIAGNOSTIC_EVENTS = new Set([
+  "profile_reader.initialized",
+  "profile_reader.consent_pending",
+  "profile_reader.extraction_complete",
+  "profile_reader.extraction_failed",
+  "profile_reader.message_failed",
+  "profile_reader.cleanup",
+  "auto_filler.initialized",
+  "auto_filler.complete",
+]);
+
+function getSafeErrorCode(error, fallback) {
+  return typeof error?.code === "string" && /^[A-Z0-9_]{3,80}$/.test(error.code)
+    ? error.code
+    : fallback;
+}
 
 // In-flight guard: prevents duplicate authenticate calls from opening multiple tabs
 let authenticatePromise = null;
@@ -32,12 +52,15 @@ let authenticatePromise = null;
 
   const { apiUrl, tabId, timeoutAt } = _loginPending;
   if (Date.now() > timeoutAt) {
-    console.log("[SW] Pending login expired, cleaning up");
+    log.info("auth.recovery.complete", {
+      outcome: "expired",
+      stage: "auth.recovery",
+    });
     await chrome.storage.local.remove("_loginPending");
     return;
   }
 
-  console.log("[SW] Recovering pending login for", apiUrl);
+  const completeRecovery = startExtensionTimedStage(log, "auth.recovery");
   // Try to fetch the session immediately (user may have already logged in)
   try {
     const sessionData = await fetchSessionFromWebApp(apiUrl);
@@ -47,9 +70,11 @@ let authenticatePromise = null;
       chrome.tabs.remove(tabId);
     } catch (e) {}
     chrome.alarms.clear("aletheia-login-keepalive");
-    console.log("[SW] Recovered session for", sessionData.user?.email);
+    completeRecovery("success");
   } catch (e) {
-    console.log("[SW] Recovery: no session yet, will keep checking via alarms");
+    completeRecovery("failure", {
+      errorCode: getSafeErrorCode(e, "SESSION_UNAVAILABLE"),
+    });
     // Keep the keepalive alarm running; next alarm cycle will retry
     chrome.alarms.create("aletheia-login-keepalive", {
       periodInMinutes: 25 / 60,
@@ -61,9 +86,7 @@ let authenticatePromise = null;
 // wakes on a non-startup/non-install event and the alarm is missing.
 chrome.alarms.get("aletheia-token-refresh", (alarm) => {
   if (!alarm) {
-    console.log(
-      "[SW] Token refresh alarm missing after cold start, re-creating",
-    );
+    log.info("runtime.alarm.created", { alarm: "token_refresh" });
     chrome.alarms.create("aletheia-token-refresh", { periodInMinutes: 20 });
   }
 });
@@ -83,7 +106,7 @@ const CONFIG = {
 
 // Installation and startup
 chrome.runtime.onInstalled.addListener(async (details) => {
-  console.log("Aletheia extension installed:", details);
+  log.info("runtime.installed", { reason: details.reason });
 
   if (details.reason === "install") {
     await initializeDefaultSettings();
@@ -102,13 +125,19 @@ chrome.runtime.onInstalled.addListener(async (details) => {
             target: { tabId: tab.id },
             files: ["content/linkedin-reader.js"],
           })
-          .catch((err) =>
-            console.warn("Could not inject into tab", tab.id, err),
+          .catch(() =>
+            log.warn("content.inject.complete", {
+              outcome: "failure",
+              errorCode: "CONTENT_SCRIPT_INJECTION_FAILED",
+            }),
           );
       }
     }
-  } catch (err) {
-    console.warn("Content script injection failed:", err);
+  } catch {
+    log.warn("content.inject.complete", {
+      outcome: "failure",
+      errorCode: "CONTENT_SCRIPT_INJECTION_FAILED",
+    });
   }
 
   // Set up proactive token refresh alarm
@@ -118,7 +147,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 });
 
 chrome.runtime.onStartup.addListener(() => {
-  console.log("Aletheia extension started");
+  log.info("runtime.startup", { outcome: "success" });
 
   // Ensure token refresh alarm exists
   chrome.alarms.create(CONFIG.TOKEN_REFRESH_ALARM, {
@@ -129,18 +158,27 @@ chrome.runtime.onStartup.addListener(() => {
 // Alarm handler for proactive token refresh + login recovery
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === CONFIG.TOKEN_REFRESH_ALARM) {
-    console.log("[SW] Token refresh alarm fired");
     const url = await getEffectiveApiUrl();
-    await proactiveRefresh(url);
+    const complete = startExtensionTimedStage(log, "auth.proactive_refresh");
+    try {
+      await proactiveRefresh(url);
+      complete("success");
+    } catch (error) {
+      complete("failure", {
+        errorCode: getSafeErrorCode(error, "TOKEN_REFRESH_FAILED"),
+      });
+    }
   }
 
   if (alarm.name === "aletheia-login-keepalive") {
-    console.log("[SW] Login keepalive — checking for session...");
     const { _loginPending } = await chrome.storage.local.get("_loginPending");
     if (!_loginPending) return;
 
     if (Date.now() > _loginPending.timeoutAt) {
-      console.log("[SW] Login timed out during recovery");
+      log.info("auth.keepalive.complete", {
+        stage: "auth.keepalive",
+        outcome: "expired",
+      });
       await chrome.storage.local.remove("_loginPending");
       chrome.alarms.clear("aletheia-login-keepalive");
       return;
@@ -154,9 +192,16 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
         chrome.tabs.remove(_loginPending.tabId);
       } catch (e) {}
       chrome.alarms.clear("aletheia-login-keepalive");
-      console.log("[SW] Session recovered via keepalive alarm");
-    } catch (e) {
-      console.log("[SW] Keepalive check: no session yet");
+      log.info("auth.keepalive.complete", {
+        stage: "auth.keepalive",
+        outcome: "success",
+      });
+    } catch (error) {
+      log.info("auth.keepalive.complete", {
+        stage: "auth.keepalive",
+        outcome: "pending",
+        errorCode: getSafeErrorCode(error, "SESSION_UNAVAILABLE"),
+      });
     }
   }
 });
@@ -166,6 +211,37 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const operationId = createOperationId(message.operationId);
   const messageStartedAt = Date.now();
   log.info("runtime.message.start", { operationId, action: message.action });
+
+  if (message.action === "diagnostic") {
+    if (CONTENT_DIAGNOSTIC_EVENTS.has(message.event)) {
+      const fields = message.fields ?? {};
+      log.info(`content.${message.event}`, {
+        operationId,
+        outcome:
+          fields.outcome === "failure" || fields.outcome === "success"
+            ? fields.outcome
+            : undefined,
+        errorCode:
+          typeof fields.errorCode === "string" &&
+          /^[A-Z0-9_]{3,80}$/.test(fields.errorCode)
+            ? fields.errorCode
+            : undefined,
+        contentLength:
+          Number.isSafeInteger(fields.contentLength) &&
+          fields.contentLength >= 0
+            ? fields.contentLength
+            : undefined,
+        changed:
+          typeof fields.changed === "boolean" ? fields.changed : undefined,
+        platform:
+          fields.platform === "linkedin" || fields.platform === "apollo"
+            ? fields.platform
+            : undefined,
+      });
+    }
+    sendResponse({ success: true });
+    return false;
+  }
 
   if (message.action === "generate") {
     handleGenerateRequest(message.payload, operationId)
@@ -195,30 +271,45 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.action === "healthCheck") {
     handleHealthCheck()
-      .then((result) => sendResponse(result))
-      .catch((error) =>
+      .then((result) => {
+        log.info("runtime.message.complete", {
+          operationId,
+          action: message.action,
+          outcome: result.success ? "success" : "failure",
+          durationMs: Date.now() - messageStartedAt,
+        });
+        sendResponse(result);
+      })
+      .catch(() =>
         sendResponse({
           success: false,
-          error: error.message || "Health check failed",
+          error: "Health check failed",
         }),
       );
     return true;
   }
 
   if (message.action === "authenticate") {
-    console.log(
-      "[SW] authenticate: authenticatePromise is",
-      authenticatePromise ? "IN-FLIGHT (reusing)" : "null (starting new)",
-    );
+    log.info("auth.interactive.start", {
+      operationId,
+      coalesced: Boolean(authenticatePromise),
+    });
     if (!authenticatePromise) {
-      authenticatePromise = handleAuthenticate()
+      authenticatePromise = handleAuthenticate(operationId)
         .then((result) => {
-          console.log("[SW] authenticate: ✓ completed successfully");
+          log.info("auth.interactive.complete", {
+            operationId,
+            outcome: "success",
+          });
           authenticatePromise = null;
           return result;
         })
         .catch((error) => {
-          console.error("[SW] authenticate: ✗ failed:", error.message);
+          log.warn("auth.interactive.complete", {
+            operationId,
+            outcome: "failure",
+            errorCode: getSafeErrorCode(error, "AUTHENTICATION_FAILED"),
+          });
           authenticatePromise = null;
           throw error;
         });
@@ -235,7 +326,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === "logout") {
-    handleLogout()
+    handleLogout(operationId)
       .then((result) => sendResponse(result))
       .catch((error) =>
         sendResponse({
@@ -264,18 +355,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     (async () => {
       try {
         const url = await getEffectiveApiUrl();
-        await getValidAccessToken(url);
+        await getValidAccessToken(url, { operationId });
         const status = await getAuthStatus();
-        console.log(
-          "[SW] silentAuthCheck: ✓ found session for",
-          status.user?.email,
-        );
+        log.info("auth.silent_check.complete", {
+          operationId,
+          outcome: "success",
+        });
         sendResponse(status);
       } catch (error) {
-        console.log(
-          "[SW] silentAuthCheck: no session available:",
-          error.message,
-        );
+        log.info("auth.silent_check.complete", {
+          operationId,
+          outcome: "failure",
+          errorCode: getSafeErrorCode(error, "AUTH_REQUIRED"),
+        });
         sendResponse({ authenticated: false });
       }
     })();
@@ -284,11 +376,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   // Auth bridge: content script on login page found the Supabase session
   if (message.action === "authBridgeSession") {
-    console.log(
-      "[SW] authBridgeSession received from:",
-      sender.url?.substring(0, 60),
-    );
-    handleAuthBridgeSession(message.session);
+    log.info("auth.bridge.received", { operationId });
+    handleAuthBridgeSession(message.session, operationId);
     sendResponse({ success: true });
     return true;
   }
@@ -299,7 +388,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     (async () => {
       try {
         const url = await getEffectiveApiUrl();
-        const accessToken = await getValidAccessToken(url);
+        const accessToken = await getValidAccessToken(url, { operationId });
         await fetch(`${url}/api/extension/feedback`, {
           method: "POST",
           headers: getAletheiaRequestHeaders({
@@ -308,9 +397,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           }),
           body: JSON.stringify(message.payload),
         });
-        console.log("[SW] Feedback sent successfully");
-      } catch (err) {
-        console.warn("[SW] Feedback send failed (non-blocking):", err.message);
+        log.info("feedback.dispatch.complete", {
+          operationId,
+          outcome: "success",
+        });
+      } catch (error) {
+        log.warn("feedback.dispatch.complete", {
+          operationId,
+          outcome: "failure",
+          errorCode: getSafeErrorCode(error, "FEEDBACK_DISPATCH_FAILED"),
+        });
       }
     })();
     return true;
@@ -346,13 +442,13 @@ async function getEffectiveApiUrl() {
   if (isAllowedApiUrl(apiBaseUrl)) return normalizeApiUrl(apiBaseUrl);
   if (apiBaseUrl) {
     await chrome.storage.sync.remove("apiBaseUrl");
-    console.log("[SW] Wiped stale apiBaseUrl from sync storage");
+    log.info("settings.api_origin.reset", { storageArea: "sync" });
   }
   const { apiUrl } = await chrome.storage.local.get("apiUrl");
   if (isAllowedApiUrl(apiUrl)) return normalizeApiUrl(apiUrl);
   if (apiUrl) {
     await chrome.storage.local.remove("apiUrl");
-    console.log("[SW] Wiped stale apiUrl from local storage");
+    log.info("settings.api_origin.reset", { storageArea: "local" });
   }
   return CONFIG.DEFAULT_API_URL;
 }
@@ -374,113 +470,128 @@ async function initializeDefaultSettings() {
   };
 
   await chrome.storage.local.set(defaults);
-  console.log("Default settings initialized with API URL:", apiUrl);
+  log.info("settings.initialized", { outcome: "success" });
 }
 
-async function handleAuthenticate() {
+async function handleAuthenticate(operationId) {
   const url = await getEffectiveApiUrl();
-  console.log("[SW] handleAuthenticate: using API URL:", url);
+  const complete = startExtensionTimedStage(log, "auth.interactive", {
+    operationId,
+  });
 
   // First try: maybe the user is already logged in (cookies exist)
   try {
-    console.log("[SW] handleAuthenticate: trying existing session...");
-    const token = await getValidAccessToken(url);
+    await getValidAccessToken(url, { operationId });
     const status = await getAuthStatus();
-    console.log(
-      "[SW] handleAuthenticate: ✓ already authenticated as",
-      status.user?.email,
-    );
+    complete("success", { authSource: "stored_session" });
     return {
       success: true,
       user: status.user,
       message: "Connected to Aletheia",
     };
-  } catch (error) {
-    console.log("[SW] handleAuthenticate: no existing session:", error.message);
+  } catch {
     // No existing session — open login tab and wait for cookies
   }
 
   // Second try: open login page and wait for the user to authenticate
   try {
-    console.log("[SW] handleAuthenticate: opening login tab and waiting...");
-    const sessionData = await waitForLogin(url);
-    console.log(
-      "[SW] handleAuthenticate: ✓ login completed for",
-      sessionData.user?.email,
-    );
+    const sessionData = await waitForLogin(url, operationId);
+    complete("success", { authSource: "interactive_login" });
     return {
       success: true,
       user: sessionData.user,
       message: "Connected to Aletheia",
     };
   } catch (waitError) {
-    console.error(
-      "[SW] handleAuthenticate: ✗ waitForLogin failed:",
-      waitError.message,
-    );
+    complete("failure", {
+      errorCode: getSafeErrorCode(waitError, "AUTHENTICATION_FAILED"),
+    });
     throw new Error(waitError.message || "Login failed. Please try again.");
   }
 }
 
-async function handleLogout() {
-  await clearAuth();
-  return { success: true, message: "Disconnected from Aletheia" };
+async function handleLogout(operationId) {
+  const complete = startExtensionTimedStage(log, "auth.logout", {
+    operationId,
+  });
+  try {
+    await clearAuth();
+    complete("success");
+    return { success: true, message: "Disconnected from Aletheia" };
+  } catch (error) {
+    complete("failure", {
+      errorCode: getSafeErrorCode(error, "LOGOUT_FAILED"),
+    });
+    throw error;
+  }
 }
 
 async function handleGenerateRequest(payload, operationId) {
-  const url = await getEffectiveApiUrl();
-  const { accepted = [] } = await chrome.storage.local.get("accepted");
-  const relevantExamples = accepted
-    .filter((item) => item.category === payload.category)
-    .map((item) => item.body || item.message)
-    .slice(-3);
-  const requestData = buildGenerationRequestData(payload, relevantExamples);
-  let usageChecked = false;
-
-  const response = await generateWithAuthRecovery({
-    // Keep session exchange in the recovery state machine: a generation has
-    // one silent exchange, rather than an implicit fetch on every token read.
-    getAccessToken: () =>
-      getValidAccessToken(url, { allowSessionFetch: false, operationId }),
-    recoverSilently: () => clearAuthAndFetchFresh(url, operationId),
-    clearAuth,
-    authenticateInteractively: handleAuthenticate,
-    generate: async (accessToken) => {
-      if (!usageChecked) {
-        await checkUsageLimit();
-        usageChecked = true;
-      }
-      const result = await makeAPIRequest(
-        "/api/extension/generate",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify(requestData),
-        },
-        url,
-        operationId,
-      );
-
-      if (!result.success) {
-        const responseError = new Error(
-          result.message || result.error || "API request failed",
-        );
-        responseError.status = result.status;
-        responseError.code = result.code;
-        responseError.authCause = result.cause;
-        responseError.apiResponse = result;
-        throw responseError;
-      }
-
-      return result;
-    },
+  const complete = startExtensionTimedStage(log, "generation.workflow", {
+    operationId,
   });
+  try {
+    const url = await getEffectiveApiUrl();
+    const { accepted = [] } = await chrome.storage.local.get("accepted");
+    const relevantExamples = accepted
+      .filter((item) => item.category === payload.category)
+      .map((item) => item.body || item.message)
+      .slice(-3);
+    const requestData = buildGenerationRequestData(payload, relevantExamples);
+    let usageChecked = false;
 
-  await logUsage(payload.category);
-  return response;
+    const response = await generateWithAuthRecovery({
+      // Keep session exchange in the recovery state machine: a generation has
+      // one silent exchange, rather than an implicit fetch on every token read.
+      getAccessToken: () =>
+        getValidAccessToken(url, { allowSessionFetch: false, operationId }),
+      recoverSilently: () => clearAuthAndFetchFresh(url, operationId),
+      clearAuth,
+      authenticateInteractively: () => handleAuthenticate(operationId),
+      generate: async (accessToken) => {
+        if (!usageChecked) {
+          await checkUsageLimit();
+          usageChecked = true;
+        }
+        const result = await makeAPIRequest(
+          "/api/extension/generate",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${accessToken}`,
+            },
+            body: JSON.stringify(requestData),
+          },
+          url,
+          operationId,
+        );
+
+        if (!result.success) {
+          const responseError = new Error(
+            result.message || result.error || "API request failed",
+          );
+          responseError.status = result.status;
+          responseError.code = result.code;
+          responseError.authCause = result.cause;
+          responseError.apiResponse = result;
+          throw responseError;
+        }
+
+        return result;
+      },
+    });
+
+    await logUsage(payload.category);
+    complete("success", { category: payload.category });
+    return response;
+  } catch (error) {
+    complete("failure", {
+      category: payload?.category,
+      errorCode: getSafeErrorCode(error, "GENERATION_FAILED"),
+    });
+    throw error;
+  }
 }
 
 async function makeAPIRequest(
@@ -494,9 +605,12 @@ async function makeAPIRequest(
 
   for (let attempt = 1; attempt <= CONFIG.MAX_RETRIES; attempt++) {
     try {
-      console.log(
-        `API request attempt ${attempt}/${CONFIG.MAX_RETRIES}: ${url}`,
-      );
+      log.info("api.request.start", {
+        operationId,
+        attempt,
+        maxAttempts: CONFIG.MAX_RETRIES,
+        endpoint,
+      });
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), CONFIG.TIMEOUT);
@@ -542,9 +656,11 @@ async function makeAPIRequest(
       }
 
       const data = await response.json();
-      console.log("API request successful:", {
+      log.info("api.request.complete", {
+        operationId,
         endpoint,
         status: response.status,
+        outcome: "success",
       });
 
       return {
@@ -553,7 +669,14 @@ async function makeAPIRequest(
       };
     } catch (error) {
       lastError = error;
-      console.warn(`API request attempt ${attempt} failed:`, error.message);
+      log.warn("api.request.complete", {
+        operationId,
+        endpoint,
+        attempt,
+        outcome: "failure",
+        errorCode: getSafeErrorCode(error, "API_REQUEST_FAILED"),
+        status: typeof error.status === "number" ? error.status : undefined,
+      });
 
       if (error.name === "AbortError") {
         throw new Error("Request timeout. Please try again.");
@@ -681,22 +804,31 @@ async function logUsage(category) {
 
     await chrome.storage.local.set({ dailyUsage, categoryUsage });
   } catch (error) {
-    console.warn("Failed to log usage:", error);
+    log.warn("usage.record.complete", {
+      outcome: "failure",
+      errorCode: getSafeErrorCode(error, "USAGE_RECORD_FAILED"),
+    });
   }
 }
 
 // Error handling for unhandled promise rejections
 self.addEventListener("unhandledrejection", (event) => {
-  console.error("Unhandled promise rejection in service worker:", event.reason);
+  log.error("runtime.unhandled_rejection", {
+    outcome: "failure",
+    errorCode: getSafeErrorCode(event.reason, "UNHANDLED_REJECTION"),
+  });
 });
 
 // Chrome Side Panel API integration
 chrome.action.onClicked.addListener(async (tab) => {
   try {
     await chrome.sidePanel.open({ tabId: tab.id });
-    console.log("Side panel opened for tab:", tab.id);
+    log.info("side_panel.open.complete", { outcome: "success" });
   } catch (error) {
-    console.error("Failed to open side panel:", error);
+    log.warn("side_panel.open.complete", {
+      outcome: "failure",
+      errorCode: getSafeErrorCode(error, "SIDE_PANEL_OPEN_FAILED"),
+    });
   }
 });
 
@@ -705,15 +837,15 @@ try {
   chrome.sidePanel.setPanelBehavior({
     openPanelOnActionClick: true,
   });
-  console.log("Side panel behavior configured");
+  log.info("side_panel.configuration.complete", { outcome: "success" });
 } catch (error) {
-  console.warn(
-    "Side panel configuration failed (Chrome version may not support it):",
-    error,
-  );
+  log.warn("side_panel.configuration.complete", {
+    outcome: "failure",
+    errorCode: getSafeErrorCode(error, "SIDE_PANEL_UNSUPPORTED"),
+  });
 }
 
-console.log("Aletheia background service worker loaded");
+log.info("runtime.loaded", { outcome: "success" });
 
 // Export for testing (if needed)
 if (typeof module !== "undefined" && module.exports) {

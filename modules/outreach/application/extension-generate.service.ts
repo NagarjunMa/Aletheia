@@ -26,7 +26,7 @@ import {
   reserveGenerationCredits,
 } from "@/lib/billing/credits";
 import { z } from "zod";
-import type { SafeLogger } from "@/lib/logger";
+import { startTimedStage, type SafeLogger } from "@/lib/logger";
 import { withRequestLifecycle } from "@/lib/request-lifecycle";
 import {
   CURRENT_EXTENSION_API_VERSION,
@@ -103,13 +103,16 @@ async function handlePost(request: NextRequest, log: SafeLogger) {
     }
 
     // 1. Auth check FIRST (before rate limiting)
-    const authResult = await authenticateExtensionRequest(request);
+    const completeAuth = startTimedStage(log, "extension.auth_validate");
+    const authResult = await authenticateExtensionRequest(request, log);
     if (!authResult) {
+      completeAuth("failure", { errorCode: "AUTH_REQUIRED", status: 401 });
       return NextResponse.json(
         { error: "Unauthorized", message: "Valid Bearer token required" },
         { status: 401, headers: corsHeaders },
       );
     }
+    completeAuth("success", { userId: authResult.userId });
 
     // YC is additive to API v1, but owns a stricter lifecycle: validate and
     // prepare caller-scoped grounding before rate limiting or billing. Clone
@@ -143,6 +146,7 @@ async function handlePost(request: NextRequest, log: SafeLogger) {
         corsHeaders,
         applicationBaseUrl:
           process.env.NEXT_PUBLIC_APP_URL ?? request.nextUrl.origin,
+        logger: log,
       });
     }
 
@@ -151,6 +155,10 @@ async function handlePost(request: NextRequest, log: SafeLogger) {
     // Phase 1 deliberately does not yet inject these sources into prompts.
     const validatedData = generateRequestSchema.parse(dispatchBody);
     let preparedGrounding: OutreachGroundingContext;
+    const completeGrounding = startTimedStage(log, "outreach.grounding_load", {
+      userId: authResult.userId,
+      category: validatedData.category,
+    });
     try {
       preparedGrounding = await prepareOutreachGroundingContext({
         caller: authResult,
@@ -161,7 +169,11 @@ async function handlePost(request: NextRequest, log: SafeLogger) {
           conversationContext: validatedData.conversationContext ?? "",
         },
       });
+      completeGrounding("success");
     } catch {
+      completeGrounding("failure", {
+        errorCode: "CANDIDATE_CONTEXT_UNAVAILABLE",
+      });
       // The preparation service is the private candidate-data boundary.
       // Its failures are intentionally normalized before any user-resource
       // reservation or external model call.
@@ -170,9 +182,14 @@ async function handlePost(request: NextRequest, log: SafeLogger) {
 
     // 2. Fetch user style profile (non-blocking — failure just skips learned style)
     let styleProfile: StylePatterns | undefined;
+    const completeStyle = startTimedStage(log, "outreach.style_profile_read", {
+      userId: authResult.userId,
+    });
     try {
-      styleProfile = await getUserStyleProfile(authResult.userId);
+      styleProfile = await getUserStyleProfile(authResult.userId, log);
+      completeStyle("success", { found: Boolean(styleProfile) });
     } catch {
+      completeStyle("failure", { errorCode: "STYLE_PROFILE_READ_FAILED" });
       log.warn(
         { errorCode: "STYLE_PROFILE_READ_FAILED" },
         "Failed to fetch style profile, continuing without it",
@@ -181,8 +198,19 @@ async function handlePost(request: NextRequest, log: SafeLogger) {
 
     // 3. Rate limiting (per user, persistent). Reservation is atomic.
     // If the rest of the request fails, we refund via the catch block.
-    const rateCheck = await checkGenerationRateLimit(authResult.userId);
+    const completeRateLimit = startTimedStage(
+      log,
+      "outreach.rate_limit_reserve",
+      {
+        userId: authResult.userId,
+      },
+    );
+    const rateCheck = await checkGenerationRateLimit(authResult.userId, log);
     if (!rateCheck.allowed) {
+      completeRateLimit("failure", {
+        errorCode: "DAILY_LIMIT_REACHED",
+        status: 429,
+      });
       return NextResponse.json(
         {
           error: "Daily limit reached",
@@ -201,6 +229,9 @@ async function handlePost(request: NextRequest, log: SafeLogger) {
         },
       );
     }
+    completeRateLimit("success", {
+      remainingRequests: rateCheck.remainingRequests,
+    });
     // Mark the slot reserved so a downstream failure can refund it.
     reservedUserId = authResult.userId;
 
@@ -239,7 +270,7 @@ async function handlePost(request: NextRequest, log: SafeLogger) {
         billingMode = "credits";
 
         if (!reservation.allowed || !reservation.reservationId) {
-          await releaseRateLimitReservation(authResult.userId);
+          await releaseRateLimitReservation(authResult.userId, log);
           reservedUserId = undefined;
           return NextResponse.json(
             {
@@ -280,6 +311,7 @@ async function handlePost(request: NextRequest, log: SafeLogger) {
     try {
       const primaryResume = await getPrimaryResumeForGeneration(
         authResult.userId,
+        log,
       );
       resumeForGeneration = primaryResume.text;
       resumeSource = primaryResume.source;
@@ -306,6 +338,7 @@ async function handlePost(request: NextRequest, log: SafeLogger) {
       try {
         const targetJobDescription = await getProfileTargetJobDescription(
           authResult.userId,
+          log,
         );
         if (!jdFromBody.trim() && targetJobDescription) {
           jdFromBody = targetJobDescription;
@@ -413,6 +446,7 @@ async function handlePost(request: NextRequest, log: SafeLogger) {
       useEmailDraftTool: shouldUseEmailDraftTool,
       useStructuredColdEmailTool: category === "cold_email",
       useStructuredLinkedinConnectionTool: category === "linkedin_connection",
+      logger: log,
     });
 
     const processingTime = Date.now() - startTime;
@@ -513,10 +547,10 @@ async function handlePost(request: NextRequest, log: SafeLogger) {
           "Failed to validate cold email composition",
         );
         if (reservedCredit) {
-          await refundCreditReservation(reservedCredit, "parse_failed");
+          await refundCreditReservation(reservedCredit, "parse_failed", log);
           reservedCredit = undefined;
         }
-        await releaseRateLimitReservation(authResult.userId);
+        await releaseRateLimitReservation(authResult.userId, log);
         reservedUserId = undefined;
         return NextResponse.json(
           {
@@ -625,10 +659,10 @@ async function handlePost(request: NextRequest, log: SafeLogger) {
         // no usable output. Quota was already incremented before Claude
         // ran; without this the user loses 1/30 on every upstream error.
         if (reservedCredit) {
-          await refundCreditReservation(reservedCredit, "parse_failed");
+          await refundCreditReservation(reservedCredit, "parse_failed", log);
           reservedCredit = undefined;
         }
-        await releaseRateLimitReservation(authResult.userId);
+        await releaseRateLimitReservation(authResult.userId, log);
         reservedUserId = undefined;
         return NextResponse.json(
           {
@@ -705,10 +739,10 @@ async function handlePost(request: NextRequest, log: SafeLogger) {
         "Failed to validate LinkedIn connection composition",
       );
       if (reservedCredit) {
-        await refundCreditReservation(reservedCredit, "parse_failed");
+        await refundCreditReservation(reservedCredit, "parse_failed", log);
         reservedCredit = undefined;
       }
-      await releaseRateLimitReservation(authResult.userId);
+      await releaseRateLimitReservation(authResult.userId, log);
       reservedUserId = undefined;
       return NextResponse.json(
         {
@@ -728,6 +762,7 @@ async function handlePost(request: NextRequest, log: SafeLogger) {
       await refundCreditReservation(
         reservedCredit,
         error instanceof Error ? error.name : "unknown_error",
+        log,
       );
       reservedCredit = undefined;
     }
@@ -736,7 +771,7 @@ async function handlePost(request: NextRequest, log: SafeLogger) {
     // response, refund it. Otherwise an Anthropic 5xx or Zod validation
     // failure silently burns 1/30 daily quota.
     if (reservedUserId) {
-      await releaseRateLimitReservation(reservedUserId);
+      await releaseRateLimitReservation(reservedUserId, log);
       reservedUserId = undefined;
     }
 
@@ -823,7 +858,7 @@ async function handleGet(request: NextRequest, log: SafeLogger) {
 
   try {
     // Auth check
-    const authResult = await authenticateExtensionRequest(request);
+    const authResult = await authenticateExtensionRequest(request, log);
     if (!authResult) {
       return NextResponse.json(
         { error: "Unauthorized", message: "Valid Bearer token required" },
@@ -840,6 +875,7 @@ async function handleGet(request: NextRequest, log: SafeLogger) {
     try {
       const primaryResume = await getPrimaryResumeForGeneration(
         authResult.userId,
+        log,
       );
       resumeStatus = {
         has_primary: primaryResume.source !== "none",

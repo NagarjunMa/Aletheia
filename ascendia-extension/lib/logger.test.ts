@@ -10,7 +10,11 @@ import {
   isValidOperationId,
   redactFields,
 } from "./logger-core.js";
-import { createExtensionLogger, flushExtensionDiagnostics } from "./logger.js";
+import {
+  createExtensionLogger,
+  flushExtensionDiagnostics,
+  startExtensionTimedStage,
+} from "./logger.js";
 
 describe("extension diagnostic logger core", () => {
   afterEach(async () => {
@@ -90,5 +94,26 @@ describe("extension diagnostic logger core", () => {
       "generation.start",
       "generation.complete",
     ]);
+  });
+
+  it("emits a redacted terminal event for a timed extension stage", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const logger = createExtensionLogger("service-worker");
+    const complete = startExtensionTimedStage(logger, "auth.session", {
+      operationId: "123e4567-e89b-42d3-a456-426614174000",
+    });
+
+    complete("failure", { errorCode: "SESSION_UNAVAILABLE", status: 401 });
+    await flushExtensionDiagnostics();
+
+    const { [DIAGNOSTIC_BUFFER_KEY]: events } =
+      await chrome.storage.session.get(DIAGNOSTIC_BUFFER_KEY);
+    expect(events.at(-1)).toMatchObject({
+      event: "stage.complete",
+      stage: "auth.session",
+      outcome: "failure",
+      errorCode: "SESSION_UNAVAILABLE",
+      status: 401,
+    });
   });
 });
