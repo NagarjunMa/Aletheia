@@ -71,19 +71,7 @@ export async function createServiceClient() {
   });
 }
 
-// Cookie-less service-role client for Bearer-token API routes (extension
-// endpoints). Use this instead of the cookie-bound `createServiceClient()`
-// when the route is not part of the SSR cookie flow — i.e. when auth is
-// validated via Bearer JWT, not session cookies.
-//
-// Validates env vars at call time. Reads the service role key into a local
-// variable; never logged, never returned.
-//
-// Intentionally NOT generic over Database: the bearer routes historically
-// used the untyped `createClient` form and rely on JSONB / dynamic table
-// access. Tightening to `Database` requires a sweep of those routes; do
-// that as a follow-up, not in the security refactor.
-export function createBearerServiceClient() {
+function getServiceClientConfig() {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!serviceRoleKey) {
     throw new Error(
@@ -94,6 +82,26 @@ export function createBearerServiceClient() {
   if (!supabaseUrl) {
     throw new Error("NEXT_PUBLIC_SUPABASE_URL environment variable is not set");
   }
+
+  return { serviceRoleKey, supabaseUrl };
+}
+
+// Cookie-less, typed service-role client for privileged server operations
+// whose authorization was established before this client is created. It must
+// never be returned to browser code or used as a substitute for ownership
+// checks.
+export function createStatelessServiceClient() {
+  const { serviceRoleKey, supabaseUrl } = getServiceClientConfig();
+  return createSupabaseJsClient<Database>(supabaseUrl, serviceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
+// Cookie-less service-role client for Bearer-token API routes (extension
+// endpoints). Intentionally untyped because those routes historically rely on
+// JSONB and dynamic table access; tighten them in a dedicated refactor.
+export function createBearerServiceClient() {
+  const { serviceRoleKey, supabaseUrl } = getServiceClientConfig();
   return createSupabaseJsClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });

@@ -28,6 +28,7 @@ export type ResumeUploadResult = {
 };
 
 type Supabase = SupabaseClient<Database>;
+type ResumeStorageClient = Pick<Supabase, "storage">;
 
 function toListItem(row: Tables<"user_resumes">): ResumeListItem {
   return {
@@ -121,6 +122,7 @@ export async function uploadUserResume(
   userId: string,
   file: File,
   label?: string,
+  storageSupabase: ResumeStorageClient = supabase,
 ): Promise<ResumeUploadResult> {
   const validationError = validateResumeFile(file);
   if (validationError) {
@@ -143,7 +145,7 @@ export async function uploadUserResume(
     userId,
     fileSize: file.size,
   });
-  const { error: uploadError } = await supabase.storage
+  const { error: uploadError } = await storageSupabase.storage
     .from(RESUME_BUCKET)
     .upload(storagePath, file, {
       cacheControl: "3600",
@@ -183,7 +185,7 @@ export async function uploadUserResume(
     .single();
 
   if (insertError) {
-    await supabase.storage.from(RESUME_BUCKET).remove([storagePath]);
+    await storageSupabase.storage.from(RESUME_BUCKET).remove([storagePath]);
     completeRecord("failure", { errorCode: "RESUME_RECORD_CREATE_FAILED" });
     throw insertError;
   }

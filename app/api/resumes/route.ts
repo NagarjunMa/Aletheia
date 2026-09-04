@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import {
+  createClient,
+  createStatelessServiceClient,
+} from "@/lib/supabase/server";
 import type { SafeLogger } from "@/lib/logger";
 import { getCorsHeaders } from "@/lib/cors";
 import { withRequestLifecycle } from "@/lib/request-lifecycle";
@@ -112,6 +115,7 @@ async function handlePost(request: NextRequest, log: SafeLogger) {
       user.id,
       file,
       typeof label === "string" ? label : undefined,
+      createStatelessServiceClient(),
     );
 
     log.info(

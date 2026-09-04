@@ -13,6 +13,7 @@ import {
   getPrimaryResumeText,
   listUserResumes,
   renameUserResume,
+  RESUME_BUCKET,
   sanitizeResumeFileName,
   setPrimaryUserResume,
   uploadUserResume,
@@ -268,6 +269,27 @@ describe("resume service", () => {
       file_name: "My-Resume.pdf",
       parsed_text: "Parsed resume text",
     });
+  });
+
+  it("uses the server-only storage client while keeping row writes owner-scoped", async () => {
+    const database = createFakeSupabase({ rows: [] });
+    const storage = createFakeSupabase({ rows: [] });
+    const file = new File(["resume"], "My Resume.pdf", {
+      type: "application/pdf",
+    });
+
+    await uploadUserResume(
+      database.client as any,
+      "user-1",
+      file,
+      "Uploaded",
+      storage.client as any,
+    );
+
+    expect(storage.client.storage.from).toHaveBeenCalledWith(RESUME_BUCKET);
+    expect(database.client.storage.from).not.toHaveBeenCalled();
+    expect(database.state.inserted).toMatchObject({ user_id: "user-1" });
+    expect(storage.state.inserted).toBeUndefined();
   });
 
   it("rejects invalid files and resume limit overflow", async () => {

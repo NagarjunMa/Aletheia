@@ -20,6 +20,43 @@ Follow-up:
 
 ## Entries
 
+### 2026-09-04
+
+Branch: `feat/ale-43-resume-upload-perimeter`
+
+Area: ALE-43 Phase 1 — secure resume-upload storage and database perimeter
+
+Problem: Resume files currently pass through Vercel and authenticated clients can write directly to the final `user-resumes` bucket. ALE-43 needs a private quarantine, owner-bound reservations, race-safe limits, guarded state transitions, and service-only promotion before later phases can validate and cut over browser uploads.
+
+Decision: Add a forward-only `resume-quarantine` migration with exact-path INSERT-only client access, owner-only reservation visibility, no client quarantine reads, and no authenticated writes to final Storage. Serialize the five-ready, two-active, and ten-hourly limits with a per-user advisory lock. Keep the current multipart route working during the phased rollout by using the cookie-authenticated client for user-owned database work and a cookie-less service-role client only for the already-validated final Storage write and compensation cleanup.
+
+Files changed:
+
+- `supabase/migrations/20260904054433_secure_resume_upload_pipeline.sql`
+- `supabase/migrations/resume-upload-security.test.ts`
+- `lib/database/types.ts`
+- `lib/resumes/{service,service.test}.ts`
+- `lib/supabase/server.ts`
+- `app/api/resumes/{route,route.test}.ts`
+- `docs/progress.txt`
+
+Tests/checks:
+
+- Focused migration, resume service, and route suite: 3 files / 41 tests passed.
+- Full unit suite: 61 files / 727 tests passed; production build passed.
+- Root type-check, lint, PostgreSQL 17 SQL execution, SQL parse, and `git diff --check` passed.
+- Isolated PostgreSQL runtime checks passed for owner/cross-user reservation visibility, INSERT-only quarantine access, direct final-bucket denial, service-only RPC permissions, two-active concurrency enforcement, guarded uploaded/validating/failed transitions, atomic completion, and idempotent completion.
+- The Docker-based full Supabase reset could not run because Docker Desktop stalled while restoring its local database backup. No migration was applied remotely.
+
+Result: Phase 1 is implemented. The schema, RPC, RLS, final-bucket policy cutover, generated type surface, and current-route compatibility bridge are implemented. PostgreSQL runtime checks confirm the isolation, transition, idempotency, and concurrency invariants; a full local Supabase reset remains an environment-level validation gap.
+
+Review fixes: Service-role upload lifecycle RPCs now require the authenticated owner's expected user ID and enforce it in every reservation lookup/update, preventing cross-user mutation if a route receives or mixes up another upload ID. Claiming validation also renews a 15-minute lease so cleanup cannot expire an actively processed upload based on its original reservation deadline.
+
+Follow-up:
+
+- Re-run the full migration chain with `supabase db reset` after Docker Desktop can restore the local stack, then regenerate types directly from that verified local schema.
+- Review the Phase 1 diff before committing and opening PR 1.
+
 ### 2026-09-02
 
 Branch: `feat/ale-41a-observability-stage-coverage`
