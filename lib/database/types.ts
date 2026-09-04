@@ -444,6 +444,89 @@ export type Database = {
           },
         ];
       };
+      resume_uploads: {
+        Row: {
+          completed_at: string | null;
+          content_sha256: string | null;
+          created_at: string;
+          declared_mime: string;
+          declared_size: number;
+          detected_mime: string | null;
+          detected_size: number | null;
+          expires_at: string;
+          failure_code: string | null;
+          file_name: string;
+          id: string;
+          page_count: number | null;
+          parsed_character_count: number | null;
+          quality_codes: string[];
+          resume_id: string | null;
+          retry_count: number;
+          state: string;
+          storage_path: string;
+          updated_at: string;
+          uploaded_at: string | null;
+          user_id: string;
+          validation_started_at: string | null;
+        };
+        Insert: {
+          completed_at?: string | null;
+          content_sha256?: string | null;
+          created_at?: string;
+          declared_mime: string;
+          declared_size: number;
+          detected_mime?: string | null;
+          detected_size?: number | null;
+          expires_at?: string;
+          failure_code?: string | null;
+          file_name: string;
+          id?: string;
+          page_count?: number | null;
+          parsed_character_count?: number | null;
+          quality_codes?: string[];
+          resume_id?: string | null;
+          retry_count?: number;
+          state?: string;
+          storage_path: string;
+          updated_at?: string;
+          uploaded_at?: string | null;
+          user_id: string;
+          validation_started_at?: string | null;
+        };
+        Update: {
+          completed_at?: string | null;
+          content_sha256?: string | null;
+          created_at?: string;
+          declared_mime?: string;
+          declared_size?: number;
+          detected_mime?: string | null;
+          detected_size?: number | null;
+          expires_at?: string;
+          failure_code?: string | null;
+          file_name?: string;
+          id?: string;
+          page_count?: number | null;
+          parsed_character_count?: number | null;
+          quality_codes?: string[];
+          resume_id?: string | null;
+          retry_count?: number;
+          state?: string;
+          storage_path?: string;
+          updated_at?: string;
+          uploaded_at?: string | null;
+          user_id?: string;
+          validation_started_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "resume_uploads_resume_id_fkey";
+            columns: ["resume_id"];
+            isOneToOne: false;
+            referencedRelation: "user_resumes";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       user_resumes: {
         Row: {
           created_at: string;
@@ -576,12 +659,49 @@ export type Database = {
         Args: { end_date: string; start_date: string; target_user_id: string };
         Returns: undefined;
       };
+      cancel_resume_upload: {
+        Args: { p_upload_id: string };
+        Returns: {
+          changed: boolean;
+          storage_path: string;
+          upload_state: string;
+        }[];
+      };
       check_and_increment_rate_limit: {
         Args: { p_daily_limit?: number; p_user_id: string };
         Returns: {
           allowed: boolean;
           remaining: number;
           reset_time: string;
+        }[];
+      };
+      claim_resume_upload: {
+        Args: { p_upload_id: string; p_user_id: string };
+        Returns: {
+          declared_mime: string;
+          declared_size: number;
+          file_name: string;
+          retry_count: number;
+          storage_path: string;
+          upload_id: string;
+          user_id: string;
+        }[];
+      };
+      complete_resume_upload: {
+        Args: {
+          p_content_sha256: string;
+          p_detected_mime: string;
+          p_detected_size: number;
+          p_label: string;
+          p_page_count?: number | null;
+          p_parsed_text: string;
+          p_quality_codes?: string[];
+          p_upload_id: string;
+          p_user_id: string;
+        };
+        Returns: {
+          already_completed: boolean;
+          completed_resume_id: string;
         }[];
       };
       apply_credit_purchase: {
@@ -604,6 +724,14 @@ export type Database = {
           lifetime_credits_purchased: number;
           lifetime_credits_used: number;
           trial_credits_granted_at: string | null;
+        }[];
+      };
+      expire_resume_uploads: {
+        Args: { p_limit?: number };
+        Returns: {
+          storage_path: string;
+          upload_id: string;
+          user_id: string;
         }[];
       };
       grant_trial_credits_once: {
@@ -736,6 +864,25 @@ export type Database = {
               similarity: number;
             }[];
           };
+      mark_resume_upload_uploaded: {
+        Args: { p_upload_id: string; p_user_id: string };
+        Returns: {
+          changed: boolean;
+          upload_state: string;
+        }[];
+      };
+      reject_resume_upload: {
+        Args: {
+          p_failure_code: string;
+          p_retryable?: boolean;
+          p_upload_id: string;
+          p_user_id: string;
+        };
+        Returns: {
+          changed: boolean;
+          upload_state: string;
+        }[];
+      };
       refund_generation_credits: {
         Args: {
           p_amount: number;
@@ -754,6 +901,19 @@ export type Database = {
           allowed: boolean;
           balance_after: number;
           reservation_id: string | null;
+        }[];
+      };
+      reserve_resume_upload: {
+        Args: {
+          p_declared_mime: string;
+          p_declared_size: number;
+          p_file_name: string;
+        };
+        Returns: {
+          bucket_id: string;
+          expires_at: string;
+          storage_path: string;
+          upload_id: string;
         }[];
       };
       schedule_security_cleanup: { Args: never; Returns: undefined };
@@ -782,12 +942,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -809,13 +969,12 @@ export type Tables<
 
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
-    | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -834,13 +993,12 @@ export type TablesInsert<
 
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
-    | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -859,13 +1017,12 @@ export type TablesUpdate<
 
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
-    | keyof DefaultSchema["Enums"]
-    | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    keyof DefaultSchema["Enums"] | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }
@@ -878,11 +1035,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals;
 }

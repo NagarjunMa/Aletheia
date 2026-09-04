@@ -4,8 +4,12 @@ import { makeRequest } from "@/__tests__/helpers/request";
 const mockGetUser = vi.hoisted(() => vi.fn());
 const mockListUserResumes = vi.hoisted(() => vi.fn());
 const mockUploadUserResume = vi.hoisted(() => vi.fn());
+const mockStorageServiceClient = vi.hoisted(() => ({
+  storage: { from: vi.fn() },
+}));
 
 vi.mock("@/lib/supabase/server", () => ({
+  createStatelessServiceClient: vi.fn(() => mockStorageServiceClient),
   createClient: vi.fn(() => ({
     auth: { getUser: mockGetUser },
   })),
@@ -91,6 +95,7 @@ describe("/api/resumes", () => {
       expect.objectContaining({ name: "resume.pdf", type: "application/pdf" }),
     );
     expect(uploadArgs[3]).toBeUndefined();
+    expect(uploadArgs[4]).toBe(mockStorageServiceClient);
     const body = await res.json();
     expect(body.resume).toEqual(MOCK_RESUME);
     expect(body.success).toBe(true);
