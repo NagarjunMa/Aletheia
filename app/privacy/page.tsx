@@ -14,7 +14,7 @@ export const metadata: Metadata = {
   },
 };
 
-const EFFECTIVE_DATE = "August 24, 2026";
+const EFFECTIVE_DATE = "September 5, 2026";
 const CONTACT_EMAIL = "hello@aletheia.live";
 const OPERATOR_NAME = "Nagarjun Mallesh";
 const OPERATOR_LOCATION = "Boston, Massachusetts, United States";
@@ -88,6 +88,11 @@ export default function PrivacyPage() {
             <li>
               <strong>Operational telemetry</strong> — request count, error
               traces, latency. No message body or profile content in error logs.
+            </li>
+            <li>
+              <strong>Optional support-chat information</strong> — questions,
+              name, and email address you voluntarily submit through the chat
+              widget on our landing page.
             </li>
           </ul>
           <p>
@@ -164,6 +169,20 @@ export default function PrivacyPage() {
                 sentry.io/privacy
               </a>
             </li>
+            <li>
+              <strong>OpenSpeechAI</strong> — provides the optional landing-page
+              support chat. It receives the messages and contact details you
+              choose to submit, along with ordinary request metadata needed to
+              deliver the widget.{" "}
+              <a
+                href="https://openspeechai.com/privacy-policy"
+                target="_blank"
+                rel="noreferrer"
+                className="underline"
+              >
+                openspeechai.com/privacy-policy
+              </a>
+            </li>
           </ul>
           <p>
             We do not sell, rent, or share your data with advertisers. We do not
@@ -183,7 +202,7 @@ export default function PrivacyPage() {
           </p>
         </Section>
 
-        <Section title="4. Cookies, local storage, and extension consent">
+        <Section title="4. Cookies, local storage, support chat, and extension consent">
           <p>
             The web app sets only the cookies required for sign-in (Supabase
             session cookies). No advertising or cross-site tracking cookies.
@@ -199,6 +218,13 @@ export default function PrivacyPage() {
             preferences, and accepted-message history on your own device. Your
             uploaded resumes are stored in your Aletheia account rather than in
             Chrome local storage.
+          </p>
+          <p>
+            The optional OpenSpeechAI chat widget loads only on the public
+            landing page. It uses browser local storage to maintain a chat
+            session and remember information you choose to provide. Opening the
+            widget or submitting a message sends that chat information to
+            OpenSpeechAI so it can provide the requested support experience.
           </p>
           <p>
             Before reading supported profile content, the extension presents an

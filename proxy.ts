@@ -255,14 +255,14 @@ export async function proxy(request: NextRequest) {
     // Dev needs 'unsafe-eval' for Next.js hot reload (react-refresh uses eval).
     // Production uses nonce + strict-dynamic only.
     isDev
-      ? `script-src 'self' 'unsafe-eval' 'nonce-${nonce}' 'strict-dynamic'`
-      : `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`,
-    "style-src 'self' 'unsafe-inline'",
+      ? `script-src 'self' 'unsafe-eval' 'nonce-${nonce}' 'strict-dynamic' https://widget.openspeechai.com`
+      : `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https://widget.openspeechai.com`,
+    "style-src 'self' 'unsafe-inline' https://widget.openspeechai.com",
     "img-src 'self' data: https: blob:",
-    "font-src 'self' data:",
+    "font-src 'self' data: https://widget.openspeechai.com",
     isDev
-      ? "connect-src 'self' http://127.0.0.1:* ws://localhost:* https://*.supabase.co wss://*.supabase.co https://api.anthropic.com"
-      : "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.anthropic.com",
+      ? "connect-src 'self' http://127.0.0.1:* ws://localhost:* https://*.supabase.co wss://*.supabase.co https://api.anthropic.com https://widget.openspeechai.com https://openspeechai.com"
+      : "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.anthropic.com https://widget.openspeechai.com https://openspeechai.com",
     "media-src 'self' blob:",
     "worker-src 'self' blob:",
     "object-src 'none'",
