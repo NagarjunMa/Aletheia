@@ -22,6 +22,39 @@ Follow-up:
 
 ### 2026-09-04
 
+Branch: `feat/ale-43-resume-validator`
+
+Area: ALE-43 Phase 2 — byte-oriented resume validation and quality classification
+
+Problem: The quarantine perimeter needs a deterministic validator before direct browser uploads can be finalized. Declared metadata alone cannot establish that a file is a safe PDF or strict UTF-8 text document, and unbounded PDF parsing could consume excessive resources or overlook active content.
+
+Decision: Add shared upload/validation contracts and a server-side byte validator with exact size, MIME, extension, PDF signature, strict UTF-8, and binary-control checks. Parse PDFs with PDF.js evaluation disabled, a ten-second deadline, a 20-page ceiling, bounded text extraction, and guaranteed loading-task/page cleanup. Reject encryption, document/page JavaScript, open actions, attachments, and XFA; continue inspecting later pages for actions even after reaching the text cap. Return stable public codes and Unicode-aware quality metrics while logging only bounded codes and counts.
+
+Files changed:
+
+- `lib/resumes/contracts.ts`
+- `lib/resumes/{parser,parser.test}.ts`
+- `lib/resumes/{validator,validator.test}.ts`
+- `docs/progress.txt`
+
+Tests/checks:
+
+- Focused parser and validator suite: 2 files / 44 tests passed.
+- Full unit suite: 62 files / 762 tests passed.
+- Guardrail suite: 2 files / 15 tests passed.
+- Root type-check, lint, scoped Prettier check, production build, and `git diff --check` passed.
+
+Result: Phase 2 is implementation-complete and ready for review. Accepted documents receive a SHA-256 digest, normalized bounded text, deterministic quality metrics, and ready/warning status; malformed or unsafe inputs receive stable rejection codes without exposing file names, content, hashes, or parser errors in logs or API-facing results.
+
+Review fixes: Aligned the blocking quality floor with the approved policy of 200 normalized characters and 100 Unicode letters. Added exact boundary tests, short-but-usable warnings, suspicious replacement/control-character metrics, removal of suspicious characters from accepted parsed text, and a fail-closed corruption threshold with a stable public code.
+
+Follow-up:
+
+- Review the uncommitted Phase 2 diff, then commit and open ALE-43 PR 2.
+- Keep ALE-43 In Progress; reservation/finalization endpoints and browser cutover remain separate later phases.
+
+### 2026-09-04
+
 Branch: `feat/ale-43-resume-upload-perimeter`
 
 Area: ALE-43 Phase 1 — secure resume-upload storage and database perimeter
