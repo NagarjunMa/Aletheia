@@ -1,27 +1,16 @@
-import React from "react";
-import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
-
-vi.mock("next/script", () => ({
-  default: ({
-    strategy: _strategy,
-    ...props
-  }: React.ComponentProps<"script"> & {
-    strategy?: string;
-  }) => React.createElement("script", props),
-}));
-
-import OpenSpeechWidget, { OPENSPEECH_WIDGET_URL } from "./OpenSpeechWidget";
+import { describe, expect, it } from "vitest";
+import {
+  OPENSPEECH_WIDGET_SCRIPT_PROPS,
+  OPENSPEECH_WIDGET_URL,
+} from "./OpenSpeechWidget";
 
 describe("OpenSpeechWidget", () => {
-  it("loads the configured widget anonymously without blocking page rendering", () => {
-    const markup = renderToStaticMarkup(React.createElement(OpenSpeechWidget));
-
-    expect(markup).toContain(
-      `src="${OPENSPEECH_WIDGET_URL.replaceAll("&", "&amp;")}"`,
-    );
-    expect(markup).toContain('crossorigin="anonymous"');
-    expect(markup).toContain('id="openspeech-ai-chat-widget"');
-    expect(markup).not.toContain('strategy="lazyOnload"');
+  it("keeps the external script contract lazy and anonymous", () => {
+    expect(OPENSPEECH_WIDGET_SCRIPT_PROPS).toEqual({
+      id: "openspeech-ai-chat-widget",
+      src: OPENSPEECH_WIDGET_URL,
+      strategy: "lazyOnload",
+      crossOrigin: "anonymous",
+    });
   });
 });

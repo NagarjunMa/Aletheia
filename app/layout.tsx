@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { DM_Sans, Cormorant_Garamond } from "next/font/google";
 import localFont from "next/font/local";
 import { headers } from "next/headers";
+import OpenSpeechWidget from "@/components/landing/OpenSpeechWidget";
 import "./globals.css";
 import { Providers } from "./providers";
 
@@ -86,7 +87,10 @@ export default async function RootLayout({
       <body
         className={`${dmSans.className} ${dmSans.variable} ${cormorant.variable} ${flaviotte.variable} aurora-grain`}
       >
-        <Providers {...(nonce ? { nonce } : {})}>{children}</Providers>
+        <Providers {...(nonce ? { nonce } : {})}>
+          {children}
+          <OpenSpeechWidget />
+        </Providers>
       </body>
     </html>
   );

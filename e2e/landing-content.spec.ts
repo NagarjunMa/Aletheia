@@ -1,4 +1,57 @@
 import { expect, test } from "@playwright/test";
+import { OPENSPEECH_WIDGET_URL } from "../components/landing/OpenSpeechWidget";
+
+const MOCK_WIDGET_SCRIPT = `
+  const host = document.createElement("div");
+  host.id = "openspeech-widget-host";
+  host.style.display = "block";
+  const shadowRoot = host.attachShadow({ mode: "open" });
+  const button = document.createElement("button");
+  button.type = "button";
+  button.setAttribute("aria-label", "Open chat");
+  shadowRoot.appendChild(button);
+  document.body.appendChild(host);
+`;
+
+test("support widget does not initialize on a direct non-landing visit @smoke", async ({
+  page,
+}) => {
+  let widgetRequestCount = 0;
+  await page.route(OPENSPEECH_WIDGET_URL, (route) => {
+    widgetRequestCount += 1;
+    return route.fulfill({
+      contentType: "application/javascript",
+      body: MOCK_WIDGET_SCRIPT,
+    });
+  });
+
+  await page.goto("/privacy");
+  await expect(page.locator("#openspeech-ai-chat-widget")).toHaveCount(0);
+  await expect(page.locator("#openspeech-widget-host")).toHaveCount(0);
+  expect(widgetRequestCount).toBe(0);
+});
+
+test("support widget remains scoped to the landing route @smoke", async ({
+  page,
+}) => {
+  await page.route(OPENSPEECH_WIDGET_URL, (route) =>
+    route.fulfill({
+      contentType: "application/javascript",
+      body: MOCK_WIDGET_SCRIPT,
+    }),
+  );
+
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: "Open chat" })).toBeVisible();
+
+  await page.getByRole("link", { name: "Privacy", exact: true }).click();
+  await expect(page).toHaveURL(/\/privacy$/);
+  await expect(page.getByRole("button", { name: "Open chat" })).toBeHidden();
+
+  await page.goBack();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("button", { name: "Open chat" })).toBeVisible();
+});
 
 test("landing communicates review-first and no-send boundaries @smoke", async ({
   page,

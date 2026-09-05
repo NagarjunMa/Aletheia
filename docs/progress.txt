@@ -30,12 +30,16 @@ Problem: Visitors had no embedded way to ask contextual questions while evaluati
 
 Decision: Load the configured OpenSpeechAI widget only on the public landing page using Next.js Script with the non-blocking `lazyOnload` strategy and anonymous cross-origin fetching. Restrict CSP expansion to the widget asset and API origins, retain the existing microphone prohibition, and disclose the optional chat processor, messages, contact details, request metadata, and local-storage behavior in the privacy policy.
 
+Review follow-up: Move the widget into a persistent, route-aware controller that does not initialize on direct visits to non-landing routes, hides the provider-created shadow-DOM host after App Router navigation away from `/`, and restores the provider's prior display decision when returning. Replace the static-render test with an explicit script-props contract and add mocked Playwright coverage for landing-to-privacy navigation without making external widget requests in CI.
+
 Files changed:
 
 - `components/landing/OpenSpeechWidget.tsx`
 - `components/landing/OpenSpeechWidget.test.ts`
 - `app/page.tsx`
+- `app/layout.tsx`
 - `app/privacy/page.tsx`
+- `e2e/landing-content.spec.ts`
 - `proxy.ts`
 - `next.config.js`
 - `docs/progress.txt`
@@ -50,6 +54,9 @@ Tests/checks:
 - Browser smoke test confirms the lazy-loaded widget script, visible shadow-DOM host, and accessible `Open chat` control with no console warnings or errors.
 - Changed source files pass Prettier and `git diff --check`; the repository-wide Prettier check still reports unrelated baseline files.
 - Next.js production build passes.
+- Script-props contract verifies the exact URL, `lazyOnload` strategy, anonymous cross-origin mode, and stable script ID.
+- Mocked Playwright smoke tests verify no initialization on direct non-landing visits and landing → privacy → landing visibility without external widget requests.
+- Live-provider production smoke test verifies `block` → `none !important` → `block` lifecycle with no browser warnings or errors.
 
 Result: Implementation and verification complete; branch ready for publication and review.
 
