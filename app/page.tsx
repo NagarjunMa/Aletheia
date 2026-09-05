@@ -8,7 +8,6 @@ import Capabilities from "@/components/landing/Capabilities";
 import TrustProof from "@/components/landing/TrustProof";
 import Footer from "@/components/landing/Footer";
 import LandingMotion from "@/components/landing/LandingMotion";
-import OpenSpeechWidget from "@/components/landing/OpenSpeechWidget";
 import ShaderBackground from "@/components/ShaderBackground";
 
 const Pricing = dynamic(() => import("@/components/landing/Pricing"));
@@ -89,7 +88,6 @@ export default function Home() {
         <CTA />
       </main>
       <Footer />
-      <OpenSpeechWidget />
     </LandingMotion>
   );
 }

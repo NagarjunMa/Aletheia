@@ -220,11 +220,12 @@ export default function PrivacyPage() {
             Chrome local storage.
           </p>
           <p>
-            The optional OpenSpeechAI chat widget loads only on the public
-            landing page. It uses browser local storage to maintain a chat
-            session and remember information you choose to provide. Opening the
-            widget or submitting a message sends that chat information to
-            OpenSpeechAI so it can provide the requested support experience.
+            The optional OpenSpeechAI chat widget initializes only after you
+            visit the public landing page and is hidden on every other route. It
+            uses browser local storage to maintain a chat session and remember
+            information you choose to provide. Opening the widget or submitting
+            a message sends that chat information to OpenSpeechAI so it can
+            provide the requested support experience.
           </p>
           <p>
             Before reading supported profile content, the extension presents an
