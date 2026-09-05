@@ -20,6 +20,43 @@ Follow-up:
 
 ## Entries
 
+### 2026-09-05
+
+Branch: `feat/landing-openspeech-widget`
+
+Area: Landing-page product-assistance widget
+
+Problem: Visitors had no embedded way to ask contextual questions while evaluating Aletheia.
+
+Decision: Load the configured OpenSpeechAI widget only on the public landing page using Next.js Script with the non-blocking `lazyOnload` strategy and anonymous cross-origin fetching. Restrict CSP expansion to the widget asset and API origins, retain the existing microphone prohibition, and disclose the optional chat processor, messages, contact details, request metadata, and local-storage behavior in the privacy policy.
+
+Files changed:
+
+- `components/landing/OpenSpeechWidget.tsx`
+- `components/landing/OpenSpeechWidget.test.ts`
+- `app/page.tsx`
+- `app/privacy/page.tsx`
+- `proxy.ts`
+- `next.config.js`
+- `docs/progress.txt`
+
+Tests/checks:
+
+- Focused widget unit test passes.
+- Full Vitest suite passes: 63 files, 763 tests.
+- Guardrail suite passes: 2 files, 15 tests.
+- TypeScript type-check passes.
+- ESLint passes.
+- Browser smoke test confirms the lazy-loaded widget script, visible shadow-DOM host, and accessible `Open chat` control with no console warnings or errors.
+- Changed source files pass Prettier and `git diff --check`; the repository-wide Prettier check still reports unrelated baseline files.
+- Next.js production build passes.
+
+Result: Implementation and verification complete; branch ready for publication and review.
+
+Follow-up:
+
+- Configure OpenSpeechAI Allowed Origins for the production Aletheia domain and replace the placeholder widget branding/logo in the OpenSpeechAI dashboard.
+
 ### 2026-09-04
 
 Branch: `feat/ale-43-resume-validator`
