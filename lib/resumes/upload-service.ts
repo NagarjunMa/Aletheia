@@ -17,6 +17,7 @@ import { validateResumeBytes } from "./validator";
 const QUARANTINE_BUCKET = "resume-quarantine";
 const DOWNLOAD_TIMEOUT_MS = 10_000;
 const MAX_FINALIZE_RETRIES = 3;
+const MAX_CLEANUP_BATCH_SIZE = 500;
 const log = createLogger("resume-upload-service");
 
 type Supabase = SupabaseClient<Database>;
@@ -749,4 +750,78 @@ export async function cancelResumeUpload(
     "CANCELED_RESUME_CLEANUP_FAILED",
   );
   return { status: "canceled", uploadId };
+}
+
+type CleanupCandidate = {
+  upload_id: string;
+  user_id: string;
+  storage_path: string;
+};
+
+export async function cleanupExpiredResumeUploads(
+  supabase: Supabase,
+  batchSize = 100,
+  logger: SafeLogger = log,
+): Promise<{ claimed: number; removed: number }> {
+  if (
+    !Number.isInteger(batchSize) ||
+    batchSize < 1 ||
+    batchSize > MAX_CLEANUP_BATCH_SIZE
+  ) {
+    throw new Error("Invalid resume cleanup batch size.");
+  }
+
+  const { data, error } = await supabase.rpc("expire_resume_uploads", {
+    p_limit: batchSize,
+  });
+  if (error) {
+    logger.error(
+      { errorCode: "RESUME_CLEANUP_CLAIM_FAILED" },
+      "Resume cleanup claim failed",
+    );
+    throw new Error("Resume cleanup is temporarily unavailable.");
+  }
+
+  const candidates = (data ?? []) as CleanupCandidate[];
+  if (candidates.length === 0) return { claimed: 0, removed: 0 };
+
+  const paths = candidates.map((candidate) => candidate.storage_path);
+  const { error: removalError } = await supabase.storage
+    .from(QUARANTINE_BUCKET)
+    .remove(paths);
+  if (removalError) {
+    logger.warn(
+      {
+        errorCode: "RESUME_QUARANTINE_BATCH_CLEANUP_FAILED",
+        objectCount: candidates.length,
+      },
+      "Resume quarantine cleanup failed",
+    );
+    throw new Error("Resume cleanup is temporarily unavailable.");
+  }
+
+  const uploadIds = candidates.map((candidate) => candidate.upload_id);
+  const { data: markedCount, error: markError } = await supabase.rpc(
+    "mark_resume_uploads_cleaned",
+    { p_upload_ids: uploadIds },
+  );
+  if (markError || markedCount !== uploadIds.length) {
+    logger.warn(
+      {
+        errorCode: "RESUME_CLEANUP_COMPLETION_FAILED",
+        objectCount: candidates.length,
+      },
+      "Resume cleanup completion recording failed",
+    );
+    throw new Error("Resume cleanup is temporarily unavailable.");
+  }
+
+  logger.info(
+    {
+      outcomeCode: "RESUME_CLEANUP_COMPLETE",
+      objectCount: candidates.length,
+    },
+    "Resume quarantine cleanup completed",
+  );
+  return { claimed: candidates.length, removed: candidates.length };
 }

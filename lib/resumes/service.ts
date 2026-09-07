@@ -117,6 +117,11 @@ export async function getPrimaryResumeText(
   }
 }
 
+/**
+ * Temporary rollback transport used only while the direct-upload rollout flag
+ * is disabled. Remove after Phase 5 verifies the quarantine pipeline in the
+ * production environment.
+ */
 export async function uploadUserResume(
   supabase: Supabase,
   userId: string,
@@ -125,9 +130,7 @@ export async function uploadUserResume(
   storageSupabase: ResumeStorageClient = supabase,
 ): Promise<ResumeUploadResult> {
   const validationError = validateResumeFile(file);
-  if (validationError) {
-    throw new Error(validationError);
-  }
+  if (validationError) throw new Error(validationError);
 
   const existing = await listUserResumes(supabase, userId);
   if (existing.length >= MAX_RESUMES_PER_USER) {
@@ -139,8 +142,7 @@ export async function uploadUserResume(
   const safeName = sanitizeResumeFileName(file.name);
   const storagePath = `${userId}/${resumeId}/${safeName}`;
   const isPrimary =
-    existing.length === 0 || !existing.some((r) => r.is_primary);
-
+    existing.length === 0 || !existing.some((resume) => resume.is_primary);
   const completeUpload = startTimedStage(log, "storage.resume_upload", {
     userId,
     fileSize: file.size,
@@ -162,9 +164,7 @@ export async function uploadUserResume(
   const completeRecord = startTimedStage(
     log,
     "repository.resume_record_create",
-    {
-      userId,
-    },
+    { userId },
   );
   const { data, error: insertError } = await supabase
     .from("user_resumes")

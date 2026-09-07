@@ -22,6 +22,55 @@ Follow-up:
 
 ### 2026-09-06
 
+Branch: `feat/ale-43-resume-browser-cutover`
+
+Area: ALE-43 Phase 4 — browser direct upload and quarantine lifecycle cleanup
+
+Problem: Phase 3 exposed secure reservation, finalization, and cancellation APIs, but the profile still sent resume bytes through the legacy Vercel multipart route and abandoned or unsuccessfully deleted quarantine objects had no scheduled, retry-safe cleanup owner.
+
+Decision: Cut the profile uploader over to JSON reservation, authenticated browser upload to the exact `resume-quarantine` path with `upsert: false`, and body-free finalization. Keep client file checks as immediate UX only while preserving RLS and server validation as the security boundary. Map only stable public rejection/quality codes, retry transient finalization against the same reservation, and cancel owner-scoped uploads without exposing provider errors. Gate the cutover behind default-off `NEXT_PUBLIC_RESUME_DIRECT_UPLOAD_ENABLED`; while disabled, preserve the authenticated multipart path as a temporary rollback transport, and when enabled return `410 LEGACY_RESUME_UPLOAD_DEPRECATED` without reading its body. Use an hourly Vercel Cron run protected by `CRON_SECRET`, capped at five batches of 100, and report saturation. Add a forward-only 15-minute cleanup lease and idempotent completion timestamp so failures remain retryable. Cleanup may claim a ready row only to remove a residual object from the fixed `resume-quarantine` bucket after ambiguous promotion; it never removes from the final `user-resumes` bucket.
+
+Files changed:
+
+- `app/profile/{ResumeManager,ResumeManager.test}.tsx`
+- `app/api/resumes/{route,route.test}.ts`
+- `app/api/internal/resumes/cleanup/{route,route.test}.ts`
+- `lib/resumes/{contracts,parser,service,service.test,upload-service,upload-service.test}.ts`
+- `supabase/migrations/20260906120000_resume_upload_cleanup_leases.sql`
+- `supabase/migrations/resume-upload-cleanup.test.ts`
+- `lib/database/types.ts`
+- `.env.local.example`, `vercel.json`, `vitest.config.ts`
+- `docs/agents/engineering-guide.md`, `docs/progress.txt`
+
+Tests/checks:
+
+- TDD red phase confirmed the missing direct-upload UI, stable multipart deprecation, cleanup route, and retry lease before implementation.
+- Focused resume/UI/API/migration suite passed after audit corrections: 12 files / 142 tests.
+- Full Vitest and coverage suites passed after audit corrections: 70 files / 820 tests; coverage reached 88.16% statements, 80.24% branches, 87.67% functions, and 89.71% lines.
+- Guardrail suite passed: 2 files / 15 tests.
+- Type-check, lint, scoped Prettier, `git diff --check`, production build, and unauthenticated profile Playwright smoke passed.
+- The forward-only cleanup migration executed successfully in an isolated PostgreSQL 17 cluster. A seeded audit rerun on 2026-09-06 confirmed stale reservation expiry, ready-final-object exclusion, quarantine cleanup marking for expired/canceled rows, idempotent completion, and authenticated/service-role grant separation. Contract tests assert bounded leases, retry eligibility, service-role-only grants, and ready-row eligibility solely for residual quarantine cleanup.
+- A source scan confirmed `FormData` and `uploadUserResume` remain reachable only behind the default-off rollout flag as the temporary rollback transport; the enabled direct-upload path sends no file bytes through Next.js.
+- Official Supabase browser-upload/RLS guidance, the Supabase changelog, and Vercel Cron/`CRON_SECRET` guidance were checked on 2026-09-06. Standard browser upload is appropriate under the 5 MiB limit; the Phase 5 environment gate must confirm that the deployed Vercel plan accepts the configured hourly schedule.
+- The independent Critical-tier review found three initial blockers and two P2 follow-ups. The default-off cutover flag, ready-row residual quarantine cleanup, hourly saturation signal, corrected evidence, and restored rollback-path regressions resolved all five; the final independent rereview found no unresolved material issue.
+- Dependency audit failed its advisory check with the eight inherited findings already recorded in Phase 3 (seven high, one low); Phase 4 changes no dependency versions or lockfiles. Remediation remains a separate pre-production dependency upgrade because it changes framework/runtime risk outside this phase.
+- Not run: authenticated production-like direct upload, live browser network trace, remote migration application, and real near-5-MiB Supabase upload. Those environment-dependent gates remain Phase 5; no remote state was changed.
+
+Result: Phase 4 is implementation-complete locally behind a safe rollout gate. With the flag enabled, resume bytes travel directly from the authenticated browser to the private quarantine bucket and Next.js receives metadata/lifecycle calls only. With the default-off flag, the prior authenticated transport remains available until the production prerequisites pass. The UI exposes accessible reserving, uploading, validating, warning, ready, rejection, retry, cancellation, and over-limit states without raw server or Storage errors. Bounded cleanup is secret-protected, leased, repeat-safe, hourly, saturation-aware, and restricted to the quarantine bucket.
+
+Engineering-loop risk review: **Critical** because the change crosses browser authentication, Storage RLS, resume PII, service-role cleanup, and destructive object deletion. Correctness, architecture, authorization, privacy, reliability, bounded memory/cost, concurrency, compatibility, accessibility, observability, and rollback were reviewed. Independent review found three initial blockers and two P2 follow-ups; the rollout flag, residual-ready cleanup, hourly saturation-aware schedule, evidence correction, and rollback regression coverage resolve them. The ALE-43 issue-wide completion gate stays open for Phase 5.
+
+Rollout: Deploy with `NEXT_PUBLIC_RESUME_DIRECT_UPLOAD_ENABLED=false`, apply the Phase 1 and Phase 4 forward migrations, configure a random production `CRON_SECRET` of at least 16 characters, verify the exact quarantine INSERT policy, run a real near-5-MiB upload, inspect a browser network trace, and confirm cleanup without saturation. Then set the flag to `true` and redeploy to enable direct uploads.
+
+Rollback: Set `NEXT_PUBLIC_RESUME_DIRECT_UPLOAD_ENABLED=false` and redeploy to restore the previous upload transport without reverting additive migrations. Pause the Vercel Cron only if cleanup itself is implicated. Do not reverse migrations or remove quarantine state while reservations or objects exist.
+
+Follow-up:
+
+- Commit and open the dedicated Phase 4 pull request after the final check rerun.
+- Keep ALE-43 In Progress. Execute Phase 5 production-like integration, migration/secret verification, monitoring, and rollout evidence only after Phase 4 merges.
+
+### 2026-09-06
+
 Branch: `feat/ale-43-resume-upload-apis`
 
 Area: ALE-43 Phase 3 — owner-bound resume reservation, finalization, and cancellation APIs

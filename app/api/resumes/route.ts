@@ -89,76 +89,88 @@ async function handlePost(request: NextRequest, log: SafeLogger) {
     );
   }
 
-  let formData: FormData;
-  try {
-    formData = await request.formData();
-  } catch {
-    return NextResponse.json(
-      { error: "Invalid multipart body" },
-      { status: 400, headers: corsHeaders },
-    );
+  if (process.env.NEXT_PUBLIC_RESUME_DIRECT_UPLOAD_ENABLED !== "true") {
+    let formData: FormData;
+    try {
+      formData = await request.formData();
+    } catch {
+      return NextResponse.json(
+        { error: "Invalid multipart body" },
+        { status: 400, headers: corsHeaders },
+      );
+    }
+    const file = formData.get("file");
+    if (!(file instanceof File)) {
+      return NextResponse.json(
+        { error: "Missing 'file' field" },
+        { status: 400, headers: corsHeaders },
+      );
+    }
+    try {
+      const result = await uploadUserResume(
+        supabase,
+        user.id,
+        file,
+        undefined,
+        createStatelessServiceClient(),
+      );
+      return NextResponse.json(
+        { success: true, ...result },
+        { status: 201, headers: corsHeaders },
+      );
+    } catch (caught) {
+      const message =
+        caught instanceof Error ? caught.message : "Upload failed";
+      const status = message.includes("5 MB")
+        ? 413
+        : message.includes("Unsupported")
+          ? 415
+          : message.includes("limit")
+            ? 409
+            : message.includes("extractable")
+              ? 422
+              : 500;
+      log.warn(
+        {
+          errorCode: "LEGACY_RESUME_UPLOAD_FAILED",
+          userId: user.id.substring(0, 12),
+          status,
+        },
+        "Legacy resume upload failed",
+      );
+      const publicMessage =
+        status === 413
+          ? "The resume must be 5 MB or smaller."
+          : status === 415
+            ? "Only PDF and UTF-8 TXT resumes are supported."
+            : status === 409
+              ? "Delete an existing resume before uploading another one."
+              : status === 422
+                ? "The resume does not contain enough readable text."
+                : "Resume uploads are temporarily unavailable. Please try again.";
+      return NextResponse.json(
+        { error: publicMessage },
+        { status, headers: corsHeaders },
+      );
+    }
   }
 
-  const file = formData.get("file");
-  if (!(file instanceof File)) {
-    return NextResponse.json(
-      { error: "Missing 'file' field" },
-      { status: 400, headers: corsHeaders },
-    );
-  }
-
-  const label = formData.get("label");
-
-  try {
-    const result = await uploadUserResume(
-      supabase,
-      user.id,
-      file,
-      typeof label === "string" ? label : undefined,
-      createStatelessServiceClient(),
-    );
-
-    log.info(
-      {
-        userId: user.id.substring(0, 12),
-        mime: file.type,
-        bytes: file.size,
-        outputChars: result.resume.parsed_text_chars,
-        truncated: result.truncated,
-      },
-      "Resume uploaded",
-    );
-
-    return NextResponse.json(
-      { success: true, ...result },
-      { status: 201, headers: corsHeaders },
-    );
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Upload failed";
-    const status = message.includes("5 MB")
-      ? 413
-      : message.includes("Unsupported")
-        ? 415
-        : message.includes("limit")
-          ? 409
-          : message.includes("extractable")
-            ? 422
-            : 500;
-
-    log.warn(
-      {
-        errorCode: "RESUME_UPLOAD_FAILED",
-        userId: user.id.substring(0, 12),
-        status,
-      },
-      "Resume upload failed",
-    );
-
-    return NextResponse.json(
-      { error: message },
-      { status, headers: corsHeaders },
-    );
-  }
+  log.warn(
+    {
+      errorCode: "LEGACY_RESUME_UPLOAD_DEPRECATED",
+      userId: user.id.substring(0, 12),
+      status: 410,
+    },
+    "Legacy multipart resume upload rejected",
+  );
+  return NextResponse.json(
+    {
+      error: "Multipart resume uploads are no longer supported.",
+      code: "LEGACY_RESUME_UPLOAD_DEPRECATED",
+      uploadEndpoint: "/api/resumes/uploads",
+    },
+    { status: 410, headers: corsHeaders },
+  );
 }
 
 export async function OPTIONS(request: NextRequest) {

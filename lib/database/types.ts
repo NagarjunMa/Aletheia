@@ -460,6 +460,8 @@ export type Database = {
           page_count: number | null;
           parsed_character_count: number | null;
           quality_codes: string[];
+          quarantine_cleaned_at: string | null;
+          quarantine_cleanup_claimed_at: string | null;
           resume_id: string | null;
           retry_count: number;
           state: string;
@@ -484,6 +486,8 @@ export type Database = {
           page_count?: number | null;
           parsed_character_count?: number | null;
           quality_codes?: string[];
+          quarantine_cleaned_at?: string | null;
+          quarantine_cleanup_claimed_at?: string | null;
           resume_id?: string | null;
           retry_count?: number;
           state?: string;
@@ -508,6 +512,8 @@ export type Database = {
           page_count?: number | null;
           parsed_character_count?: number | null;
           quality_codes?: string[];
+          quarantine_cleaned_at?: string | null;
+          quarantine_cleanup_claimed_at?: string | null;
           resume_id?: string | null;
           retry_count?: number;
           state?: string;
@@ -733,6 +739,10 @@ export type Database = {
           upload_id: string;
           user_id: string;
         }[];
+      };
+      mark_resume_uploads_cleaned: {
+        Args: { p_upload_ids: string[] };
+        Returns: number;
       };
       grant_trial_credits_once: {
         Args: { p_amount?: number; p_user_id: string };
