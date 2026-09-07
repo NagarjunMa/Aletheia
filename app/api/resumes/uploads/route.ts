@@ -3,8 +3,7 @@ import { z } from "zod";
 import { getCorsHeaders } from "@/lib/cors";
 import type { SafeLogger } from "@/lib/logger";
 import { withRequestLifecycle } from "@/lib/request-lifecycle";
-import { RESUME_MIME_TYPES } from "@/lib/resumes/contracts";
-import { MAX_RESUME_BYTES } from "@/lib/resumes/parser";
+import { MAX_RESUME_BYTES, RESUME_MIME_TYPES } from "@/lib/resumes/contracts";
 import {
   isResumeUploadServiceError,
   reserveResumeUpload,

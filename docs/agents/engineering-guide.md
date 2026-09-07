@@ -217,9 +217,12 @@ Copy `.env.local.example` → `.env.local` for local dev. Never commit secrets.
 
 ### Resume Upload Pipeline (ALE-43, phased rollout)
 
-Phase 3 provides the authenticated metadata and lifecycle API while the profile
-UI continues using the legacy multipart route until the separate Phase 4
-browser cutover.
+The profile UI uses the Phase 4 direct-upload flow when
+`NEXT_PUBLIC_RESUME_DIRECT_UPLOAD_ENABLED=true`. Keep the flag disabled until
+the production migrations, RLS, and authenticated upload path are verified;
+the disabled state preserves the previous multipart transport as a temporary
+rollback path. Enabling or disabling this public build-time flag requires a
+redeploy. Remove the rollback transport after the Phase 5 rollout gate.
 
 - `POST /api/resumes/uploads` accepts JSON metadata only: a sanitized PDF/TXT
   file name, an allow-listed MIME type, and an integer size from 1 byte through
@@ -234,6 +237,17 @@ browser cutover.
   codes.
 - `DELETE /api/resumes/uploads/{id}` performs owner-scoped, repeat-safe
   cancellation and best-effort quarantine cleanup.
+- `POST /api/resumes` preserves the authenticated multipart rollback path only
+  while the direct-upload flag is disabled. Once enabled, it never reads
+  multipart bodies and returns `LEGACY_RESUME_UPLOAD_DEPRECATED`; remove the
+  rollback path in the final rollout phase.
+- `GET /api/internal/resumes/cleanup` is a dynamic Node route invoked hourly by
+  Vercel Cron. It requires a `CRON_SECRET` Bearer token, processes at most five
+  batches of 100 quarantine rows with a 15-minute lease, removes objects only
+  from `resume-quarantine`, records completion, and reports saturation. Failed
+  or interrupted batches become claimable again after the lease. Ready rows
+  may be claimed only to remove a residual quarantine copy after an ambiguous
+  promotion; the final `user-resumes` bucket is never targeted.
 
 The service-role client is created only after authentication and ownership are
 established and is never exposed to browser code. Quarantine objects have no
@@ -241,7 +255,8 @@ authenticated read/update/delete policy; authenticated clients cannot write to
 the final bucket. Logs and public errors must never include resume bytes,
 parsed text, file names, storage paths, content hashes, or raw provider/parser
 errors. Phase 4 owns browser direct upload, legacy multipart deprecation, and
-expired/orphan cleanup; Phase 5 owns production migration and rollout gates.
+expired/orphan cleanup; Phase 5 owns production migration, authenticated
+near-limit integration, monitoring, and rollout gates.
 
 ---
 

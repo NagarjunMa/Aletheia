@@ -8,6 +8,7 @@ vi.mock("./validator", () => ({
 
 import {
   cancelResumeUpload,
+  cleanupExpiredResumeUploads,
   finalizeResumeUpload,
   reserveResumeUpload,
   ResumeUploadServiceError,
@@ -799,5 +800,94 @@ describe("resume upload service", () => {
       cancelResumeUpload(authenticated.client as any, UPLOAD_ID, factory),
     ).rejects.toBeInstanceOf(ResumeUploadServiceError);
     expect(factory).not.toHaveBeenCalled();
+  });
+});
+
+describe("resume upload cleanup", () => {
+  it("claims a bounded batch, removes only quarantine objects, and records completion", async () => {
+    const calls = {
+      rpc: [] as Array<{ name: string; args: unknown }>,
+      buckets: [] as string[],
+      removes: [] as string[][],
+    };
+    const client = {
+      rpc: vi.fn(async (name: string, args: unknown) => {
+        calls.rpc.push({ name, args });
+        if (name === "expire_resume_uploads") {
+          return {
+            data: [
+              {
+                upload_id: UPLOAD_ID,
+                user_id: USER_ID,
+                storage_path: STORAGE_PATH,
+              },
+            ],
+            error: null,
+          };
+        }
+        if (name === "mark_resume_uploads_cleaned") {
+          return { data: 1, error: null };
+        }
+        return { data: null, error: new Error("unexpected RPC") };
+      }),
+      storage: {
+        from: vi.fn((bucket: string) => {
+          calls.buckets.push(bucket);
+          return {
+            remove: vi.fn(async (paths: string[]) => {
+              calls.removes.push(paths);
+              return { data: [], error: null };
+            }),
+          };
+        }),
+      },
+    };
+
+    await expect(
+      cleanupExpiredResumeUploads(client as any, 100),
+    ).resolves.toEqual({ claimed: 1, removed: 1 });
+    expect(calls.rpc).toEqual([
+      { name: "expire_resume_uploads", args: { p_limit: 100 } },
+      {
+        name: "mark_resume_uploads_cleaned",
+        args: { p_upload_ids: [UPLOAD_ID] },
+      },
+    ]);
+    expect(calls.buckets).toEqual(["resume-quarantine"]);
+    expect(calls.removes).toEqual([[STORAGE_PATH]]);
+  });
+
+  it("leaves a failed storage batch unmarked so its lease can be retried", async () => {
+    const rpc = vi.fn().mockResolvedValueOnce({
+      data: [
+        { upload_id: UPLOAD_ID, user_id: USER_ID, storage_path: STORAGE_PATH },
+      ],
+      error: null,
+    });
+    const client = {
+      rpc,
+      storage: {
+        from: vi.fn(() => ({
+          remove: vi.fn(async () => ({
+            data: null,
+            error: new Error("private provider details"),
+          })),
+        })),
+      },
+    };
+
+    await expect(
+      cleanupExpiredResumeUploads(client as any, 100),
+    ).rejects.toThrow("Resume cleanup is temporarily unavailable.");
+    expect(rpc).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects an out-of-range batch before database access", async () => {
+    const client = { rpc: vi.fn() };
+
+    await expect(
+      cleanupExpiredResumeUploads(client as any, 501),
+    ).rejects.toThrow("Invalid resume cleanup batch size.");
+    expect(client.rpc).not.toHaveBeenCalled();
   });
 });

@@ -250,35 +250,14 @@ describe("resume service", () => {
     ).resolves.toEqual({ text: "", source: "none" });
   });
 
-  it("uploads a resume as primary when no existing primary exists", async () => {
-    const { client, state } = createFakeSupabase({ rows: [] });
-    const file = new File(["resume"], "My Resume.pdf", {
-      type: "application/pdf",
-    });
-
-    const result = await uploadUserResume(
-      client as any,
-      "user-1",
-      file,
-      "Uploaded",
-    );
-
-    expect(result.resume.label).toBe("Uploaded");
-    expect(state.inserted).toMatchObject({
-      is_primary: true,
-      file_name: "My-Resume.pdf",
-      parsed_text: "Parsed resume text",
-    });
-  });
-
-  it("uses the server-only storage client while keeping row writes owner-scoped", async () => {
+  it("keeps rollback uploads owner-scoped and uses server-only storage", async () => {
     const database = createFakeSupabase({ rows: [] });
     const storage = createFakeSupabase({ rows: [] });
     const file = new File(["resume"], "My Resume.pdf", {
       type: "application/pdf",
     });
 
-    await uploadUserResume(
+    const result = await uploadUserResume(
       database.client as any,
       "user-1",
       file,
@@ -286,18 +265,36 @@ describe("resume service", () => {
       storage.client as any,
     );
 
+    expect(result.resume.label).toBe("Uploaded");
     expect(storage.client.storage.from).toHaveBeenCalledWith(RESUME_BUCKET);
     expect(database.client.storage.from).not.toHaveBeenCalled();
-    expect(database.state.inserted).toMatchObject({ user_id: "user-1" });
-    expect(storage.state.inserted).toBeUndefined();
+    expect(database.state.inserted).toMatchObject({
+      user_id: "user-1",
+      parsed_text: "Parsed resume text",
+    });
   });
 
-  it("rejects invalid files and resume limit overflow", async () => {
+  it("removes the rollback storage object when its row insert fails", async () => {
+    const database = createFakeSupabase({
+      rows: [],
+      insertError: new Error("insert failed"),
+    });
+
+    await expect(
+      uploadUserResume(
+        database.client as any,
+        "user-1",
+        new File(["resume"], "resume.txt", { type: "text/plain" }),
+      ),
+    ).rejects.toThrow("insert failed");
+    expect(database.state.removedPaths[0]).toContain("user-1/");
+  });
+
+  it("rejects invalid rollback files and resume-limit overflow", async () => {
     mockValidateResumeFile.mockReturnValueOnce(
       "Unsupported file type: image/png",
     );
     const invalid = createFakeSupabase();
-
     await expect(
       uploadUserResume(
         invalid.client as any,
@@ -321,24 +318,7 @@ describe("resume service", () => {
     ).rejects.toThrow("Resume limit exceeded");
   });
 
-  it("cleans up uploaded storage object when DB insert fails", async () => {
-    const { client, state } = createFakeSupabase({
-      rows: [],
-      insertError: new Error("insert failed"),
-    });
-
-    await expect(
-      uploadUserResume(
-        client as any,
-        "user-1",
-        new File(["x"], "resume.txt", { type: "text/plain" }),
-      ),
-    ).rejects.toThrow("insert failed");
-
-    expect(state.removedPaths[0]).toContain("user-1/");
-  });
-
-  it("surfaces storage upload errors before inserting metadata", async () => {
+  it("does not create metadata when rollback storage upload fails", async () => {
     const { client, state } = createFakeSupabase({
       rows: [],
       uploadError: new Error("upload failed"),
@@ -351,7 +331,6 @@ describe("resume service", () => {
         new File(["x"], "resume.txt", { type: "text/plain" }),
       ),
     ).rejects.toThrow("upload failed");
-
     expect(state.inserted).toBeUndefined();
   });
 

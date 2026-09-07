@@ -1,4 +1,5 @@
 export const RESUME_MIME_TYPES = ["application/pdf", "text/plain"] as const;
+export const MAX_RESUME_BYTES = 5 * 1024 * 1024;
 
 export type ResumeMimeType = (typeof RESUME_MIME_TYPES)[number];
 export type ResumeValidationStatus = "ready" | "warning" | "rejected";
@@ -151,4 +152,16 @@ export const RESUME_UPLOAD_FAILURE_MESSAGES: Record<
     "The resume could not be saved safely. Please upload it again.",
   TEMPORARY_PROCESSING_FAILURE:
     "The resume could not be processed right now. Please try again.",
+};
+
+export const RESUME_QUALITY_MESSAGES: Record<ResumeQualityCode, string> = {
+  TEXT_TRUNCATED: "Parsed text was trimmed to 50,000 characters.",
+  LOW_TEXT_DENSITY:
+    "Some pages contain little readable text. Review the generated draft carefully.",
+  HIGH_REPETITION:
+    "The resume contains repeated text. Review the generated draft carefully.",
+  UNUSUAL_CHARACTER_RATIO:
+    "Some characters could not be read cleanly. Review the generated draft carefully.",
+  SHORT_USABLE_TEXT:
+    "Only a small amount of usable text was found. Review the generated draft carefully.",
 };

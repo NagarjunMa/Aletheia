@@ -40,9 +40,9 @@ const MOCK_RESUME = {
   has_storage_file: true,
 };
 
-function makeMultipart(file?: File): Request {
+function makeMultipart(): Request {
   const formData = new FormData();
-  if (file) formData.append("file", file);
+  formData.append("file", new File(["resume"], "private-name.txt"));
   return new Request("http://localhost:3000/api/resumes", {
     method: "POST",
     body: formData,
@@ -54,6 +54,7 @@ describe("/api/resumes", () => {
     mockGetUser.mockReset();
     mockListUserResumes.mockReset();
     mockUploadUserResume.mockReset();
+    process.env.NEXT_PUBLIC_RESUME_DIRECT_UPLOAD_ENABLED = "true";
     mockGetUser.mockResolvedValue({ data: { user: MOCK_USER }, error: null });
   });
 
@@ -77,43 +78,37 @@ describe("/api/resumes", () => {
     expect(res.status).toBe(401);
   });
 
-  it("POST uploads a resume and returns created metadata", async () => {
+  it("POST returns the stable direct-upload deprecation contract", async () => {
+    const request = makeMultipart();
+    const formDataSpy = vi.spyOn(request, "formData");
+
+    const res = await POST(request as never);
+
+    expect(res.status).toBe(410);
+    await expect(res.json()).resolves.toEqual({
+      error: "Multipart resume uploads are no longer supported.",
+      code: "LEGACY_RESUME_UPLOAD_DEPRECATED",
+      uploadEndpoint: "/api/resumes/uploads",
+    });
+    expect(formDataSpy).not.toHaveBeenCalled();
+  });
+
+  it("preserves the authenticated legacy transport until rollout is enabled", async () => {
+    process.env.NEXT_PUBLIC_RESUME_DIRECT_UPLOAD_ENABLED = "false";
     mockUploadUserResume.mockResolvedValue({
       resume: MOCK_RESUME,
       truncated: false,
     });
 
-    const file = new File([new Uint8Array([1, 2, 3])], "resume.pdf", {
-      type: "application/pdf",
-    });
-    const res = await POST(makeMultipart(file) as never);
-
-    expect(res.status).toBe(201);
-    const uploadArgs = mockUploadUserResume.mock.calls[0]!;
-    expect(uploadArgs[1]).toBe(MOCK_USER.id);
-    expect(uploadArgs[2]).toEqual(
-      expect.objectContaining({ name: "resume.pdf", type: "application/pdf" }),
-    );
-    expect(uploadArgs[3]).toBeUndefined();
-    expect(uploadArgs[4]).toBe(mockStorageServiceClient);
-    const body = await res.json();
-    expect(body.resume).toEqual(MOCK_RESUME);
-    expect(body.success).toBe(true);
-  });
-
-  it("POST rejects missing files", async () => {
     const res = await POST(makeMultipart() as never);
 
-    expect(res.status).toBe(400);
-    expect(mockUploadUserResume).not.toHaveBeenCalled();
-  });
-
-  it("POST maps resume limit failures to 409", async () => {
-    mockUploadUserResume.mockRejectedValue(new Error("Resume limit exceeded"));
-
-    const file = new File(["resume"], "resume.txt", { type: "text/plain" });
-    const res = await POST(makeMultipart(file) as never);
-
-    expect(res.status).toBe(409);
+    expect(res.status).toBe(201);
+    expect(mockUploadUserResume).toHaveBeenCalledWith(
+      expect.anything(),
+      MOCK_USER.id,
+      expect.objectContaining({ name: "private-name.txt" }),
+      undefined,
+      mockStorageServiceClient,
+    );
   });
 });
