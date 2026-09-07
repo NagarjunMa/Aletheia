@@ -241,13 +241,17 @@ redeploy. Remove the rollback transport after the Phase 5 rollout gate.
   while the direct-upload flag is disabled. Once enabled, it never reads
   multipart bodies and returns `LEGACY_RESUME_UPLOAD_DEPRECATED`; remove the
   rollback path in the final rollout phase.
-- `GET /api/internal/resumes/cleanup` is a dynamic Node route invoked hourly by
-  Vercel Cron. It requires a `CRON_SECRET` Bearer token, processes at most five
+- `GET /api/internal/resumes/cleanup` is a dynamic Node route invoked daily at
+  `03:17` UTC by Vercel Cron, matching the Hobby plan's once-daily limit. It
+  requires a `CRON_SECRET` Bearer token and processes at most five
   batches of 100 quarantine rows with a 15-minute lease, removes objects only
   from `resume-quarantine`, records completion, and reports saturation. Failed
   or interrupted batches become claimable again after the lease. Ready rows
   may be claimed only to remove a residual quarantine copy after an ambiguous
-  promotion; the final `user-resumes` bucket is never targeted.
+  promotion; the final `user-resumes` bucket is never targeted. Hobby execution
+  may occur up to 59 minutes after the scheduled hour, and a failed or saturated
+  run can extend retention beyond 24 hours; Phase 5 must monitor this residual
+  risk or move cleanup to a more frequent execution plan.
 
 The service-role client is created only after authentication and ownership are
 established and is never exposed to browser code. Quarantine objects have no
