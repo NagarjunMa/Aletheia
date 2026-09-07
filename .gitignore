@@ -84,6 +84,6 @@ ehthumbs.db
 *~
 
 # Local user/generated content
-uploads/
+/uploads/
 user-content/
 generated/

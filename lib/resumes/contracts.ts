@@ -32,6 +32,12 @@ export type ResumeRejectionCode =
   | "INSUFFICIENT_TEXT"
   | "CORRUPTED_TEXT";
 
+export type ResumeUploadFailureCode =
+  | ResumeRejectionCode
+  | "DUPLICATE_RESUME"
+  | "PERSISTENCE_FAILURE"
+  | "TEMPORARY_PROCESSING_FAILURE";
+
 export type ResumeQualityCode =
   | "TEXT_TRUNCATED"
   | "LOW_TEXT_DENSITY"
@@ -100,12 +106,15 @@ export type FinalizeResumeUploadResponse =
       uploadId: string;
       resumeId: string;
       qualityCodes: ResumeQualityCode[];
-      metrics: Omit<ResumeQualityMetrics, "byteCount">;
+      metrics: {
+        pageCount: number | null;
+        characterCount: number;
+      };
     }
   | {
       status: "rejected" | "failed";
       uploadId: string;
-      code: ResumeRejectionCode | "TEMPORARY_PROCESSING_FAILURE";
+      code: ResumeUploadFailureCode;
       message: string;
       retryable: boolean;
     };
@@ -131,4 +140,15 @@ export const RESUME_REJECTION_MESSAGES: Record<ResumeRejectionCode, string> = {
   INSUFFICIENT_TEXT: "The resume does not contain enough meaningful text.",
   CORRUPTED_TEXT:
     "The extracted resume text contains too many unreadable characters.",
+};
+
+export const RESUME_UPLOAD_FAILURE_MESSAGES: Record<
+  Exclude<ResumeUploadFailureCode, ResumeRejectionCode>,
+  string
+> = {
+  DUPLICATE_RESUME: "This resume has already been uploaded.",
+  PERSISTENCE_FAILURE:
+    "The resume could not be saved safely. Please upload it again.",
+  TEMPORARY_PROCESSING_FAILURE:
+    "The resume could not be processed right now. Please try again.",
 };

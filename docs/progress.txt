@@ -20,6 +20,58 @@ Follow-up:
 
 ## Entries
 
+### 2026-09-06
+
+Branch: `feat/ale-43-resume-upload-apis`
+
+Area: ALE-43 Phase 3 — owner-bound resume reservation, finalization, and cancellation APIs
+
+Problem: The quarantine and validator phases existed, but browsers had no bounded metadata endpoint for reserving an exact upload path and no trusted server workflow for acknowledging, validating, promoting, retrying, rejecting, or canceling a direct Storage upload.
+
+Decision: Add JSON-only reservation, body-free finalize, and cancellation routes backed by a dedicated upload service. Keep reservation and cancellation on the cookie-authenticated client, create the stateless service-role client only after authentication or owner-scoped cancellation succeeds, and pass the authenticated user ID through every privileged lifecycle RPC. Finalization downloads only from the private quarantine with a timeout, validates actual bytes, promotes accepted files across private buckets, completes the database record atomically, reconciles ambiguous completion and Storage-move responses, restores promoted bytes before retryable failures, and removes promoted or quarantine bytes when safe restoration fails. Only the explicit temporary-processing code can re-enter validation, and terminal, expired, canceled, over-limit, and concurrent states fail closed.
+
+Files changed:
+
+- `.gitignore`
+- `docs/agents/engineering-guide.md`
+- `lib/resumes/contracts.ts`
+- `lib/zod-details.ts`
+- `lib/resumes/{upload-service,upload-service.test}.ts`
+- `app/api/resumes/uploads/{route,route.test}.ts`
+- `app/api/resumes/uploads/[id]/{route,route.test}.ts`
+- `app/api/resumes/uploads/[id]/finalize/{route,route.test}.ts`
+- `docs/progress.txt`
+
+Tests/checks:
+
+- Focused Phase 3 service and route suite: 4 files / 40 tests passed after TDD regressions first failed and then passed.
+- Resume regression suite: 10 files / 107 tests passed.
+- Full coverage suite: 66 files / 802 tests passed; 80.79% branch coverage satisfied the 80% CI threshold.
+- Guardrail suite: 2 files / 15 tests passed.
+- Migration/RLS contract suite: 1 file / 21 tests passed.
+- Browser smoke and health suite: 16 tests passed.
+- Unchanged extension security/build suite: 18 files / 169 tests passed, extension dependency audit reported zero vulnerabilities, and the version policy confirmed no packaged extension change.
+- Root type-check, lint, production build, scoped Prettier, and `git diff --check` passed. The build retained the pre-existing stale `caniuse-lite` warning.
+- Supabase changelog, installed `@supabase/supabase-js` 2.107.0 Storage signatures, and official Storage access-control documentation were checked on 2026-09-06; no applicable Storage breaking change was found.
+- Blocked: Supabase CLI 2.116.0 loaded, but the Docker/local-stack availability check stalled and was terminated after 10 seconds. A production-like direct-upload integration and remote migration validation were therefore not run; no remote project state was changed.
+- Additional non-gating root production-dependency audit failed with eight inherited advisories (seven high, one low), including Next.js and transitive build/runtime packages. This branch changes no dependencies; remediation remains outside the Phase 3 diff and must be tracked before production rollout.
+
+Result: The Phase 3 audit found and corrected two material issues: Zod 400 responses now use the required field-detail array, and retries now recover, revalidate, and complete an object that an earlier ambiguous Storage move already promoted. Reservation responses contain only the generated upload ID, private bucket, exact server path, expiry, and non-upsert upload options. Finalization is owner-bound, body-free, and idempotent; it exposes stable public failure codes without raw database or Storage errors, converts unexpected validator faults into bounded retries, rejects same-user duplicates, byte-verifies ambiguous promotions, and compensates cross-system failures. Cancellation is owner-scoped, repeat-safe, and performs best-effort private quarantine cleanup.
+
+Engineering-loop final audit: Critical risk because the change crosses authentication, authorization, service-role Storage, RLS-backed RPCs, untrusted documents, and production PII. Correctness, architecture, security/privacy, data integrity, concurrency/idempotency, reliability, bounded performance/memory/cost, compatibility, observability, regression risk, rollout, and rollback were reviewed. Accessibility is N/A because Phase 3 adds no UI. No known material finding introduced by the Phase 3 diff remains unresolved, but independent PR review is still required for the Critical boundary. The issue-wide completion gate remains open because Phases 4 and 5, production-like integration, local/remote database validation, and dependency remediation are incomplete.
+
+Phase 3 completion decision: The Phase 3 development contract and repository-native pre-merge gates pass. Phase 4 and Phase 5 criteria are intentionally deferred and do not block the dedicated Phase 3 pull request. Phase 3 is ready to commit and open for independent review; it is not delivered until that pull request is merged, and the parent ALE-43 issue must remain In Progress until every planned phase is complete.
+
+Rollout: Merge Phase 3 without enabling browser traffic. Apply the already-reviewed forward-only Phase 1 migration in a controlled environment, verify bucket policies/RPC grants, then enable the Phase 4 client only after a production-like direct upload succeeds near 5 MiB. Monitor stable failure-code counts and quarantine/final object consistency without logging resume content or paths.
+
+Rollback: Before Phase 4 traffic exists, revert the Phase 3 application commit; the additive migration can remain dormant. After cutover, first restore the legacy multipart client/API path, stop new reservations, allow or explicitly expire in-flight reservations, and only then revert application routes. Do not destructively roll back the migration while upload rows or objects exist.
+
+Follow-up:
+
+- Commit and open ALE-43 PR 3 for independent review; do not deploy or apply a remote migration from this branch.
+- Keep ALE-43 In Progress; browser direct-upload/cancel/retry UI, legacy multipart deprecation, expired-object cleanup, production-like integration, and release rollout remain in Phases 4 and 5.
+- The requested `ALE-52` evidence target could not be found in the connected Linear workspace, including archived issues; record the audit on ALE-43 unless a valid replacement identifier is supplied.
+
 ### 2026-09-05
 
 Branch: `feat/landing-openspeech-widget`

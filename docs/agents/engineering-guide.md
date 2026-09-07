@@ -215,6 +215,34 @@ Copy `.env.local.example` → `.env.local` for local dev. Never commit secrets.
 
 ## Key API Contracts
 
+### Resume Upload Pipeline (ALE-43, phased rollout)
+
+Phase 3 provides the authenticated metadata and lifecycle API while the profile
+UI continues using the legacy multipart route until the separate Phase 4
+browser cutover.
+
+- `POST /api/resumes/uploads` accepts JSON metadata only: a sanitized PDF/TXT
+  file name, an allow-listed MIME type, and an integer size from 1 byte through
+  5 MiB. It atomically reserves an owner-scoped, expiring path in the private
+  `resume-quarantine` bucket and returns `upsert: false` upload options.
+- `POST /api/resumes/uploads/{id}/finalize` accepts no request body. After
+  cookie authentication and owner-scoped lookup, the server downloads the
+  exact quarantine object with a timeout, validates its bytes, promotes an
+  accepted object using a stateless service-role client, and atomically creates
+  the ready `user_resumes` row. Terminal results are idempotent and partial
+  Storage/database failures are compensated or returned with stable retryable
+  codes.
+- `DELETE /api/resumes/uploads/{id}` performs owner-scoped, repeat-safe
+  cancellation and best-effort quarantine cleanup.
+
+The service-role client is created only after authentication and ownership are
+established and is never exposed to browser code. Quarantine objects have no
+authenticated read/update/delete policy; authenticated clients cannot write to
+the final bucket. Logs and public errors must never include resume bytes,
+parsed text, file names, storage paths, content hashes, or raw provider/parser
+errors. Phase 4 owns browser direct upload, legacy multipart deprecation, and
+expired/orphan cleanup; Phase 5 owns production migration and rollout gates.
+
 ---
 
 ## First-Party Observability
