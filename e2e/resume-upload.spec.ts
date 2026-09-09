@@ -53,7 +53,10 @@ async function login(page: Page, environment: ResumeProductionGateEnvironment) {
   if (Object.keys(bypassHeaders).length > 0) {
     await page.route(`${environment.baseUrl.origin}/**`, async (route) => {
       await route.continue({
-        headers: { ...route.request().headers(), ...bypassHeaders },
+        headers: {
+          ...(await route.request().allHeaders()),
+          ...bypassHeaders,
+        },
       });
     });
   }

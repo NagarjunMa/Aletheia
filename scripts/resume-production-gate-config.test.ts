@@ -50,6 +50,8 @@ describe("ALE-43 Phase 5 production gate wiring", () => {
     expect(e2e).toContain("discoverRunArtifacts");
     expect(e2e).toContain("buildVercelBypassHeaders");
     expect(e2e).toContain("environment.baseUrl.origin");
+    expect(e2e).toContain("route.request().allHeaders()");
+    expect(e2e).not.toContain("route.request().headers()");
   });
 
   it("documents operations, privacy, rollback, and the future sharing gate", () => {

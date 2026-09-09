@@ -38,6 +38,8 @@ Result: The gate can authenticate to a protected preview without weakening previ
 
 Follow-up: Add the Vercel automation-bypass value to the GitHub `resume-production-gate` environment, push the correction, and rerun all six protected tests.
 
+2026-09-09 follow-up: The next protected run passed deployment/project identity but returned 401 on the first authenticated resume request. The Vercel route interceptor had rebuilt requests from Playwright's incomplete `headers()` view, which excludes cookie-related headers. It now uses `allHeaders()` so the Supabase session remains attached while the bypass header stays origin-scoped. A regression contract requires the complete-header API; protected rerun evidence remains pending.
+
 ### 2026-09-07
 
 Branch: `feat/ale-43-production-gate`
