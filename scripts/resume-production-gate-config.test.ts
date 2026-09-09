@@ -48,6 +48,13 @@ describe("ALE-43 Phase 5 production gate wiring", () => {
     );
     const e2e = read("e2e/resume-upload.spec.ts");
     expect(e2e).toContain("unexpectedStorageOrigins");
+    expect(e2e).toContain("storageUploadCount");
+    expect(e2e).toContain('.select("file_size,storage_path")');
+    expect(e2e).toMatch(/\.from\("user-resumes"\)\s+\.download/u);
+    expect(e2e).toContain("storedResume.data?.size");
+    expect(e2e).not.toContain(
+      "storageRequestBodies.push(request.postDataBuffer()?.byteLength ?? 0)",
+    );
     expect(e2e).toContain('route.abort("blockedbyclient")');
     expect(e2e).toContain("verifyDeploymentIdentity");
     expect(e2e).toContain("discoverRunArtifacts");

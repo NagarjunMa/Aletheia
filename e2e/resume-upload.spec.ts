@@ -135,8 +135,10 @@ async function discoverRunArtifacts(service: Supabase) {
 }
 
 async function observeStorageOrigins(page: Page, expectedOrigin: string) {
-  const unexpectedStorageOrigins = new Set<string>();
-  const storageRequestBodies: number[] = [];
+  const observation = {
+    storageUploadCount: 0,
+    unexpectedStorageOrigins: new Set<string>(),
+  };
   await page.route(
     "**/storage/v1/object/resume-quarantine/**",
     async (route) => {
@@ -147,15 +149,15 @@ async function observeStorageOrigins(page: Page, expectedOrigin: string) {
       }
       const url = new URL(request.url());
       if (url.origin !== expectedOrigin) {
-        unexpectedStorageOrigins.add(url.origin);
+        observation.unexpectedStorageOrigins.add(url.origin);
         await route.abort("blockedbyclient");
         return;
       }
-      storageRequestBodies.push(request.postDataBuffer()?.byteLength ?? 0);
+      observation.storageUploadCount += 1;
       await route.continue();
     },
   );
-  return { storageRequestBodies, unexpectedStorageOrigins };
+  return observation;
 }
 
 async function finalize(page: Page, uploadId: string) {
@@ -180,11 +182,15 @@ async function attachTiming(
   fixtureBytes: number,
   durationMs: number,
   outcome: string,
+  storageUploadCount: number,
+  storedBytes: number,
 ) {
   const body = JSON.stringify({
     fixtureBytes,
     durationMs: Math.round(durationMs),
     outcome,
+    storageUploadCount,
+    storedBytes,
   });
   const evidencePath = testInfo.outputPath(
     `resume-${fixtureBytes}-byte-result.json`,
@@ -304,8 +310,10 @@ test.describe("ALE-43 isolated resume production gate", () => {
       await login(page, gate);
       const before = new Set((await listResumes(page)).map(({ id }) => id));
       const appRequestBodies: number[] = [];
-      const { storageRequestBodies, unexpectedStorageOrigins } =
-        await observeStorageOrigins(page, gate.supabaseUrl.origin);
+      const storageObservation = await observeStorageOrigins(
+        page,
+        gate.supabaseUrl.origin,
+      );
       page.on("request", (request) => {
         if (request.method() !== "POST") return;
         const length = request.postDataBuffer()?.byteLength ?? 0;
@@ -320,6 +328,7 @@ test.describe("ALE-43 isolated resume production gate", () => {
 
       const marker = `${CONTENT_CANARY}-${fixtureBytes}-${Date.now()}`;
       const fixture = buildResumeTextFixture(fixtureBytes, marker);
+      expect(fixture.byteLength).toBe(fixtureBytes);
       const startedAt = performance.now();
       await page.getByLabel("Choose resume file").setInputFiles({
         name: `${RUN_FILE_CANARY}-${fixtureBytes}.txt`,
@@ -334,21 +343,51 @@ test.describe("ALE-43 isolated resume production gate", () => {
       const created = (await listResumes(page)).find(
         ({ id }) => !before.has(id),
       );
-      expect(Boolean(created)).toBe(true);
+      expect(created).toBeDefined();
+      if (!created) {
+        throw new Error("Promoted resume was not returned by the list API.");
+      }
+      resumeIds.add(created.id);
+
+      const persistedResume = await service
+        .from("user_resumes")
+        .select("file_size,storage_path")
+        .eq("id", created.id)
+        .single();
+      expect(persistedResume.error).toBeNull();
+      expect(persistedResume.data?.file_size).toBe(fixtureBytes);
+      expect(typeof persistedResume.data?.storage_path).toBe("string");
+      if (!persistedResume.data?.storage_path) {
+        throw new Error("Promoted resume storage path was not persisted.");
+      }
+      storagePaths.add(persistedResume.data.storage_path);
+      const storedResume = await service.storage
+        .from("user-resumes")
+        .download(persistedResume.data.storage_path);
+      expect(storedResume.error).toBeNull();
+      expect(storedResume.data?.size).toBe(fixtureBytes);
+      expect(
+        storedResume.data
+          ? Buffer.from(await storedResume.data.arrayBuffer()).equals(fixture)
+          : false,
+      ).toBe(true);
+
       expect(appRequestBodies.length).toBeGreaterThanOrEqual(2);
       expect(appRequestBodies.every((size) => size < 1024)).toBe(true);
-      expect(storageRequestBodies.some((size) => size === fixtureBytes)).toBe(
-        true,
-      );
-      expect([...unexpectedStorageOrigins]).toEqual([]);
+      expect(storageObservation.storageUploadCount).toBeGreaterThanOrEqual(1);
+      expect([...storageObservation.unexpectedStorageOrigins]).toEqual([]);
       expect(durationMs).toBeLessThan(150_000);
 
-      if (created) {
-        resumeIds.add(created.id);
-        await deleteResume(page, created.id);
-        resumeIds.delete(created.id);
-      }
-      await attachTiming(testInfo, fixtureBytes, durationMs, "ready");
+      await deleteResume(page, created.id);
+      resumeIds.delete(created.id);
+      await attachTiming(
+        testInfo,
+        fixtureBytes,
+        durationMs,
+        "ready",
+        storageObservation.storageUploadCount,
+        storedResume.data?.size ?? 0,
+      );
     });
   }
 
