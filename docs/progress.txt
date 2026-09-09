@@ -22,6 +22,22 @@ Follow-up:
 
 ### 2026-09-09
 
+Branch: `chore/ale-44-linear-engineering-loop-prompts`
+
+Area: ALE-44 — persistent Linear implementation and completion workflow
+
+Problem: Starting and verifying Linear work depended on the user manually repeating the engineering-loop prompt templates, which made the required kickoff contract and final audit easy to omit.
+
+Decision: Add dynamic `<ISSUE-ID>` kickoff and completion templates to the root `AGENTS.md`. Explicit implementation requests now require Linear issue retrieval, a change contract, risk tier, TDD, preserved unrelated work, and no early completion. Verification requests require a merge-base audit, repository-native checks, dated Linear evidence, rollout/rollback review, and completion only after all material gates pass. Status and planning questions remain read-only, and phased issues cannot close the parent prematurely.
+
+Files changed: `AGENTS.md`, `docs/progress.txt`.
+
+Tests/checks: Markdown formatting and `git diff --check`.
+
+Result: The repository now supplies the workflow automatically; `ALE-52` remains an example rather than a hard-coded issue.
+
+Follow-up: Merge this governance change before starting the next implementation issue.
+
 Branch: `feat/ale-43-production-gate`
 
 Area: ALE-43 Phase 5 — protected Vercel preview access
