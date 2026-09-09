@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { validateResumeBytes } from "../lib/resumes/validator";
 import {
+  assertResumeGateDeploymentIdentity,
   buildVercelBypassHeaders,
   buildResumePdfFixture,
   buildResumeTextFixture,
+  cleanupResumeGateArtifacts,
   inspectResumeLogExport,
   parseResumeProductionGateEnv,
 } from "./resume-production-gate";
@@ -21,6 +23,7 @@ const validEnvironment = {
   RESUME_GATE_USER_B_PASSWORD: "not-a-real-password-b",
   RESUME_GATE_CRON_SECRET: "test-cron-secret-at-least-16",
   RESUME_GATE_CONFIRM_ISOLATED_PROJECT: "yes",
+  RESUME_GATE_EXPECTED_COMMIT_SHA: "4918db33a1b9a9938470b5b48af7728a4295775d",
   RESUME_GATE_VERCEL_AUTOMATION_BYPASS_SECRET: "vercel-bypass-secret",
 };
 
@@ -77,6 +80,113 @@ describe("resume production gate", () => {
         RESUME_GATE_USER_B_EMAIL: validEnvironment.RESUME_GATE_USER_A_EMAIL,
       }),
     ).toThrow(/distinct test accounts/i);
+  });
+
+  it("requires a valid expected deployment commit SHA", () => {
+    expect(() =>
+      parseResumeProductionGateEnv({
+        ...validEnvironment,
+        RESUME_GATE_EXPECTED_COMMIT_SHA: "not-a-commit",
+      }),
+    ).toThrow(/commit SHA/i);
+
+    expect(
+      parseResumeProductionGateEnv(validEnvironment).expectedCommitSha,
+    ).toBe(validEnvironment.RESUME_GATE_EXPECTED_COMMIT_SHA);
+  });
+
+  it("rejects a stale deployment before the protected gate proceeds", () => {
+    const environment = parseResumeProductionGateEnv(validEnvironment);
+
+    expect(() =>
+      assertResumeGateDeploymentIdentity(
+        {
+          deploymentSha: environment.expectedCommitSha,
+          supabaseOrigin: environment.supabaseUrl.origin,
+        },
+        environment,
+      ),
+    ).not.toThrow();
+    expect(() =>
+      assertResumeGateDeploymentIdentity(
+        {
+          deploymentSha: "000000000000",
+          supabaseOrigin: environment.supabaseUrl.origin,
+        },
+        environment,
+      ),
+    ).toThrow(/workflow commit/i);
+  });
+
+  it("deletes database references only after Storage cleanup succeeds", async () => {
+    const calls: string[] = [];
+    const result = await cleanupResumeGateArtifacts({
+      paths: ["user/upload.txt"],
+      resumeIds: ["resume-id"],
+      uploadIds: ["upload-id"],
+      removeStorageObjects: async () => {
+        calls.push("storage");
+        return [{ error: null }, { error: null }];
+      },
+      deleteResumeRows: async () => {
+        calls.push("resumes");
+        return { error: null };
+      },
+      deleteUploadRows: async () => {
+        calls.push("uploads");
+        return { error: null };
+      },
+    });
+
+    expect(result).toBe(true);
+    expect(calls).toEqual(["storage", "resumes", "uploads"]);
+  });
+
+  it("preserves database references when Storage cleanup fails", async () => {
+    const calls: string[] = [];
+    const result = await cleanupResumeGateArtifacts({
+      paths: ["user/upload.txt"],
+      resumeIds: ["resume-id"],
+      uploadIds: ["upload-id"],
+      removeStorageObjects: async () => {
+        calls.push("storage");
+        return [{ error: new Error("unavailable") }, { error: null }];
+      },
+      deleteResumeRows: async () => {
+        calls.push("resumes");
+        return { error: null };
+      },
+      deleteUploadRows: async () => {
+        calls.push("uploads");
+        return { error: null };
+      },
+    });
+
+    expect(result).toBe(false);
+    expect(calls).toEqual(["storage"]);
+  });
+
+  it("preserves database references when Storage cleanup throws", async () => {
+    let databaseDeleteCalled = false;
+    const result = await cleanupResumeGateArtifacts({
+      paths: ["user/upload.txt"],
+      resumeIds: ["resume-id"],
+      uploadIds: ["upload-id"],
+      removeStorageObjects: async () => {
+        throw new Error("network failure");
+      },
+      deleteResumeRows: async () => {
+        databaseDeleteCalled = true;
+        return { error: null };
+      },
+      deleteUploadRows: async () => {
+        databaseDeleteCalled = true;
+        return { error: null };
+      },
+    });
+
+    expect(result).toBe(false);
+    expect(databaseDeleteCalled).toBe(false);
   });
 
   it("creates exact-size UTF-8 fixtures without unbounded allocation", () => {

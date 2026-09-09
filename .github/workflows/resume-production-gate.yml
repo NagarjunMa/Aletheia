@@ -42,6 +42,7 @@ jobs:
         env:
           RESUME_GATE_ENABLED: "true"
           RESUME_GATE_CONFIRM_ISOLATED_PROJECT: ${{ inputs.confirm_isolated_project }}
+          RESUME_GATE_EXPECTED_COMMIT_SHA: ${{ github.sha }}
           RESUME_GATE_BASE_URL: ${{ vars.RESUME_GATE_BASE_URL }}
           RESUME_GATE_PRODUCTION_BASE_URL: ${{ vars.RESUME_GATE_PRODUCTION_BASE_URL }}
           PLAYWRIGHT_BASE_URL: ${{ vars.RESUME_GATE_BASE_URL }}

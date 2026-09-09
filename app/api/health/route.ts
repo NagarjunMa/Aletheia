@@ -10,6 +10,7 @@ export async function GET(request: NextRequest) {
 
 async function handleGet(log: SafeLogger) {
   log.debug("Health check");
+  const deploymentSha = process.env.VERCEL_GIT_COMMIT_SHA?.trim().toLowerCase();
   let supabaseOrigin: string | null = null;
   const configuredSupabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   if (configuredSupabaseUrl) {
@@ -23,5 +24,6 @@ async function handleGet(log: SafeLogger) {
     status: "ok",
     timestamp: new Date().toISOString(),
     supabaseOrigin,
+    deploymentSha: deploymentSha || null,
   });
 }

@@ -55,12 +55,15 @@ Configure these protected secrets:
   under **Project Settings → Deployment Protection → Protection Bypass for
   Automation** and copy it into the GitHub environment secret
 
-The workflow sets `RESUME_GATE_CONFIRM_ISOLATED_PROJECT=yes`. Its parser requires
-HTTPS, rejects the configured production application and Supabase origins, the
-known production hostname, and identical test accounts. Browser traffic must use
-the exact configured isolated Supabase origin. The service-role key is used only
-by the Node test process to discover, verify, and remove artifacts carrying the
-unique run marker; it is never passed to the browser.
+The workflow sets `RESUME_GATE_CONFIRM_ISOLATED_PROJECT=yes` and supplies
+`RESUME_GATE_EXPECTED_COMMIT_SHA` from the selected workflow commit. Its parser
+requires HTTPS, rejects the configured production application and Supabase
+origins, the known production hostname, and identical test accounts. Before
+authentication or mutation, `/api/health` must report both the exact configured
+isolated Supabase origin and the selected commit SHA. Browser traffic
+must use the exact configured isolated Supabase origin. The service-role key is
+used only by the Node test process to discover, verify, and remove artifacts
+carrying the unique run marker; it is never passed to the browser.
 
 The Vercel bypass value is sent as the `x-vercel-protection-bypass` header only
 to the configured application origin. Before browser login, the gate exchanges
@@ -85,7 +88,9 @@ field. It must prove:
    removed.
 5. An expired reservation is claimed by the secret-protected cleanup endpoint,
    its object is removed, and cleanup completion is recorded.
-6. Test-created rows and objects are removed in `afterAll`, even after failure.
+6. Test-created objects are removed before their database references. If Storage
+   cleanup fails, the gate fails and preserves the rows so a later cleanup can
+   rediscover and retry them.
 
 The Playwright report records validation durations and response outcomes for the
 1 MiB and near-5 MiB fixtures. GitHub artifact upload is allow-listed to those
