@@ -53,6 +53,10 @@ describe("ALE-43 Phase 5 production gate wiring", () => {
     expect(e2e).toContain("page\n      .context()\n      .request.get");
     expect(e2e).toContain("setCookie: true");
     expect(e2e).not.toContain("page.route(`${environment.baseUrl.origin}/**`");
+    expect(e2e).toContain('getByRole("button", { name: "Upload resume" })');
+    expect(e2e).not.toContain(
+      'expect(page.getByLabel("Choose resume file")).toBeVisible',
+    );
   });
 
   it("documents operations, privacy, rollback, and the future sharing gate", () => {
