@@ -31,6 +31,12 @@ describe("resume production gate", () => {
     });
     expect(buildVercelBypassHeaders(undefined)).toEqual({});
     expect(buildVercelBypassHeaders("   ")).toEqual({});
+    expect(
+      buildVercelBypassHeaders("bypass-secret", { setCookie: true }),
+    ).toEqual({
+      "x-vercel-protection-bypass": "bypass-secret",
+      "x-vercel-set-bypass-cookie": "true",
+    });
   });
 
   it("rejects incomplete or production-targeted environments", () => {

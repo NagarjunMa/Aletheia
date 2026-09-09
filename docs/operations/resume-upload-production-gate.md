@@ -63,9 +63,12 @@ by the Node test process to discover, verify, and remove artifacts carrying the
 unique run marker; it is never passed to the browser.
 
 The Vercel bypass value is sent as the `x-vercel-protection-bypass` header only
-to the configured application origin. It is not added to direct Supabase
-requests, URLs, logs, or Playwright artifacts. Keep Vercel Deployment Protection
-enabled and rotate or remove the bypass after the gate if it is no longer needed.
+to the configured application origin. Before browser login, the gate exchanges
+that header for Vercel's scoped bypass cookie through Playwright's
+browser-context request client; subsequent browser requests are left unchanged.
+The secret is not added to direct Supabase requests, URLs, logs, or Playwright
+artifacts. Keep Vercel Deployment Protection enabled and rotate or remove the
+bypass after the gate if it is no longer needed.
 
 ## Automated gate
 
