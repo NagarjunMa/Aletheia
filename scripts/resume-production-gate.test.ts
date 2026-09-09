@@ -279,6 +279,38 @@ describe("resume production gate", () => {
     expect(result.missingStages).not.toContain("resume_upload.cleanup");
   });
 
+  it("reads and deduplicates Vercel historical records with nested logs", () => {
+    const stages = [
+      "resume_upload.reservation",
+      "resume_upload.acknowledgement",
+      "resume_upload.validation",
+      "resume_upload.promotion",
+      "resume_upload.rejection",
+      "resume_upload.cleanup",
+    ];
+    const record = JSON.stringify({
+      rowId: "request-row-1",
+      logs: stages.map((stage) => ({
+        level: "info",
+        message: JSON.stringify({
+          event: "stage.complete",
+          stage,
+          outcome: stage === "resume_upload.rejection" ? "failure" : "success",
+          durationMs: 8,
+        }),
+      })),
+    });
+
+    expect(
+      inspectResumeLogExport([record, record].join("\n"), ["PRIVATE_CANARY"]),
+    ).toEqual({
+      eventCount: 6,
+      missingStages: [],
+      leakedCanaries: [],
+      forbiddenFields: [],
+    });
+  });
+
   it("rejects forbidden sensitive fields recursively in structured logs", () => {
     const result = inspectResumeLogExport(
       [

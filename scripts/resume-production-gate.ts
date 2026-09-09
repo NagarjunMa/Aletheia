@@ -302,6 +302,8 @@ export function inspectResumeLogExport(
   const leakedCanaries = canaries.filter((canary) => contents.includes(canary));
   const observedStages = new Set<string>();
   const forbiddenFields = new Set<string>();
+  const seenCompletedEvents = new Set<string>();
+  const seenRecords = new Set<string>();
   let eventCount = 0;
 
   const recordEvent = (event: Record<string, unknown>) => {
@@ -311,11 +313,44 @@ export function inspectResumeLogExport(
       (event.outcome === "success" || event.outcome === "failure") &&
       typeof event.durationMs === "number"
     ) {
+      const eventKey = JSON.stringify(event);
+      if (seenCompletedEvents.has(eventKey)) return true;
+      seenCompletedEvents.add(eventKey);
       eventCount += 1;
       observedStages.add(event.stage);
       return true;
     }
     return false;
+  };
+
+  const recordSerializedEvent = (value: unknown) => {
+    if (typeof value !== "string") return false;
+    try {
+      const event = JSON.parse(value) as Record<string, unknown>;
+      collectForbiddenLogFields(event, forbiddenFields);
+      return recordEvent(event);
+    } catch {
+      return false;
+    }
+  };
+
+  const inspectRecord = (event: Record<string, unknown>) => {
+    collectForbiddenLogFields(event, forbiddenFields);
+    recordEvent(event);
+    recordSerializedEvent(event.message);
+    recordSerializedEvent(event.msg);
+
+    if (!Array.isArray(event.logs)) return;
+    for (const nested of event.logs) {
+      if (!nested || typeof nested !== "object" || Array.isArray(nested)) {
+        continue;
+      }
+      const nestedEvent = nested as Record<string, unknown>;
+      collectForbiddenLogFields(nestedEvent, forbiddenFields);
+      recordEvent(nestedEvent);
+      recordSerializedEvent(nestedEvent.message);
+      recordSerializedEvent(nestedEvent.msg);
+    }
   };
 
   let lineCount = 0;
@@ -325,18 +360,11 @@ export function inspectResumeLogExport(
     if (lineCount > MAX_LOG_EXPORT_LINES) {
       throw new Error("Resume log export exceeds the 50,000-line audit limit.");
     }
+    if (seenRecords.has(line)) continue;
+    seenRecords.add(line);
     try {
       const event = JSON.parse(line) as Record<string, unknown>;
-      collectForbiddenLogFields(event, forbiddenFields);
-      if (recordEvent(event)) continue;
-      const wrapped = [event.message, event.msg].find(
-        (value): value is string => typeof value === "string",
-      );
-      if (wrapped) {
-        const wrappedEvent = JSON.parse(wrapped) as Record<string, unknown>;
-        collectForbiddenLogFields(wrappedEvent, forbiddenFields);
-        recordEvent(wrappedEvent);
-      }
+      inspectRecord(event);
     } catch {
       // Platform prefixes may wrap or precede JSON; the raw canary scan still runs.
     }
