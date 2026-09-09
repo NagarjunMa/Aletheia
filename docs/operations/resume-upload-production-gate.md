@@ -124,7 +124,10 @@ RESUME_GATE_LOG_CANARIES='ALE43PRIVATECONTENTCANARY,ALE43PRIVATEFILENAMECANARY' 
 The audit is bounded to 20 MiB/50,000 lines. It fails if a canary is present, a
 forbidden structured content/file/path/hash field is present, or any required
 lifecycle stage is absent. Record only its safe summary—never the canary values
-or raw log export—in Linear.
+or raw log export—in Linear. Hobby runtime logs expire after one hour, so export
+them immediately after the protected run or capture them live. The auditor
+accepts both Vercel's live flat JSON records and its historical JSON records
+whose function messages are nested under `logs`.
 
 ## Cleanup and retention
 
