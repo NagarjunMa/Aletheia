@@ -27,7 +27,7 @@
     "eslint": "^10.8.0",
     "globals": "^17.8.0",
     "typescript": "^5.3.3",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.11"
   },
   "keywords": [
     "chrome-extension",
