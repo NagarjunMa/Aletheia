@@ -33,10 +33,20 @@ export type ResumeProductionGateEnvironment = {
   supabaseUrl: URL;
   supabaseAnonKey: string;
   supabaseServiceRoleKey: string;
+  vercelAutomationBypassSecret?: string;
   userA: { email: string; password: string };
   userB: { email: string; password: string };
   cronSecret: string;
 };
+
+export function buildVercelBypassHeaders(
+  secret: string | undefined,
+): Record<string, string> {
+  const normalizedSecret = secret?.trim();
+  return normalizedSecret
+    ? { "x-vercel-protection-bypass": normalizedSecret }
+    : {};
+}
 
 export function parseResumeProductionGateEnv(
   environment: Environment,
@@ -94,6 +104,12 @@ export function parseResumeProductionGateEnv(
     supabaseUrl,
     supabaseAnonKey: value("RESUME_GATE_SUPABASE_ANON_KEY"),
     supabaseServiceRoleKey: value("RESUME_GATE_SUPABASE_SERVICE_ROLE_KEY"),
+    ...(environment.RESUME_GATE_VERCEL_AUTOMATION_BYPASS_SECRET?.trim()
+      ? {
+          vercelAutomationBypassSecret:
+            environment.RESUME_GATE_VERCEL_AUTOMATION_BYPASS_SECRET.trim(),
+        }
+      : {}),
     userA: {
       email: userAEmail,
       password: value("RESUME_GATE_USER_A_PASSWORD"),

@@ -50,6 +50,10 @@ Configure these protected secrets:
 - `RESUME_GATE_USER_A_EMAIL` and `RESUME_GATE_USER_A_PASSWORD`
 - `RESUME_GATE_USER_B_EMAIL` and `RESUME_GATE_USER_B_PASSWORD`
 - `RESUME_GATE_CRON_SECRET`
+- `RESUME_GATE_VERCEL_AUTOMATION_BYPASS_SECRET` — required only when the
+  isolated Vercel deployment has Deployment Protection enabled; generate it
+  under **Project Settings → Deployment Protection → Protection Bypass for
+  Automation** and copy it into the GitHub environment secret
 
 The workflow sets `RESUME_GATE_CONFIRM_ISOLATED_PROJECT=yes`. Its parser requires
 HTTPS, rejects the configured production application and Supabase origins, the
@@ -57,6 +61,11 @@ known production hostname, and identical test accounts. Browser traffic must use
 the exact configured isolated Supabase origin. The service-role key is used only
 by the Node test process to discover, verify, and remove artifacts carrying the
 unique run marker; it is never passed to the browser.
+
+The Vercel bypass value is sent as the `x-vercel-protection-bypass` header only
+to the configured application origin. It is not added to direct Supabase
+requests, URLs, logs, or Playwright artifacts. Keep Vercel Deployment Protection
+enabled and rotate or remove the bypass after the gate if it is no longer needed.
 
 ## Automated gate
 
