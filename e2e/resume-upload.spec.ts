@@ -2,6 +2,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import type { Database } from "../lib/database/types";
 import {
+  buildVercelBypassHeaders,
   buildResumePdfFixture,
   buildResumeTextFixture,
   parseResumeProductionGateEnv,
@@ -28,8 +29,14 @@ async function verifyDeploymentIdentity(
   environment: ResumeProductionGateEnvironment,
 ) {
   const response = await fetch(`${environment.baseUrl.origin}/api/health`, {
-    redirect: "error",
+    headers: buildVercelBypassHeaders(environment.vercelAutomationBypassSecret),
+    redirect: "manual",
   });
+  if (response.status >= 300 && response.status < 400) {
+    throw new Error(
+      "Isolated deployment redirected before its identity could be verified. If Vercel Deployment Protection is enabled, configure RESUME_GATE_VERCEL_AUTOMATION_BYPASS_SECRET.",
+    );
+  }
   if (!response.ok) {
     throw new Error("Unable to verify isolated deployment identity.");
   }
@@ -40,6 +47,16 @@ async function verifyDeploymentIdentity(
 }
 
 async function login(page: Page, environment: ResumeProductionGateEnvironment) {
+  const bypassHeaders = buildVercelBypassHeaders(
+    environment.vercelAutomationBypassSecret,
+  );
+  if (Object.keys(bypassHeaders).length > 0) {
+    await page.route(`${environment.baseUrl.origin}/**`, async (route) => {
+      await route.continue({
+        headers: { ...route.request().headers(), ...bypassHeaders },
+      });
+    });
+  }
   await page.goto(
     `${environment.baseUrl.origin}/auth/login?redirectTo=/profile`,
   );
@@ -441,7 +458,12 @@ test.describe("ALE-43 isolated resume production gate", () => {
 
     const cleanup = await request.get(
       `${gate.baseUrl.origin}/api/internal/resumes/cleanup`,
-      { headers: { authorization: `Bearer ${gate.cronSecret}` } },
+      {
+        headers: {
+          authorization: `Bearer ${gate.cronSecret}`,
+          ...buildVercelBypassHeaders(gate.vercelAutomationBypassSecret),
+        },
+      },
     );
     expect(cleanup.ok()).toBe(true);
     const cleanupBody = (await cleanup.json()) as {

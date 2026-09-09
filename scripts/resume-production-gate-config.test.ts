@@ -34,6 +34,7 @@ describe("ALE-43 Phase 5 production gate wiring", () => {
     expect(workflow).toContain("RESUME_GATE_PRODUCTION_BASE_URL");
     expect(workflow).toContain("RESUME_GATE_PRODUCTION_SUPABASE_URL");
     expect(workflow).toContain("PLAYWRIGHT_BASE_URL");
+    expect(workflow).toContain("RESUME_GATE_VERCEL_AUTOMATION_BYPASS_SECRET");
     expect(workflow).toContain("RESUME_GATE_SUPABASE_SERVICE_ROLE_KEY");
     expect(workflow).toContain("npm run test:resume-production");
     expect(
@@ -47,6 +48,8 @@ describe("ALE-43 Phase 5 production gate wiring", () => {
     expect(e2e).toContain('route.abort("blockedbyclient")');
     expect(e2e).toContain("verifyDeploymentIdentity");
     expect(e2e).toContain("discoverRunArtifacts");
+    expect(e2e).toContain("buildVercelBypassHeaders");
+    expect(e2e).toContain("environment.baseUrl.origin");
   });
 
   it("documents operations, privacy, rollback, and the future sharing gate", () => {

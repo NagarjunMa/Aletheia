@@ -20,6 +20,24 @@ Follow-up:
 
 ## Entries
 
+### 2026-09-09
+
+Branch: `feat/ale-43-production-gate`
+
+Area: ALE-43 Phase 5 — protected Vercel preview access
+
+Problem: The first protected production-gate run stopped before application or Supabase testing because the isolated Vercel preview redirected `/api/health` to Vercel SSO.
+
+Decision: Keep Deployment Protection enabled and support Vercel's automation bypass through the optional protected `RESUME_GATE_VERCEL_AUTOMATION_BYPASS_SECRET`. Send the bypass header only to the configured application origin, including the identity probe, browser application traffic, and cleanup request; never attach it to direct Supabase requests or URLs. Return a specific setup error when the identity probe is redirected.
+
+Files changed: `.github/workflows/resume-production-gate.yml`, `e2e/resume-upload.spec.ts`, `scripts/resume-production-gate.ts` and tests, `docs/operations/resume-upload-production-gate.md`, and `docs/progress.txt`.
+
+Tests/checks: TDD reproduced missing workflow/header support; focused gate contracts, type-check, lint, formatting, and diff checks pass. The protected deployment run remains pending because its bypass secret must be created in Vercel and copied to the protected GitHub environment.
+
+Result: The gate can authenticate to a protected preview without weakening preview protection or leaking the bypass credential to Supabase traffic.
+
+Follow-up: Add the Vercel automation-bypass value to the GitHub `resume-production-gate` environment, push the correction, and rerun all six protected tests.
+
 ### 2026-09-07
 
 Branch: `feat/ale-43-production-gate`

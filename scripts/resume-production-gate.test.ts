@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { validateResumeBytes } from "../lib/resumes/validator";
 import {
+  buildVercelBypassHeaders,
   buildResumePdfFixture,
   buildResumeTextFixture,
   inspectResumeLogExport,
@@ -20,9 +21,18 @@ const validEnvironment = {
   RESUME_GATE_USER_B_PASSWORD: "not-a-real-password-b",
   RESUME_GATE_CRON_SECRET: "test-cron-secret-at-least-16",
   RESUME_GATE_CONFIRM_ISOLATED_PROJECT: "yes",
+  RESUME_GATE_VERCEL_AUTOMATION_BYPASS_SECRET: "vercel-bypass-secret",
 };
 
 describe("resume production gate", () => {
+  it("builds a scoped Vercel deployment-protection header", () => {
+    expect(buildVercelBypassHeaders("  bypass-secret  ")).toEqual({
+      "x-vercel-protection-bypass": "bypass-secret",
+    });
+    expect(buildVercelBypassHeaders(undefined)).toEqual({});
+    expect(buildVercelBypassHeaders("   ")).toEqual({});
+  });
+
   it("rejects incomplete or production-targeted environments", () => {
     expect(() => parseResumeProductionGateEnv({})).toThrow(
       /missing resume production gate environment/i,
