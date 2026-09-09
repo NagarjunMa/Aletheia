@@ -88,8 +88,10 @@ field. It must prove:
 6. Test-created rows and objects are removed in `afterAll`, even after failure.
 
 The Playwright report records validation durations and response outcomes for the
-1 MiB and near-5 MiB fixtures. The workflow does not use or mutate production
-data.
+1 MiB and near-5 MiB fixtures. GitHub artifact upload is allow-listed to those
+timing JSON files; never upload the complete `test-results` directory because
+Playwright failure context can include values from form controls. The workflow
+does not use or mutate production data.
 
 ## Observability and log privacy
 
