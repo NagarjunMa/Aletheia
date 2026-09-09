@@ -49,16 +49,19 @@ async function verifyDeploymentIdentity(
 async function login(page: Page, environment: ResumeProductionGateEnvironment) {
   const bypassHeaders = buildVercelBypassHeaders(
     environment.vercelAutomationBypassSecret,
+    { setCookie: true },
   );
   if (Object.keys(bypassHeaders).length > 0) {
-    await page.route(`${environment.baseUrl.origin}/**`, async (route) => {
-      await route.continue({
-        headers: {
-          ...(await route.request().allHeaders()),
-          ...bypassHeaders,
-        },
+    const response = await page
+      .context()
+      .request.get(`${environment.baseUrl.origin}/api/health`, {
+        headers: bypassHeaders,
       });
-    });
+    if (!response.ok()) {
+      throw new Error(
+        "Unable to establish the Vercel deployment-protection bypass cookie.",
+      );
+    }
   }
   await page.goto(
     `${environment.baseUrl.origin}/auth/login?redirectTo=/profile`,
@@ -66,7 +69,10 @@ async function login(page: Page, environment: ResumeProductionGateEnvironment) {
   await page.locator("#email").fill(environment.userA.email);
   await page.locator("#password").fill(environment.userA.password);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await page.waitForURL(/\/profile(?:\?|$)/u, { timeout: 30_000 });
+  await expect(page.getByLabel("Choose resume file")).toBeVisible({
+    timeout: 30_000,
+  });
+  await expect(page).toHaveURL(/\/profile(?:\?|$)/u);
 }
 
 async function listResumes(page: Page): Promise<ListedResume[]> {

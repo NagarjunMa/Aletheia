@@ -41,10 +41,14 @@ export type ResumeProductionGateEnvironment = {
 
 export function buildVercelBypassHeaders(
   secret: string | undefined,
+  options: { setCookie?: boolean } = {},
 ): Record<string, string> {
   const normalizedSecret = secret?.trim();
   return normalizedSecret
-    ? { "x-vercel-protection-bypass": normalizedSecret }
+    ? {
+        "x-vercel-protection-bypass": normalizedSecret,
+        ...(options.setCookie ? { "x-vercel-set-bypass-cookie": "true" } : {}),
+      }
     : {};
 }
 
