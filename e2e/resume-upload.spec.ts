@@ -69,9 +69,9 @@ async function login(page: Page, environment: ResumeProductionGateEnvironment) {
   await page.locator("#email").fill(environment.userA.email);
   await page.locator("#password").fill(environment.userA.password);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByLabel("Choose resume file")).toBeVisible({
-    timeout: 30_000,
-  });
+  await expect(page.getByRole("button", { name: "Upload resume" })).toBeVisible(
+    { timeout: 30_000 },
+  );
   await expect(page).toHaveURL(/\/profile(?:\?|$)/u);
 }
 
