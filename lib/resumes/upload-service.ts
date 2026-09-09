@@ -216,62 +216,90 @@ async function getOwnedUpload(
 export async function reserveResumeUpload(
   supabase: Supabase,
   input: ReserveResumeUploadRequest,
+  logger: SafeLogger = log,
 ): Promise<ReserveResumeUploadResponse> {
-  const { data, error } = await supabase.rpc("reserve_resume_upload", {
-    p_file_name: safeReservationFileName(input),
-    p_declared_mime: input.declaredMime,
-    p_declared_size: input.declaredSize,
+  const complete = startTimedStage(logger, "resume_upload.reservation", {
+    declaredSize: input.declaredSize,
   });
-  if (error) throw reservationError(error);
+  try {
+    const { data, error } = await supabase.rpc("reserve_resume_upload", {
+      p_file_name: safeReservationFileName(input),
+      p_declared_mime: input.declaredMime,
+      p_declared_size: input.declaredSize,
+    });
+    if (error) throw reservationError(error);
 
-  const reservation = data?.[0];
-  if (
-    !reservation ||
-    reservation.bucket_id !== QUARANTINE_BUCKET ||
-    !reservation.upload_id ||
-    !reservation.storage_path ||
-    !reservation.expires_at
-  ) {
-    throw serviceUnavailable();
+    const reservation = data?.[0];
+    if (
+      !reservation ||
+      reservation.bucket_id !== QUARANTINE_BUCKET ||
+      !reservation.upload_id ||
+      !reservation.storage_path ||
+      !reservation.expires_at
+    ) {
+      throw serviceUnavailable();
+    }
+
+    complete("success", {
+      outcomeCode: "RESUME_UPLOAD_RESERVED",
+      declaredSize: input.declaredSize,
+    });
+    return {
+      uploadId: reservation.upload_id,
+      bucketId: QUARANTINE_BUCKET,
+      storagePath: reservation.storage_path,
+      expiresAt: reservation.expires_at,
+      uploadOptions: {
+        contentType: input.declaredMime,
+        upsert: false,
+      },
+    };
+  } catch (error) {
+    complete("failure", {
+      errorCode: isResumeUploadServiceError(error)
+        ? error.code
+        : "UPLOAD_SERVICE_UNAVAILABLE",
+    });
+    throw error;
   }
-
-  return {
-    uploadId: reservation.upload_id,
-    bucketId: QUARANTINE_BUCKET,
-    storagePath: reservation.storage_path,
-    expiresAt: reservation.expires_at,
-    uploadOptions: {
-      contentType: input.declaredMime,
-      upsert: false,
-    },
-  };
 }
 
 async function markUploaded(
   supabase: Supabase,
   uploadId: string,
   userId: string,
+  logger: SafeLogger,
 ): Promise<void> {
+  const complete = startTimedStage(logger, "resume_upload.acknowledgement");
   const { error } = await supabase.rpc("mark_resume_upload_uploaded", {
     p_upload_id: uploadId,
     p_user_id: userId,
   });
-  if (!error) return;
+  if (!error) {
+    complete("success", { outcomeCode: "RESUME_UPLOAD_ACKNOWLEDGED" });
+    return;
+  }
   if (databaseErrorMessage(error).includes("object not found")) {
+    complete("failure", { errorCode: "QUARANTINE_OBJECT_MISSING" });
     throw new ResumeUploadServiceError(
       "QUARANTINE_OBJECT_MISSING",
       409,
       "Upload the reserved resume file before finalizing it.",
     );
   }
-  if (databaseErrorCode(error) === "P0002") throw uploadNotFound();
+  if (databaseErrorCode(error) === "P0002") {
+    complete("failure", { errorCode: "UPLOAD_NOT_FOUND" });
+    throw uploadNotFound();
+  }
   if (databaseErrorCode(error) === "23514") {
+    complete("failure", { errorCode: "INVALID_UPLOAD_STATE" });
     throw new ResumeUploadServiceError(
       "INVALID_UPLOAD_STATE",
       409,
       "This resume upload cannot be finalized.",
     );
   }
+  complete("failure", { errorCode: "UPLOAD_SERVICE_UNAVAILABLE" });
   throw serviceUnavailable();
 }
 
@@ -496,7 +524,7 @@ export async function finalizeResumeUpload(
 
     const supabase = createServiceClient();
     if (shouldMarkUploaded) {
-      await markUploaded(supabase, uploadId, userId);
+      await markUploaded(supabase, uploadId, userId, logger);
     }
     const claim = await claimUpload(supabase, uploadId, userId);
     let sourceBucket = QUARANTINE_BUCKET;
@@ -520,37 +548,81 @@ export async function finalizeResumeUpload(
     }
 
     let validation;
+    const completeValidation = startTimedStage(
+      logger,
+      "resume_upload.validation",
+      { byteCount: bytes.byteLength },
+    );
     try {
-      validation = await validateResumeBytes({
-        bytes,
-        fileName: claim.file_name,
-        declaredMime: claim.declared_mime,
-        declaredSize: claim.declared_size,
-      });
+      validation = await validateResumeBytes(
+        {
+          bytes,
+          fileName: claim.file_name,
+          declaredMime: claim.declared_mime,
+          declaredSize: claim.declared_size,
+        },
+        { logger },
+      );
+      completeValidation(
+        validation.status === "rejected" ? "failure" : "success",
+        validation.status === "rejected"
+          ? { errorCode: validation.code }
+          : {
+              outcomeCode:
+                validation.status === "warning"
+                  ? "RESUME_VALID_WITH_WARNINGS"
+                  : "RESUME_VALID",
+              pageCount: validation.metrics.pageCount,
+              characterCount: validation.metrics.characterCount,
+              qualityCodeCount: validation.qualityCodes.length,
+            },
+      );
     } catch {
+      completeValidation("failure", {
+        errorCode: "TEMPORARY_PROCESSING_FAILURE",
+      });
       const response = await recordRetryableFailure(supabase, claim);
       finish("failure", { errorCode: response.code });
       return response;
     }
     if (validation.status === "rejected") {
-      await rejectUpload(
-        supabase,
-        claim.upload_id,
-        claim.user_id,
-        validation.code,
-        false,
-      );
-      await bestEffortRemove(
-        supabase,
-        sourceBucket,
-        claim.storage_path,
+      const completeRejection = startTimedStage(
         logger,
-        "REJECTED_RESUME_CLEANUP_FAILED",
+        "resume_upload.rejection",
       );
+      try {
+        await rejectUpload(
+          supabase,
+          claim.upload_id,
+          claim.user_id,
+          validation.code,
+          false,
+        );
+        const removed = await bestEffortRemove(
+          supabase,
+          sourceBucket,
+          claim.storage_path,
+          logger,
+          "REJECTED_RESUME_CLEANUP_FAILED",
+        );
+        completeRejection("failure", {
+          errorCode: validation.code,
+          cleanupSucceeded: removed,
+        });
+      } catch (error) {
+        completeRejection("failure", {
+          errorCode: "UPLOAD_SERVICE_UNAVAILABLE",
+        });
+        throw error;
+      }
       finish("failure", { errorCode: validation.code });
       return failureResponse(uploadId, validation.code, false);
     }
 
+    const completePromotion = startTimedStage(
+      logger,
+      "resume_upload.promotion",
+    );
     let promotionResponseReconciled = sourceBucket === RESUME_BUCKET;
     const { error: moveError } = promotionResponseReconciled
       ? { error: null }
@@ -566,11 +638,15 @@ export async function finalizeResumeUpload(
         claim.storage_path,
       );
       if (!promotedBytes) {
+        completePromotion("failure", {
+          errorCode: "TEMPORARY_PROCESSING_FAILURE",
+        });
         const response = await recordRetryableFailure(supabase, claim);
         finish("failure", { errorCode: response.code });
         return response;
       }
       if (!bytesMatch(bytes, promotedBytes)) {
+        completePromotion("failure", { errorCode: "PERSISTENCE_FAILURE" });
         await bestEffortRemove(
           supabase,
           QUARANTINE_BUCKET,
@@ -596,10 +672,20 @@ export async function finalizeResumeUpload(
         return failureResponse(uploadId, "PERSISTENCE_FAILURE", false);
       }
       promotionResponseReconciled = true;
+      completePromotion("success", {
+        outcomeCode: "RESUME_PROMOTION_RESPONSE_RECONCILED",
+      });
       logger.warn(
         { errorCode: "RESUME_PROMOTION_RESPONSE_RECONCILED" },
         "Resume promotion response reconciled",
       );
+    } else {
+      completePromotion("success", {
+        outcomeCode:
+          sourceBucket === RESUME_BUCKET
+            ? "RESUME_ALREADY_PROMOTED"
+            : "RESUME_PROMOTED",
+      });
     }
 
     const completionArgs = {
@@ -771,6 +857,10 @@ export async function cleanupExpiredResumeUploads(
     throw new Error("Invalid resume cleanup batch size.");
   }
 
+  const complete = startTimedStage(logger, "resume_upload.cleanup", {
+    batchSize,
+  });
+
   const { data, error } = await supabase.rpc("expire_resume_uploads", {
     p_limit: batchSize,
   });
@@ -779,11 +869,15 @@ export async function cleanupExpiredResumeUploads(
       { errorCode: "RESUME_CLEANUP_CLAIM_FAILED" },
       "Resume cleanup claim failed",
     );
+    complete("failure", { errorCode: "RESUME_CLEANUP_CLAIM_FAILED" });
     throw new Error("Resume cleanup is temporarily unavailable.");
   }
 
   const candidates = (data ?? []) as CleanupCandidate[];
-  if (candidates.length === 0) return { claimed: 0, removed: 0 };
+  if (candidates.length === 0) {
+    complete("success", { claimedCount: 0, removedCount: 0 });
+    return { claimed: 0, removed: 0 };
+  }
 
   const paths = candidates.map((candidate) => candidate.storage_path);
   const { error: removalError } = await supabase.storage
@@ -797,6 +891,10 @@ export async function cleanupExpiredResumeUploads(
       },
       "Resume quarantine cleanup failed",
     );
+    complete("failure", {
+      errorCode: "RESUME_QUARANTINE_BATCH_CLEANUP_FAILED",
+      claimedCount: candidates.length,
+    });
     throw new Error("Resume cleanup is temporarily unavailable.");
   }
 
@@ -813,6 +911,10 @@ export async function cleanupExpiredResumeUploads(
       },
       "Resume cleanup completion recording failed",
     );
+    complete("failure", {
+      errorCode: "RESUME_CLEANUP_COMPLETION_FAILED",
+      claimedCount: candidates.length,
+    });
     throw new Error("Resume cleanup is temporarily unavailable.");
   }
 
@@ -823,5 +925,9 @@ export async function cleanupExpiredResumeUploads(
     },
     "Resume quarantine cleanup completed",
   );
+  complete("success", {
+    claimedCount: candidates.length,
+    removedCount: candidates.length,
+  });
   return { claimed: candidates.length, removed: candidates.length };
 }

@@ -427,9 +427,9 @@ DECLARE
   v_upload public.resume_uploads%ROWTYPE;
 BEGIN
   SELECT * INTO v_upload
-  FROM public.resume_uploads
-  WHERE id = p_upload_id
-    AND user_id = p_user_id
+  FROM public.resume_uploads AS upload
+  WHERE upload.id = p_upload_id
+    AND upload.user_id = p_user_id
   FOR UPDATE;
 
   IF NOT FOUND THEN

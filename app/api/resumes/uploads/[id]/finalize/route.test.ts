@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { NextRequest } from "next/server";
 import { makeRequest } from "@/__tests__/helpers/request";
 
 const mockGetUser = vi.hoisted(() => vi.fn());
@@ -49,6 +50,26 @@ describe("POST /api/resumes/uploads/[id]/finalize", () => {
     );
   });
 
+  it("accepts the zero-byte request stream produced by the Next.js runtime", async () => {
+    mockFinalizeResumeUpload.mockResolvedValue({
+      status: "ready",
+      uploadId: UPLOAD_ID,
+      resumeId: "resume-1",
+      qualityCodes: [],
+      metrics: { pageCount: null, characterCount: 400 },
+    });
+    const request = new Request("http://localhost:3000/api/test", {
+      method: "POST",
+      headers: { origin: "http://localhost:3000" },
+      body: new Uint8Array(0),
+    }) as unknown as NextRequest;
+
+    const response = await POST(request, PARAMS);
+
+    expect(response.status).toBe(200);
+    expect(mockFinalizeResumeUpload).toHaveBeenCalledOnce();
+  });
+
   it("does not create a privileged client for unauthenticated callers", async () => {
     mockGetUser.mockResolvedValue({ data: { user: null }, error: null });
     const response = await POST(makeRequest({ method: "POST" }), PARAMS);
@@ -91,6 +112,25 @@ describe("POST /api/resumes/uploads/[id]/finalize", () => {
     const response = await POST(makeRequest({ method: "POST" }), PARAMS);
     expect(response.status).toBe(503);
     await expect(response.json()).resolves.toMatchObject({ retryable: true });
+  });
+
+  it("returns stable validation rejections with 422", async () => {
+    mockFinalizeResumeUpload.mockResolvedValue({
+      status: "rejected",
+      uploadId: UPLOAD_ID,
+      code: "BINARY_TEXT",
+      message: "The text resume contains unsupported binary content.",
+      retryable: false,
+    });
+
+    const response = await POST(makeRequest({ method: "POST" }), PARAMS);
+
+    expect(response.status).toBe(422);
+    await expect(response.json()).resolves.toMatchObject({
+      status: "rejected",
+      code: "BINARY_TEXT",
+      retryable: false,
+    });
   });
 
   it("maps owner-scoped service errors to stable API responses", async () => {

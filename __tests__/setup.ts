@@ -23,7 +23,32 @@ vi.mock("@/lib/logger", () => ({
     error: vi.fn(),
     child: vi.fn(),
   }),
-  startTimedStage: () => vi.fn(),
+  startTimedStage: (
+    logger: {
+      info: (fields: Record<string, unknown>, message: string) => void;
+    },
+    stage: string,
+    fields: Record<string, unknown> = {},
+  ) => {
+    logger.info(
+      { event: "stage.start", stage, outcome: "started", ...fields },
+      "Process stage started",
+    );
+    return (
+      outcome: "success" | "failure",
+      terminalFields: Record<string, unknown> = {},
+    ) =>
+      logger.info(
+        {
+          event: "stage.complete",
+          stage,
+          outcome,
+          durationMs: 0,
+          ...terminalFields,
+        },
+        "Process stage completed",
+      );
+  },
 }));
 
 // ─── Required env vars for all route handler tests ────────────────────────────

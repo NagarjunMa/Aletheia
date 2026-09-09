@@ -22,6 +22,35 @@ Follow-up:
 
 ### 2026-09-07
 
+Branch: `feat/ale-43-production-gate`
+
+Area: ALE-43 Phase 5 — production-like verification, observability, privacy, and operations
+
+Problem: Phases 1-4 provide the secure upload pipeline behind a default-off rollout flag, but the repository lacked a repeatable isolated-environment proof for direct near-limit uploads, cross-user denial, rejection cleanup, Cron cleanup, log privacy, and measured validation duration. The privacy policy also did not explicitly describe retained original resume files.
+
+Decision: Add a protected, manually dispatched GitHub Actions gate that refuses the known production hostname, requires explicit isolated-project confirmation, uses two test-only accounts, and disables authenticated Playwright traces. Exercise direct PDF/TXT uploads, exact 5 MiB browser routing, cross-user RLS/Storage denial, binary rejection, and expired-object cleanup; remove all test-created rows and objects afterward. Add bounded synthetic fixtures, a 20 MiB/50,000-line exported-log auditor, explicit resume security CI, request-correlated lifecycle stages, a production runbook, and accurate original-file retention/deletion privacy copy.
+
+Files changed:
+
+- `.github/workflows/{ci,resume-production-gate}.yml`
+- `e2e/resume-upload.spec.ts`
+- `scripts/{resume-production-gate,audit-resume-log-export}.ts` and contract tests
+- `lib/resumes/{upload-service,upload-service.test}.ts`
+- `app/api/resumes/uploads/{route,route.test}.ts`
+- `app/api/health/{route,route.test}.ts`
+- `__tests__/setup.ts`, `package.json`
+- `app/privacy/page.tsx`
+- `docs/operations/resume-upload-production-gate.md`
+- `docs/agents/engineering-guide.md`, `docs/progress.txt`
+
+Tests/checks: TDD red phase recorded missing helper, workflow, CI, documentation, lifecycle events, and wrapped platform-log parsing. The 2026-09-08 final audit added failing contracts for independent-review findings, then fixed run-scoped failure cleanup, recursive forbidden log-field detection, fail-closed production/deployment/Storage-origin isolation before mutation, and fail-closed handling beyond the 50,000-line log-audit bound. Final independent rereview found no remaining material code issue. A subsequent local runtime audit found and corrected four integration defects with regression coverage: Next.js represents a zero-byte finalize POST as a non-null stream, the `claim_resume_upload` SQL used an output-column name ambiguously, stable validator rejections returned HTTP 200 instead of 422, and the cleanup fixture violated the database expiry constraint. After those fixes, a clean local Supabase reset applied every migration; authenticated direct uploads finalized an 861-byte PDF in 1,099 ms, a 1 MiB TXT in 326 ms, and an exact 5 MiB TXT in 538 ms while application requests remained metadata-only (97-101 bytes). Cross-user database and Storage access was denied, binary text returned 422 and its object was removed, and cleanup claimed and removed two expired fixtures without saturation. The local exported-log audit passed across 54 events with all required stages, no canary leakage, and no forbidden fields. Green checks pass for focused resume security (12 files / 143 tests), full coverage (72 files / 838 tests; 88.03% statements, 80.60% branches, 87.46% functions, 89.48% lines), guardrails (2 files / 15 tests), strict type-check, lint, scoped formatting, `git diff --check`, production build, and the full mocked Playwright smoke tier (18/18). Playwright discovers six protected production-gate tests; the local no-credential invocation passed with all six correctly skipped. The generated PDF fixture passed the real bounded validator. Repository-wide Prettier remains failed on 25 pre-existing unrelated files while every Phase 5 file passes. `npm audit --omit=dev --audit-level=high` still fails with the inherited eight findings (seven high, one low); this phase changes no dependencies.
+
+Result: The code-backed Phase 5 gate and runbook are implemented, and the local application/Supabase integration now passes. The product owner accepted Vercel Hobby's best-effort daily cleanup cadence instead of a strict 24-hour deletion guarantee; privacy and operational wording now state that limitation directly. No remote Supabase/Vercel project or production data was touched. ALE-43 remains In Progress as requested because protected isolated-environment CI and deployment evidence are still pending.
+
+Follow-up: Run the protected workflow against the non-production deployment after opening the pull request; export the matching Vercel logs and pass `npm run audit:resume-logs`; record the inherited dependency disposition and rollout approval. Keep direct upload disabled in production until those environment gates pass.
+
+### 2026-09-07
+
 Branch: `feat/ale-43-resume-browser-cutover`
 
 Area: ALE-43 Phase 4 — Vercel Hobby Cron compatibility

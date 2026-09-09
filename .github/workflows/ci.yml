@@ -56,6 +56,9 @@ jobs:
       - name: Run guardrail tests
         run: npm run test:guardrails -- --run
 
+      - name: Run focused resume security contracts
+        run: npm run test:resume-security
+
       - name: Upload coverage report
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

@@ -10,8 +10,18 @@ export async function GET(request: NextRequest) {
 
 async function handleGet(log: SafeLogger) {
   log.debug("Health check");
+  let supabaseOrigin: string | null = null;
+  const configuredSupabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (configuredSupabaseUrl) {
+    try {
+      supabaseOrigin = new URL(configuredSupabaseUrl).origin;
+    } catch {
+      // Startup validation owns configuration errors; health reports null.
+    }
+  }
   return NextResponse.json({
     status: "ok",
     timestamp: new Date().toISOString(),
+    supabaseOrigin,
   });
 }

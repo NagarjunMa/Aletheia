@@ -250,8 +250,9 @@ redeploy. Remove the rollback transport after the Phase 5 rollout gate.
   may be claimed only to remove a residual quarantine copy after an ambiguous
   promotion; the final `user-resumes` bucket is never targeted. Hobby execution
   may occur up to 59 minutes after the scheduled hour, and a failed or saturated
-  run can extend retention beyond 24 hours; Phase 5 must monitor this residual
-  risk or move cleanup to a more frequent execution plan.
+  run can extend retention into a later run. The accepted Vercel Hobby policy is
+  bounded, best-effort daily cleanup with saturation monitoring rather than a
+  strict 24-hour deletion guarantee.
 
 The service-role client is created only after authentication and ownership are
 established and is never exposed to browser code. Quarantine objects have no
@@ -259,8 +260,22 @@ authenticated read/update/delete policy; authenticated clients cannot write to
 the final bucket. Logs and public errors must never include resume bytes,
 parsed text, file names, storage paths, content hashes, or raw provider/parser
 errors. Phase 4 owns browser direct upload, legacy multipart deprecation, and
-expired/orphan cleanup; Phase 5 owns production migration, authenticated
-near-limit integration, monitoring, and rollout gates.
+expired/orphan cleanup. Phase 5 provides the protected, manually dispatched
+`resume-production-gate` workflow and the operational runbook at
+`docs/operations/resume-upload-production-gate.md`. The gate targets only an
+explicitly confirmed isolated deployment/project with two test accounts; it
+checks direct PDF/TXT upload, 1 MiB and exact-5-MiB behavior, cross-user denial,
+stable rejection, destructive cleanup, and bounded timing evidence. Authenticated
+Playwright traces are disabled so test artifacts do not retain session tokens.
+
+Resume lifecycle telemetry uses `stage.start`/`stage.complete` with the stages
+`resume_upload.reservation`, `resume_upload.acknowledgement`,
+`resume_upload.validation`, `resume_upload.promotion`,
+`resume_upload.rejection`, and `resume_upload.cleanup`. Exported logs must pass
+`npm run audit:resume-logs` with synthetic canaries before production rollout.
+Keep direct upload disabled until migration/RLS, integration, cleanup capacity,
+and log-privacy evidence are approved. The production migration, live log audit,
+and flag enablement remain controlled environment actions, not ordinary tests.
 
 ---
 

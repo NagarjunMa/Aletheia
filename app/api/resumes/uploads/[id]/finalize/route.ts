@@ -15,6 +15,21 @@ import { formatZodDetails } from "@/lib/zod-details";
 
 const uploadIdSchema = z.string().uuid();
 
+async function hasNonEmptyRequestBody(request: NextRequest) {
+  if (request.body === null) return false;
+
+  const reader = request.body.getReader();
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) return false;
+      if (value.byteLength > 0) return true;
+    }
+  } finally {
+    await reader.cancel().catch(() => undefined);
+  }
+}
+
 export async function POST(
   request: NextRequest,
   context: { params: Promise<{ id: string }> },
@@ -45,7 +60,7 @@ async function handlePost(
     );
   }
 
-  if (request.body !== null) {
+  if (await hasNonEmptyRequestBody(request)) {
     return NextResponse.json(
       { error: "Request body must be empty" },
       { status: 400, headers: corsHeaders },
@@ -72,7 +87,12 @@ async function handlePost(
       log,
     );
     return NextResponse.json(result, {
-      status: result.status === "failed" ? 503 : 200,
+      status:
+        result.status === "failed"
+          ? 503
+          : result.status === "rejected"
+            ? 422
+            : 200,
       headers: corsHeaders,
     });
   } catch (error) {
