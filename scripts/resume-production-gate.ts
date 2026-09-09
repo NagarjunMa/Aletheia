@@ -24,6 +24,7 @@ const requiredEnvironmentKeys = [
   "RESUME_GATE_USER_B_PASSWORD",
   "RESUME_GATE_CRON_SECRET",
   "RESUME_GATE_CONFIRM_ISOLATED_PROJECT",
+  "RESUME_GATE_EXPECTED_COMMIT_SHA",
 ] as const;
 
 type Environment = Record<string, string | undefined>;
@@ -37,7 +38,80 @@ export type ResumeProductionGateEnvironment = {
   userA: { email: string; password: string };
   userB: { email: string; password: string };
   cronSecret: string;
+  expectedCommitSha: string;
 };
+
+type ResumeGateDeploymentIdentity = {
+  deploymentSha?: unknown;
+  supabaseOrigin?: unknown;
+};
+
+export function assertResumeGateDeploymentIdentity(
+  identity: ResumeGateDeploymentIdentity,
+  environment: ResumeProductionGateEnvironment,
+): void {
+  if (identity.supabaseOrigin !== environment.supabaseUrl.origin) {
+    throw new Error("Resume gate deployment/project identity mismatch.");
+  }
+  if (identity.deploymentSha !== environment.expectedCommitSha) {
+    throw new Error(
+      "Resume gate deployment commit does not match the workflow commit.",
+    );
+  }
+}
+
+type CleanupResult = { error: unknown };
+
+type ResumeGateCleanupInput = {
+  paths: string[];
+  resumeIds: string[];
+  uploadIds: string[];
+  removeStorageObjects: (paths: string[]) => Promise<CleanupResult[]>;
+  deleteResumeRows: (ids: string[]) => Promise<CleanupResult>;
+  deleteUploadRows: (ids: string[]) => Promise<CleanupResult>;
+};
+
+export async function cleanupResumeGateArtifacts({
+  paths,
+  resumeIds,
+  uploadIds,
+  removeStorageObjects,
+  deleteResumeRows,
+  deleteUploadRows,
+}: ResumeGateCleanupInput): Promise<boolean> {
+  if ((resumeIds.length > 0 || uploadIds.length > 0) && paths.length === 0) {
+    return false;
+  }
+
+  if (paths.length > 0) {
+    try {
+      const storageCleanup = await removeStorageObjects(paths);
+      if (storageCleanup.some(({ error }) => Boolean(error))) return false;
+    } catch {
+      return false;
+    }
+  }
+
+  if (resumeIds.length > 0) {
+    try {
+      const result = await deleteResumeRows(resumeIds);
+      if (result.error) return false;
+    } catch {
+      return false;
+    }
+  }
+
+  if (uploadIds.length > 0) {
+    try {
+      const result = await deleteUploadRows(uploadIds);
+      if (result.error) return false;
+    } catch {
+      return false;
+    }
+  }
+
+  return true;
+}
 
 export function buildVercelBypassHeaders(
   secret: string | undefined,
@@ -102,6 +176,10 @@ export function parseResumeProductionGateEnv(
       "Resume production gate requires two distinct test accounts.",
     );
   }
+  const expectedCommitSha = value("RESUME_GATE_EXPECTED_COMMIT_SHA");
+  if (!/^[a-f0-9]{40,64}$/iu.test(expectedCommitSha)) {
+    throw new Error("Resume production gate requires a valid commit SHA.");
+  }
 
   return {
     baseUrl,
@@ -123,6 +201,7 @@ export function parseResumeProductionGateEnv(
       password: value("RESUME_GATE_USER_B_PASSWORD"),
     },
     cronSecret: value("RESUME_GATE_CRON_SECRET"),
+    expectedCommitSha: expectedCommitSha.toLowerCase(),
   };
 }
 

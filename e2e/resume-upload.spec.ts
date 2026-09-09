@@ -3,9 +3,11 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import type { Database } from "../lib/database/types";
 import {
+  assertResumeGateDeploymentIdentity,
   buildVercelBypassHeaders,
   buildResumePdfFixture,
   buildResumeTextFixture,
+  cleanupResumeGateArtifacts,
   parseResumeProductionGateEnv,
   type ResumeProductionGateEnvironment,
 } from "../scripts/resume-production-gate";
@@ -41,10 +43,11 @@ async function verifyDeploymentIdentity(
   if (!response.ok) {
     throw new Error("Unable to verify isolated deployment identity.");
   }
-  const body = (await response.json()) as { supabaseOrigin?: unknown };
-  if (body.supabaseOrigin !== environment.supabaseUrl.origin) {
-    throw new Error("Resume gate deployment/project identity mismatch.");
-  }
+  const body = (await response.json()) as {
+    deploymentSha?: unknown;
+    supabaseOrigin?: unknown;
+  };
+  assertResumeGateDeploymentIdentity(body, environment);
 }
 
 async function login(page: Page, environment: ResumeProductionGateEnvironment) {
@@ -255,6 +258,7 @@ test.describe("ALE-43 isolated resume production gate", () => {
   test.afterAll(async () => {
     if (!gate || !service) return;
     let cleanupFailed = false;
+    let referencesResolved = true;
     try {
       for (const artifact of await discoverRunArtifacts(service)) {
         uploadIds.add(artifact.id);
@@ -263,6 +267,7 @@ test.describe("ALE-43 isolated resume production gate", () => {
       }
     } catch {
       cleanupFailed = true;
+      referencesResolved = false;
     }
     if (resumeIds.size > 0) {
       const lookup = await service
@@ -270,31 +275,28 @@ test.describe("ALE-43 isolated resume production gate", () => {
         .select("storage_path")
         .in("id", [...resumeIds]);
       cleanupFailed ||= Boolean(lookup.error);
+      referencesResolved &&= !lookup.error;
       for (const row of lookup.data ?? []) {
         if (row.storage_path) storagePaths.add(row.storage_path);
       }
     }
     const paths = [...storagePaths];
-    if (paths.length > 0) {
-      const storageCleanup = await Promise.all([
-        service.storage.from("resume-quarantine").remove(paths),
-        service.storage.from("user-resumes").remove(paths),
-      ]);
-      cleanupFailed ||= storageCleanup.some(({ error }) => Boolean(error));
-    }
-    if (resumeIds.size > 0) {
-      const result = await service
-        .from("user_resumes")
-        .delete()
-        .in("id", [...resumeIds]);
-      cleanupFailed ||= Boolean(result.error);
-    }
-    if (uploadIds.size > 0) {
-      const result = await service
-        .from("resume_uploads")
-        .delete()
-        .in("id", [...uploadIds]);
-      cleanupFailed ||= Boolean(result.error);
+    if (referencesResolved) {
+      const cleanupSucceeded = await cleanupResumeGateArtifacts({
+        paths,
+        resumeIds: [...resumeIds],
+        uploadIds: [...uploadIds],
+        removeStorageObjects: async (cleanupPaths) =>
+          Promise.all([
+            service.storage.from("resume-quarantine").remove(cleanupPaths),
+            service.storage.from("user-resumes").remove(cleanupPaths),
+          ]),
+        deleteResumeRows: async (ids) =>
+          service.from("user_resumes").delete().in("id", ids),
+        deleteUploadRows: async (ids) =>
+          service.from("resume_uploads").delete().in("id", ids),
+      });
+      cleanupFailed ||= !cleanupSucceeded;
     }
     await Promise.all([userA?.auth.signOut(), userB?.auth.signOut()]);
     if (cleanupFailed) {
