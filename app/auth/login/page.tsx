@@ -1,12 +1,13 @@
 "use client";
 
 import { Suspense, useState, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { Mail, Lock } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { ensureProfileAction } from "@/app/auth/actions";
+import { normalizePostAuthRedirect } from "./redirect";
 
 /* ── Shared theme tokens ─────────────────────────── */
 const T = {
@@ -95,9 +96,8 @@ export default function LoginPage() {
 }
 
 function LoginForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
-  const redirectTo = searchParams.get("redirectTo") || "/dashboard";
+  const redirectTo = normalizePostAuthRedirect(searchParams.get("redirectTo"));
   const source = searchParams.get("source");
 
   const [email, setEmail] = useState("");
@@ -151,7 +151,12 @@ function LoginForm() {
       return;
     }
 
-    await ensureProfileAction();
+    const profileResult = await ensureProfileAction();
+    if ("error" in profileResult) {
+      setError("Your account could not be prepared. Please try again.");
+      setLoading(false);
+      return;
+    }
 
     if (source === "extension") {
       setLoading(false);
@@ -159,8 +164,9 @@ function LoginForm() {
       return;
     }
 
-    router.push(redirectTo);
-    router.refresh();
+    // A full navigation guarantees that the authenticated Server Component
+    // request observes the cookies written by the browser Supabase client.
+    window.location.replace(redirectTo);
   }
 
   async function handleOAuthSignIn(provider: "google" | "github") {

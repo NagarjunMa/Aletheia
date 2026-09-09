@@ -37,6 +37,9 @@ describe("ALE-43 Phase 5 production gate wiring", () => {
     expect(workflow).toContain("RESUME_GATE_VERCEL_AUTOMATION_BYPASS_SECRET");
     expect(workflow).toContain("RESUME_GATE_SUPABASE_SERVICE_ROLE_KEY");
     expect(workflow).toContain("npm run test:resume-production");
+    expect(workflow).toContain("test-results/**/resume-*-byte-result.json");
+    expect(workflow).toContain("if-no-files-found: error");
+    expect(workflow).not.toMatch(/^\s+path:\s+test-results\/\s*$/mu);
     expect(
       workflow.indexOf("RESUME_GATE_SUPABASE_SERVICE_ROLE_KEY"),
     ).toBeGreaterThan(workflow.indexOf("Run isolated resume production gate"));
@@ -57,6 +60,15 @@ describe("ALE-43 Phase 5 production gate wiring", () => {
     expect(e2e).not.toContain(
       'expect(page.getByLabel("Choose resume file")).toBeVisible',
     );
+    expect(e2e).toContain("clearCredentialFields");
+    expect(e2e).toContain("testInfo.outputPath(");
+    expect(e2e).toContain("await writeFile(evidencePath");
+
+    const loginPage = read("app/auth/login/page.tsx");
+    expect(loginPage).toContain("window.location.replace(redirectTo)");
+    expect(loginPage).toContain('"error" in profileResult');
+    expect(loginPage).not.toContain("router.push(redirectTo)");
+    expect(loginPage).not.toContain("router.refresh()");
   });
 
   it("documents operations, privacy, rollback, and the future sharing gate", () => {

@@ -1,3 +1,4 @@
+import { writeFile } from "node:fs/promises";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import type { Database } from "../lib/database/types";
@@ -68,11 +69,28 @@ async function login(page: Page, environment: ResumeProductionGateEnvironment) {
   );
   await page.locator("#email").fill(environment.userA.email);
   await page.locator("#password").fill(environment.userA.password);
-  await page.getByRole("button", { name: "Sign in" }).click();
+  try {
+    await page.getByRole("button", { name: "Sign in" }).click();
+    await clearCredentialFields(page);
+    await page.waitForURL(/\/profile(?:\?|$)/u, {
+      timeout: 30_000,
+      waitUntil: "domcontentloaded",
+    });
+  } finally {
+    await clearCredentialFields(page);
+  }
   await expect(page.getByRole("button", { name: "Upload resume" })).toBeVisible(
     { timeout: 30_000 },
   );
-  await expect(page).toHaveURL(/\/profile(?:\?|$)/u);
+}
+
+async function clearCredentialFields(page: Page) {
+  for (const selector of ["#email", "#password"]) {
+    await page
+      .locator(selector)
+      .fill("")
+      .catch(() => undefined);
+  }
 }
 
 async function listResumes(page: Page): Promise<ListedResume[]> {
@@ -163,14 +181,17 @@ async function attachTiming(
   durationMs: number,
   outcome: string,
 ) {
+  const body = JSON.stringify({
+    fixtureBytes,
+    durationMs: Math.round(durationMs),
+    outcome,
+  });
+  const evidencePath = testInfo.outputPath(
+    `resume-${fixtureBytes}-byte-result.json`,
+  );
+  await writeFile(evidencePath, body, "utf8");
   await testInfo.attach(`resume-${fixtureBytes}-byte-result`, {
-    body: Buffer.from(
-      JSON.stringify({
-        fixtureBytes,
-        durationMs: Math.round(durationMs),
-        outcome,
-      }),
-    ),
+    path: evidencePath,
     contentType: "application/json",
   });
 }
