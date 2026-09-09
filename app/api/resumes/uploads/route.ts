@@ -131,14 +131,7 @@ async function handlePost(request: NextRequest, log: SafeLogger) {
   }
 
   try {
-    const reservation = await reserveResumeUpload(supabase, parsed.data);
-    log.info(
-      {
-        userId: user.id.substring(0, 12),
-        declaredSize: parsed.data.declaredSize,
-      },
-      "Resume upload reserved",
-    );
+    const reservation = await reserveResumeUpload(supabase, parsed.data, log);
     return NextResponse.json(reservation, {
       status: 201,
       headers: corsHeaders,

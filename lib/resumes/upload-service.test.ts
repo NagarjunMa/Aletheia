@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { SafeLogger } from "@/lib/logger";
 
 const mockValidateResumeBytes = vi.hoisted(() => vi.fn());
 
@@ -171,6 +172,23 @@ function finalizeWithFakeClient(client: unknown) {
   );
 }
 
+function createRecordingLogger() {
+  const entries: Array<Record<string, unknown>> = [];
+  const record = (fields: Record<string, unknown> | Error | string) => {
+    if (typeof fields !== "string" && !(fields instanceof Error)) {
+      entries.push(fields);
+    }
+  };
+  const logger: SafeLogger = {
+    debug: record,
+    info: record,
+    warn: record,
+    error: record,
+    child: () => logger,
+  };
+  return { logger, entries };
+}
+
 describe("resume upload service", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -213,6 +231,48 @@ describe("resume upload service", () => {
       name: "reserve_resume_upload",
       args: expect.objectContaining({ p_file_name: "My-Resume.txt" }),
     });
+  });
+
+  it("emits a bounded reservation lifecycle event without file metadata", async () => {
+    const { client } = createFakeSupabase({
+      rpc: {
+        reserve_resume_upload: [
+          {
+            data: [
+              {
+                upload_id: UPLOAD_ID,
+                bucket_id: "resume-quarantine",
+                storage_path: STORAGE_PATH,
+                expires_at: FUTURE,
+              },
+            ],
+            error: null,
+          },
+        ],
+      },
+    });
+    const { logger, entries } = createRecordingLogger();
+
+    await reserveResumeUpload(
+      client as any,
+      {
+        fileName: `${"private-name"}.txt`,
+        declaredMime: "text/plain",
+        declaredSize: 400,
+      },
+      logger,
+    );
+
+    expect(entries).toContainEqual(
+      expect.objectContaining({
+        event: "stage.complete",
+        stage: "resume_upload.reservation",
+        outcome: "success",
+        declaredSize: 400,
+      }),
+    );
+    expect(JSON.stringify(entries)).not.toContain("private-name");
+    expect(JSON.stringify(entries)).not.toContain(STORAGE_PATH);
   });
 
   it("maps reservation limits without exposing database messages", async () => {
@@ -350,6 +410,48 @@ describe("resume upload service", () => {
     });
   });
 
+  it("emits acknowledgement, validation, and promotion lifecycle events", async () => {
+    const { client } = createFakeSupabase({
+      rpc: {
+        mark_resume_upload_uploaded: [
+          { data: [{ upload_state: "uploaded" }], error: null },
+        ],
+        claim_resume_upload: [{ data: [claim], error: null }],
+        complete_resume_upload: [
+          {
+            data: [
+              { completed_resume_id: RESUME_ID, already_completed: false },
+            ],
+            error: null,
+          },
+        ],
+      },
+    });
+    const { logger, entries } = createRecordingLogger();
+
+    await finalizeResumeUpload(
+      client as any,
+      () => client as any,
+      USER_ID,
+      UPLOAD_ID,
+      logger,
+    );
+
+    const completedStages = entries
+      .filter((entry) => entry.event === "stage.complete")
+      .map((entry) => entry.stage);
+    expect(completedStages).toEqual(
+      expect.arrayContaining([
+        "resume_upload.acknowledgement",
+        "resume_upload.validation",
+        "resume_upload.promotion",
+      ]),
+    );
+    expect(JSON.stringify(entries)).not.toContain(STORAGE_PATH);
+    expect(JSON.stringify(entries)).not.toContain(accepted.parsedText);
+    expect(JSON.stringify(entries)).not.toContain(accepted.contentSha256);
+  });
+
   it("records deterministic validation rejection and deletes quarantine bytes", async () => {
     mockValidateResumeBytes.mockResolvedValue({
       status: "rejected",
@@ -374,6 +476,41 @@ describe("resume upload service", () => {
     expect(calls.removes).toEqual([
       { bucket: "resume-quarantine", paths: [STORAGE_PATH] },
     ]);
+  });
+
+  it("emits rejection lifecycle evidence using only the stable code", async () => {
+    mockValidateResumeBytes.mockResolvedValue({
+      status: "rejected",
+      code: "INVALID_UTF8",
+      publicMessage: "invalid",
+    });
+    const { client } = createFakeSupabase({
+      snapshots: [{ ...snapshot, state: "uploaded" }],
+      rpc: {
+        claim_resume_upload: [{ data: [claim], error: null }],
+        reject_resume_upload: [
+          { data: [{ upload_state: "rejected" }], error: null },
+        ],
+      },
+    });
+    const { logger, entries } = createRecordingLogger();
+
+    await finalizeResumeUpload(
+      client as any,
+      () => client as any,
+      USER_ID,
+      UPLOAD_ID,
+      logger,
+    );
+
+    expect(entries).toContainEqual(
+      expect.objectContaining({
+        event: "stage.complete",
+        stage: "resume_upload.rejection",
+        outcome: "failure",
+        errorCode: "INVALID_UTF8",
+      }),
+    );
   });
 
   it("marks storage download failures as explicitly retryable", async () => {
@@ -855,6 +992,30 @@ describe("resume upload cleanup", () => {
     ]);
     expect(calls.buckets).toEqual(["resume-quarantine"]);
     expect(calls.removes).toEqual([[STORAGE_PATH]]);
+  });
+
+  it("emits one cleanup lifecycle event with bounded counts", async () => {
+    const client = {
+      rpc: vi.fn(async (name: string) =>
+        name === "expire_resume_uploads"
+          ? { data: [], error: null }
+          : { data: 0, error: null },
+      ),
+      storage: { from: vi.fn() },
+    };
+    const { logger, entries } = createRecordingLogger();
+
+    await cleanupExpiredResumeUploads(client as any, 100, logger);
+
+    expect(entries).toContainEqual(
+      expect.objectContaining({
+        event: "stage.complete",
+        stage: "resume_upload.cleanup",
+        outcome: "success",
+        claimedCount: 0,
+        removedCount: 0,
+      }),
+    );
   });
 
   it("leaves a failed storage batch unmarked so its lease can be retried", async () => {

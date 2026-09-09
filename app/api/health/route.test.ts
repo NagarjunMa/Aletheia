@@ -12,6 +12,9 @@ describe("GET /api/health", () => {
     const res = await GET(makeRequest({ method: "GET" }));
     const body = await res.json();
     expect(body.status).toBe("ok");
+    expect(body.supabaseOrigin).toBe(
+      new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").origin,
+    );
   });
 
   it("returns a valid ISO timestamp", async () => {

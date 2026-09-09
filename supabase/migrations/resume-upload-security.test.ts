@@ -225,7 +225,7 @@ describe("secure resume upload pipeline migration", () => {
 
       expect(functionBlock).toBeDefined();
       expect(functionBlock).toContain("p_user_id uuid");
-      expect(functionBlock).toContain("and user_id = p_user_id");
+      expect(functionBlock).toMatch(/and (?:[a-z_]+\.)?user_id = p_user_id/);
     }
   });
 
@@ -235,6 +235,9 @@ describe("secure resume upload pipeline migration", () => {
     )?.[0];
 
     expect(functionBlock).toBeDefined();
+    expect(functionBlock).toContain(
+      "from public.resume_uploads as upload\n  where upload.id = p_upload_id\n    and upload.user_id = p_user_id",
+    );
     expect(functionBlock).toContain("validation_started_at = now()");
     expect(functionBlock).toContain(
       "expires_at = greatest(upload.expires_at, now() + interval '15 minutes')",

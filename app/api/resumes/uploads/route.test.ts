@@ -37,6 +37,7 @@ describe("POST /api/resumes/uploads", () => {
     expect(mockReserveResumeUpload).toHaveBeenCalledWith(
       expect.anything(),
       VALID_BODY,
+      expect.anything(),
     );
   });
 

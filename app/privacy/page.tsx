@@ -14,7 +14,7 @@ export const metadata: Metadata = {
   },
 };
 
-const EFFECTIVE_DATE = "September 5, 2026";
+const EFFECTIVE_DATE = "September 7, 2026";
 const CONTACT_EMAIL = "hello@aletheia.live";
 const OPERATOR_NAME = "Nagarjun Mallesh";
 const OPERATOR_LOCATION = "Boston, Massachusetts, United States";
@@ -70,11 +70,10 @@ export default function PrivacyPage() {
               supported compose field; it does not extract Apollo profiles.
             </li>
             <li>
-              <strong>
-                Resume, opportunity, and confirmed evidence context
-              </strong>{" "}
-              you provide in Aletheia. This supports professional drafts and
-              grounded YC application answers from your recorded background.
+              <strong>Original resume files, extracted resume text,</strong>{" "}
+              opportunity context, and confirmed evidence you provide in
+              Aletheia. This supports professional drafts and grounded YC
+              application answers from your recorded background.
             </li>
             <li>
               <strong>Generated drafts</strong>, plus accept/reject feedback you
@@ -118,8 +117,10 @@ export default function PrivacyPage() {
           </p>
           <ul>
             <li>
-              <strong>Supabase</strong> — Postgres database and auth. Stores
-              your account, generated message history, accept/reject feedback.{" "}
+              <strong>Supabase</strong> — Postgres database, authentication, and
+              private file storage. Stores your account, original resume files,
+              extracted resume text, generated message history, and
+              accept/reject feedback.{" "}
               <a
                 href="https://supabase.com/privacy"
                 target="_blank"
@@ -276,6 +277,15 @@ export default function PrivacyPage() {
             account deletion, identifiable data is removed within 30 days.
             Anonymous aggregated metrics (e.g. total messages generated per day)
             may be retained for product analytics.
+          </p>
+          <p>
+            Ready original resume files and extracted text remain in your
+            account until you delete the resume or request account deletion.
+            Files that are rejected, canceled, or abandoned remain private in
+            quarantine and are scheduled for deletion by a daily cleanup job.
+            Vercel Hobby scheduling or a temporary infrastructure failure may
+            delay that cleanup; the file remains private and unavailable to
+            drafting while cleanup retries.
           </p>
           <p>
             Server logs containing IP addresses are kept for up to 30 days for
