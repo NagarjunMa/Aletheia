@@ -1,4 +1,5 @@
 import { createLogger, startTimedStage, type SafeLogger } from "@/lib/logger";
+import type { GenerationTiming } from "@/lib/generation-timing";
 import type { YcGroundingContext } from "../domain/yc-grounding.types";
 import {
   loadCandidateGroundingData,
@@ -31,6 +32,7 @@ type PrepareYcGroundingContextInput = {
   caller: CandidateContextCaller;
   question: string;
   jobDescription: string;
+  timing?: GenerationTiming;
 };
 
 function recordGrounding(telemetry: GroundingTelemetry): void {
@@ -52,11 +54,13 @@ export async function prepareYcGroundingContext(
   });
   let context: YcGroundingContext;
   try {
+    input.timing?.enter("groundingLoad");
     const candidate = dependencies.loadCandidateData
       ? await dependencies.loadCandidateData(input.caller)
       : await loadCandidateGroundingData(input.caller, {
           logger: operationLog,
         });
+    input.timing?.enter("groundingBuild");
     context = buildYcGroundingContext({
       question: input.question,
       jobDescription: input.jobDescription,

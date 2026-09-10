@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { candidateProfileInputSchema } from "@/lib/candidate-profile/schema";
 import type { CandidateGroundingData } from "../domain/yc-grounding.types";
 import { prepareYcGroundingContext } from "./prepare-yc-grounding-context";
+import { createGenerationTiming } from "@/lib/generation-timing";
 
 const caller = {
   accessToken: "verified-access-token",
@@ -43,6 +44,29 @@ function candidateData(
 }
 
 describe("prepareYcGroundingContext", () => {
+  it("separates repository wait from context build without changing caller scope", async () => {
+    let time = 0;
+    const timing = createGenerationTiming(() => time);
+    const loadCandidateData = vi.fn(async () => {
+      time += 19;
+      return candidateData();
+    });
+    await prepareYcGroundingContext(
+      { caller, ...target, timing },
+      {
+        loadCandidateData,
+        recordGrounding: () => {
+          time += 2;
+        },
+      },
+    );
+    timing.enter("rateLimit");
+    expect(timing.finish(200).stages).toMatchObject({
+      groundingLoad: 19,
+      groundingBuild: 2,
+    });
+    expect(loadCandidateData).toHaveBeenCalledWith(caller);
+  });
   it("loads caller-scoped data, builds the context, and logs metadata only", async () => {
     const loadCandidateData = vi.fn().mockResolvedValue(candidateData());
     const recordGrounding = vi.fn();

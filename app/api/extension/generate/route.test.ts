@@ -9,6 +9,142 @@ import { POST } from "./route";
 import { makeRequest } from "@/__tests__/helpers/request";
 import { getCorsHeaders } from "@/lib/cors";
 import { OutreachGroundingUnavailableError } from "@/modules/outreach/domain/outreach-grounding.types";
+import * as loggerModule from "@/lib/logger";
+
+describe("ALE-38 comparable request timings", () => {
+  it("carries the same collector across application dispatch and emits only one summary", async () => {
+    const info = vi.fn();
+    const spy = vi.spyOn(loggerModule, "createRequestLogger").mockReturnValue({
+      info,
+      debug: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      child: vi.fn(),
+    });
+    mockGenerateYcApplication.mockImplementation(async ({ timing }) => {
+      timing.enter("model");
+      timing.enter("postProcessing");
+      return Response.json({ success: true });
+    });
+    try {
+      const response = await POST(
+        makeRequest({
+          method: "POST",
+          headers: { Authorization: "Bearer test-token" },
+          body: {
+            category: "yc_application",
+            question: "Why are you a strong candidate for this role?",
+            jd: "Join a small startup team to build and operate reliable TypeScript products for customers across the full delivery lifecycle.",
+          },
+        }),
+      );
+      expect(response.status).toBe(200);
+      const summaries = info.mock.calls
+        .map(([fields]) => fields)
+        .filter((fields) => fields.event === "generation.timing");
+      expect(summaries).toEqual([
+        expect.objectContaining({
+          category: "yc_application",
+          outcome: "success",
+          stages: expect.objectContaining({
+            model: expect.any(Number),
+            postProcessing: expect.any(Number),
+          }),
+        }),
+      ]);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+  it.each(["linkedin_connection", "cold_email"])(
+    "records one private-data-free summary for %s",
+    async (category) => {
+      const info = vi.fn();
+      const logger = {
+        info,
+        debug: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        child: vi.fn(),
+      };
+      const spy = vi
+        .spyOn(loggerModule, "createRequestLogger")
+        .mockReturnValue(logger);
+      try {
+        if (category === "cold_email")
+          mockAnthropicCreate.mockResolvedValue({
+            content: [coldEmailCompositionBlock()],
+            usage: { input_tokens: 10, output_tokens: 20 },
+          });
+        const response = await POST(
+          makeRequest({
+            method: "POST",
+            headers: { Authorization: "Bearer test-token" },
+            body: { ...validPayload, category },
+          }),
+        );
+        expect(response.status).toBe(200);
+        const summaries = info.mock.calls
+          .map(([fields]) => fields)
+          .filter((fields) => fields.event === "generation.timing");
+        expect(summaries).toHaveLength(1);
+        expect(summaries[0]).toMatchObject({
+          category,
+          status: 200,
+          outcome: "success",
+          metrics: { inputUnits: 10, outputUnits: 20 },
+          stages: { billing: null, refund: null },
+        });
+        for (const stage of [
+          "authDispatch",
+          "groundingLoad",
+          "styleLoad",
+          "rateLimit",
+          "contextHydration",
+          "inputBuild",
+          "model",
+          "postProcessing",
+        ])
+          expect(summaries[0].stages[stage]).toBeTypeOf("number");
+        expect(JSON.stringify(summaries)).not.toContain("test-token");
+        expect(JSON.stringify(summaries)).not.toContain("Jane Doe");
+        const body = await response.json();
+        expect(body).not.toHaveProperty("stages");
+      } finally {
+        spy.mockRestore();
+      }
+    },
+  );
+
+  it("emits a summary for auth rejection without inventing model timings", async () => {
+    const info = vi.fn();
+    const spy = vi.spyOn(loggerModule, "createRequestLogger").mockReturnValue({
+      info,
+      debug: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      child: vi.fn(),
+    });
+    try {
+      const response = await POST(makeRequest({ method: "POST", headers: {} }));
+      expect(response.status).toBe(401);
+      expect(
+        info.mock.calls
+          .map(([fields]) => fields)
+          .filter((fields) => fields.event === "generation.timing"),
+      ).toEqual([
+        expect.objectContaining({
+          category: "unknown",
+          status: 401,
+          outcome: "failure",
+          stages: expect.objectContaining({ model: null }),
+        }),
+      ]);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});
 
 // ─── Hoisted mocks ────────────────────────────────────────────────────────────
 const mockAuthGetUser = vi.hoisted(() => vi.fn());

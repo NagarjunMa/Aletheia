@@ -584,6 +584,7 @@ function enableMainContent() {
 }
 
 async function generateMessage() {
+  const generationStartedAt = Date.now();
   const category = document.getElementById("category").value;
   const contextValue = document.getElementById("jdInput").value.trim();
   const questionValue = document
@@ -601,7 +602,10 @@ async function generateMessage() {
     return;
   }
 
+  const operationId = createOperationId();
+  let generationCompleted = false;
   try {
+    log.info("generation.start", { operationId, category });
     setGeneratingState(true);
 
     const intent = document.getElementById("intent").value;
@@ -626,9 +630,6 @@ async function generateMessage() {
       questionValue,
     );
 
-    const operationId = createOperationId();
-    const generationStartedAt = Date.now();
-    log.info("generation.start", { operationId, category });
     const response = await sendBackgroundMessage({
       action: "generate",
       payload,
@@ -636,23 +637,25 @@ async function generateMessage() {
     });
 
     if (response.success) {
+      currentOutput = response;
+      displayOutput(response);
+      generationCompleted = true;
       log.info("generation.complete", {
         operationId,
         category,
         outcome: "success",
-        durationMs: Date.now() - generationStartedAt,
+        durationMs: Math.max(0, Date.now() - generationStartedAt),
         requestId: response.requestId,
       });
-      currentOutput = response;
-      displayOutput(response);
       await storeGeneration(response);
       await incrementUsageCount();
     } else {
+      generationCompleted = true;
       log.warn("generation.complete", {
         operationId,
         category,
         outcome: "failure",
-        durationMs: Date.now() - generationStartedAt,
+        durationMs: Math.max(0, Date.now() - generationStartedAt),
         errorCode: response.code,
         status: response.status,
       });
@@ -665,7 +668,15 @@ async function generateMessage() {
       }
     }
   } catch (error) {
-    console.error("Generation error:", error);
+    if (!generationCompleted) {
+      log.warn("generation.complete", {
+        operationId,
+        category,
+        outcome: "failure",
+        durationMs: Math.max(0, Date.now() - generationStartedAt),
+        errorCode: "GENERATION_CLIENT_FAILED",
+      });
+    }
     const errMsg =
       error.message ||
       "Network error. Please check your connection and try again.";

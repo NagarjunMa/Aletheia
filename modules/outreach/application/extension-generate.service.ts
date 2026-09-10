@@ -29,6 +29,11 @@ import { z } from "zod";
 import { startTimedStage, type SafeLogger } from "@/lib/logger";
 import { withRequestLifecycle } from "@/lib/request-lifecycle";
 import {
+  createGenerationTiming,
+  type GenerationTiming,
+} from "@/lib/generation-timing";
+import { YC_APPLICATION_PROMPT_VERSION } from "@/lib/ai/prompts/yc-application";
+import {
   CURRENT_EXTENSION_API_VERSION,
   evaluateExtensionContract,
 } from "@/lib/extension-contract";
@@ -78,13 +83,43 @@ import { renderColdEmail } from "./render-cold-email";
 import { renderLinkedinConnection } from "./render-linkedin-connection";
 import { validateOutreachDraft } from "./validate-outreach-draft";
 
+let hasHandledGeneration = false;
+
 export async function POST(request: NextRequest) {
-  return withRequestLifecycle("generate-route", request, (log) =>
-    handlePost(request, log),
-  );
+  return withRequestLifecycle("generate-route", request, async (log) => {
+    const timing = createGenerationTiming();
+    const firstInvocation = !hasHandledGeneration;
+    hasHandledGeneration = true;
+    let status = 500;
+    try {
+      const response = await handlePost(request, log, timing);
+      status = response.status;
+      return response;
+    } finally {
+      // Exactly one bounded summary, including rejected/failed requests. No
+      // response-body parsing and no additional network or persistence work.
+      const summary = timing.finish(status);
+      log.info(
+        {
+          ...summary,
+          firstInvocation,
+          model: CLAUDE_MODEL,
+          templateVersion:
+            summary.category === "yc_application"
+              ? YC_APPLICATION_PROMPT_VERSION
+              : PROMPT_VERSION,
+        },
+        "Generation timing summary",
+      );
+    }
+  });
 }
 
-async function handlePost(request: NextRequest, log: SafeLogger) {
+async function handlePost(
+  request: NextRequest,
+  log: SafeLogger,
+  timing: GenerationTiming,
+) {
   const corsHeaders = createGenerateCorsHeaders(request);
 
   // Tracks whether the rate-limit slot was reserved for this user; set
@@ -128,6 +163,7 @@ async function handlePost(request: NextRequest, log: SafeLogger) {
       dispatchBody.category === "yc_application"
     ) {
       const parsed = ycApplicationRequestSchema.safeParse(dispatchBody);
+      timing.category("yc_application");
       if (!parsed.success) {
         return NextResponse.json(
           {
@@ -147,6 +183,7 @@ async function handlePost(request: NextRequest, log: SafeLogger) {
         applicationBaseUrl:
           process.env.NEXT_PUBLIC_APP_URL ?? request.nextUrl.origin,
         logger: log,
+        timing,
       });
     }
 
@@ -154,6 +191,8 @@ async function handlePost(request: NextRequest, log: SafeLogger) {
     // then prepare the caller-scoped context before quota or credit mutation.
     // Phase 1 deliberately does not yet inject these sources into prompts.
     const validatedData = generateRequestSchema.parse(dispatchBody);
+    timing.category(validatedData.category);
+    timing.enter("groundingLoad");
     let preparedGrounding: OutreachGroundingContext;
     const completeGrounding = startTimedStage(log, "outreach.grounding_load", {
       userId: authResult.userId,
@@ -162,6 +201,7 @@ async function handlePost(request: NextRequest, log: SafeLogger) {
     try {
       preparedGrounding = await prepareOutreachGroundingContext({
         caller: authResult,
+        timing,
         target: {
           category: validatedData.category,
           profileMarkdown: validatedData.profileMarkdown,
@@ -180,6 +220,14 @@ async function handlePost(request: NextRequest, log: SafeLogger) {
       return candidateContextUnavailableResponse(corsHeaders);
     }
 
+    timing.metrics({
+      sourceChars: preparedGrounding.sources.reduce(
+        (sum, source) => sum + source.content.length,
+        0,
+      ),
+      sourceCount: preparedGrounding.sources.length,
+    });
+    timing.enter("styleLoad");
     // 2. Fetch user style profile (non-blocking — failure just skips learned style)
     let styleProfile: StylePatterns | undefined;
     const completeStyle = startTimedStage(log, "outreach.style_profile_read", {
@@ -198,6 +246,7 @@ async function handlePost(request: NextRequest, log: SafeLogger) {
 
     // 3. Rate limiting (per user, persistent). Reservation is atomic.
     // If the rest of the request fails, we refund via the catch block.
+    timing.enter("rateLimit");
     const completeRateLimit = startTimedStage(
       log,
       "outreach.rate_limit_reserve",
@@ -258,6 +307,7 @@ async function handlePost(request: NextRequest, log: SafeLogger) {
           "Unlimited developer credits applied",
         );
       } else {
+        timing.enter("billing");
         const billingClient = getSupabaseService();
         await grantTrialCreditsOnce(billingClient, authResult.userId);
         const reservation = await reserveGenerationCredits(
@@ -270,6 +320,7 @@ async function handlePost(request: NextRequest, log: SafeLogger) {
         billingMode = "credits";
 
         if (!reservation.allowed || !reservation.reservationId) {
+          timing.enter("refund");
           await releaseRateLimitReservation(authResult.userId, log);
           reservedUserId = undefined;
           return NextResponse.json(
@@ -303,6 +354,7 @@ async function handlePost(request: NextRequest, log: SafeLogger) {
       }
     }
 
+    timing.enter("contextHydration");
     // Server-owned resume context is now the source of truth. The request-body
     // resume is retained only as a legacy fallback for older extension builds.
     let resumeForGeneration = "";
@@ -358,6 +410,7 @@ async function handlePost(request: NextRequest, log: SafeLogger) {
       }
     }
 
+    timing.enter("inputBuild");
     // Sanitize user-provided strings to strip unpaired Unicode surrogates
     // that cause JSON serialization failures with the Anthropic API
     const cleanMarkdown = stripSurrogates(profileMarkdown);
@@ -439,6 +492,8 @@ async function handlePost(request: NextRequest, log: SafeLogger) {
     const shouldUseEmailDraftTool =
       category === "cold_email" || category === "linkedin_inmail";
 
+    timing.metrics({ inputChars: systemPrompt.length + userPrompt.length });
+    timing.enter("model");
     const startTime = Date.now();
     const response = await createOutreachDraftMessage({
       systemPrompt,
@@ -450,7 +505,12 @@ async function handlePost(request: NextRequest, log: SafeLogger) {
     });
 
     const processingTime = Date.now() - startTime;
+    timing.enter("postProcessing");
     const tokenUsage = response.usage;
+    timing.metrics({
+      inputUnits: tokenUsage.input_tokens,
+      outputUnits: tokenUsage.output_tokens,
+    });
     const totalTokens = tokenUsage.input_tokens + tokenUsage.output_tokens;
 
     log.info(
@@ -542,6 +602,7 @@ async function handlePost(request: NextRequest, log: SafeLogger) {
           { headers: { ...corsHeaders, ...rateLimitHeaders } },
         );
       } catch {
+        timing.enter("refund");
         log.warn(
           { errorCode: "COLD_EMAIL_VALIDATION_FAILED", category },
           "Failed to validate cold email composition",
@@ -646,6 +707,7 @@ async function handlePost(request: NextRequest, log: SafeLogger) {
           },
         );
       } catch {
+        timing.enter("refund");
         log.warn(
           { errorCode: "EMAIL_DRAFT_VALIDATION_FAILED" },
           "Failed to validate email draft tool response",
@@ -734,6 +796,7 @@ async function handlePost(request: NextRequest, log: SafeLogger) {
         { headers: { ...corsHeaders, ...rateLimitHeaders } },
       );
     } catch {
+      timing.enter("refund");
       log.warn(
         { errorCode: "LINKEDIN_DRAFT_VALIDATION_FAILED", category },
         "Failed to validate LinkedIn connection composition",
@@ -753,6 +816,8 @@ async function handlePost(request: NextRequest, log: SafeLogger) {
       );
     }
   } catch (error) {
+    // Capture failure time in the stage that failed before timing compensation.
+    if (reservedCredit || reservedUserId) timing.enter("refund");
     log.error(
       { errorCode: "EXTENSION_GENERATION_FAILED" },
       "Extension generation error",

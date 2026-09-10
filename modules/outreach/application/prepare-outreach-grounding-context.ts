@@ -1,4 +1,5 @@
 import { createLogger } from "@/lib/logger";
+import type { GenerationTiming } from "@/lib/generation-timing";
 import type { AuthenticatedExtensionUser } from "../domain/extension-generate.types";
 import {
   OutreachGroundingUnavailableError,
@@ -26,7 +27,11 @@ function recordGrounding(metadata: OutreachGroundingContext["metadata"]): void {
  * repository details, candidate text, IDs, or credentials in telemetry/errors.
  */
 export async function prepareOutreachGroundingContext(
-  input: { caller: AuthenticatedExtensionUser; target: OutreachGroundingInput },
+  input: {
+    caller: AuthenticatedExtensionUser;
+    target: OutreachGroundingInput;
+    timing?: GenerationTiming;
+  },
   dependencies: PrepareOutreachGroundingDependencies = {},
 ): Promise<OutreachGroundingContext> {
   const caller: CandidateContextCaller = {
@@ -34,9 +39,11 @@ export async function prepareOutreachGroundingContext(
     userId: input.caller.userId,
   };
   try {
+    input.timing?.enter("groundingLoad");
     const candidate = await (
       dependencies.loadCandidateData ?? loadCandidateGroundingData
     )(caller);
+    input.timing?.enter("groundingBuild");
     const context = (
       dependencies.buildContext ?? buildOutreachGroundingContext
     )({
