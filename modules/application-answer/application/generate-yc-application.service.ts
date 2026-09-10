@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { GenerationTiming } from "@/lib/generation-timing";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
@@ -57,6 +58,7 @@ export type GenerateYcApplicationDependencies = {
     caller: { accessToken: string; userId: string };
     question: string;
     jobDescription: string;
+    timing?: GenerationTiming;
   }) => Promise<YcGroundingContext>;
   checkRateLimit: (_userId: string) => Promise<RateLimitResult>;
   getDailyLimit: () => number;
@@ -153,16 +155,19 @@ export async function generateYcApplication(
     corsHeaders: Record<string, string>;
     applicationBaseUrl: string;
     logger?: SafeLogger;
+    timing?: GenerationTiming;
   },
   dependencies: GenerateYcApplicationDependencies = defaultDependencies,
 ) {
   const operationLog = input.logger ?? log;
+  const timing = input.timing;
   let rateReserved = false;
   let reservedCredit:
     { userId: string; reservationId: string; amount: number } | undefined;
   let modelRequested = false;
 
   try {
+    timing?.enter("groundingLoad");
     const completeGrounding = startTimedStage(
       operationLog,
       "yc.grounding_load",
@@ -177,12 +182,20 @@ export async function generateYcApplication(
         },
         question: input.request.question,
         jobDescription: input.request.jd,
+        ...(timing ? { timing } : {}),
       });
     } catch (error) {
       completeGrounding("failure", { errorCode: "YC_GROUNDING_UNAVAILABLE" });
       throw error;
     }
     completeGrounding("success", { ready: context.readiness.ready });
+    timing?.metrics({
+      sourceChars: context.sources.reduce(
+        (sum, source) => sum + source.content.length,
+        0,
+      ),
+      sourceCount: context.sources.length,
+    });
 
     if (!context.readiness.ready) {
       const response = ycApplicationReadinessFailureSchema.parse({
@@ -202,6 +215,7 @@ export async function generateYcApplication(
       });
     }
 
+    timing?.enter("rateLimit");
     const completeRateLimit = startTimedStage(
       operationLog,
       "yc.rate_limit_reserve",
@@ -248,6 +262,7 @@ export async function generateYcApplication(
       dependencies.billingEnabled &&
       !dependencies.isUnlimitedUser(input.caller.email)
     ) {
+      timing?.enter("billing");
       await dependencies.grantTrialCredits(input.caller.userId);
       const reservation = await dependencies.reserveCredits(
         input.caller.userId,
@@ -257,6 +272,7 @@ export async function generateYcApplication(
       billingMode = "credits";
 
       if (!reservation.allowed || !reservation.reservationId) {
+        timing?.enter("refund");
         await dependencies.releaseRateLimit(input.caller.userId);
         rateReserved = false;
         return NextResponse.json(
@@ -287,7 +303,12 @@ export async function generateYcApplication(
       };
     }
 
+    timing?.enter("inputBuild");
     const prompt = buildYcApplicationPrompt(context);
+    timing?.metrics({
+      inputChars: prompt.systemPrompt.length + prompt.userPrompt.length,
+    });
+    timing?.enter("model");
     const startedAt = dependencies.now();
     modelRequested = true;
     const message = await dependencies.createMessage({
@@ -296,6 +317,11 @@ export async function generateYcApplication(
       logger: operationLog,
     });
     const processingTime = dependencies.now() - startedAt;
+    timing?.enter("postProcessing");
+    timing?.metrics({
+      inputUnits: message.usage.input_tokens,
+      outputUnits: message.usage.output_tokens,
+    });
     const parsed = dependencies.parseMessage(message);
     const sanitized = await dependencies.sanitizeOutput(parsed);
     if (sanitized.metadata.fingerprintPatternCount > 0) {
@@ -372,6 +398,7 @@ export async function generateYcApplication(
       : timeout
         ? "model_timeout"
         : "model_upstream_error";
+    timing?.enter("refund");
     await releaseReservations({
       dependencies,
       caller: input.caller,

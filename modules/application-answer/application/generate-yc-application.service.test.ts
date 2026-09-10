@@ -7,6 +7,99 @@ import {
   type GenerateYcApplicationDependencies,
 } from "./generate-yc-application.service";
 import { YcApplicationOutputSanitizationError } from "./sanitize-yc-application-output";
+import { createGenerationTiming } from "@/lib/generation-timing";
+
+describe("ALE-38 application timings", () => {
+  it("keeps model time separate from billing and postprocessing", async () => {
+    let time = 0;
+    const timing = createGenerationTiming(() => time);
+    const deps = dependencies();
+    deps.grantTrialCredits = vi.fn(async () => {
+      time += 11;
+      return { granted: false, balance: 40 };
+    });
+    deps.createMessage = vi.fn(async () => {
+      time += 125;
+      return {
+        id: "test-message",
+        type: "message" as const,
+        role: "assistant" as const,
+        model: "claude-test-model",
+        stop_reason: "tool_use" as const,
+        stop_sequence: null,
+        content: [],
+        usage: { input_tokens: 120, output_tokens: 80 },
+      };
+    });
+    deps.sanitizeOutput = vi.fn(async (output) => {
+      time += 7;
+      return {
+        output,
+        metadata: { fingerprintPatternCount: 0, fingerprintPatterns: [] },
+      };
+    });
+    const response = await generateYcApplication(
+      {
+        caller,
+        request,
+        corsHeaders: {},
+        applicationBaseUrl: "https://aletheia.live",
+        timing,
+      },
+      deps,
+    );
+    const summary = timing.finish(response.status);
+    expect(response.status).toBe(200);
+    expect(summary.stages).toMatchObject({
+      billing: 11,
+      model: 125,
+      postProcessing: 7,
+      refund: null,
+    });
+    expect(summary.durationMs).toBe(143);
+    expect(summary.metrics).toMatchObject({
+      inputUnits: 120,
+      outputUnits: 80,
+      sourceCount: 1,
+    });
+    expect((await response.json()).processingTime).toBe(125);
+    expect(JSON.stringify(summary)).not.toContain(answer);
+  });
+
+  it("includes failed model time and refunds without logging upstream errors", async () => {
+    let time = 0;
+    const timing = createGenerationTiming(() => time);
+    const deps = dependencies({
+      createMessage: vi.fn(async () => {
+        time += 30000;
+        throw new Error("PRIVATE upstream body");
+      }),
+      refundCredits: vi.fn(async () => {
+        time += 4;
+      }),
+    });
+    const response = await generateYcApplication(
+      {
+        caller,
+        request,
+        corsHeaders: {},
+        applicationBaseUrl: "https://aletheia.live",
+        timing,
+      },
+      deps,
+    );
+    const summary = timing.finish(response.status);
+    expect(response.status).toBe(502);
+    expect(summary.stages).toMatchObject({
+      model: 30000,
+      refund: 4,
+      postProcessing: null,
+    });
+    expect(deps.refundCredits).toHaveBeenCalledTimes(1);
+    expect(deps.releaseRateLimit).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(summary)).not.toContain("PRIVATE");
+  });
+});
 
 const answer =
   "I build reliable TypeScript services from ambiguous requirements and carry them through production. In a recent customer workflow, I designed the architecture, shipped the service, and operated it after launch. That experience fits an early-stage team because I move quickly, stay close to users, and take responsibility for outcomes across the full delivery cycle.";

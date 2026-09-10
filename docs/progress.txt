@@ -1,5 +1,26 @@
 # Progress Tracker
 
+## 2026-09-09 — ALE-38 final local audit
+
+Engineering-loop and available code-review-security checklist applied to the full diff against 631e92cd09398bf4f6e834ed7eae21e09fd42e76 plus untracked files. Final tier Critical. No material introduced code finding; no runtime edits needed. This is a second assistant review, not independent approval.
+Checks rerun on Node 24.16.0 after detecting shell default Node 26: 867 root tests/coverage, 171 extension tests, 15 guardrails, lint/type-check and production build passed. CI resume-security tests and seven local browser smoke tests passed. Native extension build passed in a temporary source copy; original dist/ZIP preserved. Local unauthenticated POST proved 401 plus a single safe summary without model/billing work or canary leakage.
+Outstanding: npm audit reports 13 inherited entries (1 critical, 7 high, 4 moderate, 1 low); root lock/manifest unchanged. Repository formatting fails on 25 unchanged baseline files. Live matched latency evidence, bottleneck/remediation and independent reviewer approval remain pending. Security skill supporting play/template files are missing; fallback checklist used and limitation recorded.
+Audit report: docs/operations/ale-38-pre-merge-audit.md. ALE-38 remains In Progress; no completion or release approval, commit, push or production action.
+
+## 2026-09-09 — ALE-38 comparable generation timing (implementation, not completion)
+
+Branch: feat/ale-38-generation-latency (from synchronized main 631e92c).
+Risk: Critical — instrumentation surrounds auth/billing/private candidate and model boundaries. Engineering-loop used; independent final review and isolated runtime verification remain required.
+Contract: measurement only; no prompt/model/30-second timeout/output/billing/refund/query-order/RLS changes. No migrations or new dependencies. Public processingTime/generationTimeMs remain model-only.
+Implemented: shared lib/generation-timing.ts collector; one request-correlated generation.timing summary per POST including failures; comparable sequential auth/dispatch, grounding load/build, style, quota, billing, hydration, input build, model, post-processing and compensation stages. Fixed-shape bounded numeric counts survive the existing privacy redactor. First-invocation marker explicitly does not certify a platform cold start.
+Client: existing local-only generation timing now includes preparation and synchronous output render; transport exceptions receive one sanitized terminal event instead of raw error logging. Extension version 1.0.14 satisfies packaged-source policy; no bundle/ZIP generated or Store submission performed.
+TDD: collector tests first failed on missing implementation, then passed. Popup fake-clock tests reproduced preparation/render exclusion and missing failure completion, then passed. Added service, route, load/build, runtime-field allow-list, failure/refund and independent-request tests. No live APIs used.
+Validation: root tests/coverage, guardrails, lint, type-check, placeholder-env production build; extension tests/type-check/lint/security audit (zero advisories); extension-version policy and diff checks passed. Initial test-fixture typing and hard-coded version expectations failed and were corrected. See Linear ALE-38 for final counts.
+Measurement: 10,000 synthetic collector iterations averaged ~0.00225 ms on this machine, excluding logger serialization/I/O; this is NOT end-to-end generation latency or proof of a production bottleneck.
+Deviations: reuse ALE-41 logs and shared collector instead of an application-owned duplicate; time candidate repository at its preparation boundary without editing queries; numeric inputUnits/outputUnits denote model tokens because redactor intentionally drops token-named fields. Runbook: docs/operations/generation-latency.md.
+Remaining: matched isolated warm/cold/unknown samples across application answers, connection notes and cold email; sample-size-aware p50/p95 and stage/token/size comparison; verified bottleneck and scoped recommendation. No exported deployment evidence available. All latency hypotheses remain unresolved; ALE-37 performance budget is not yet established. ALE-38 remains In Progress, not Done.
+Rollout/rollback: review first, deploy instrumentation to isolated environment, test unpacked extension, sample only with agreed account/cost budget. Revert instrumentation and redeploy to roll back; old clients remain compatible, no data conversion. Extension publication requires separate authorization.
+
 Purpose: daily implementation and decision log for product-quality, security, migration, and feature work.
 
 Update this file whenever meaningful progress is made. Keep entries short but specific enough that a future reviewer can understand what changed, why it changed, how it was tested, and what remains uncertain.

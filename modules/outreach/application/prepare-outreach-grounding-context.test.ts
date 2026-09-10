@@ -3,6 +3,7 @@ import { candidateProfileInputSchema } from "@/lib/candidate-profile/schema";
 import type { CandidateGroundingData } from "@/modules/candidate-context/domain/candidate-context.types";
 import { OutreachGroundingUnavailableError } from "../domain/outreach-grounding.types";
 import { prepareOutreachGroundingContext } from "./prepare-outreach-grounding-context";
+import { createGenerationTiming } from "@/lib/generation-timing";
 
 const caller = {
   userId: "user-1",
@@ -23,6 +24,27 @@ const candidate: CandidateGroundingData = {
 };
 
 describe("prepareOutreachGroundingContext", () => {
+  it("uses the same load/build timing stages as application answers", async () => {
+    let time = 0;
+    const timing = createGenerationTiming(() => time);
+    await prepareOutreachGroundingContext(
+      { caller, target, timing },
+      {
+        loadCandidateData: async () => {
+          time += 19;
+          return candidate;
+        },
+        recordGrounding: () => {
+          time += 2;
+        },
+      },
+    );
+    timing.enter("rateLimit");
+    expect(timing.finish(200).stages).toMatchObject({
+      groundingLoad: 19,
+      groundingBuild: 2,
+    });
+  });
   it("uses the verified caller and records content-free metadata only", async () => {
     const loadCandidateData = vi.fn().mockResolvedValue(candidate);
     const recordGrounding = vi.fn();
