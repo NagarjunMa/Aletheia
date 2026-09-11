@@ -1,3 +1,4 @@
+import { isValidOperationId } from "../lib/logger-core.js";
 // Aletheia Extension Popup JavaScript
 // Main UI logic and user interaction handlers
 
@@ -604,8 +605,16 @@ async function generateMessage() {
 
   const operationId = createOperationId();
   let generationCompleted = false;
+  let generationOutcome = "failure";
+  let generationRequestId;
+  let clientVersion;
   try {
-    log.info("generation.start", { operationId, category });
+    clientVersion = chrome.runtime?.getManifest?.().version;
+  } catch {
+    /* Optional diagnostic metadata. */
+  }
+  try {
+    log.info("generation.start", { operationId, category, clientVersion });
     setGeneratingState(true);
 
     const intent = document.getElementById("intent").value;
@@ -640,15 +649,20 @@ async function generateMessage() {
       currentOutput = response;
       displayOutput(response);
       generationCompleted = true;
+      generationRequestId = isValidOperationId(response.requestId)
+        ? response.requestId.toLowerCase()
+        : undefined;
       log.info("generation.complete", {
         operationId,
         category,
         outcome: "success",
         durationMs: Math.max(0, Date.now() - generationStartedAt),
         requestId: response.requestId,
+        clientVersion,
       });
       await storeGeneration(response);
       await incrementUsageCount();
+      generationOutcome = "success";
     } else {
       generationCompleted = true;
       log.warn("generation.complete", {
@@ -687,6 +701,18 @@ async function generateMessage() {
     }
   } finally {
     setGeneratingState(false);
+    try {
+      log.info("generation.finished", {
+        operationId,
+        requestId: generationRequestId,
+        category,
+        clientVersion,
+        outcome: generationOutcome,
+        durationMs: Math.max(0, Date.now() - generationStartedAt),
+      });
+    } catch {
+      /* Local diagnostics cannot prevent spinner recovery. */
+    }
   }
 }
 

@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { runInNewContext } from "node:vm";
 
+import { isValidOperationId } from "../lib/logger-core.js";
 const popupHtml = readFileSync(
   new URL("./popup.html", import.meta.url),
   "utf8",
@@ -20,6 +21,7 @@ describe("ALE-38 popup elapsed time", () => {
       const warn = vi.fn();
       const consoleError = vi.fn();
       const sandbox = {
+        isValidOperationId,
         document: { getElementById: () => ({ value: "yc_application" }) },
         currentProfile: null,
         validateGenerationInput: () => ({ valid: true }),
@@ -46,8 +48,12 @@ describe("ALE-38 popup elapsed time", () => {
         displayOutput: () => {
           time += 3;
         },
-        storeGeneration: async () => undefined,
-        incrementUsageCount: async () => undefined,
+        storeGeneration: async () => {
+          time += 7;
+        },
+        incrementUsageCount: async () => {
+          time += 2;
+        },
         isAuthError: () => false,
         showError: vi.fn(),
         console: { error: consoleError },
@@ -65,6 +71,13 @@ describe("ALE-38 popup elapsed time", () => {
         durationMs: failed ? 25 : 28,
         outcome: failed ? "failure" : "success",
       });
+      expect(
+        info.mock.calls.find(([event]) => event === "generation.finished")?.[1],
+      ).toMatchObject({
+        durationMs: failed ? 25 : 37,
+        outcome: failed ? "failure" : "success",
+      });
+      expect(sandbox.setGeneratingState).toHaveBeenLastCalledWith(false);
       expect(
         JSON.stringify([
           ...info.mock.calls,

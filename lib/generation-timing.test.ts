@@ -3,6 +3,52 @@ import { createGenerationTiming } from "./generation-timing";
 import { sanitizeLogFields } from "./logging-core";
 
 describe("generation timing", () => {
+  it("preserves a safe failure cause through refund and ignores arbitrary or late codes", () => {
+    const timing = createGenerationTiming(() => 0);
+    timing.enter("model");
+    timing.failure("MODEL_TIMEOUT");
+    timing.failure("PRIVATE" as never);
+    timing.enter("refund");
+    expect(timing.finish(504)).toMatchObject({
+      errorCode: "MODEL_TIMEOUT",
+      failedStage: "model",
+    });
+    timing.failure("MODEL_ABORTED");
+    expect(timing.finish(504).errorCode).toBe("MODEL_TIMEOUT");
+    const success = createGenerationTiming(() => 0);
+    success.failure("MODEL_TIMEOUT");
+    expect(success.finish(200).errorCode).toBeUndefined();
+    expect(createGenerationTiming(() => 0).finish(500).errorCode).toBe(
+      "GENERATION_FAILED",
+    );
+  });
+  it("records only bounded configuration and extended numeric usage", () => {
+    const timing = createGenerationTiming(() => 0);
+    timing.config({
+      temperature: 0.3,
+      maxOutputUnits: 1000,
+      billingMode: "metered",
+      intent: "referral",
+      stopReason: "tool_use",
+    });
+    timing.config({ mode: "PRIVATE", secret: "PRIVATE" } as never);
+    timing.metrics({
+      cacheReadUnits: 50,
+      cacheWriteUnits: 0,
+      resultChars: 300,
+      claimCount: 2,
+    });
+    const result = timing.finish(200);
+    expect(result.config).toEqual({
+      temperature: 0.3,
+      maxOutputUnits: 1000,
+      billingMode: "metered",
+      intent: "referral",
+      stopReason: "tool_use",
+    });
+    expect(sanitizeLogFields(result)).toEqual(result);
+    expect(JSON.stringify(result)).not.toContain("PRIVATE");
+  });
   it("keeps overlapping requests independent", () => {
     let time = 0;
     const first = createGenerationTiming(() => time);

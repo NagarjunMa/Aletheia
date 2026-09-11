@@ -24,6 +24,7 @@ import {
   CLAUDE_MODEL,
   getAnthropicApiErrorStatus,
   isAnthropicTimeoutError,
+  isAnthropicAbortError,
 } from "@/modules/outreach/infrastructure/anthropic.repository";
 import {
   checkGenerationRateLimit,
@@ -34,6 +35,7 @@ import {
 } from "@/modules/outreach/infrastructure/extension-generate.repository";
 import type { YcGroundingContext } from "../domain/yc-grounding.types";
 import {
+  YC_GENERATION_SETTINGS,
   createYcApplicationDraft,
   getYcApplicationToolInput,
   type YcApplicationToolOutput,
@@ -59,6 +61,7 @@ export type GenerateYcApplicationDependencies = {
     question: string;
     jobDescription: string;
     timing?: GenerationTiming;
+    logger?: SafeLogger;
   }) => Promise<YcGroundingContext>;
   checkRateLimit: (_userId: string) => Promise<RateLimitResult>;
   getDailyLimit: () => number;
@@ -68,10 +71,11 @@ export type GenerateYcApplicationDependencies = {
     _userId: string,
   ) => Promise<{ granted: boolean; balance: number }>;
   reserveCredits: (_userId: string) => Promise<CreditReservation>;
-  releaseRateLimit: (_userId: string) => Promise<unknown>;
+  releaseRateLimit: (_userId: string, _logger?: SafeLogger) => Promise<unknown>;
   refundCredits: (
     _credit: { userId: string; reservationId: string; amount: number },
     _reason: string,
+    _logger?: SafeLogger,
   ) => Promise<void>;
   createMessage: typeof createYcApplicationDraft;
   parseMessage: (
@@ -135,15 +139,22 @@ async function releaseReservations(input: {
     | undefined;
   rateReserved: boolean;
   reason: string;
+  logger: SafeLogger;
 }) {
   const cleanup: Promise<unknown>[] = [];
   if (input.reservedCredit) {
     cleanup.push(
-      input.dependencies.refundCredits(input.reservedCredit, input.reason),
+      input.dependencies.refundCredits(
+        input.reservedCredit,
+        input.reason,
+        input.logger,
+      ),
     );
   }
   if (input.rateReserved) {
-    cleanup.push(input.dependencies.releaseRateLimit(input.caller.userId));
+    cleanup.push(
+      input.dependencies.releaseRateLimit(input.caller.userId, input.logger),
+    );
   }
   await Promise.allSettled(cleanup);
 }
@@ -161,6 +172,14 @@ export async function generateYcApplication(
 ) {
   const operationLog = input.logger ?? log;
   const timing = input.timing;
+  timing?.config({
+    ...YC_GENERATION_SETTINGS,
+    ...(!dependencies.billingEnabled ? { billingMode: "disabled" } : {}),
+  });
+  timing?.metrics({
+    targetChars: input.request.question.length,
+    contextChars: input.request.jd.length,
+  });
   let rateReserved = false;
   let reservedCredit:
     { userId: string; reservationId: string; amount: number } | undefined;
@@ -183,6 +202,7 @@ export async function generateYcApplication(
         question: input.request.question,
         jobDescription: input.request.jd,
         ...(timing ? { timing } : {}),
+        logger: operationLog,
       });
     } catch (error) {
       completeGrounding("failure", { errorCode: "YC_GROUNDING_UNAVAILABLE" });
@@ -262,6 +282,7 @@ export async function generateYcApplication(
       dependencies.billingEnabled &&
       !dependencies.isUnlimitedUser(input.caller.email)
     ) {
+      timing?.config({ billingMode: "metered" });
       timing?.enter("billing");
       await dependencies.grantTrialCredits(input.caller.userId);
       const reservation = await dependencies.reserveCredits(
@@ -273,7 +294,7 @@ export async function generateYcApplication(
 
       if (!reservation.allowed || !reservation.reservationId) {
         timing?.enter("refund");
-        await dependencies.releaseRateLimit(input.caller.userId);
+        await dependencies.releaseRateLimit(input.caller.userId, operationLog);
         rateReserved = false;
         return NextResponse.json(
           {
@@ -303,6 +324,8 @@ export async function generateYcApplication(
       };
     }
 
+    if (dependencies.billingEnabled && billingMode === "unlimited_developer")
+      timing?.config({ billingMode: "unlimited" });
     timing?.enter("inputBuild");
     const prompt = buildYcApplicationPrompt(context);
     timing?.metrics({
@@ -322,7 +345,24 @@ export async function generateYcApplication(
       inputUnits: message.usage.input_tokens,
       outputUnits: message.usage.output_tokens,
     });
+    timing?.config({ stopReason: message.stop_reason ?? "unknown" });
+    const cacheUsage = message.usage as typeof message.usage & {
+      cache_read_input_tokens?: number;
+      cache_creation_input_tokens?: number;
+    };
+    timing?.metrics({
+      ...(cacheUsage.cache_read_input_tokens !== undefined
+        ? { cacheReadUnits: cacheUsage.cache_read_input_tokens }
+        : {}),
+      ...(cacheUsage.cache_creation_input_tokens !== undefined
+        ? { cacheWriteUnits: cacheUsage.cache_creation_input_tokens }
+        : {}),
+    });
     const parsed = dependencies.parseMessage(message);
+    timing?.metrics({
+      claimCount: parsed.claims.length,
+      ledgerChars: parsed.claims.reduce((n, c) => n + c.text.length, 0),
+    });
     const sanitized = await dependencies.sanitizeOutput(parsed);
     if (sanitized.metadata.fingerprintPatternCount > 0) {
       log.info(
@@ -380,6 +420,7 @@ export async function generateYcApplication(
       },
     });
 
+    timing?.metrics({ resultChars: validated.body.length });
     return NextResponse.json(result.response, {
       headers: {
         ...input.corsHeaders,
@@ -393,6 +434,17 @@ export async function generateYcApplication(
       error instanceof YcApplicationStructuredOutputError ||
       (modelRequested && error instanceof z.ZodError);
     const timeout = isAnthropicTimeoutError(error);
+    timing?.failure(
+      outputInvalid
+        ? "OUTPUT_VALIDATION_FAILED"
+        : timeout
+          ? "MODEL_TIMEOUT"
+          : isAnthropicAbortError(error)
+            ? "MODEL_ABORTED"
+            : modelRequested
+              ? "MODEL_REQUEST_FAILED"
+              : "GROUNDING_CONTEXT_UNAVAILABLE",
+    );
     const reason = outputInvalid
       ? "yc_output_invalid"
       : timeout
@@ -405,6 +457,7 @@ export async function generateYcApplication(
       reservedCredit,
       rateReserved,
       reason,
+      logger: operationLog,
     });
 
     if (outputInvalid) {

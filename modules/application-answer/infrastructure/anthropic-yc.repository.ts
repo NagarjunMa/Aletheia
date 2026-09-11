@@ -1,8 +1,13 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { observeAnthropicAttempts } from "@/lib/provider-attempt-timing";
 import { z } from "zod";
 import { createLogger, startTimedStage, type SafeLogger } from "@/lib/logger";
 import { CLAUDE_MODEL } from "@/modules/outreach/infrastructure/anthropic.repository";
 
+export const YC_GENERATION_SETTINGS = {
+  temperature: 0.3,
+  maxOutputUnits: 1000,
+} as const;
 const YC_APPLICATION_TOOL_NAME = "return_yc_application_answer";
 const log = createLogger("yc-anthropic-repository");
 
@@ -126,8 +131,8 @@ export async function createYcApplicationMessage(input: {
   return input.anthropic.messages.create(
     {
       model: CLAUDE_MODEL,
-      max_tokens: 1_000,
-      temperature: 0.3,
+      max_tokens: YC_GENERATION_SETTINGS.maxOutputUnits,
+      temperature: YC_GENERATION_SETTINGS.temperature,
       system: input.systemPrompt,
       messages: [{ role: "user", content: input.userPrompt }],
       tools: [ycApplicationTool],
@@ -155,8 +160,10 @@ export async function createYcApplicationDraft(input: {
     { model: CLAUDE_MODEL },
   );
   try {
+    const client = new Anthropic({ apiKey });
+    observeAnthropicAttempts(client, input.logger ?? log);
     const response = await createYcApplicationMessage({
-      anthropic: new Anthropic({ apiKey }),
+      anthropic: client,
       ...input,
     });
     complete("success", {

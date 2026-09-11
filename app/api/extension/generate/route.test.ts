@@ -12,6 +12,85 @@ import { OutreachGroundingUnavailableError } from "@/modules/outreach/domain/out
 import * as loggerModule from "@/lib/logger";
 
 describe("ALE-38 comparable request timings", () => {
+  it.each(["timeout", "output", "input"])(
+    "records %s failure codes without changing response semantics",
+    async (kind) => {
+      const info = vi.fn();
+      const spy = vi
+        .spyOn(loggerModule, "createRequestLogger")
+        .mockReturnValue({
+          info,
+          debug: vi.fn(),
+          warn: vi.fn(),
+          error: vi.fn(),
+          child: vi.fn(),
+        });
+      try {
+        if (kind === "timeout") {
+          const Anthropic = (await import("@anthropic-ai/sdk")).default;
+          mockAnthropicCreate.mockRejectedValueOnce(
+            new Anthropic.APIConnectionTimeoutError(),
+          );
+        } else if (kind === "output") {
+          mockAnthropicCreate.mockResolvedValueOnce({
+            content: [],
+            usage: { input_tokens: 100, output_tokens: 0 },
+          });
+        }
+        const res = await POST(
+          makeRequest({
+            method: "POST",
+            headers: { Authorization: "Bearer test-token" },
+            body:
+              kind === "input"
+                ? { ...validPayload, intent: "PRIVATE" }
+                : validPayload,
+          }),
+        );
+        expect(res.status).toBe(
+          kind === "timeout" ? 504 : kind === "output" ? 502 : 400,
+        );
+        const summary = info.mock.calls
+          .map((c) => c[0])
+          .find((e) => e.event === "generation.timing");
+        expect(summary?.errorCode).toBe(
+          kind === "timeout"
+            ? "MODEL_TIMEOUT"
+            : kind === "output"
+              ? "OUTPUT_VALIDATION_FAILED"
+              : "INPUT_VALIDATION_FAILED",
+        );
+        expect(JSON.stringify(summary)).not.toContain("PRIVATE");
+      } finally {
+        spy.mockRestore();
+      }
+    },
+  );
+  it("does not fail generation when the new timing summary logger throws", async () => {
+    const info = vi.fn((fields) => {
+      if (fields.event === "generation.timing")
+        throw new Error("telemetry unavailable");
+    });
+    const spy = vi.spyOn(loggerModule, "createRequestLogger").mockReturnValue({
+      info,
+      debug: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      child: vi.fn(),
+    });
+    try {
+      const response = await POST(
+        makeRequest({
+          method: "POST",
+          headers: { Authorization: "Bearer test-token" },
+          body: validPayload,
+        }),
+      );
+      expect(response.status).toBe(200);
+    } finally {
+      spy.mockRestore();
+    }
+  });
   it("carries the same collector across application dispatch and emits only one summary", async () => {
     const info = vi.fn();
     const spy = vi.spyOn(loggerModule, "createRequestLogger").mockReturnValue({
@@ -92,7 +171,20 @@ describe("ALE-38 comparable request timings", () => {
           category,
           status: 200,
           outcome: "success",
-          metrics: { inputUnits: 10, outputUnits: 20 },
+          metrics: {
+            inputUnits: 10,
+            outputUnits: 20,
+            resultChars: expect.any(Number),
+            targetChars: expect.any(Number),
+            contextChars: expect.any(Number),
+            exampleCount: expect.any(Number),
+          },
+          config: {
+            temperature: 0.8,
+            maxOutputUnits: 600,
+            mode: "initial_outreach",
+            billingMode: "disabled",
+          },
           stages: { billing: null, refund: null },
         });
         for (const stage of [
