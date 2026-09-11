@@ -33,6 +33,7 @@ type PrepareYcGroundingContextInput = {
   question: string;
   jobDescription: string;
   timing?: GenerationTiming;
+  logger?: SafeLogger;
 };
 
 function recordGrounding(telemetry: GroundingTelemetry): void {
@@ -48,7 +49,7 @@ export async function prepareYcGroundingContext(
   input: PrepareYcGroundingContextInput,
   dependencies: PrepareYcGroundingContextDependencies = {},
 ): Promise<YcGroundingContext> {
-  const operationLog = dependencies.logger ?? log;
+  const operationLog = input.logger ?? dependencies.logger ?? log;
   const complete = startTimedStage(operationLog, "yc.grounding_prepare", {
     userId: input.caller.userId,
   });

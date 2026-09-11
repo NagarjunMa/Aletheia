@@ -1,4 +1,4 @@
-import { createLogger } from "@/lib/logger";
+import { createLogger, type SafeLogger } from "@/lib/logger";
 import type { GenerationTiming } from "@/lib/generation-timing";
 import type { AuthenticatedExtensionUser } from "../domain/extension-generate.types";
 import {
@@ -31,6 +31,7 @@ export async function prepareOutreachGroundingContext(
     caller: AuthenticatedExtensionUser;
     target: OutreachGroundingInput;
     timing?: GenerationTiming;
+    logger?: SafeLogger;
   },
   dependencies: PrepareOutreachGroundingDependencies = {},
 ): Promise<OutreachGroundingContext> {
@@ -40,9 +41,12 @@ export async function prepareOutreachGroundingContext(
   };
   try {
     input.timing?.enter("groundingLoad");
-    const candidate = await (
-      dependencies.loadCandidateData ?? loadCandidateGroundingData
-    )(caller);
+    const candidate = dependencies.loadCandidateData
+      ? await dependencies.loadCandidateData(caller)
+      : await loadCandidateGroundingData(
+          caller,
+          input.logger ? { logger: input.logger } : {},
+        );
     input.timing?.enter("groundingBuild");
     const context = (
       dependencies.buildContext ?? buildOutreachGroundingContext

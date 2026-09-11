@@ -1,3 +1,4 @@
+import { observeQuery } from "@/lib/provider-attempt-timing";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createLogger, startTimedStage, type SafeLogger } from "@/lib/logger";
 import {
@@ -58,29 +59,45 @@ export async function loadCandidateGroundingData(
   const { userId } = caller;
   const [profileResult, evidenceResult, resumeResult, legacyProfileResult] =
     await Promise.all([
-      supabase
-        .from("candidate_profiles")
-        .select(PROFILE_FIELDS)
-        .eq("user_id", userId)
-        .maybeSingle(),
-      supabase
-        .from("candidate_evidence")
-        .select(EVIDENCE_FIELDS)
-        .eq("user_id", userId)
-        .not("confirmed_at", "is", null)
-        .order("sort_order", { ascending: true })
-        .order("created_at", { ascending: true }),
-      supabase
-        .from("user_resumes")
-        .select("parsed_text")
-        .eq("user_id", userId)
-        .eq("is_primary", true)
-        .maybeSingle(),
-      supabase
-        .from("profiles")
-        .select("resume,full_name")
-        .eq("id", userId)
-        .maybeSingle(),
+      observeQuery(
+        "context",
+        supabase
+          .from("candidate_profiles")
+          .select(PROFILE_FIELDS)
+          .eq("user_id", userId)
+          .maybeSingle(),
+        dependencies.logger ?? log,
+      ),
+      observeQuery(
+        "evidence",
+        supabase
+          .from("candidate_evidence")
+          .select(EVIDENCE_FIELDS)
+          .eq("user_id", userId)
+          .not("confirmed_at", "is", null)
+          .order("sort_order", { ascending: true })
+          .order("created_at", { ascending: true }),
+        dependencies.logger ?? log,
+      ),
+      observeQuery(
+        "primary",
+        supabase
+          .from("user_resumes")
+          .select("parsed_text")
+          .eq("user_id", userId)
+          .eq("is_primary", true)
+          .maybeSingle(),
+        dependencies.logger ?? log,
+      ),
+      observeQuery(
+        "legacy",
+        supabase
+          .from("profiles")
+          .select("resume,full_name")
+          .eq("id", userId)
+          .maybeSingle(),
+        dependencies.logger ?? log,
+      ),
     ]);
 
   if (

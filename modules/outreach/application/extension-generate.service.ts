@@ -1,3 +1,4 @@
+import { recordMeasurement } from "@/lib/provider-attempt-timing";
 import { NextRequest, NextResponse } from "next/server";
 import {
   getSystemPrompt,
@@ -59,12 +60,14 @@ import type {
 import type { OutreachGroundingContext } from "@/modules/outreach/domain/outreach-grounding.types";
 import {
   CLAUDE_MODEL,
+  OUTREACH_GENERATION_SETTINGS,
   createOutreachDraftMessage,
   getColdEmailDraftToolInput,
   getLinkedinConnectionDraftToolInput,
   getAnthropicApiErrorStatus,
   getEmailDraftToolInput,
   isAnthropicTimeoutError,
+  isAnthropicAbortError,
 } from "@/modules/outreach/infrastructure/anthropic.repository";
 import {
   authenticateExtensionRequest,
@@ -99,18 +102,20 @@ export async function POST(request: NextRequest) {
       // Exactly one bounded summary, including rejected/failed requests. No
       // response-body parsing and no additional network or persistence work.
       const summary = timing.finish(status);
-      log.info(
-        {
-          ...summary,
-          firstInvocation,
-          model: CLAUDE_MODEL,
-          templateVersion:
-            summary.category === "yc_application"
-              ? YC_APPLICATION_PROMPT_VERSION
-              : PROMPT_VERSION,
-        },
-        "Generation timing summary",
-      );
+      recordMeasurement(log, {
+        ...summary,
+        deployment: /^[a-f0-9]{7,40}$/i.test(
+          process.env.VERCEL_GIT_COMMIT_SHA ?? "",
+        )
+          ? process.env.VERCEL_GIT_COMMIT_SHA
+          : undefined,
+        firstInvocation,
+        model: CLAUDE_MODEL,
+        templateVersion:
+          summary.category === "yc_application"
+            ? YC_APPLICATION_PROMPT_VERSION
+            : PROMPT_VERSION,
+      });
     }
   });
 }
@@ -136,6 +141,8 @@ async function handlePost(
     if (!contract.compatible) {
       return contractFailureResponse(contract, corsHeaders);
     }
+    if (contract.extensionVersion)
+      timing.config({ clientVersion: contract.extensionVersion });
 
     // 1. Auth check FIRST (before rate limiting)
     const completeAuth = startTimedStage(log, "extension.auth_validate");
@@ -192,6 +199,15 @@ async function handlePost(
     // Phase 1 deliberately does not yet inject these sources into prompts.
     const validatedData = generateRequestSchema.parse(dispatchBody);
     timing.category(validatedData.category);
+    timing.config({
+      ...OUTREACH_GENERATION_SETTINGS,
+      intent: validatedData.intent ?? "networking",
+      mode: validatedData.emailMode,
+    });
+    timing.metrics({
+      targetChars: validatedData.profileMarkdown.length,
+      exampleCount: validatedData.acceptedExamples?.length ?? 0,
+    });
     timing.enter("groundingLoad");
     let preparedGrounding: OutreachGroundingContext;
     const completeGrounding = startTimedStage(log, "outreach.grounding_load", {
@@ -202,6 +218,7 @@ async function handlePost(
       preparedGrounding = await prepareOutreachGroundingContext({
         caller: authResult,
         timing,
+        logger: log,
         target: {
           category: validatedData.category,
           profileMarkdown: validatedData.profileMarkdown,
@@ -296,6 +313,13 @@ async function handlePost(
     } = validatedData;
 
     const unlimitedCreditUser = isUnlimitedCreditUser(authResult.email);
+    timing.config({
+      billingMode: !CREDIT_BILLING_ENABLED
+        ? "disabled"
+        : unlimitedCreditUser
+          ? "unlimited"
+          : "metered",
+    });
 
     if (CREDIT_BILLING_ENABLED && isBillableGenerationCategory(category)) {
       if (unlimitedCreditUser) {
@@ -410,6 +434,7 @@ async function handlePost(
       }
     }
 
+    timing.metrics({ contextChars: jdFromBody.length });
     timing.enter("inputBuild");
     // Sanitize user-provided strings to strip unpaired Unicode surrogates
     // that cause JSON serialization failures with the Anthropic API
@@ -511,6 +536,19 @@ async function handlePost(
       inputUnits: tokenUsage.input_tokens,
       outputUnits: tokenUsage.output_tokens,
     });
+    timing.config({ stopReason: response.stop_reason ?? "unknown" });
+    const cacheUsage = tokenUsage as typeof tokenUsage & {
+      cache_read_input_tokens?: number;
+      cache_creation_input_tokens?: number;
+    };
+    timing.metrics({
+      ...(cacheUsage.cache_read_input_tokens !== undefined
+        ? { cacheReadUnits: cacheUsage.cache_read_input_tokens }
+        : {}),
+      ...(cacheUsage.cache_creation_input_tokens !== undefined
+        ? { cacheWriteUnits: cacheUsage.cache_creation_input_tokens }
+        : {}),
+    });
     const totalTokens = tokenUsage.input_tokens + tokenUsage.output_tokens;
 
     log.info(
@@ -534,7 +572,7 @@ async function handlePost(
     const evalMetadata = {
       promptVersion: PROMPT_VERSION,
       model: CLAUDE_MODEL,
-      temperature: 0.8,
+      temperature: OUTREACH_GENERATION_SETTINGS.temperature,
       category,
       intent: intent ?? "networking",
       emailMode,
@@ -574,6 +612,10 @@ async function handlePost(
           .filter(Boolean)
           .join("\n\n");
 
+        timing.metrics({
+          resultChars: body.length,
+          claimCount: draft.proof_points.length,
+        });
         reservedUserId = undefined;
         reservedCredit = undefined;
         return NextResponse.json(
@@ -602,6 +644,7 @@ async function handlePost(
           { headers: { ...corsHeaders, ...rateLimitHeaders } },
         );
       } catch {
+        timing.failure("OUTPUT_VALIDATION_FAILED");
         timing.enter("refund");
         log.warn(
           { errorCode: "COLD_EMAIL_VALIDATION_FAILED", category },
@@ -679,6 +722,7 @@ async function handlePost(
           wordCount = countWords(finalBody);
         }
 
+        timing.metrics({ resultChars: finalBody.length });
         // Mark slot consumed — successful response, no refund needed.
         reservedUserId = undefined;
         reservedCredit = undefined;
@@ -707,6 +751,7 @@ async function handlePost(
           },
         );
       } catch {
+        timing.failure("OUTPUT_VALIDATION_FAILED");
         timing.enter("refund");
         log.warn(
           { errorCode: "EMAIL_DRAFT_VALIDATION_FAILED" },
@@ -770,6 +815,10 @@ async function handlePost(
         );
       }
 
+      timing.metrics({
+        resultChars: body.length,
+        claimCount: draft.candidate_relevance ? 1 : 0,
+      });
       reservedUserId = undefined;
       reservedCredit = undefined;
       return NextResponse.json(
@@ -796,6 +845,7 @@ async function handlePost(
         { headers: { ...corsHeaders, ...rateLimitHeaders } },
       );
     } catch {
+      timing.failure("OUTPUT_VALIDATION_FAILED");
       timing.enter("refund");
       log.warn(
         { errorCode: "LINKEDIN_DRAFT_VALIDATION_FAILED", category },
@@ -816,6 +866,11 @@ async function handlePost(
       );
     }
   } catch (error) {
+    if (error instanceof z.ZodError) timing.failure("INPUT_VALIDATION_FAILED");
+    else if (isAnthropicTimeoutError(error)) timing.failure("MODEL_TIMEOUT");
+    else if (isAnthropicAbortError(error)) timing.failure("MODEL_ABORTED");
+    else if (getAnthropicApiErrorStatus(error) !== null)
+      timing.failure("MODEL_REQUEST_FAILED");
     // Capture failure time in the stage that failed before timing compensation.
     if (reservedCredit || reservedUserId) timing.enter("refund");
     log.error(

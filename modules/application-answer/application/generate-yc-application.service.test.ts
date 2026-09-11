@@ -8,8 +8,46 @@ import {
 } from "./generate-yc-application.service";
 import { YcApplicationOutputSanitizationError } from "./sanitize-yc-application-output";
 import { createGenerationTiming } from "@/lib/generation-timing";
+import { createLogger } from "@/lib/logger";
 
 describe("ALE-38 application timings", () => {
+  it.each([
+    [new Anthropic.APIConnectionTimeoutError(), "MODEL_TIMEOUT", 504],
+    [new Anthropic.APIUserAbortError(), "MODEL_ABORTED", 502],
+    [new Error("PRIVATE"), "MODEL_REQUEST_FAILED", 502],
+  ])(
+    "records a safe model failure cause while preserving responses and refunds: %s",
+    async (error, code, status) => {
+      const timing = createGenerationTiming();
+      const logger = createLogger("test-generation");
+      const deps = dependencies({
+        createMessage: vi.fn().mockRejectedValue(error),
+      });
+      const response = await generateYcApplication(
+        {
+          caller,
+          request,
+          corsHeaders: {},
+          applicationBaseUrl: "https://aletheia.live",
+          timing,
+          logger,
+        },
+        deps,
+      );
+      expect(response.status).toBe(status);
+      expect(timing.finish(response.status).errorCode).toBe(code);
+      expect(deps.refundCredits).toHaveBeenCalledTimes(1);
+      expect(deps.refundCredits).toHaveBeenCalledWith(
+        expect.objectContaining({ amount: 4 }),
+        expect.any(String),
+        logger,
+      );
+      expect(deps.releaseRateLimit).toHaveBeenCalledWith(caller.userId, logger);
+      expect(JSON.stringify(timing.finish(response.status))).not.toContain(
+        "PRIVATE",
+      );
+    },
+  );
   it("keeps model time separate from billing and postprocessing", async () => {
     let time = 0;
     const timing = createGenerationTiming(() => time);
@@ -57,10 +95,19 @@ describe("ALE-38 application timings", () => {
       refund: null,
     });
     expect(summary.durationMs).toBe(143);
+    expect(summary.config).toMatchObject({
+      temperature: 0.3,
+      maxOutputUnits: 1000,
+      billingMode: "metered",
+      stopReason: "tool_use",
+    });
     expect(summary.metrics).toMatchObject({
       inputUnits: 120,
       outputUnits: 80,
       sourceCount: 1,
+      claimCount: expect.any(Number),
+      ledgerChars: expect.any(Number),
+      resultChars: answer.length,
     });
     expect((await response.json()).processingTime).toBe(125);
     expect(JSON.stringify(summary)).not.toContain(answer);
@@ -198,12 +245,14 @@ const caller = {
 
 describe("generateYcApplication", () => {
   it("returns a privacy-safe 422 before rate limiting, billing, or model work", async () => {
+    const timing = createGenerationTiming();
     const deps = dependencies({
       prepareGrounding: vi.fn().mockResolvedValue(grounding(false)),
     });
 
     const response = await generateYcApplication(
       {
+        timing,
         caller,
         request,
         corsHeaders: {},
@@ -213,6 +262,7 @@ describe("generateYcApplication", () => {
     );
 
     expect(response.status).toBe(422);
+    expect(timing.finish(422).config.billingMode).toBeUndefined();
     await expect(response.json()).resolves.toEqual({
       success: false,
       error: "Candidate profile incomplete",
@@ -290,6 +340,7 @@ describe("generateYcApplication", () => {
   });
 
   it("refunds both reservations when the model output fails validation", async () => {
+    const timing = createGenerationTiming();
     const deps = dependencies({
       parseMessage: vi.fn().mockReturnValue({
         body: "Too short.",
@@ -308,11 +359,13 @@ describe("generateYcApplication", () => {
         request,
         corsHeaders: {},
         applicationBaseUrl: "https://www.aletheia.live",
+        timing,
       },
       deps,
     );
 
     expect(response.status).toBe(502);
+    expect(timing.finish(502).errorCode).toBe("OUTPUT_VALIDATION_FAILED");
     await expect(response.json()).resolves.toMatchObject({
       success: false,
       code: "YC_OUTPUT_INVALID",
@@ -320,8 +373,12 @@ describe("generateYcApplication", () => {
     expect(deps.refundCredits).toHaveBeenCalledWith(
       expect.objectContaining({ amount: 4 }),
       "yc_output_invalid",
+      expect.objectContaining({ info: expect.any(Function) }),
     );
-    expect(deps.releaseRateLimit).toHaveBeenCalledWith(caller.userId);
+    expect(deps.releaseRateLimit).toHaveBeenCalledWith(
+      caller.userId,
+      expect.objectContaining({ info: expect.any(Function) }),
+    );
   });
 
   it("treats malformed structured model output as refundable invalid output", async () => {
@@ -348,8 +405,12 @@ describe("generateYcApplication", () => {
     expect(deps.refundCredits).toHaveBeenCalledWith(
       expect.objectContaining({ amount: 4 }),
       "yc_output_invalid",
+      expect.objectContaining({ info: expect.any(Function) }),
     );
-    expect(deps.releaseRateLimit).toHaveBeenCalledWith(caller.userId);
+    expect(deps.releaseRateLimit).toHaveBeenCalledWith(
+      caller.userId,
+      expect.objectContaining({ info: expect.any(Function) }),
+    );
   });
 
   it("refunds the batch when claim-safe sanitation rejects output", async () => {
@@ -380,8 +441,12 @@ describe("generateYcApplication", () => {
     expect(deps.refundCredits).toHaveBeenCalledWith(
       expect.objectContaining({ amount: 4 }),
       "yc_output_invalid",
+      expect.objectContaining({ info: expect.any(Function) }),
     );
-    expect(deps.releaseRateLimit).toHaveBeenCalledWith(caller.userId);
+    expect(deps.releaseRateLimit).toHaveBeenCalledWith(
+      caller.userId,
+      expect.objectContaining({ info: expect.any(Function) }),
+    );
   });
 
   it("does not call the model or billing when the daily limit is reached", async () => {
@@ -434,7 +499,10 @@ describe("generateYcApplication", () => {
       creditCost: 4,
       creditsRemaining: 2,
     });
-    expect(deps.releaseRateLimit).toHaveBeenCalledWith(caller.userId);
+    expect(deps.releaseRateLimit).toHaveBeenCalledWith(
+      caller.userId,
+      expect.objectContaining({ info: expect.any(Function) }),
+    );
     expect(deps.refundCredits).not.toHaveBeenCalled();
     expect(deps.createMessage).not.toHaveBeenCalled();
   });
@@ -487,7 +555,11 @@ describe("generateYcApplication", () => {
     expect(deps.refundCredits).toHaveBeenCalledWith(
       expect.objectContaining({ amount: 4 }),
       "model_timeout",
+      expect.objectContaining({ info: expect.any(Function) }),
     );
-    expect(deps.releaseRateLimit).toHaveBeenCalledWith(caller.userId);
+    expect(deps.releaseRateLimit).toHaveBeenCalledWith(
+      caller.userId,
+      expect.objectContaining({ info: expect.any(Function) }),
+    );
   });
 });

@@ -87,6 +87,35 @@ function clientWithRows() {
 }
 
 describe("shared candidate-context repository", () => {
+  it("reports all four nested queries without exposing their data", async () => {
+    const fixture = clientWithRows();
+    const logger = {
+      info: vi.fn(),
+      debug: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      child: vi.fn(),
+    };
+    await loadCandidateGroundingData(
+      { userId, accessToken: "PRIVATE" },
+      { createCallerClient: () => fixture.client as never, logger },
+    );
+    const events = logger.info.mock.calls
+      .map((c) => c[0])
+      .filter((e) => e.event === "candidate.query");
+    expect(events.map((e) => e.stage).sort()).toEqual([
+      "context",
+      "evidence",
+      "legacy",
+      "primary",
+    ]);
+    expect(
+      events.every((e) => e.outcome === "success" && e.durationMs >= 0),
+    ).toBe(true);
+    expect(JSON.stringify(events)).not.toMatch(
+      /PRIVATE|Primary resume|Candidate Name/,
+    );
+  });
   it("keeps explicit ownership filters, filters cross-user rows, and returns identity", async () => {
     const fixture = clientWithRows();
     const result = await loadCandidateGroundingData(

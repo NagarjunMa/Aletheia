@@ -27,11 +27,60 @@ const METRICS = [
   "sourceCount",
   "inputUnits",
   "outputUnits",
+  "cacheReadUnits",
+  "cacheWriteUnits",
+  "targetChars",
+  "contextChars",
+  "exampleCount",
+  "resultChars",
+  "claimCount",
+  "ledgerChars",
 ] as const;
+const CONFIG_ENUMS = {
+  intent: ["networking", "referral", "mentorship", "job_inquiry"],
+  mode: [
+    "initial_outreach",
+    "founder_ceo_outreach",
+    "follow_up",
+    "clarification",
+    "role_fit_summary",
+    "referral_request",
+  ],
+  billingMode: ["disabled", "unlimited", "metered"],
+  stopReason: [
+    "end_turn",
+    "max_tokens",
+    "stop_sequence",
+    "tool_use",
+    "pause_turn",
+    "refusal",
+  ],
+} as const;
+type Config = Partial<
+  Record<keyof typeof CONFIG_ENUMS, string> & {
+    temperature: number;
+    maxOutputUnits: number;
+    clientVersion: string;
+  }
+>;
 type Stage = (typeof STAGES)[number];
 type Category = (typeof CATEGORIES)[number];
 type Metrics = Partial<Record<(typeof METRICS)[number], number>>;
 const MAX_NUMBER = 1_000_000_000;
+// Shared with the offline projection; never accept arbitrary error text/codes.
+export const GENERATION_FAILURE_CODES = [
+  "GENERATION_FAILED",
+  "MODEL_TIMEOUT",
+  "MODEL_ABORTED",
+  "MODEL_REQUEST_FAILED",
+  "OUTPUT_VALIDATION_FAILED",
+  "INPUT_VALIDATION_FAILED",
+  "GROUNDING_CONTEXT_UNAVAILABLE",
+  "FETCH_ABORTED",
+  "PROVIDER_FETCH_FAILED",
+  "CREDIT_REFUND_FAILED",
+  "RATE_LIMIT_RELEASE_FAILED",
+] as const;
 
 export function createGenerationTiming(
   now: () => number = () => performance.now(),
@@ -42,10 +91,13 @@ export function createGenerationTiming(
   let active: Stage = "authDispatch";
   let category: Category | "unknown" = "unknown";
   let failedStage: Stage | undefined;
+  let failureCode: (typeof GENERATION_FAILURE_CODES)[number] =
+    "GENERATION_FAILED";
   const stages = Object.fromEntries(
     STAGES.map((stage) => [stage, null]),
   ) as Record<Stage, number | null>;
   const metrics: Metrics = {};
+  const config: Config = {};
   let finished: ReturnType<typeof snapshot> | undefined;
   function tick() {
     const delta = now() - initial;
@@ -63,13 +115,46 @@ export function createGenerationTiming(
       durationMs: elapsed,
       terminalStage: active,
       ...(status >= 400
-        ? { errorCode: "GENERATION_FAILED", failedStage: failedStage ?? active }
+        ? { errorCode: failureCode, failedStage: failedStage ?? active }
         : {}),
       stages: { ...stages },
       metrics: { ...metrics },
+      config: { ...config },
     };
   }
   return {
+    failure(code: (typeof GENERATION_FAILURE_CODES)[number]) {
+      if (!finished && GENERATION_FAILURE_CODES.includes(code))
+        failureCode = code;
+    },
+    config(values: Config) {
+      if (finished) return;
+      if (
+        typeof values.clientVersion === "string" &&
+        /^\d{1,5}(\.\d{1,5}){1,3}$/.test(values.clientVersion)
+      )
+        config.clientVersion = values.clientVersion;
+      for (const key of Object.keys(
+        CONFIG_ENUMS,
+      ) as (keyof typeof CONFIG_ENUMS)[]) {
+        const value = values[key];
+        if (
+          typeof value === "string" &&
+          (CONFIG_ENUMS[key] as readonly string[]).includes(value)
+        )
+          config[key] = value;
+      }
+      for (const key of ["temperature", "maxOutputUnits"] as const) {
+        const value = values[key];
+        if (
+          typeof value === "number" &&
+          Number.isFinite(value) &&
+          value >= 0 &&
+          value <= MAX_NUMBER
+        )
+          config[key] = value;
+      }
+    },
     enter(stage: Stage) {
       if (finished || !STAGES.includes(stage)) return;
       if (stage === "refund" && active !== "refund" && !failedStage)

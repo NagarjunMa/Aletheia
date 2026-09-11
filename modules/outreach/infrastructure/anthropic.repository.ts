@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { observeAnthropicAttempts } from "@/lib/provider-attempt-timing";
 import { z } from "zod";
 import { createLogger, startTimedStage, type SafeLogger } from "@/lib/logger";
 import {
@@ -9,6 +10,10 @@ import {
 } from "../domain/outreach-draft.types";
 
 export const CLAUDE_MODEL = "claude-sonnet-4-6";
+export const OUTREACH_GENERATION_SETTINGS = {
+  temperature: 0.8,
+  maxOutputUnits: 600,
+} as const;
 const log = createLogger("outreach-anthropic-repository");
 
 const EMAIL_DRAFT_TOOL_NAME = "return_email_draft";
@@ -137,12 +142,14 @@ const emailDraftToolInputSchema = z
   })
   .strict();
 
-function getAnthropic() {
+function getAnthropic(logger: SafeLogger) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     throw new Error("ANTHROPIC_API_KEY environment variable is not set");
   }
-  return new Anthropic({ apiKey });
+  const client = new Anthropic({ apiKey });
+  observeAnthropicAttempts(client, logger);
+  return client;
 }
 
 export async function createOutreachDraftMessage(input: {
@@ -170,11 +177,12 @@ export async function createOutreachDraftMessage(input: {
   const requiresTool =
     input.useEmailDraftTool || input.useStructuredLinkedinConnectionTool;
   try {
-    const response = await getAnthropic().messages.create(
+    const client = getAnthropic(stageLogger);
+    const response = await client.messages.create(
       {
         model: CLAUDE_MODEL,
-        max_tokens: 600,
-        temperature: 0.8,
+        max_tokens: OUTREACH_GENERATION_SETTINGS.maxOutputUnits,
+        temperature: OUTREACH_GENERATION_SETTINGS.temperature,
         system: input.systemPrompt,
         messages: [{ role: "user", content: input.userPrompt }],
         ...(requiresTool
@@ -258,6 +266,13 @@ export function getEmailDraftToolInput(response: Anthropic.Messages.Message) {
 
 export function isAnthropicTimeoutError(error: unknown) {
   return error instanceof Anthropic.APIConnectionTimeoutError;
+}
+
+export function isAnthropicAbortError(error: unknown) {
+  return (
+    typeof Anthropic.APIUserAbortError === "function" &&
+    error instanceof Anthropic.APIUserAbortError
+  );
 }
 
 export function getAnthropicApiErrorStatus(error: unknown): number | null {

@@ -1,3 +1,4 @@
+import { isValidOperationId } from "../lib/logger-core.js";
 // Aletheia Extension Background Service Worker
 // Handles API communication with the Aletheia backend
 
@@ -604,11 +605,14 @@ async function makeAPIRequest(
   let lastError;
 
   for (let attempt = 1; attempt <= CONFIG.MAX_RETRIES; attempt++) {
+    const attemptStartedAt = Date.now();
+    let attemptRequestId;
     try {
       log.info("api.request.start", {
         operationId,
         attempt,
         maxAttempts: CONFIG.MAX_RETRIES,
+        method: options.method || "GET",
         endpoint,
       });
 
@@ -625,6 +629,10 @@ async function makeAPIRequest(
       });
 
       clearTimeout(timeoutId);
+      const receivedId = response.headers.get("x-request-id");
+      attemptRequestId = isValidOperationId(receivedId)
+        ? receivedId.toLowerCase()
+        : undefined;
 
       if (!response.ok) {
         let errorBody = null;
@@ -657,6 +665,10 @@ async function makeAPIRequest(
 
       const data = await response.json();
       log.info("api.request.complete", {
+        attempt,
+        durationMs: Math.max(0, Date.now() - attemptStartedAt),
+        requestId: attemptRequestId,
+        method: options.method || "GET",
         operationId,
         endpoint,
         status: response.status,
@@ -670,6 +682,9 @@ async function makeAPIRequest(
     } catch (error) {
       lastError = error;
       log.warn("api.request.complete", {
+        durationMs: Math.max(0, Date.now() - attemptStartedAt),
+        requestId: attemptRequestId,
+        method: options.method || "GET",
         operationId,
         endpoint,
         attempt,
