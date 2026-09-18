@@ -1447,3 +1447,69 @@ textarea:focus-visible {
   border-color: var(--accent-400);
   color: var(--accent-400);
 }
+
+.application-answer {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border-color, #1e4938);
+  overflow-wrap: anywhere;
+}
+.application-answer h3 {
+  font-size: 14px;
+  font-weight: 700;
+  margin: 0 0 8px;
+}
+.application-answer p {
+  margin: 0 0 12px;
+  white-space: pre-wrap;
+}
+.application-answer .copy-btn {
+  opacity: 1;
+  transform: none;
+  color: #f7faf9;
+  position: static;
+  width: auto;
+  padding: 6px 10px;
+}
+#applicationFeedbackDialog {
+  color: #f7faf9;
+  background: #091814;
+  border: 1px solid #367960;
+  border-radius: 12px;
+  padding: 20px;
+  width: calc(100% - 32px);
+  max-width: 440px;
+  max-height: 90vh;
+  overflow: auto;
+}
+#applicationFeedbackDialog::backdrop {
+  background: rgb(0 0 0 / 65%);
+}
+#applicationFeedbackDialog label {
+  display: block;
+  margin: 12px 0 6px;
+}
+#applicationFeedbackDialog textarea,
+#applicationFeedbackDialog select {
+  width: 100%;
+  box-sizing: border-box;
+  background: #020403;
+  color: #f7faf9;
+  border: 1px solid #367960;
+  padding: 8px;
+}
+#applicationFeedbackDialog button {
+  margin: 12px 6px 0 0;
+  padding: 8px 12px;
+  background: #285d49;
+  color: #f7faf9;
+  border: 1px solid #78b49b;
+  border-radius: 6px;
+}
+#applicationFeedbackDialog :focus-visible,
+.application-answer button:focus-visible {
+  outline: 2px solid #78b49b;
+  outline-offset: 3px;
+}
+#feedbackError {
+  color: #ffb4ab;
+}

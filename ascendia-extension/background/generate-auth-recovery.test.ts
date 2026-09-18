@@ -109,3 +109,16 @@ describe("generateWithAuthRecovery", () => {
     expect(deps.recoverSilently).not.toHaveBeenCalled();
   });
 });
+
+it("restores an application draft after interactive sign-in without charging an abandoned popup", async () => {
+  const deps = dependencies({
+    generate: vi.fn().mockRejectedValue(authenticationError()),
+    resumeAfterInteractive: false,
+  });
+  await expect(generateWithAuthRecovery(deps)).resolves.toMatchObject({
+    success: false,
+    code: "AUTH_RECONNECTED",
+  });
+  expect(deps.generate).toHaveBeenCalledTimes(2);
+  expect(deps.authenticateInteractively).toHaveBeenCalledTimes(1);
+});

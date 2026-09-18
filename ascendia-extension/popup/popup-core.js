@@ -19,8 +19,65 @@ function countWords(text) {
 /**
  * Parse a generation response, extracting JSON for cold_email/inmail.
  */
-export function parseGenerationResponse(output) {
+export function parseGenerationResponse(output, expectedQuestions) {
   const processed = { ...output };
+  if (
+    expectedQuestions &&
+    (output.category !== YC_APPLICATION_CATEGORY ||
+      (expectedQuestions.length > 1 && !Array.isArray(output.answers)))
+  ) {
+    throw new Error(
+      "The returned answers do not match the submitted questions.",
+    );
+  }
+  if (
+    output.category === YC_APPLICATION_CATEGORY &&
+    output.answers !== undefined
+  ) {
+    if (
+      !Array.isArray(output.answers) ||
+      output.answers.length < 1 ||
+      output.answers.length > 5
+    )
+      throw new Error("Invalid application answers");
+    const answers = [...output.answers].sort((a, b) =>
+      String(a.questionId).localeCompare(String(b.questionId)),
+    );
+    const restored = answers.every((answer) => answer.question === undefined);
+    if (
+      expectedQuestions &&
+      (answers.length !== expectedQuestions.length ||
+        answers.some(
+          (answer, index) => answer.question !== expectedQuestions[index],
+        ))
+    ) {
+      throw new Error(
+        "The returned answers do not match the submitted questions.",
+      );
+    }
+    for (const [index, answer] of answers.entries()) {
+      if (
+        answer.questionId !== `q${index + 1}` ||
+        typeof answer.body !== "string" ||
+        answer.body.length > 3000 ||
+        countWords(answer.body) < 50 ||
+        countWords(answer.body) > 150 ||
+        answer.word_count !== countWords(answer.body) ||
+        answer.character_count !== answer.body.length ||
+        (!restored &&
+          (typeof answer.question !== "string" ||
+            answer.question.length < 10 ||
+            answer.question.length > 1000))
+      ) {
+        throw new Error("Invalid application answer contract");
+      }
+    }
+    processed.answers = answers;
+    processed.body = restored
+      ? answers.map((answer) => answer.body).join("\n\n")
+      : formatApplicationAnswers(answers);
+    return processed;
+  }
 
   if (
     (output.category === "cold_email" ||
@@ -100,14 +157,13 @@ export function buildGeneratePayload(
   intent,
   acceptedExamples,
   emailMode = "initial_outreach",
-  questionValue = DEFAULT_YC_APPLICATION_QUESTION,
+  questionValue = "",
 ) {
   if (category === YC_APPLICATION_CATEGORY) {
     return {
       category: YC_APPLICATION_CATEGORY,
-      jd: String(contextValue || "").trim(),
-      question:
-        String(questionValue || "").trim() || DEFAULT_YC_APPLICATION_QUESTION,
+      jd: normalizeApplicationInput(contextValue),
+      questions: parseApplicationQuestions(questionValue),
     };
   }
 
@@ -136,10 +192,10 @@ export function getCategoryUiState(category, emailMode = "initial_outreach") {
       contextRequired: true,
       contextLabel: "Job Description",
       contextPlaceholder:
-        "Paste the complete YC startup job description (minimum 80 characters)...",
+        "Paste the complete job description (minimum 80 characters)...",
       contextMaxLength: YC_APPLICATION_JOB_DESCRIPTION_MAX_CHARS,
-      generateLabel: "Generate YC Answer",
-      outputLabel: "Application Answer",
+      generateLabel: "Generate Answers · 4 credits",
+      outputLabel: "Application Answers",
       showAutoFill: false,
     };
   }
@@ -192,9 +248,8 @@ export function validateGenerationInput({
         };
   }
 
-  const jd = String(contextValue || "").trim();
-  const question =
-    String(questionValue || "").trim() || DEFAULT_YC_APPLICATION_QUESTION;
+  const jd = normalizeApplicationInput(contextValue);
+  const questions = parseApplicationQuestions(questionValue);
 
   if (jd.length < YC_APPLICATION_JOB_DESCRIPTION_MIN_CHARS) {
     return {
@@ -210,19 +265,22 @@ export function validateGenerationInput({
       message: `Keep the job description under ${YC_APPLICATION_JOB_DESCRIPTION_MAX_CHARS.toLocaleString("en-US")} characters.`,
     };
   }
-  if (question.length < YC_APPLICATION_QUESTION_MIN_CHARS) {
+  if (questions.length === 0 || questions.length > 5)
     return {
       valid: false,
-      code: "YC_QUESTION_TOO_SHORT",
-      message: `Enter an application question with at least ${YC_APPLICATION_QUESTION_MIN_CHARS} characters.`,
+      code: "YC_QUESTION_COUNT_INVALID",
+      message: "Enter one to five questions, one per line.",
     };
-  }
-  if (question.length > YC_APPLICATION_QUESTION_MAX_CHARS) {
-    return {
-      valid: false,
-      code: "YC_QUESTION_TOO_LONG",
-      message: `Keep the application question under ${YC_APPLICATION_QUESTION_MAX_CHARS.toLocaleString("en-US")} characters.`,
-    };
+  for (const [index, question] of questions.entries()) {
+    if (question.length < 10 || question.length > 500)
+      return {
+        valid: false,
+        code:
+          question.length < 10
+            ? "YC_QUESTION_TOO_SHORT"
+            : "YC_QUESTION_TOO_LONG",
+        message: `Question ${index + 1} must contain 10–500 characters.`,
+      };
   }
   return { valid: true };
 }
@@ -232,6 +290,9 @@ export function validateGenerationInput({
  */
 export function getGenerationErrorPresentation(response) {
   const message =
+    (response?.billing === "refund_pending"
+      ? `Generation failed. Credit restoration pending manual review.${response.refundReference ? ` Reference: ${response.refundReference}` : ""}`
+      : "") ||
     response?.message ||
     response?.error ||
     "Generation failed. Please try again.";
@@ -289,3 +350,105 @@ export function isAuthError(message) {
     lower.includes("please log in")
   );
 }
+
+export function normalizeApplicationInput(value) {
+  return String(value ?? "")
+    .normalize("NFKC")
+    .replace(/\r\n?/gu, "\n")
+    .trim();
+}
+
+export function parseApplicationQuestions(value) {
+  return normalizeApplicationInput(value)
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+export function formatApplicationAnswers(answers) {
+  if (answers.length === 1) return answers[0].body;
+  return answers
+    .map(
+      ({ question, body }) =>
+        `**${question.replace(/([\\`*_{}[\]()<>#+.!|~-])/gu, "\\$1")}**\n${body}`,
+    )
+    .join("\n\n");
+}
+
+const APPLICATION_METADATA_FIELDS = [
+  "generationId",
+  "promptVersion",
+  "model",
+  "category",
+  "generationTimeMs",
+  "inputTokens",
+  "outputTokens",
+  "profileFieldCount",
+  "confirmedEvidenceCount",
+  "resumeSource",
+  "injectionTriggered",
+  "groundingValidationPassed",
+];
+export function applicationMetadata(output) {
+  if (!output.evalMetadata) return undefined;
+  return Object.fromEntries(
+    APPLICATION_METADATA_FIELDS.filter((key) =>
+      ["string", "number", "boolean"].includes(typeof output.evalMetadata[key]),
+    ).map((key) => [key, output.evalMetadata[key]]),
+  );
+}
+
+export function projectStoredApplication(output) {
+  const parsed = parseGenerationResponse(output);
+  const answers = parsed.answers?.map(
+    ({ questionId, body, word_count, character_count }) => ({
+      questionId,
+      body,
+      word_count,
+      character_count,
+    }),
+  );
+  const body = answers
+    ? answers.map((answer) => answer.body).join("\n\n")
+    : parsed.body;
+  return {
+    category: YC_APPLICATION_CATEGORY,
+    body,
+    ...(answers ? { answers } : {}),
+    word_count: countWords(body),
+    character_count: body.length,
+    ...(applicationMetadata(output)
+      ? { evalMetadata: applicationMetadata(output) }
+      : {}),
+  };
+}
+
+export function buildApplicationFeedback(
+  output,
+  approved,
+  issueCategory,
+  summary,
+) {
+  const metadata = applicationMetadata(output);
+  if (!metadata?.generationId)
+    throw new Error(
+      "This saved answer has no generation reference. Generate again before reporting feedback.",
+    );
+  return {
+    format: "application_summary",
+    category: YC_APPLICATION_CATEGORY,
+    approved,
+    generationId: metadata.generationId,
+    evalMetadata: metadata,
+    ...(!approved
+      ? { issueCategory, summary: String(summary ?? "").trim() }
+      : {}),
+  };
+}
+
+export {
+  APPLICATION_AUTH_DRAFT_KEY,
+  APPLICATION_AUTH_DRAFT_TTL_MS,
+  buildApplicationAuthDraft,
+  readApplicationAuthDraft,
+} from "../lib/application-auth-draft.js";

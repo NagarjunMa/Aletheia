@@ -35,6 +35,7 @@ const METRICS = [
   "resultChars",
   "claimCount",
   "ledgerChars",
+  "itemCount",
 ] as const;
 const CONFIG_ENUMS = {
   intent: ["networking", "referral", "mentorship", "job_inquiry"],

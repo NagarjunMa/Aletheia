@@ -19,6 +19,11 @@ export type YcGroundingReadiness = {
 
 export type YcGroundingContext = {
   question: string;
+  questions?: Array<{
+    questionId: string;
+    question: string;
+    sourceIds: string[];
+  }>;
   jobDescription: string;
   sources: YcGroundingSource[];
   excludedClaims: string[];

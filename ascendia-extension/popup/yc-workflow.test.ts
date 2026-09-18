@@ -2,6 +2,11 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { runInNewContext } from "node:vm";
 
+import {
+  projectStoredApplication,
+  buildApplicationFeedback,
+  parseGenerationResponse,
+} from "./popup-core.js";
 import { isValidOperationId } from "../lib/logger-core.js";
 const popupHtml = readFileSync(
   new URL("./popup.html", import.meta.url),
@@ -11,6 +16,133 @@ const popupSource = readFileSync(
   new URL("./popup.js", import.meta.url),
   "utf8",
 );
+
+describe("ALE-37 private question handling at persistence boundaries", () => {
+  const firstBody = Array.from({ length: 50 }, () => "experience").join(" ");
+  const secondBody = Array.from({ length: 50 }, () => "delivery").join(" ");
+  const answerOnlyBody = `${firstBody}\n\n${secondBody}`;
+  const output = {
+    category: "yc_application",
+    evalMetadata: { generationId: "33333333-3333-4333-8333-333333333333" },
+    body: `**PRIVATE QUESTION ONE**\n${firstBody}\n\n**PRIVATE QUESTION TWO**\n${secondBody}`,
+    answers: [
+      {
+        questionId: "q1",
+        question: "PRIVATE QUESTION ONE",
+        body: firstBody,
+        word_count: 50,
+        character_count: firstBody.length,
+      },
+      {
+        questionId: "q2",
+        question: "PRIVATE QUESTION TWO",
+        body: secondBody,
+        word_count: 50,
+        character_count: secondBody.length,
+      },
+    ],
+  };
+
+  function sandbox() {
+    return {
+      YC_APPLICATION_CATEGORY: "yc_application",
+      projectStoredApplication,
+      buildApplicationFeedback,
+      currentUserId: "user-1",
+      currentOutput: structuredClone(output),
+      currentProfile: null,
+      document: {
+        getElementById: (id: string) => ({
+          value:
+            id === "category" ? "yc_application" : "PRIVATE_JOB_DESCRIPTION",
+          classList: { add: vi.fn() },
+        }),
+      },
+      chrome: {
+        storage: {
+          local: {
+            get: vi.fn().mockResolvedValue({ accepted: [] }),
+            set: vi.fn().mockResolvedValue(undefined),
+          },
+        },
+        runtime: { sendMessage: vi.fn().mockResolvedValue({ success: true }) },
+      },
+      showTemporaryFeedback: vi.fn(),
+      generateMessage: vi.fn().mockResolvedValue(undefined),
+      console: { error: vi.fn() },
+    };
+  }
+
+  it("stores ordered answers without question text in lastGeneration", async () => {
+    const context = sandbox();
+    const source = popupSource.slice(
+      popupSource.indexOf("async function storeGeneration(output)"),
+      popupSource.indexOf("\nasync function restoreLastGeneration()"),
+    );
+    await runInNewContext(`(${source})(currentOutput)`, context);
+    expect(context.console.error).not.toHaveBeenCalled();
+    expect(context.chrome.storage.local.set).toHaveBeenCalledTimes(1);
+    const stored = context.chrome.storage.local.set.mock.calls[0]?.[0];
+    expect(stored.lastGeneration.output.body).toBe(answerOnlyBody);
+    expect(stored.lastGeneration.inputs).toEqual({
+      category: "yc_application",
+    });
+    expect(JSON.stringify(stored)).not.toMatch(
+      /PRIVATE QUESTION|PRIVATE_JOB_DESCRIPTION/,
+    );
+    expect(context.currentOutput).toEqual(output);
+  });
+
+  it("keeps question text out of accepted-message storage", async () => {
+    const context = sandbox();
+    const source = popupSource.slice(
+      popupSource.indexOf("async function saveAcceptedMessage()"),
+      popupSource.indexOf("\nfunction updateUIForCategory()"),
+    );
+    await runInNewContext(`(${source})()`, context);
+    expect(context.chrome.storage.local.set).toHaveBeenCalledTimes(1);
+    const stored = context.chrome.storage.local.set.mock.calls[0]?.[0];
+    expect(stored.accepted[0].body).toBe(answerOnlyBody);
+    expect(JSON.stringify(stored)).not.toMatch(
+      /PRIVATE QUESTION|PRIVATE_JOB_DESCRIPTION/,
+    );
+    expect(context.currentOutput).toEqual(output);
+  });
+
+  it.each(["accept", "reject"])(
+    "sends compact %s feedback without response text or regeneration",
+    async (type) => {
+      const context = {
+        ...sandbox(),
+        saveAcceptedMessage: vi.fn().mockResolvedValue(undefined),
+      };
+      const source = popupSource.slice(
+        popupSource.indexOf(
+          "async function handleFeedback(type, rejectionReason, summary)",
+        ),
+        popupSource.indexOf("\nasync function saveAcceptedMessage()"),
+      );
+      await runInNewContext(
+        `(${source})("${type}", "too_generic", "User reports generic wording.")`,
+        context,
+      );
+      expect(context.chrome.runtime.sendMessage).toHaveBeenCalledTimes(1);
+      const sent = context.chrome.runtime.sendMessage.mock.calls[0]?.[0];
+      expect(sent.payload).toMatchObject({
+        format: "application_summary",
+        generationId: "33333333-3333-4333-8333-333333333333",
+        category: "yc_application",
+        approved: type === "accept",
+      });
+      expect(JSON.stringify(sent)).not.toMatch(
+        /PRIVATE QUESTION|PRIVATE_JOB_DESCRIPTION/,
+      );
+      expect(sent.payload).not.toHaveProperty("message");
+      expect(context.generateMessage).not.toHaveBeenCalled();
+      expect(context.currentOutput).toEqual(output);
+    },
+  );
+});
 
 describe("ALE-38 popup elapsed time", () => {
   it.each([false, true])(
@@ -22,6 +154,8 @@ describe("ALE-38 popup elapsed time", () => {
       const consoleError = vi.fn();
       const sandbox = {
         isValidOperationId,
+        parseGenerationResponse,
+        popupAuthenticated: true,
         document: { getElementById: () => ({ value: "yc_application" }) },
         currentProfile: null,
         validateGenerationInput: () => ({ valid: true }),

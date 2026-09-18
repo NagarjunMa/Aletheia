@@ -16,6 +16,13 @@ export function serializeGenerationError(error) {
   const details = error?.apiResponse || {};
   return {
     success: false,
+    ...(["none", "refunded", "refund_pending"].includes(details.billing)
+      ? { billing: details.billing }
+      : {}),
+    ...(typeof details.refundReference === "string" &&
+    /^[0-9a-f-]{36}$/i.test(details.refundReference)
+      ? { refundReference: details.refundReference }
+      : {}),
     error: details.error || error?.message || "Generation failed",
     message: details.message || error?.message || "Generation failed",
     ...(error?.status ? { status: error.status } : {}),

@@ -324,6 +324,7 @@ function buildReadiness(
 
 export function buildYcGroundingContext(input: {
   question: string;
+  questions?: string[];
   jobDescription: string;
   candidate: CandidateGroundingData;
 }): YcGroundingContext {
@@ -348,11 +349,28 @@ export function buildYcGroundingContext(input: {
         excludedClaims,
       ),
   );
-  const selectedEvidence = rankEvidence(
-    allowedEvidence,
-    normalizedQuestion,
-    normalizedJobDescription,
+  const rankedByQuestion = (input.questions ?? [normalizedQuestion]).map(
+    (question) =>
+      rankEvidence(
+        allowedEvidence,
+        normalizeText(question),
+        normalizedJobDescription,
+      ),
   );
+  // Round-robin selection reserves an opportunity for each question's best source
+  // without multiplying the existing six-source / 16k-character prompt budget.
+  const selectedEvidence: CandidateEvidenceRecord[] = [];
+  for (let rank = 0; rank < YC_GROUNDING_MAX_EVIDENCE; rank++) {
+    for (const ranked of rankedByQuestion) {
+      const entry = ranked[rank];
+      if (
+        entry &&
+        !selectedEvidence.some((selected) => selected.id === entry.id) &&
+        selectedEvidence.length < YC_GROUNDING_MAX_EVIDENCE
+      )
+        selectedEvidence.push(entry);
+    }
+  }
 
   const evidenceDrafts: DraftSource[] = selectedEvidence.map((entry) => ({
     id: `evidence:${entry.id}`,
@@ -404,6 +422,23 @@ export function buildYcGroundingContext(input: {
 
   return {
     question: escapeForXmlTag(normalizedQuestion),
+    ...(input.questions
+      ? {
+          questions: input.questions.map((question, index) => ({
+            questionId: `q${index + 1}`,
+            question: escapeForXmlTag(normalizeText(question)),
+            sourceIds: sources
+              .filter(
+                (source) =>
+                  source.type !== "evidence" ||
+                  rankedByQuestion[index]?.some(
+                    (entry) => source.id === `evidence:${entry.id}`,
+                  ),
+              )
+              .map((source) => source.id),
+          })),
+        }
+      : {}),
     jobDescription: escapeForXmlTag(normalizedJobDescription),
     sources,
     excludedClaims: excludedClaims.map(escapeForXmlTag),

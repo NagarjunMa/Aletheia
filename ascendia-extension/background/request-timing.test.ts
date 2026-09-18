@@ -83,3 +83,35 @@ describe("HTTP attempt diagnostics", () => {
     },
   );
 });
+
+it("does not automatically repeat a chargeable batch after an ambiguous transport failure", async () => {
+  const fetch = vi.fn().mockRejectedValue(new Error("Network disconnected"));
+  const clearTimeout = vi.fn();
+  const sandbox = {
+    CONFIG: {
+      DEFAULT_API_URL: "https://example.test",
+      MAX_RETRIES: 3,
+      TIMEOUT: 30000,
+    },
+    Date,
+    log: { info: vi.fn(), warn: vi.fn() },
+    AbortController,
+    setTimeout: (callback: () => void, ms: number) => {
+      if (ms < 30000) callback();
+      return 1;
+    },
+    clearTimeout,
+    getAletheiaRequestHeaders: (value: unknown) => value,
+    getSafeErrorCode: () => "API_REQUEST_FAILED",
+    fetch,
+    isValidOperationId,
+  };
+  await expect(
+    runInNewContext(
+      `(${fn})("/api/extension/generate", {}, null, "operation", {maxAttempts: 1, timeoutMs: 120000})`,
+      sandbox,
+    ),
+  ).rejects.toThrow("Network disconnected");
+  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(clearTimeout).toHaveBeenCalledWith(1);
+});

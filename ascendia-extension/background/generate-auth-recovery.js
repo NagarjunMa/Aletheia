@@ -49,6 +49,7 @@ export async function generateWithAuthRecovery({
   recoverSilently,
   clearAuth,
   authenticateInteractively,
+  resumeAfterInteractive = true,
 }) {
   async function generateOnce() {
     const accessToken = await getAccessToken();
@@ -77,6 +78,13 @@ export async function generateWithAuthRecovery({
   try {
     await clearAuth();
     await authenticateInteractively();
+    if (!resumeAfterInteractive)
+      return {
+        success: false,
+        code: "AUTH_RECONNECTED",
+        message:
+          "Connected. Your application draft is ready. Select Generate to continue.",
+      };
     return await generateOnce();
   } catch (error) {
     throw recoveryError(error, "INTERACTIVE_AUTH_REJECTED");

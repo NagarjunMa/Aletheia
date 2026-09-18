@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   DEFAULT_YC_APPLICATION_QUESTION,
+  buildApplicationAuthDraft,
+  readApplicationAuthDraft,
   parseGenerationResponse,
   calculateCharCount,
   buildGeneratePayload,
@@ -13,6 +15,41 @@ import {
 // ─── parseGenerationResponse ───
 
 describe("parseGenerationResponse", () => {
+  it("rejects body-only fallback for a live multi-question request", () => {
+    expect(() =>
+      parseGenerationResponse(
+        { category: "yc_application", body: "unmapped text" },
+        ["Describe your experience?", "Why are you interested?"],
+      ),
+    ).toThrow();
+  });
+  it("requires live structured answers to cover the submitted questions", () => {
+    const body = Array(50).fill("experience").join(" ");
+    const output = {
+      category: "yc_application",
+      answers: [
+        {
+          questionId: "q1",
+          question: "Describe your experience?",
+          body,
+          word_count: 50,
+          character_count: body.length,
+        },
+      ],
+    };
+    expect(() =>
+      parseGenerationResponse(output, [
+        "Describe your experience?",
+        "Why are you interested?",
+      ]),
+    ).toThrow();
+    expect(() =>
+      parseGenerationResponse(output, ["A different question entirely?"]),
+    ).toThrow();
+    expect(
+      parseGenerationResponse(output, ["Describe your experience?"]).body,
+    ).toBe(body);
+  });
   it("returns output unchanged for linkedin_connection", () => {
     const output = { body: "Hello!", category: "linkedin_connection" };
     const result = parseGenerationResponse(output);
@@ -215,13 +252,13 @@ describe("buildGeneratePayload", () => {
     expect(result).toEqual({
       category: "yc_application",
       jd: "Build an AI operations product with a small team and own customer discovery through production delivery.",
-      question: "Why are you a great fit for this role?",
+      questions: ["Why are you a great fit for this role?"],
     });
     expect(result).not.toHaveProperty("profileMarkdown");
     expect(result).not.toHaveProperty("acceptedExamples");
   });
 
-  it("uses the server-aligned default YC question", () => {
+  it("ALE-37 never substitutes a default when the new question area is empty", () => {
     const result = buildGeneratePayload(
       null,
       null,
@@ -233,7 +270,197 @@ describe("buildGeneratePayload", () => {
       "",
     );
 
-    expect(result.question).toBe(DEFAULT_YC_APPLICATION_QUESTION);
+    expect(result).not.toHaveProperty("question");
+    expect(result.questions).toEqual([]);
+  });
+});
+
+describe("ALE-37 canonical question entry", () => {
+  const jd =
+    "A sufficiently detailed job description for an early-stage product engineering role with customer ownership.";
+  const payload = (questionValue: string) =>
+    buildGeneratePayload(
+      null,
+      null,
+      jd,
+      "yc_application",
+      "networking",
+      [],
+      "initial_outreach",
+      questionValue,
+    );
+  const validate = (questionValue: string) =>
+    validateGenerationInput({
+      category: "yc_application",
+      hasProfile: false,
+      contextValue: jd,
+      questionValue,
+    });
+
+  it("uses non-empty lines, not periods, to identify questions", () => {
+    expect(
+      payload(
+        "  Describe your U.S. experience. Include the result.\r\n\r\n  Explain a 2.5% improvement.  ",
+      ),
+    ).toEqual({
+      category: "yc_application",
+      jd,
+      questions: [
+        "Describe your U.S. experience. Include the result.",
+        "Explain a 2.5% improvement.",
+      ],
+    });
+  });
+
+  it("keeps a multi-sentence single line as one question", () => {
+    expect(
+      payload("Describe a project. Explain your contribution."),
+    ).toMatchObject({
+      questions: ["Describe a project. Explain your contribution."],
+    });
+  });
+
+  it("normalizes Unicode and preserves repeated questions as distinct entries", () => {
+    expect(payload("  Why ＡＩ products?\rWhy AI products?  ")).toMatchObject({
+      questions: ["Why AI products?", "Why AI products?"],
+    });
+  });
+
+  it.each(["", " \r\n \n "])(
+    "requires application question data (%s)",
+    (input) => {
+      expect(validate(input)).toMatchObject({ valid: false });
+    },
+  );
+
+  it("accepts five 500-character lines without applying the legacy total limit", () => {
+    expect(
+      validate(Array.from({ length: 5 }, () => "x".repeat(500)).join("\n")),
+    ).toEqual({ valid: true });
+  });
+
+  it.each([
+    ["oversized item", "x".repeat(501)],
+    ["short second item", "Why this role?\nToo short"],
+    [
+      "six questions",
+      Array.from({ length: 6 }, () => "Why this role?").join("\n"),
+    ],
+    ["normalized short item", "ＡＢＣＤＥＦＧＨＩ"],
+  ])("rejects %s before sending", (_label, input) => {
+    expect(validate(input)).toMatchObject({ valid: false });
+  });
+
+  it.each(["linkedin_connection", "cold_email", "linkedin_inmail"])(
+    "ignores the question area for %s without dropping profile validation",
+    (category) => {
+      expect(
+        validateGenerationInput({
+          category,
+          hasProfile: true,
+          contextValue: "",
+          questionValue: "",
+        }),
+      ).toEqual({ valid: true });
+      expect(
+        validateGenerationInput({
+          category,
+          hasProfile: false,
+          contextValue: "",
+          questionValue: "",
+        }),
+      ).toMatchObject({ valid: false });
+      const result = buildGeneratePayload(
+        { profileMarkdown: "Existing profile" },
+        null,
+        "",
+        category,
+        "networking",
+        [],
+        "initial_outreach",
+        "ignored question",
+      );
+      expect(result).not.toHaveProperty("question");
+      expect(result).not.toHaveProperty("questions");
+    },
+  );
+});
+
+describe("ALE-37 answer ordering and compatibility body", () => {
+  const body = Array.from({ length: 50 }, () => "experience").join(" ");
+  const first = {
+    questionId: "q1",
+    question: "Why this role?",
+    body,
+    word_count: 50,
+    character_count: body.length,
+  };
+  const secondBody = Array.from({ length: 50 }, () => "delivery").join(" ");
+  const second = {
+    questionId: "q2",
+    question: "Describe your experience?",
+    body: secondBody,
+    word_count: 50,
+    character_count: secondBody.length,
+  };
+
+  it("orders a complete ID set and derives the body from the ordered answers", () => {
+    const input = {
+      category: "yc_application",
+      answers: [second, first],
+      body: "Stale fallback",
+    };
+    const result = parseGenerationResponse(input);
+    expect(result.answers).toEqual([first, second]);
+    expect(result.body).toBe(
+      `**${first.question}**\n${first.body}\n\n**${second.question}**\n${second.body}`,
+    );
+    expect(input.answers).toEqual([second, first]);
+  });
+
+  it("uses the entire body for a single answer without a question heading", () => {
+    expect(
+      parseGenerationResponse({
+        category: "yc_application",
+        answers: [first],
+        body: "Stale fallback",
+      }).body,
+    ).toBe(first.body);
+  });
+
+  it("escapes heading punctuation instead of interpreting user formatting", () => {
+    const special = { ...first, question: "Why **this** role?" };
+    const result = parseGenerationResponse({
+      category: "yc_application",
+      answers: [special, second],
+      body: "Stale fallback",
+    });
+    expect(result.body).toBe(
+      `**Why \\*\\*this\\*\\* role?**\n${first.body}\n\n**${second.question}**\n${second.body}`,
+    );
+  });
+
+  it.each([
+    ["empty", []],
+    ["duplicate", [first, first]],
+    ["missing first ID", [second]],
+    ["unknown ID", [first, { ...second, questionId: "other" }]],
+  ])(
+    "does not use a combined body to conceal an invalid %s collection",
+    (_label, answers) => {
+      expect(() =>
+        parseGenerationResponse({
+          category: "yc_application",
+          answers,
+          body: first.body,
+        }),
+      ).toThrow();
+    },
+  );
+
+  it("preserves a legacy body-only response for the existing single-answer path", () => {
+    const legacy = { category: "yc_application", body: first.body };
+    expect(parseGenerationResponse(legacy)).toEqual(legacy);
   });
 });
 
@@ -247,8 +474,8 @@ describe("YC category UI and validation", () => {
         showQuestion: true,
         contextRequired: true,
         contextMaxLength: 20000,
-        generateLabel: "Generate YC Answer",
-        outputLabel: "Application Answer",
+        generateLabel: "Generate Answers · 4 credits",
+        outputLabel: "Application Answers",
         showAutoFill: false,
       }),
     );
@@ -359,5 +586,37 @@ describe("isAuthError", () => {
   it("returns false for generic errors", () => {
     expect(isAuthError("Network error")).toBe(false);
     expect(isAuthError("Rate limit exceeded")).toBe(false);
+  });
+});
+
+describe("ALE-37 authentication draft lifetime", () => {
+  const draft = buildApplicationAuthDraft(
+    {
+      category: "yc_application",
+      jd: "Unfinished job",
+      questions: "Unfinished question",
+      ownerId: "user-1",
+    },
+    1000,
+  );
+  it("keeps incomplete inputs through sign-in without requiring generation validity", () => {
+    expect(readApplicationAuthDraft(draft, "user-1", 2000)).toMatchObject({
+      jd: "Unfinished job",
+      questions: "Unfinished question",
+    });
+  });
+  it("rejects expired, future, cross-account and malformed drafts", () => {
+    expect(readApplicationAuthDraft(draft, "user-2", 2000)).toBeNull();
+    expect(readApplicationAuthDraft(draft, "user-1", 901000)).toBeNull();
+    expect(
+      readApplicationAuthDraft(
+        { ...draft, expiresAt: 99999999 },
+        "user-1",
+        2000,
+      ),
+    ).toBeNull();
+    expect(
+      readApplicationAuthDraft({ ...draft, jd: {} }, "user-1", 2000),
+    ).toBeNull();
   });
 });

@@ -1,7 +1,7 @@
 import { scanForInjection } from "./injection-heuristic";
 import type { YcGroundingContext } from "@/modules/application-answer/domain/yc-grounding.types";
 
-export const YC_APPLICATION_PROMPT_VERSION = "yc-1.1.0";
+export const YC_APPLICATION_PROMPT_VERSION = "yc-1.2.0";
 
 export const YC_APPLICATION_SYSTEM_PROMPT = `You write concise answers for startup job application forms.
 
@@ -42,7 +42,7 @@ function renderSource(source: YcGroundingContext["sources"][number]): string {
 
 export function buildYcApplicationPrompt(context: YcGroundingContext) {
   const injectionScan = scanForInjection(
-    `${context.question}\n${context.jobDescription}`,
+    `${context.questions?.map((entry) => entry.question).join("\n") ?? context.question}\n${context.jobDescription}`,
   );
   const sources = context.sources.map(renderSource).join("\n");
   const excludedClaims = context.excludedClaims
@@ -50,10 +50,20 @@ export function buildYcApplicationPrompt(context: YcGroundingContext) {
     .join("\n");
 
   return {
-    systemPrompt: YC_APPLICATION_SYSTEM_PROMPT,
+    systemPrompt: context.questions
+      ? YC_APPLICATION_SYSTEM_PROMPT.replace(
+          "- Return only the required return_yc_application_answer tool.",
+          "- Return only return_application_answers. Return exactly one answer per questionId in input order. Apply all answer and grounding rules independently to each answer. Use only that question’s listed source IDs.",
+        )
+      : YC_APPLICATION_SYSTEM_PROMPT,
     userPrompt: [
       "<target_context>",
-      `<application_question>${context.question}</application_question>`,
+      ...(context.questions
+        ? context.questions.map(
+            (entry) =>
+              `<application_question id="${entry.questionId}" source_ids="${entry.sourceIds.join(" ")}">${entry.question}</application_question>`,
+          )
+        : [`<application_question>${context.question}</application_question>`]),
       `<job_description>${context.jobDescription}</job_description>`,
       "</target_context>",
       "<candidate_sources>",

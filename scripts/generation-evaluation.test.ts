@@ -354,3 +354,19 @@ describe("generation evaluation", () => {
     expect(result.cohorts[0]?.parameters.temperature?.varied).toBe(false);
   });
 });
+
+it("separates one- and five-item batches while retaining unknown legacy counts", () => {
+  const report = run([
+    event(1, { metrics: { itemCount: 1 } }),
+    event(2, { metrics: { itemCount: 5 } }),
+    event(3),
+  ]);
+  expect(report.cohorts).toHaveLength(3);
+  expect(report.cohorts.map((row) => row.cohort)).toEqual(
+    expect.arrayContaining([
+      expect.stringContaining("items:1"),
+      expect.stringContaining("items:5"),
+      expect.stringContaining("items:unknown"),
+    ]),
+  );
+});

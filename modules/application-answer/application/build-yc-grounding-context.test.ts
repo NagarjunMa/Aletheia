@@ -388,3 +388,58 @@ describe("buildYcGroundingContext safety and limits", () => {
     ).toHaveLength(YC_GROUNDING_MAX_EVIDENCE);
   });
 });
+
+describe("ALE-37 question-aware evidence budget", () => {
+  it("includes each question's best evidence without duplicating source text or increasing the budget", () => {
+    const topics = [
+      "Kubernetes",
+      "Mentoring",
+      "Accessibility",
+      "Analytics",
+      "Recruiting",
+    ];
+    const entries = topics.flatMap((topic, index) =>
+      Array.from({ length: 3 }, (_, sub) =>
+        evidence(`${index}-${sub}`, {
+          title: topic,
+          skills: [topic],
+          actions: `${topic} project ${index}-${sub} ownership and delivery.`,
+          sortOrder: index * 3 + sub,
+        }),
+      ),
+    );
+    const questions = topics.map(
+      (topic) => `Describe your ${topic} experience?`,
+    );
+    const context = buildYcGroundingContext({
+      question: questions[0] ?? "",
+      questions,
+      jobDescription: "Join our team",
+      candidate: groundingData({ confirmedEvidence: entries }),
+    });
+    expect(context.questions?.map((question) => question.questionId)).toEqual([
+      "q1",
+      "q2",
+      "q3",
+      "q4",
+      "q5",
+    ]);
+    for (let index = 0; index < topics.length; index++) {
+      expect(
+        context.sources.some((source) => source.id === `evidence:${index}-0`),
+      ).toBe(true);
+      expect(context.questions?.[index]?.sourceIds).toContain(
+        `evidence:${index}-0`,
+      );
+    }
+    expect(
+      context.sources.filter((source) => source.type === "evidence"),
+    ).toHaveLength(6);
+    expect(new Set(context.sources.map((source) => source.id)).size).toBe(
+      context.sources.length,
+    );
+    expect(
+      context.sources.reduce((sum, source) => sum + source.content.length, 0),
+    ).toBeLessThanOrEqual(16000);
+  });
+});

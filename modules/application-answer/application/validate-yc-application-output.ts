@@ -62,6 +62,7 @@ export function validateYcApplicationOutput(input: {
   const body = normalizeText(input.output.body);
   const wordCount = countWords(body);
   if (
+    body.length > 3000 ||
     wordCount < YC_APPLICATION_MIN_WORDS ||
     wordCount > YC_APPLICATION_MAX_WORDS
   ) {
@@ -92,6 +93,19 @@ export function validateYcApplicationOutput(input: {
     );
   }
 
+  // A model must not evade numeric grounding by omitting the invented metric
+  // from its ledger. Source checks below then validate each covered metric.
+  for (const metric of extractMetrics(body)) {
+    if (
+      !input.output.claims.some((claim) =>
+        extractMetrics(claim.text).includes(metric),
+      )
+    ) {
+      throw new YcApplicationOutputValidationError(
+        "Answer contains an unledgered metric",
+      );
+    }
+  }
   const sourceById = new Map(
     input.context.sources.map((source) => [source.id, source] as const),
   );

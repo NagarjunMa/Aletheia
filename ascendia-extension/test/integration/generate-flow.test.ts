@@ -107,7 +107,7 @@ describe("generate flow integration", () => {
     expect(payload).toEqual({
       category: "yc_application",
       jd: "Build and operate an AI product with a small YC startup team while working closely with customers from idea through production.",
-      question: "Why are you the strongest candidate for this role?",
+      questions: ["Why are you the strongest candidate for this role?"],
     });
 
     const answer = Array.from(

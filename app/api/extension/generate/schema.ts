@@ -52,7 +52,7 @@ function normalizedBoundedString(minimum: number, maximum: number) {
     .pipe(z.string().min(minimum).max(maximum));
 }
 
-export const ycApplicationRequestSchema = z
+const legacyYcApplicationRequestSchema = z
   .object({
     category: z.literal("yc_application"),
     jd: normalizedBoundedString(
@@ -68,6 +68,72 @@ export const ycApplicationRequestSchema = z
   })
   .strict();
 
+const canonicalYcApplicationRequestSchema = z
+  .object({
+    category: z.literal("yc_application"),
+    jd: normalizedBoundedString(80, 20_000),
+    questions: z
+      .array(
+        normalizedBoundedString(10, 500).refine(
+          (value) => !value.includes("\n"),
+          "Use one line per question",
+        ),
+      )
+      .min(1)
+      .max(5),
+  })
+  .strict();
+
+// Dispatch before validation so canonical errors retain their question index.
+// Invalid batches must never fall back to the more permissive legacy contract.
+export const ycApplicationRequestSchema = z
+  .unknown()
+  .transform((value, context) => {
+    const schema =
+      value !== null && typeof value === "object" && "questions" in value
+        ? canonicalYcApplicationRequestSchema
+        : legacyYcApplicationRequestSchema;
+    const result = schema.safeParse(value);
+    if (!result.success) {
+      for (const issue of result.error.issues) context.addIssue(issue);
+      return z.NEVER;
+    }
+    return result.data;
+  });
+
+export function formatApplicationAnswers(
+  answers: Array<{ question: string; body: string }>,
+): string {
+  if (answers.length === 1 && answers[0]) return answers[0].body;
+  return answers
+    .map(
+      ({ question, body }) =>
+        `**${question.replace(/([\\`*_{}[\]()<>#+.!|~-])/gu, "\\$1")}**\n${body}`,
+    )
+    .join("\n\n");
+}
+
+const applicationAnswerSchema = z
+  .object({
+    questionId: z.string().regex(/^q[1-5]$/u),
+    question: normalizedBoundedString(10, 1000),
+    body: z.string().trim().min(1).max(3000),
+    word_count: z.number().int().min(50).max(150),
+    character_count: z.number().int().nonnegative(),
+  })
+  .strict()
+  .superRefine((answer, context) => {
+    if (
+      countWords(answer.body) !== answer.word_count ||
+      answer.body.length !== answer.character_count
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Answer counts must match body",
+      });
+    }
+  });
+
 const linkedinConnectionRequestContractSchema = z.object({
   ...legacyGenerateRequestFields,
   category: z.literal("linkedin_connection"),
@@ -81,11 +147,8 @@ const linkedInInmailRequestContractSchema = z.object({
   category: z.literal("linkedin_inmail"),
 });
 
-/**
- * Frozen additive contract for Phase 1. The active route continues to use
- * generateRequestSchema until Phase 3 can dispatch YC requests safely.
- */
-export const generateRequestContractSchema = z.discriminatedUnion("category", [
+/** Combined compatibility contract; the route dispatches by category first. */
+export const generateRequestContractSchema = z.union([
   linkedinConnectionRequestContractSchema,
   coldEmailRequestContractSchema,
   linkedInInmailRequestContractSchema,
@@ -118,12 +181,9 @@ export const ycApplicationPublicSuccessSchema = z
   .object({
     success: z.literal(true),
     category: z.literal("yc_application"),
-    body: z.string().trim().min(1),
-    word_count: z
-      .number()
-      .int()
-      .min(YC_APPLICATION_MIN_WORDS)
-      .max(YC_APPLICATION_MAX_WORDS),
+    body: z.string().trim().min(1).max(22_000),
+    answers: z.array(applicationAnswerSchema).min(1).max(5).optional(),
+    word_count: z.number().int().min(YC_APPLICATION_MIN_WORDS).max(22_000),
     character_count: z.number().int().nonnegative(),
     usage: z
       .object({
@@ -139,6 +199,29 @@ export const ycApplicationPublicSuccessSchema = z
   })
   .strict()
   .superRefine((value, context) => {
+    if (value.answers) {
+      if (
+        value.answers.some(
+          (answer, index) => answer.questionId !== `q${index + 1}`,
+        ) ||
+        value.body !== formatApplicationAnswers(value.answers)
+      ) {
+        context.addIssue({
+          code: "custom",
+          path: ["answers"],
+          message: "Answers must be ordered and match body",
+        });
+      }
+    } else if (
+      value.word_count > YC_APPLICATION_MAX_WORDS ||
+      value.body.length > 3000
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["body"],
+        message: "Legacy answer exceeds bounds",
+      });
+    }
     if (value.word_count !== countWords(value.body)) {
       context.addIssue({
         code: "custom",
@@ -184,7 +267,7 @@ const ycApplicationProvenanceSchema = z
           })
           .strict(),
       )
-      .max(30),
+      .max(150),
     excludedClaimCount: z.number().int().nonnegative(),
   })
   .strict()

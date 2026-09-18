@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
   ycApplicationGenerationResultSchema,
+  formatApplicationAnswers,
   ycApplicationReadinessFailureSchema,
   type YcApplicationRequest,
 } from "@/app/api/extension/generate/schema";
@@ -31,6 +32,7 @@ import {
   getDailyLimit,
   getSupabaseService,
   refundCreditReservation,
+  recordApplicationRefundFailure,
   releaseRateLimitReservation,
 } from "@/modules/outreach/infrastructure/extension-generate.repository";
 import type { YcGroundingContext } from "../domain/yc-grounding.types";
@@ -38,6 +40,8 @@ import {
   YC_GENERATION_SETTINGS,
   createYcApplicationDraft,
   getYcApplicationToolInput,
+  getApplicationBatchToolInput,
+  getApplicationOutputBudget,
   type YcApplicationToolOutput,
   YcApplicationStructuredOutputError,
 } from "../infrastructure/anthropic-yc.repository";
@@ -59,6 +63,7 @@ export type GenerateYcApplicationDependencies = {
   prepareGrounding: (_input: {
     caller: { accessToken: string; userId: string };
     question: string;
+    questions?: string[];
     jobDescription: string;
     timing?: GenerationTiming;
     logger?: SafeLogger;
@@ -76,7 +81,8 @@ export type GenerateYcApplicationDependencies = {
     _credit: { userId: string; reservationId: string; amount: number },
     _reason: string,
     _logger?: SafeLogger,
-  ) => Promise<void>;
+  ) => Promise<boolean>;
+  recordRefundFailure: typeof recordApplicationRefundFailure;
   createMessage: typeof createYcApplicationDraft;
   parseMessage: (
     _message: Awaited<ReturnType<typeof createYcApplicationDraft>>,
@@ -101,6 +107,7 @@ const defaultDependencies: GenerateYcApplicationDependencies = {
     reserveGenerationCredits(getSupabaseService(), userId, "yc_application"),
   releaseRateLimit: releaseRateLimitReservation,
   refundCredits: refundCreditReservation,
+  recordRefundFailure: recordApplicationRefundFailure,
   createMessage: createYcApplicationDraft,
   parseMessage: getYcApplicationToolInput,
   sanitizeOutput: sanitizeYcApplicationOutput,
@@ -141,22 +148,59 @@ async function releaseReservations(input: {
   reason: string;
   logger: SafeLogger;
 }) {
-  const cleanup: Promise<unknown>[] = [];
-  if (input.reservedCredit) {
-    cleanup.push(
-      input.dependencies.refundCredits(
+  const [credit, quota] = await Promise.allSettled([
+    input.reservedCredit
+      ? input.dependencies.refundCredits(
+          input.reservedCredit,
+          input.reason,
+          input.logger,
+        )
+      : Promise.resolve(true),
+    input.rateReserved
+      ? input.dependencies.releaseRateLimit(input.caller.userId, input.logger)
+      : Promise.resolve(true),
+  ]);
+  const refunded = credit.status === "fulfilled" && credit.value === true;
+  if (input.reservedCredit && !refunded) {
+    try {
+      await input.dependencies.recordRefundFailure(
         input.reservedCredit,
         input.reason,
         input.logger,
-      ),
-    );
+      );
+    } catch {
+      input.logger.error(
+        {
+          errorCode: "REFUND_RECONCILIATION_RECORD_FAILED",
+          reservationId: input.reservedCredit.reservationId,
+        },
+        "Refund remains pending",
+      );
+    }
   }
-  if (input.rateReserved) {
-    cleanup.push(
-      input.dependencies.releaseRateLimit(input.caller.userId, input.logger),
+  const quotaReleased = quota.status === "fulfilled" && quota.value === true;
+  if (!quotaReleased)
+    input.logger.error(
+      { errorCode: "RATE_LIMIT_RELEASE_FAILED", userId: input.caller.userId },
+      "Daily slot release needs review; do not retry blindly",
     );
-  }
-  await Promise.allSettled(cleanup);
+  return {
+    billing: !input.reservedCredit
+      ? "none"
+      : refunded
+        ? "refunded"
+        : "refund_pending",
+    ...(input.reservedCredit && !refunded
+      ? {
+          message:
+            "Generation failed. Credit restoration pending manual review.",
+          refundReference: input.reservedCredit.reservationId,
+        }
+      : {}),
+    ...(input.rateReserved
+      ? { quotaRestoration: quotaReleased ? "released" : "pending_review" }
+      : {}),
+  };
 }
 
 export async function generateYcApplication(
@@ -172,14 +216,26 @@ export async function generateYcApplication(
 ) {
   const operationLog = input.logger ?? log;
   const timing = input.timing;
+  const isBatch = "questions" in input.request;
+  const questions =
+    "questions" in input.request
+      ? input.request.questions
+      : [input.request.question];
   timing?.config({
     ...YC_GENERATION_SETTINGS,
+    maxOutputUnits: getApplicationOutputBudget(
+      isBatch ? questions.length : undefined,
+    ),
     ...(!dependencies.billingEnabled ? { billingMode: "disabled" } : {}),
   });
   timing?.metrics({
-    targetChars: input.request.question.length,
+    itemCount: questions.length,
+    targetChars: questions.reduce((sum, question) => sum + question.length, 0),
     contextChars: input.request.jd.length,
   });
+  const firstQuestion = questions[0];
+  if (firstQuestion === undefined)
+    throw new Error("Validated question required");
   let rateReserved = false;
   let reservedCredit:
     { userId: string; reservationId: string; amount: number } | undefined;
@@ -199,7 +255,8 @@ export async function generateYcApplication(
           userId: input.caller.userId,
           accessToken: input.caller.accessToken,
         },
-        question: input.request.question,
+        question: firstQuestion,
+        ...(isBatch ? { questions } : {}),
         jobDescription: input.request.jd,
         ...(timing ? { timing } : {}),
         logger: operationLog,
@@ -294,8 +351,8 @@ export async function generateYcApplication(
 
       if (!reservation.allowed || !reservation.reservationId) {
         timing?.enter("refund");
-        await dependencies.releaseRateLimit(input.caller.userId, operationLog);
         rateReserved = false;
+        await dependencies.releaseRateLimit(input.caller.userId, operationLog);
         return NextResponse.json(
           {
             success: false,
@@ -337,6 +394,7 @@ export async function generateYcApplication(
     const message = await dependencies.createMessage({
       systemPrompt: prompt.systemPrompt,
       userPrompt: prompt.userPrompt,
+      ...(isBatch ? { questionCount: questions.length } : {}),
       logger: operationLog,
     });
     const processingTime = dependencies.now() - startedAt;
@@ -358,37 +416,81 @@ export async function generateYcApplication(
         ? { cacheWriteUnits: cacheUsage.cache_creation_input_tokens }
         : {}),
     });
-    const parsed = dependencies.parseMessage(message);
-    timing?.metrics({
-      claimCount: parsed.claims.length,
-      ledgerChars: parsed.claims.reduce((n, c) => n + c.text.length, 0),
-    });
-    const sanitized = await dependencies.sanitizeOutput(parsed);
-    if (sanitized.metadata.fingerprintPatternCount > 0) {
-      log.info(
-        {
-          fingerprintPatternCount: sanitized.metadata.fingerprintPatternCount,
-          fingerprintPatterns: sanitized.metadata.fingerprintPatterns,
-        },
-        "Application answer AI fingerprints sanitized",
-      );
+    if (message.stop_reason === "max_tokens")
+      throw new YcApplicationStructuredOutputError();
+    const parsedAnswers = isBatch
+      ? getApplicationBatchToolInput(message)
+      : [{ questionId: "q1", ...dependencies.parseMessage(message) }];
+    const byId = new Map(
+      parsedAnswers.map((answer) => [answer.questionId, answer]),
+    );
+    if (
+      parsedAnswers.length !== questions.length ||
+      byId.size !== questions.length ||
+      questions.some((_, index) => !byId.has(`q${index + 1}`))
+    ) {
+      throw new YcApplicationStructuredOutputError();
     }
-    const validated = validateYcApplicationOutput({
-      context,
-      output: sanitized.output,
+    timing?.metrics({
+      claimCount: parsedAnswers.reduce(
+        (sum, answer) => sum + answer.claims.length,
+        0,
+      ),
+      ledgerChars: parsedAnswers.reduce(
+        (sum, answer) =>
+          sum + answer.claims.reduce((n, claim) => n + claim.text.length, 0),
+        0,
+      ),
     });
+    const validatedAnswers = [];
+    for (const [index, question] of questions.entries()) {
+      const questionId = `q${index + 1}`;
+      const parsed = byId.get(questionId);
+      if (!parsed) throw new YcApplicationStructuredOutputError();
+      const sanitized = await dependencies.sanitizeOutput({
+        body: parsed.body,
+        claims: parsed.claims,
+      });
+      const selection = context.questions?.find(
+        (entry) => entry.questionId === questionId,
+      );
+      const answerContext = selection
+        ? {
+            ...context,
+            question: selection.question,
+            sources: context.sources.filter((source) =>
+              selection.sourceIds.includes(source.id),
+            ),
+          }
+        : context;
+      const validated = validateYcApplicationOutput({
+        context: answerContext,
+        output: sanitized.output,
+      });
+      validatedAnswers.push({ questionId, question, ...validated });
+    }
+    const answers = validatedAnswers.map((answer) => ({
+      questionId: answer.questionId,
+      question: answer.question,
+      body: answer.body,
+      word_count: answer.wordCount,
+      character_count: answer.characterCount,
+    }));
+    const body = formatApplicationAnswers(answers);
+    const claims = validatedAnswers.flatMap((answer) => answer.claims);
     const generationId = dependencies.randomUuid();
     const selectedSourceIds = [
-      ...new Set(validated.claims.flatMap((claim) => claim.sourceIds)),
+      ...new Set(claims.flatMap((claim) => claim.sourceIds)),
     ];
 
     const result = ycApplicationGenerationResultSchema.parse({
       response: {
         success: true,
         category: "yc_application",
-        body: validated.body,
-        word_count: validated.wordCount,
-        character_count: validated.characterCount,
+        body,
+        ...(isBatch ? { answers } : {}),
+        word_count: body.trim().split(/\s+/u).length,
+        character_count: body.length,
         usage: {
           input_tokens: message.usage.input_tokens,
           output_tokens: message.usage.output_tokens,
@@ -415,12 +517,12 @@ export async function generateYcApplication(
       provenance: {
         generationId,
         selectedSourceIds,
-        claims: validated.claims,
+        claims,
         excludedClaimCount: context.excludedClaims.length,
       },
     });
 
-    timing?.metrics({ resultChars: validated.body.length });
+    timing?.metrics({ resultChars: body.length });
     return NextResponse.json(result.response, {
       headers: {
         ...input.corsHeaders,
@@ -451,7 +553,7 @@ export async function generateYcApplication(
         ? "model_timeout"
         : "model_upstream_error";
     timing?.enter("refund");
-    await releaseReservations({
+    const compensation = await releaseReservations({
       dependencies,
       caller: input.caller,
       reservedCredit,
@@ -466,6 +568,7 @@ export async function generateYcApplication(
           success: false,
           error: "Generated answer could not be safely validated.",
           code: "YC_OUTPUT_INVALID",
+          ...compensation,
         },
         { status: 502, headers: input.corsHeaders },
       );
@@ -476,6 +579,7 @@ export async function generateYcApplication(
           success: false,
           error: "AI generation timed out. Please try again.",
           code: "MODEL_TIMEOUT",
+          ...compensation,
         },
         { status: 504, headers: input.corsHeaders },
       );
@@ -485,7 +589,8 @@ export async function generateYcApplication(
     return NextResponse.json(
       {
         success: false,
-        error: "Failed to generate a YC application answer.",
+        error: "Failed to generate application answers.",
+        ...compensation,
         code:
           status === null && !modelRequested
             ? "GROUNDING_CONTEXT_UNAVAILABLE"
