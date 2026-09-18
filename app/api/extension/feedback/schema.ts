@@ -43,7 +43,7 @@ export const evalMetadataSchema = z.discriminatedUnion("category", [
   ycApplicationEvalMetadataSchema,
 ]);
 
-export const feedbackSchema = z
+const legacyFeedbackSchema = z
   .object({
     message: z.string().min(1).max(10000),
     approved: z.boolean(),
@@ -68,3 +68,61 @@ export const feedbackSchema = z
       });
     }
   });
+
+export const applicationFeedbackSchema = z
+  .object({
+    format: z.literal("application_summary"),
+    category: z.literal("yc_application"),
+    approved: z.boolean(),
+    generationId: z.string().uuid(),
+    issueCategory: z
+      .enum([
+        "unsupported_claim",
+        "missed_question",
+        "wrong_tone",
+        "too_generic",
+        "formatting",
+        "other",
+      ])
+      .optional(),
+    summary: z.string().trim().min(1).max(500).optional(),
+    evalMetadata: ycApplicationEvalMetadataSchema.optional(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (!value.approved && (!value.issueCategory || !value.summary)) {
+      context.addIssue({
+        code: "custom",
+        message: "Describe the reported issue",
+      });
+    }
+    if (value.approved && (value.issueCategory || value.summary)) {
+      context.addIssue({
+        code: "custom",
+        message: "Approval must not contain an issue report",
+      });
+    }
+    if (
+      value.evalMetadata &&
+      value.evalMetadata.generationId !== value.generationId
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Generation identifiers must match",
+      });
+    }
+  });
+
+// Explicit routing prevents malformed new reports falling back to legacy field stripping.
+export const feedbackSchema = z.unknown().transform((value, context) => {
+  const schema =
+    value && typeof value === "object" && "format" in value
+      ? applicationFeedbackSchema
+      : legacyFeedbackSchema;
+  const result = schema.safeParse(value);
+  if (!result.success) {
+    for (const issue of result.error.issues) context.addIssue(issue);
+    return z.NEVER;
+  }
+  return result.data;
+});

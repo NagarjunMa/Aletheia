@@ -111,7 +111,12 @@
         >
           Privacy policy
         </a>
-        <p id="consentStatus" class="consent-status" role="status" aria-live="polite"></p>
+        <p
+          id="consentStatus"
+          class="consent-status"
+          role="status"
+          aria-live="polite"
+        ></p>
       </section>
 
       <!-- Reading Profile Banner -->
@@ -175,7 +180,7 @@
             </option>
             <option value="cold_email">Cold Email (Apollo)</option>
             <option value="linkedin_inmail">LinkedIn InMail</option>
-            <option value="yc_application">YC Application Answer</option>
+            <option value="yc_application">Application Questions</option>
           </select>
         </div>
 
@@ -225,20 +230,25 @@
 
         <!-- YC application question -->
         <div id="ycQuestionGroup" class="input-group hidden">
-          <label for="ycQuestionInput">Application Question</label>
+          <label for="ycQuestionInput">Application Questions</label>
           <textarea
             id="ycQuestionInput"
             rows="3"
-            maxlength="1000"
-            aria-describedby="ycQuestionHelp ycQuestionCount"
+            maxlength="10000"
+            aria-describedby="ycQuestionHelp ycQuestionCount applicationInputStatus"
           >
 Why are you a strong candidate for this role?</textarea>
           <p id="ycQuestionHelp" class="input-help">
-            Edit this when the application asks a different question.
+            Enter up to five questions, one per line; 10–500 characters each.
+            For YC, Greenhouse, Ashby or other application forms. Review and
+            copy answers yourself.
           </p>
           <div id="ycQuestionCount" class="char-count">
-            <span id="ycQuestionCharCount">45</span>/<span>1000</span>
+            <span id="ycQuestionCharCount"
+              >1/5 questions · 500 characters each</span
+            >
           </div>
+          <p id="applicationInputStatus" class="input-help" role="status"></p>
         </div>
 
         <!-- Generate Button -->
@@ -379,9 +389,16 @@ Why are you a strong candidate for this role?</textarea>
                   <path d="m9 9 6 6" />
                   <circle cx="12" cy="12" r="9" />
                 </svg>
-                Regenerate
+                <span id="rejectLabel">Regenerate</span>
               </button>
             </div>
+            <button
+              type="button"
+              id="regenerateApplicationBtn"
+              class="action-btn secondary hidden"
+            >
+              Generate again · 4 credits
+            </button>
             <div id="reject-reason" class="reject-reason hidden">
               <p class="reject-reason-label">What wasn't right?</p>
               <div class="reason-buttons">
@@ -456,5 +473,42 @@ Why are you a strong candidate for this role?</textarea>
     </div>
 
     <script type="module" src="popup.js"></script>
+    <dialog
+      id="applicationFeedbackDialog"
+      aria-labelledby="feedbackTitle"
+      aria-describedby="feedbackHelp"
+    >
+      <form id="applicationFeedbackForm">
+        <h2 id="feedbackTitle">What went wrong?</h2>
+        <p id="feedbackHelp">
+          Briefly summarize the issue. Avoid personal details or pasting the
+          full question or answer. Feedback does not regenerate answers or
+          change your credits.
+        </p>
+        <label for="feedbackCategory">Issue category</label>
+        <select id="feedbackCategory" required>
+          <option value="unsupported_claim">Unsupported claim</option>
+          <option value="missed_question">Did not answer the question</option>
+          <option value="wrong_tone">Wrong tone</option>
+          <option value="too_generic">Too generic</option>
+          <option value="formatting">Formatting</option>
+          <option value="other">Other</option>
+        </select>
+        <label for="feedbackSummary">Issue summary</label>
+        <textarea
+          id="feedbackSummary"
+          required
+          maxlength="500"
+          rows="4"
+          aria-describedby="feedbackSummaryHelp"
+        ></textarea>
+        <p id="feedbackSummaryHelp">
+          Up to 500 characters. This summary is stored as a user-reported issue.
+        </p>
+        <p id="feedbackError" role="alert"></p>
+        <button type="button" id="feedbackCancel">Cancel</button>
+        <button type="submit" id="feedbackSubmit">Submit feedback</button>
+      </form>
+    </dialog>
   </body>
 </html>

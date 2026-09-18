@@ -103,11 +103,12 @@ export async function releaseRateLimitReservation(
         p_user_id: userId,
       },
     );
+    if (result.error) throw new Error("Rate limit release failed");
     complete("success");
-    return result;
+    return true;
   } catch {
     complete("failure", { errorCode: "RATE_LIMIT_RELEASE_FAILED" });
-    return null;
+    return false;
   }
 }
 
@@ -115,7 +116,7 @@ export async function refundCreditReservation(
   reservedCredit: ReservedCredit,
   reason: string,
   logger: SafeLogger = log,
-): Promise<void> {
+): Promise<boolean> {
   const complete = startTimedStage(logger, "repository.credit_refund", {
     userId: reservedCredit.userId,
     reason,
@@ -129,10 +130,12 @@ export async function refundCreditReservation(
       { reason },
     );
     complete("success");
+    return true;
   } catch {
     complete("failure", { errorCode: "CREDIT_REFUND_FAILED" });
     // Best-effort refund helper. The calling service owns user-facing error
     // handling and must not have its error path replaced by a refund failure.
+    return false;
   }
 }
 
@@ -217,5 +220,69 @@ export async function getProfileTargetJobDescription(
     if (error && typeof error === "object" && "code" in error) throw error;
     complete("failure", { errorCode: "TARGET_JOB_DESCRIPTION_READ_FAILED" });
     throw error;
+  }
+}
+
+/** Preserve a server-owned reconciliation marker without storing application data.
+ * If the database is unavailable too, the safe log is the operator fallback. */
+export async function recordApplicationRefundFailure(
+  credit: ReservedCredit,
+  reason: string,
+  logger: SafeLogger = log,
+): Promise<boolean> {
+  logger.error(
+    {
+      event: "billing.refund_pending",
+      userId: credit.userId,
+      reservationId: credit.reservationId,
+      amount: credit.amount,
+      errorCode: "CREDIT_REFUND_PENDING",
+    },
+    "Application refund needs manual reconciliation",
+  );
+  try {
+    const db = getSupabaseService();
+    const { data, error } = await db
+      .from("credit_ledger")
+      .select("metadata")
+      .eq("id", credit.reservationId)
+      .eq("user_id", credit.userId)
+      .eq("reason", "generation_debit")
+      .abortSignal(AbortSignal.timeout(3_000))
+      .single();
+    if (error || !data) throw new Error("Reservation unavailable");
+    const metadata =
+      data.metadata &&
+      typeof data.metadata === "object" &&
+      !Array.isArray(data.metadata)
+        ? data.metadata
+        : {};
+    const result = await db
+      .from("credit_ledger")
+      .update({
+        metadata: {
+          ...metadata,
+          refund_status: "pending_manual_review",
+          refund_reason: reason,
+        },
+      })
+      .eq("id", credit.reservationId)
+      .eq("user_id", credit.userId)
+      .eq("reason", "generation_debit")
+      .select("id")
+      .abortSignal(AbortSignal.timeout(3_000))
+      .single();
+    if (result.error || !result.data) throw new Error("Marker unavailable");
+    return true;
+  } catch {
+    logger.error(
+      {
+        errorCode: "REFUND_RECONCILIATION_RECORD_FAILED",
+        userId: credit.userId,
+        reservationId: credit.reservationId,
+      },
+      "Use the refund-pending audit log for reconciliation",
+    );
+    return false;
   }
 }

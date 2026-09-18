@@ -1,3 +1,7 @@
+import {
+  buildApplicationAuthDraft,
+  saveApplicationAuthDraft,
+} from "../lib/application-auth-draft.js";
 import { isValidOperationId } from "../lib/logger-core.js";
 // Aletheia Extension Background Service Worker
 // Handles API communication with the Aletheia backend
@@ -158,6 +162,14 @@ chrome.runtime.onStartup.addListener(() => {
 
 // Alarm handler for proactive token refresh + login recovery
 chrome.alarms.onAlarm.addListener(async (alarm) => {
+  if (alarm.name === "application-auth-draft-expiry") {
+    const { applicationAuthDraft } = await chrome.storage.session.get(
+      "applicationAuthDraft",
+    );
+    if (!applicationAuthDraft || applicationAuthDraft.expiresAt <= Date.now())
+      await chrome.storage.session.remove("applicationAuthDraft");
+    return;
+  }
   if (alarm.name === CONFIG.TOKEN_REFRESH_ALARM) {
     const url = await getEffectiveApiUrl();
     const complete = startExtensionTimedStage(log, "auth.proactive_refresh");
@@ -383,26 +395,32 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  // Send feedback to backend (fire-and-forget)
+  // Acknowledge only after persistence; the modal retains unsaved reports.
   if (message.action === "sendFeedback") {
-    sendResponse({ success: true }); // Respond immediately, don't block UI
     (async () => {
       try {
         const url = await getEffectiveApiUrl();
         const accessToken = await getValidAccessToken(url, { operationId });
-        await fetch(`${url}/api/extension/feedback`, {
+        const response = await fetch(`${url}/api/extension/feedback`, {
           method: "POST",
           headers: getAletheiaRequestHeaders({
             "Content-Type": "application/json",
             Authorization: `Bearer ${accessToken}`,
           }),
           body: JSON.stringify(message.payload),
+          signal: AbortSignal.timeout(15000),
         });
+        if (!response.ok) throw new Error("Feedback persistence failed");
+        sendResponse({ success: true });
         log.info("feedback.dispatch.complete", {
           operationId,
           outcome: "success",
         });
       } catch (error) {
+        sendResponse({
+          success: false,
+          error: "Feedback could not be saved. Please retry.",
+        });
         log.warn("feedback.dispatch.complete", {
           operationId,
           outcome: "failure",
@@ -504,6 +522,8 @@ async function handleAuthenticate(operationId) {
       message: "Connected to Aletheia",
     };
   } catch (waitError) {
+    await chrome.storage.session.remove("applicationAuthDraft");
+    await chrome.alarms.clear("application-auth-draft-expiry");
     complete("failure", {
       errorCode: getSafeErrorCode(waitError, "AUTHENTICATION_FAILED"),
     });
@@ -517,6 +537,8 @@ async function handleLogout(operationId) {
   });
   try {
     await clearAuth();
+    await chrome.storage.session.remove("applicationAuthDraft");
+    await chrome.alarms.clear("application-auth-draft-expiry");
     complete("success");
     return { success: true, message: "Disconnected from Aletheia" };
   } catch (error) {
@@ -533,7 +555,10 @@ async function handleGenerateRequest(payload, operationId) {
   });
   try {
     const url = await getEffectiveApiUrl();
-    const { accepted = [] } = await chrome.storage.local.get("accepted");
+    const { accepted = [], aletheia_auth } = await chrome.storage.local.get([
+      "accepted",
+      "aletheia_auth",
+    ]);
     const relevantExamples = accepted
       .filter((item) => item.category === payload.category)
       .map((item) => item.body || item.message)
@@ -542,13 +567,30 @@ async function handleGenerateRequest(payload, operationId) {
     let usageChecked = false;
 
     const response = await generateWithAuthRecovery({
+      resumeAfterInteractive: payload.category !== "yc_application",
       // Keep session exchange in the recovery state machine: a generation has
       // one silent exchange, rather than an implicit fetch on every token read.
       getAccessToken: () =>
         getValidAccessToken(url, { allowSessionFetch: false, operationId }),
       recoverSilently: () => clearAuthAndFetchFresh(url, operationId),
       clearAuth,
-      authenticateInteractively: () => handleAuthenticate(operationId),
+      authenticateInteractively: async () => {
+        if (payload.category === "yc_application") {
+          await saveApplicationAuthDraft(
+            buildApplicationAuthDraft({
+              category: payload.category,
+              jd: payload.jd,
+              questions: Array.isArray(payload.questions)
+                ? payload.questions.join("\n")
+                : payload.question,
+              ownerId: aletheia_auth?.user?.id ?? null,
+            }),
+            chrome.storage.session,
+            chrome.alarms,
+          );
+        }
+        return handleAuthenticate(operationId);
+      },
       generate: async (accessToken) => {
         if (!usageChecked) {
           await checkUsageLimit();
@@ -566,6 +608,9 @@ async function handleGenerateRequest(payload, operationId) {
           },
           url,
           operationId,
+          payload.category === "yc_application"
+            ? { maxAttempts: 1, timeoutMs: 120000 }
+            : undefined,
         );
 
         if (!result.success) {
@@ -583,6 +628,13 @@ async function handleGenerateRequest(payload, operationId) {
       },
     });
 
+    if (!response.success) {
+      complete("failure", {
+        category: payload.category,
+        errorCode: response.code,
+      });
+      return response;
+    }
     await logUsage(payload.category);
     complete("success", { category: payload.category });
     return response;
@@ -600,24 +652,28 @@ async function makeAPIRequest(
   options = {},
   baseUrl = null,
   operationId,
+  policy = {},
 ) {
   const url = (baseUrl || CONFIG.DEFAULT_API_URL) + endpoint;
   let lastError;
+  const maxAttempts = policy.maxAttempts ?? CONFIG.MAX_RETRIES;
+  const timeoutMs = policy.timeoutMs ?? CONFIG.TIMEOUT;
 
-  for (let attempt = 1; attempt <= CONFIG.MAX_RETRIES; attempt++) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const attemptStartedAt = Date.now();
     let attemptRequestId;
+    let timeoutId;
     try {
       log.info("api.request.start", {
         operationId,
         attempt,
-        maxAttempts: CONFIG.MAX_RETRIES,
+        maxAttempts,
         method: options.method || "GET",
         endpoint,
       });
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), CONFIG.TIMEOUT);
+      timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
       const response = await fetch(url, {
         ...options,
@@ -680,6 +736,7 @@ async function makeAPIRequest(
         requestId: response.headers.get("x-request-id") || undefined,
       };
     } catch (error) {
+      clearTimeout(timeoutId);
       lastError = error;
       log.warn("api.request.complete", {
         durationMs: Math.max(0, Date.now() - attemptStartedAt),
@@ -694,7 +751,11 @@ async function makeAPIRequest(
       });
 
       if (error.name === "AbortError") {
-        throw new Error("Request timeout. Please try again.");
+        throw new Error(
+          policy.maxAttempts === 1
+            ? "Connection timed out; generation outcome is unknown. Check your credits before retrying."
+            : "Request timeout. Please try again.",
+        );
       }
 
       if (
@@ -724,7 +785,7 @@ async function makeAPIRequest(
         throw error;
       }
 
-      if (attempt < CONFIG.MAX_RETRIES) {
+      if (attempt < maxAttempts) {
         const delay = Math.pow(2, attempt) * 1000;
         await new Promise((resolve) => setTimeout(resolve, delay));
       }

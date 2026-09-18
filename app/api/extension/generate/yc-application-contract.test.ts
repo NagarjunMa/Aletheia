@@ -13,6 +13,7 @@ import {
   YC_APPLICATION_QUESTION_MAX_CHARS,
   YC_APPLICATION_QUESTION_MIN_CHARS,
   ycApplicationGenerationResultSchema,
+  ycApplicationRequestSchema,
   ycApplicationPublicSuccessSchema,
   ycApplicationReadinessFailureSchema,
 } from "./schema";
@@ -28,6 +29,225 @@ const legacyPayload = {
   emailMode: "founder_ceo_outreach" as const,
   acceptedExamples: ["A concise accepted example."],
 };
+
+// ALE-37 red checkpoint: these exercise existing public boundaries. No runtime
+// implementation, skipped tests, or expected-failure wrappers are introduced.
+describe("ALE-37 additive batch request compatibility", () => {
+  const base = { category: "yc_application", jd: validJobDescription };
+
+  it.each([10, 500, 501, 1000])(
+    "preserves legacy questions of %i characters",
+    (length) => {
+      const question = "x".repeat(length);
+      expect(
+        generateRequestContractSchema.parse({ ...base, question }),
+      ).toEqual({
+        ...base,
+        question,
+      });
+    },
+  );
+
+  it("preserves one multiline legacy question without splitting punctuation", () => {
+    const question = "Explain your U.S. experience.\nInclude the result.";
+    expect(generateRequestContractSchema.parse({ ...base, question })).toEqual({
+      ...base,
+      question,
+    });
+  });
+
+  it.each([1, 5])(
+    "accepts %i canonical questions at the 500-character boundary",
+    (count) => {
+      const questions = Array.from({ length: count }, () => "x".repeat(500));
+      expect(
+        generateRequestContractSchema.parse({ ...base, questions }),
+      ).toEqual({ ...base, questions });
+    },
+  );
+
+  it("normalizes each item before measuring the ten-character minimum", () => {
+    const questions = ["  ＡＢＣＤＥＦＧＨＩＪ  ", "  Why this role?  "];
+    expect(generateRequestContractSchema.parse({ ...base, questions })).toEqual(
+      {
+        ...base,
+        questions: ["ABCDEFGHIJ", "Why this role?"],
+      },
+    );
+  });
+
+  it("counts normalized UTF-16 units, preserving existing string-length semantics", () => {
+    const questions = ["😀".repeat(250)];
+    expect(
+      generateRequestContractSchema.safeParse({ ...base, questions }).success,
+    ).toBe(true);
+    expect(
+      generateRequestContractSchema.safeParse({
+        ...base,
+        questions: ["😀".repeat(251)],
+      }).success,
+    ).toBe(false);
+  });
+
+  it.each([
+    ["empty array", []],
+    ["six entries", Array.from({ length: 6 }, () => "Why this role?")],
+    ["blank entry", ["Why this role?", "  "]],
+    ["short entry", ["x".repeat(9)]],
+    ["oversized entry", ["x".repeat(501)]],
+    ["embedded newline", ["Why this role?\nDescribe your experience."]],
+    ["client-owned ID", [{ questionId: "q1", question: "Why this role?" }]],
+    ["null entry", [null]],
+    ["null array", null],
+    ["string instead of array", "Why this role?"],
+  ])("rejects canonical input with %s", (_label, questions) => {
+    expect(
+      generateRequestContractSchema.safeParse({ ...base, questions }).success,
+    ).toBe(false);
+  });
+
+  it("rejects mixed legacy and batch fields, including an empty batch", () => {
+    for (const questions of [[], ["Why this role?"]]) {
+      expect(
+        generateRequestContractSchema.safeParse({
+          ...base,
+          question: "Why this role?",
+          questions,
+        }).success,
+      ).toBe(false);
+    }
+  });
+
+  it.each(["", "  ", null])(
+    "does not default an explicitly invalid legacy question (%s)",
+    (question) => {
+      expect(
+        generateRequestContractSchema.safeParse({ ...base, question }).success,
+      ).toBe(false);
+    },
+  );
+
+  it.each(["linkedin_connection", "cold_email", "linkedin_inmail"] as const)(
+    "does not require application questions for %s",
+    (category) => {
+      const payload = { ...legacyPayload, category };
+      expect(generateRequestContractSchema.parse(payload)).toEqual(
+        generateRequestSchema.parse(payload),
+      );
+      expect(
+        generateRequestContractSchema.parse({
+          ...payload,
+          question: "",
+          questions: [],
+        }),
+      ).toEqual(generateRequestSchema.parse(payload));
+    },
+  );
+});
+
+describe("ALE-37 ordered public answer collection", () => {
+  function answer(questionId: string, question: string, count = 50) {
+    const body = words(count);
+    return {
+      questionId,
+      question,
+      body,
+      word_count: count,
+      character_count: body.length,
+    };
+  }
+
+  function response(answers: ReturnType<typeof answer>[], body: string) {
+    return { ...validPublicSuccess(body), answers };
+  }
+
+  it("adds a single answer without changing the legacy body or request-level usage", () => {
+    const entry = answer("q1", "Why this role?");
+    const payload = response([entry], entry.body);
+    expect(ycApplicationPublicSuccessSchema.parse(payload)).toEqual(payload);
+  });
+
+  it("accepts five separately bounded answers and counts the complete compatibility body", () => {
+    const answers = Array.from({ length: 5 }, (_, index) =>
+      answer(`q${index + 1}`, `Explain project ${index + 1}?`, 150),
+    );
+    const body = answers
+      .map((entry) => `**${entry.question}**\n${entry.body}`)
+      .join("\n\n");
+    const payload = response(answers, body);
+    expect(ycApplicationPublicSuccessSchema.parse(payload)).toEqual(payload);
+  });
+
+  it("accepts escaped bold headings with the answer on the next line", () => {
+    const first = answer("q1", "Why **this** role?");
+    const second = answer("q2", "Describe your experience.");
+    const body = `**Why \\*\\*this\\*\\* role?**\n${first.body}\n\n**Describe your experience\\.**\n${second.body}`;
+    expect(
+      ycApplicationPublicSuccessSchema.safeParse(
+        response([first, second], body),
+      ).success,
+    ).toBe(true);
+  });
+
+  it("rejects a body that does not represent its structured answer", () => {
+    const entry = answer("q1", "Why this role?");
+    expect(
+      ycApplicationPublicSuccessSchema.safeParse(response([entry], words(51)))
+        .success,
+    ).toBe(false);
+  });
+
+  it.each([
+    ["duplicate", ["q1", "q1"]],
+    ["gap", ["q1", "q3"]],
+    ["unknown", ["q1", "untrusted"]],
+    ["not ordered", ["q2", "q1"]],
+  ])("rejects %s IDs in a final public response", (_label, ids) => {
+    const answers = ids.map((id) => answer(id, "Why this role?"));
+    const body = answers
+      .map((entry) => `**${entry.question}**\n${entry.body}`)
+      .join("\n\n");
+    expect(
+      ycApplicationPublicSuccessSchema.safeParse(response(answers, body))
+        .success,
+    ).toBe(false);
+  });
+
+  it.each([49, 151])(
+    "rejects one %i-word answer even if the batch total looks valid",
+    (count) => {
+      const answers = [
+        answer("q1", "Why this role?"),
+        answer("q2", "Describe your experience?", count),
+      ];
+      const body = answers
+        .map((entry) => `**${entry.question}**\n${entry.body}`)
+        .join("\n\n");
+      expect(
+        ycApplicationPublicSuccessSchema.safeParse(response(answers, body))
+          .success,
+      ).toBe(false);
+    },
+  );
+
+  it("rejects mismatched per-answer counts and private claim ledgers", () => {
+    const entry = answer("q1", "Why this role?");
+    for (const invalid of [
+      { ...entry, word_count: 51 },
+      { ...entry, character_count: entry.character_count + 1 },
+      {
+        ...entry,
+        claims: [{ text: "Private claim", sourceIds: ["private-source"] }],
+      },
+    ]) {
+      expect(
+        ycApplicationPublicSuccessSchema.safeParse(
+          response([invalid], entry.body),
+        ).success,
+      ).toBe(false);
+    }
+  });
+});
 
 function words(count: number): string {
   return Array.from({ length: count }, (_, index) => `proof${index + 1}`).join(
@@ -105,6 +325,7 @@ describe("YC application request contract", () => {
       throw new Error("Expected the YC application request branch");
     }
     expect(parsed.jd).toBe(validJobDescription);
+    if (!("question" in parsed)) throw new Error("Expected legacy request");
     expect(parsed.question).toBe("Why does this candidate fit the role?");
   });
 
@@ -341,4 +562,17 @@ describe("YC application representative golden fixtures", () => {
       expect(fixture.expectations.requiredSourceIds.length).toBeGreaterThan(0);
     }
   });
+});
+
+it("keeps field-level batch input errors actionable", () => {
+  const result = ycApplicationRequestSchema.safeParse({
+    category: "yc_application",
+    jd: validJobDescription,
+    questions: ["short"],
+  });
+  expect(result.success).toBe(false);
+  if (result.success) throw new Error("Expected invalid question");
+  expect(result.error.issues.map((issue) => issue.path.join("."))).toContain(
+    "questions.0",
+  );
 });

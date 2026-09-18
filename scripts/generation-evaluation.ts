@@ -30,6 +30,7 @@ const metrics = [
   "resultChars",
   "claimCount",
   "ledgerChars",
+  "itemCount",
 ] as const;
 const enums: Record<string, readonly string[]> = {
   errorCode: GENERATION_FAILURE_CODES,
@@ -495,6 +496,7 @@ export function evaluateGeneration(
         clientByOperation.get(e.operationId)?.values.clientVersion ??
         manifest.clientVersion ??
         "unknown",
+      `items:${number(v.itemCount) && Number.isInteger(v.itemCount) && v.itemCount >= 1 && v.itemCount <= 5 ? v.itemCount : "unknown"}`,
     ].join(" | ");
     const g = groups.get(key) ?? [];
     g.push(e);

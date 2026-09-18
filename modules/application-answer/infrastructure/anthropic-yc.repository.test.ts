@@ -98,3 +98,43 @@ describe("createYcApplicationMessage", () => {
     );
   });
 });
+
+describe("ALE-37 bounded batch tool", () => {
+  it.each([
+    [1, 2000],
+    [2, 3500],
+    [3, 5000],
+    [4, 6500],
+    [5, 8000],
+  ])("sets the %i-question output ceiling", async (questionCount, ceiling) => {
+    const create = vi.fn().mockResolvedValue({ content: [] });
+    await createYcApplicationMessage({
+      anthropic: { messages: { create } } as never,
+      systemPrompt: "system",
+      userPrompt: "user",
+      questionCount,
+    });
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        max_tokens: ceiling,
+        tool_choice: { type: "tool", name: "return_application_answers" },
+      }),
+      { timeout: 30000 },
+    );
+  });
+  it.each([0, 6, 1.5, NaN])(
+    "rejects an invalid batch count %s before a provider call",
+    async (questionCount) => {
+      const create = vi.fn();
+      await expect(
+        createYcApplicationMessage({
+          anthropic: { messages: { create } } as never,
+          systemPrompt: "system",
+          userPrompt: "user",
+          questionCount,
+        }),
+      ).rejects.toThrow();
+      expect(create).not.toHaveBeenCalled();
+    },
+  );
+});

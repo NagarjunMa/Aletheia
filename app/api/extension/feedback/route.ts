@@ -93,6 +93,43 @@ async function handlePost(request: NextRequest, log: SafeLogger) {
 
     // Parse
     const body = await request.json();
+    const payload = feedbackSchema.parse(body);
+    if ("format" in payload) {
+      const { error } = await getSupabaseService()
+        .from("user_feedback")
+        .insert({
+          user_id: authResult.userId,
+          feedback_type: payload.approved ? "approved" : "rejected",
+          rating: payload.approved ? 5 : 1,
+          comment: payload.summary ?? null,
+          metadata: {
+            ...(payload.evalMetadata ?? {}),
+            generationId: payload.generationId,
+            category: payload.category,
+            feedback_format: payload.format,
+            report_status: "user_reported",
+            ...(payload.issueCategory
+              ? { issue_category: payload.issueCategory }
+              : {}),
+            extension_version: contract.extensionVersion,
+            extension_api_version: contract.apiVersion,
+          },
+        });
+      if (error) {
+        log.error(
+          { errorCode: "FEEDBACK_PERSIST_FAILED" },
+          "Application feedback was not saved",
+        );
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Feedback could not be saved. Please retry.",
+          },
+          { status: 503, headers: corsHeaders },
+        );
+      }
+      return NextResponse.json({ success: true }, { headers: corsHeaders });
+    }
     const {
       message,
       approved,
@@ -100,7 +137,7 @@ async function handlePost(request: NextRequest, log: SafeLogger) {
       subjectLine,
       rejectionReason,
       evalMetadata,
-    } = feedbackSchema.parse(body);
+    } = payload;
 
     log.info(
       {

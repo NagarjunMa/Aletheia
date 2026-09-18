@@ -1,6 +1,60 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { feedbackSchema } from "./schema";
 
+describe("ALE-37 summary-only feedback", () => {
+  const payload = {
+    format: "application_summary",
+    category: "yc_application",
+    approved: false,
+    generationId: "33333333-3333-4333-8333-333333333333",
+    issueCategory: "unsupported_claim",
+    summary: "User reports an invented leadership achievement.",
+  };
+  it("accepts a concise report without sending the generated response", () => {
+    expect(feedbackSchema.parse(payload)).toEqual(payload);
+  });
+  it.each([
+    { summary: " " },
+    { summary: "x".repeat(501) },
+    { issueCategory: "unknown" },
+    { message: "PRIVATE RESPONSE" },
+    { questions: ["PRIVATE QUESTION"] },
+    { complaint: "PRIVATE COMPLAINT" },
+  ])("rejects malformed or excessive report data %j", (change) => {
+    expect(feedbackSchema.safeParse({ ...payload, ...change }).success).toBe(
+      false,
+    );
+  });
+  it("accepts approval without text and rejects a rejection without a summary", () => {
+    const { issueCategory: _, summary: __, ...base } = payload;
+    expect(feedbackSchema.safeParse({ ...base, approved: true }).success).toBe(
+      true,
+    );
+    expect(feedbackSchema.safeParse(base).success).toBe(false);
+  });
+  it.each([
+    "yc_application",
+    "linkedin_connection",
+    "cold_email",
+    "linkedin_inmail",
+  ])("preserves the legacy 10000-character bound for %s", (category) => {
+    expect(
+      feedbackSchema.safeParse({
+        category,
+        approved: true,
+        message: "x".repeat(10000),
+      }).success,
+    ).toBe(true);
+    expect(
+      feedbackSchema.safeParse({
+        category,
+        approved: true,
+        message: "x".repeat(10001),
+      }).success,
+    ).toBe(false);
+  });
+});
+
 // ─── Hoisted mocks for POST route tests ─────────────────────────────────────
 const mockAuthGetUser = vi.hoisted(() => vi.fn());
 const mockInsert = vi.hoisted(() => vi.fn());
@@ -283,6 +337,43 @@ describe("POST /api/extension/feedback — dual-behavior persistence contract", 
     mockRpc.mockResolvedValue({ error: null });
     mockUpsert.mockResolvedValue({ error: null });
   });
+
+  it.each([false, true])(
+    "persists a compact report and reports database failure truthfully (%s)",
+    async (failed) => {
+      mockInsert.mockResolvedValue({
+        error: failed ? { message: "PRIVATE" } : null,
+      });
+      const payload = {
+        format: "application_summary",
+        category: "yc_application",
+        approved: false,
+        generationId: "33333333-3333-4333-8333-333333333333",
+        issueCategory: "unsupported_claim",
+        summary: "User reports an invented leadership achievement.",
+      };
+      const response = await POST(
+        makeRequest({
+          method: "POST",
+          headers: { authorization: "Bearer test" },
+          body: payload,
+        }),
+      );
+      expect(response.status).toBe(failed ? 503 : 200);
+      expect(mockInsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          comment: payload.summary,
+          metadata: expect.objectContaining({
+            generationId: payload.generationId,
+            issue_category: "unsupported_claim",
+            report_status: "user_reported",
+          }),
+        }),
+      );
+      expect(mockRpc).not.toHaveBeenCalled();
+      expect(JSON.stringify(mockInsert.mock.calls)).not.toContain('"message"');
+    },
+  );
 
   // T8 — sync user_feedback insert + 200
   it("inserts user_feedback row synchronously and returns 200", async () => {

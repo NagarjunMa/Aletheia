@@ -31,6 +31,7 @@ type PrepareYcGroundingContextDependencies = {
 type PrepareYcGroundingContextInput = {
   caller: CandidateContextCaller;
   question: string;
+  questions?: string[];
   jobDescription: string;
   timing?: GenerationTiming;
   logger?: SafeLogger;
@@ -64,6 +65,7 @@ export async function prepareYcGroundingContext(
     input.timing?.enter("groundingBuild");
     context = buildYcGroundingContext({
       question: input.question,
+      ...(input.questions ? { questions: input.questions } : {}),
       jobDescription: input.jobDescription,
       candidate,
     });

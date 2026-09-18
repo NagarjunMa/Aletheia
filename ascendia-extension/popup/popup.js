@@ -1,9 +1,16 @@
+import { saveApplicationAuthDraft } from "../lib/application-auth-draft.js";
 import { isValidOperationId } from "../lib/logger-core.js";
 // Aletheia Extension Popup JavaScript
 // Main UI logic and user interaction handlers
 
 import {
   YC_APPLICATION_CATEGORY,
+  projectStoredApplication,
+  buildApplicationFeedback,
+  parseApplicationQuestions,
+  buildApplicationAuthDraft,
+  readApplicationAuthDraft,
+  APPLICATION_AUTH_DRAFT_KEY,
   buildGeneratePayload,
   calculateCharCount,
   getCategoryUiState,
@@ -16,6 +23,9 @@ import { createExtensionLogger, createOperationId } from "../lib/logger.js";
 
 let currentProfile = null;
 let currentOutput = null;
+let currentUserId = null;
+let popupAuthenticated = false;
+let feedbackOutput = null;
 const BACKGROUND_UNAVAILABLE_CODE = "BACKGROUND_UNAVAILABLE";
 const DEFAULT_API_URL = "https://www.aletheia.live";
 const PROFILE_EXTRACTION_CONSENT_KEY = "profileExtractionConsent";
@@ -115,6 +125,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (area === "local" && changes.aletheia_auth) {
       const before = changes.aletheia_auth.oldValue;
       const after = changes.aletheia_auth.newValue;
+      if (before?.access_token && !after?.access_token) {
+        currentOutput = null;
+        document.getElementById("output")?.classList.add("hidden");
+      }
       // Only reload on transition into authenticated state — avoid reload
       // loops when the SW writes the same auth back on a refresh tick.
       if (!before?.access_token && after?.access_token) {
@@ -162,7 +176,9 @@ async function initializePopup() {
   console.log("[POPUP] initializePopup: checking auth status...");
   // Check auth status from storage first
   let authStatus = await sendBackgroundMessage({ action: "getAuthStatus" });
-  console.log("[POPUP] authStatus:", JSON.stringify(authStatus));
+  log.info("auth.status", {
+    authenticated: Boolean(authStatus?.authenticated),
+  });
 
   // If not authenticated in storage, silently try to detect an existing web app session
   // (handles: logged in via web app, logged in from another window, etc.)
@@ -176,10 +192,9 @@ async function initializePopup() {
     const silentResult = await sendBackgroundMessage({
       action: "silentAuthCheck",
     });
-    console.log(
-      "[POPUP] silentAuthCheck result:",
-      JSON.stringify(silentResult),
-    );
+    log.info("auth.silent_check", {
+      authenticated: Boolean(silentResult?.authenticated),
+    });
 
     if (silentResult && silentResult.authenticated) {
       authStatus = silentResult;
@@ -192,6 +207,8 @@ async function initializePopup() {
     return;
   }
 
+  popupAuthenticated = true;
+  currentUserId = authStatus.user?.id ?? null;
   // Show connected user badge
   showUserBadge(authStatus.user);
 
@@ -205,6 +222,7 @@ async function initializePopup() {
 
   // Restore last generation if available
   await restoreLastGeneration();
+  await restoreAuthenticationDraft();
 }
 
 function setupEventListeners() {
@@ -240,6 +258,10 @@ function setupEventListeners() {
     .getElementById("generateBtn")
     ?.addEventListener("click", generateMessage);
 
+  document
+    .getElementById("regenerateApplicationBtn")
+    ?.addEventListener("click", generateMessage);
+
   // Copy buttons
   document.addEventListener("click", handleCopyClick);
 
@@ -251,7 +273,9 @@ function setupEventListeners() {
   // Feedback buttons
   document
     .getElementById("acceptBtn")
-    ?.addEventListener("click", () => handleFeedback("accept"));
+    ?.addEventListener("click", () =>
+      handleFeedback("accept").catch((error) => showError(error.message)),
+    );
   document
     .getElementById("rejectBtn")
     ?.addEventListener("click", showRejectReasonPicker);
@@ -261,8 +285,47 @@ function setupEventListeners() {
     const btn = e.target.closest(".reason-btn");
     if (!btn) return;
     const reason = btn.getAttribute("data-reason");
-    handleFeedback("reject", reason === "skip" ? undefined : reason);
+    handleFeedback("reject", reason === "skip" ? undefined : reason).catch(
+      (error) => showError(error.message),
+    );
   });
+
+  document
+    .getElementById("feedbackCancel")
+    ?.addEventListener("click", () =>
+      document.getElementById("applicationFeedbackDialog").close(),
+    );
+  document
+    .getElementById("applicationFeedbackDialog")
+    ?.addEventListener("close", () => {
+      feedbackOutput = null;
+      document.getElementById("feedbackSummary").value = "";
+      document.getElementById("rejectBtn")?.focus();
+    });
+  document
+    .getElementById("applicationFeedbackForm")
+    ?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const submit = document.getElementById("feedbackSubmit");
+      if (submit.disabled) return;
+      submit.disabled = true;
+      try {
+        if (!feedbackOutput || currentOutput !== feedbackOutput)
+          throw new Error(
+            "The answer changed. Reopen feedback for the current result.",
+          );
+        await handleFeedback(
+          "reject",
+          document.getElementById("feedbackCategory").value,
+          document.getElementById("feedbackSummary").value,
+        );
+        document.getElementById("applicationFeedbackDialog").close();
+      } catch (error) {
+        document.getElementById("feedbackError").textContent = error.message;
+      } finally {
+        submit.disabled = false;
+      }
+    });
 
   // Category change handler
   document.getElementById("category")?.addEventListener("change", async () => {
@@ -380,11 +443,25 @@ function showAuthRequired(authStatus) {
   }
 
   setup.append(heading, description, connect, settings, authError);
-  mainContent.replaceChildren(setup);
+  document.getElementById("authenticationSetup")?.remove();
+  setup.id = "authenticationSetup";
+  mainContent.prepend(setup);
+  popupAuthenticated = false;
+  document.getElementById("category").value = YC_APPLICATION_CATEGORY;
+  document.getElementById("category").disabled = true;
+  updateUIForCategory();
   mainContent.classList.remove("hidden");
 
   document.getElementById("connectBtn").addEventListener("click", async () => {
     const btn = document.getElementById("connectBtn");
+    try {
+      await persistAuthenticationDraft();
+    } catch {
+      showError(
+        "Could not preserve your draft. Keep this window open and try connecting again.",
+      );
+      return;
+    }
     btn.textContent = "Connecting...";
     btn.disabled = true;
     console.log(
@@ -418,7 +495,9 @@ function showAuthRequired(authStatus) {
       }, 2000);
 
       const result = await sendBackgroundMessage({ action: "authenticate" });
-      console.log("[POPUP] authenticate response:", JSON.stringify(result));
+      log.info("auth.interactive_result", {
+        outcome: result?.success ? "success" : "failure",
+      });
 
       clearTimeout(waitingTimeout);
 
@@ -446,12 +525,12 @@ function showAuthRequired(authStatus) {
       clearInterval(authPollInterval);
 
       if (result.success) {
-        console.log("[POPUP] Authentication successful:", result.user?.email);
+        log.info("auth.connected", { outcome: "success" });
         btn.textContent = "Connected!";
         // Brief delay so user sees success before reload
         setTimeout(() => window.location.reload(), 500);
       } else {
-        console.error("[POPUP] Authentication failed:", result.error);
+        log.warn("auth.connect_failed", { errorCode: "AUTH_FAILED" });
         btn.textContent = "Connect to Aletheia";
         btn.disabled = false;
         const errorMsg = result.error?.includes("timed out")
@@ -462,7 +541,7 @@ function showAuthRequired(authStatus) {
     } catch (error) {
       clearInterval(authPollInterval);
       if (authResolved) return;
-      console.error("[POPUP] authenticate threw:", error);
+      log.warn("auth.connect_failed", { errorCode: "AUTH_FAILED" });
       btn.textContent = "Connect to Aletheia";
       btn.disabled = false;
       showError("Connection failed. Please try again.");
@@ -603,6 +682,10 @@ async function generateMessage() {
     return;
   }
 
+  if (!popupAuthenticated) {
+    document.getElementById("connectBtn")?.click();
+    return;
+  }
   const operationId = createOperationId();
   let generationCompleted = false;
   let generationOutcome = "failure";
@@ -646,8 +729,11 @@ async function generateMessage() {
     });
 
     if (response.success) {
-      currentOutput = response;
-      displayOutput(response);
+      const validatedResponse = parseGenerationResponse(
+        response,
+        payload.questions,
+      );
+      displayOutput(validatedResponse);
       generationCompleted = true;
       generationRequestId = isValidOperationId(response.requestId)
         ? response.requestId.toLowerCase()
@@ -660,7 +746,7 @@ async function generateMessage() {
         requestId: response.requestId,
         clientVersion,
       });
-      await storeGeneration(response);
+      await storeGeneration(validatedResponse);
       await incrementUsageCount();
       generationOutcome = "success";
     } else {
@@ -676,6 +762,8 @@ async function generateMessage() {
       const presentation = getGenerationErrorPresentation(response);
       const errMsg = presentation.message;
       if (isAuthError(errMsg)) {
+        await persistAuthenticationDraft();
+        showAuthRequired();
         showAuthError(errMsg);
       } else {
         showGenerationError(presentation);
@@ -723,12 +811,50 @@ function displayOutput(output) {
   const subjectText = document.getElementById("subjectText");
 
   const processedOutput = parseGenerationResponse(output);
+  const application = processedOutput.category === YC_APPLICATION_CATEGORY;
+  document.getElementById("rejectLabel").textContent = application
+    ? "Report issue"
+    : "Regenerate";
+  document
+    .getElementById("regenerateApplicationBtn")
+    .classList.toggle("hidden", !application);
   currentOutput = processedOutput;
 
   const messageBody = processedOutput.body || processedOutput.message || "";
-  messageText.textContent = messageBody;
+  messageText.replaceChildren();
+  if (
+    processedOutput.category === YC_APPLICATION_CATEGORY &&
+    processedOutput.answers
+  ) {
+    for (const [index, answer] of processedOutput.answers.entries()) {
+      const section = document.createElement("section");
+      section.className = "application-answer";
+      const heading = document.createElement("h3");
+      heading.id = `answer-heading-${answer.questionId}`;
+      heading.textContent = answer.question || `Answer ${index + 1}`;
+      section.setAttribute("aria-labelledby", heading.id);
+      const body = document.createElement("p");
+      body.textContent = answer.body;
+      const copy = document.createElement("button");
+      copy.className = "copy-btn";
+      copy.type = "button";
+      copy.dataset.copy = "answer";
+      copy.dataset.answerId = answer.questionId;
+      copy.setAttribute("aria-label", `Copy answer ${index + 1}`);
+      copy.textContent = "Copy answer";
+      section.append(heading, body, copy);
+      messageText.append(section);
+    }
+  } else messageText.textContent = messageBody;
 
   updateCharacterCountDisplay(messageBody, processedOutput.category);
+  if (processedOutput.answers) {
+    const count = document.getElementById("messageCharCount");
+    count.textContent = `${processedOutput.answers.length} answers · 50–150 words each`;
+    count.className = "char-count-display";
+    count.style.color = "";
+    count.style.borderColor = "";
+  }
 
   if (processedOutput.subject_line) {
     subjectText.textContent = processedOutput.subject_line;
@@ -777,6 +903,20 @@ function setGeneratingState(isGenerating) {
   const generateSpinner = document.getElementById("generateSpinner");
 
   generateBtn.disabled = isGenerating;
+  for (const id of [
+    "regenerateApplicationBtn",
+    "acceptBtn",
+    "rejectBtn",
+    "jdInput",
+    "ycQuestionInput",
+    "emailMode",
+    "intent",
+  ]) {
+    const control = document.getElementById(id);
+    if (control) control.disabled = isGenerating;
+  }
+  document.getElementById("category").disabled =
+    isGenerating || !popupAuthenticated;
 
   if (isGenerating) {
     generateText.textContent = "Generating...";
@@ -797,7 +937,12 @@ function handleCopyClick(event) {
   if (copyType === "subject") {
     textToCopy = document.getElementById("subjectText").textContent;
   } else if (copyType === "body") {
-    textToCopy = document.getElementById("messageText").textContent;
+    textToCopy = currentOutput?.body || "";
+  } else if (copyType === "answer") {
+    textToCopy =
+      currentOutput?.answers?.find(
+        (answer) => answer.questionId === copyBtn.dataset.answerId,
+      )?.body || "";
   }
 
   if (textToCopy) {
@@ -949,17 +1094,44 @@ async function autoFillMessage() {
 }
 
 function showRejectReasonPicker() {
+  if (currentOutput?.category === YC_APPLICATION_CATEGORY) {
+    feedbackOutput = currentOutput;
+    document.getElementById("feedbackSummary").value = "";
+    document.getElementById("feedbackError").textContent = "";
+    document.getElementById("applicationFeedbackDialog").showModal();
+    return;
+  }
   const rejectReason = document.getElementById("reject-reason");
   if (rejectReason) rejectReason.classList.remove("hidden");
 }
 
-async function handleFeedback(type, rejectionReason) {
+async function handleFeedback(type, rejectionReason, summary) {
   if (!currentOutput) return;
 
   // Hide reason picker if visible
   document.getElementById("reject-reason")?.classList.add("hidden");
 
   const category = document.getElementById("category").value;
+  if (currentOutput.category === YC_APPLICATION_CATEGORY) {
+    const payload = buildApplicationFeedback(
+      currentOutput,
+      type === "accept",
+      rejectionReason,
+      summary,
+    );
+    const response = await chrome.runtime.sendMessage({
+      action: "sendFeedback",
+      payload,
+    });
+    if (!response?.success)
+      throw new Error("Feedback could not be saved. Please retry.");
+    if (type === "accept") await saveAcceptedMessage();
+    showTemporaryFeedback(
+      document.getElementById(type === "accept" ? "acceptBtn" : "rejectBtn"),
+      "Saved!",
+    );
+    return;
+  }
   const messageBody = currentOutput.body || currentOutput.message || "";
 
   const evalMetadata = currentOutput.evalMetadata || undefined;
@@ -1000,11 +1172,21 @@ async function saveAcceptedMessage() {
   const { accepted = [] } = await chrome.storage.local.get("accepted");
 
   const feedbackData = {
-    ...currentOutput,
-    category: document.getElementById("category").value,
-    intent: document.getElementById("intent").value,
+    ...(currentOutput.category === YC_APPLICATION_CATEGORY
+      ? projectStoredApplication(currentOutput)
+      : currentOutput),
+    ...(currentOutput.category === YC_APPLICATION_CATEGORY
+      ? { ownerId: currentUserId }
+      : {}),
+    category:
+      currentOutput.category || document.getElementById("category").value,
+    ...(currentOutput.category !== YC_APPLICATION_CATEGORY
+      ? {
+          intent: document.getElementById("intent").value,
+          profileName: currentProfile?.name || "Unknown",
+        }
+      : {}),
     timestamp: Date.now(),
-    profileName: currentProfile?.name || "Unknown",
   };
 
   accepted.push(feedbackData);
@@ -1085,7 +1267,7 @@ function updateQuestionCharacterCount() {
   const input = document.getElementById("ycQuestionInput");
   const count = document.getElementById("ycQuestionCharCount");
   if (!input || !count) return;
-  count.textContent = input.value.length;
+  count.textContent = `${parseApplicationQuestions(input.value).length}/5 questions · 500 characters each`;
 }
 
 function updateGenerateAvailability() {
@@ -1105,6 +1287,30 @@ function updateGenerateAvailability() {
   });
 
   button.disabled = !validation.valid;
+  const applicationMode = category === "yc_application";
+  const inputStatus = document.getElementById("applicationInputStatus");
+  if (inputStatus)
+    inputStatus.textContent =
+      applicationMode && !validation.valid ? validation.message : "";
+  document
+    .getElementById("ycQuestionInput")
+    ?.setAttribute(
+      "aria-invalid",
+      String(
+        applicationMode && Boolean(validation.code?.startsWith("YC_QUESTION")),
+      ),
+    );
+  document
+    .getElementById("jdInput")
+    ?.setAttribute(
+      "aria-invalid",
+      String(
+        applicationMode &&
+          Boolean(validation.code?.startsWith("YC_JOB_DESCRIPTION")),
+      ),
+    );
+  const regenerate = document.getElementById("regenerateApplicationBtn");
+  if (regenerate) regenerate.disabled = !validation.valid;
   if (generateText) generateText.textContent = uiState.generateLabel;
 }
 
@@ -1285,11 +1491,13 @@ function showAuthError(message) {
 }
 
 function showTemporaryFeedback(element, text) {
-  const originalText = element.textContent;
-  element.textContent = text;
+  if (!element) return;
+  const target = element.querySelector("#rejectLabel") || element;
+  const originalText = target.textContent;
+  target.textContent = text;
 
   setTimeout(() => {
-    element.textContent = originalText;
+    target.textContent = originalText;
   }, 2000);
 }
 
@@ -1374,15 +1582,18 @@ function displayValidationFeedback(output) {
   }
 
   if (category === YC_APPLICATION_CATEGORY) {
-    const wordCount =
+    const counts = output.answers?.map((answer) => answer.word_count) ?? [
       output.word_count ||
-      calculateCharCount(output.body || "", category).count;
-    const isWithinRange = wordCount >= 50 && wordCount <= 150;
+        calculateCharCount(output.body || "", category).count,
+    ];
+    const isWithinRange = counts.every((count) => count >= 50 && count <= 150);
     feedbackItems.push({
       icon: isWithinRange ? "✅" : "⚠️",
-      text: `${wordCount} words`,
+      text: output.answers
+        ? `${counts.length} answers within their word limits`
+        : `${counts[0]} words`,
       status: isWithinRange ? "success" : "warning",
-      details: "Required response range: 50–150 words",
+      details: "Required range: 50–150 words per answer",
     });
   }
 
@@ -1474,7 +1685,8 @@ async function storeGeneration(output) {
     const category = document.getElementById("category").value;
     const isYcApplication = category === YC_APPLICATION_CATEGORY;
     const generationData = {
-      output,
+      output: isYcApplication ? projectStoredApplication(output) : output,
+      ...(isYcApplication ? { ownerId: currentUserId } : {}),
       timestamp: Date.now(),
       profile: isYcApplication ? null : currentProfile,
       inputs: isYcApplication
@@ -1499,6 +1711,13 @@ async function restoreLastGeneration() {
     const { lastGeneration } = await chrome.storage.local.get("lastGeneration");
 
     if (!lastGeneration) return;
+    if (
+      lastGeneration.output?.category === YC_APPLICATION_CATEGORY &&
+      (!currentUserId || lastGeneration.ownerId !== currentUserId)
+    ) {
+      await chrome.storage.local.remove("lastGeneration");
+      return;
+    }
 
     const fourHoursAgo = Date.now() - 4 * 60 * 60 * 1000;
     if (lastGeneration.timestamp < fourHoursAgo) {
@@ -1531,10 +1750,23 @@ async function restoreLastGeneration() {
 
     if (lastGeneration.output) {
       currentOutput = lastGeneration.output;
-      displayOutput(lastGeneration.output);
+      displayOutput(
+        lastGeneration.output.category === YC_APPLICATION_CATEGORY
+          ? projectStoredApplication(lastGeneration.output)
+          : lastGeneration.output,
+      );
+      if (lastGeneration.output.category === YC_APPLICATION_CATEGORY) {
+        document.getElementById("ycQuestionInput").value = "";
+        updateGenerateAvailability();
+      }
     }
 
-    showTemporaryMessage("Previous session restored", "info");
+    showTemporaryMessage(
+      lastGeneration.output?.category === YC_APPLICATION_CATEGORY
+        ? "Answers restored. Re-enter questions and job description to generate again."
+        : "Previous session restored",
+      "info",
+    );
   } catch (error) {
     console.error("Error restoring generation:", error);
   }
@@ -1586,3 +1818,35 @@ chrome.runtime.onMessage.addListener((message) => {
     void handleProfileUpdated(message.profile);
   }
 });
+
+async function persistAuthenticationDraft() {
+  const draft = buildApplicationAuthDraft({
+    category: document.getElementById("category")?.value,
+    jd: document.getElementById("jdInput")?.value,
+    questions: document.getElementById("ycQuestionInput")?.value,
+    ownerId: currentUserId,
+  });
+  await saveApplicationAuthDraft(draft, chrome.storage.session, chrome.alarms);
+}
+
+async function restoreAuthenticationDraft() {
+  const stored = await chrome.storage.session.get(APPLICATION_AUTH_DRAFT_KEY);
+  const draft = readApplicationAuthDraft(
+    stored[APPLICATION_AUTH_DRAFT_KEY],
+    currentUserId,
+  );
+  await chrome.storage.session.remove(APPLICATION_AUTH_DRAFT_KEY);
+  await chrome.alarms.clear("application-auth-draft-expiry");
+  if (!draft) return;
+  document.getElementById("category").value = draft.category;
+  document.getElementById("jdInput").value = draft.jd;
+  document.getElementById("ycQuestionInput").value = draft.questions;
+  updateUIForCategory();
+  updateCharacterCount();
+  updateQuestionCharacterCount();
+  document.getElementById("ycQuestionInput").focus();
+  showTemporaryMessage(
+    "Your application draft was restored after sign-in.",
+    "info",
+  );
+}
