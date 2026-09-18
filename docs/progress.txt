@@ -1313,3 +1313,12 @@ Follow-up:
 
 - Implement a real CPL scoring service before treating CPL as a production metric.
 - Add tests around popup/settings dashboard navigation if the extension test harness is expanded for DOM click flows.
+
+## 2026-09-17 — Public landing access and auth navigation
+
+Branch: fix/public-landing-navigation. User-requested repair, not ALE-38/52 work.
+Contract/risk: Critical (proxy auth-routing boundary). Keep the exact homepage public regardless of saved session state; preserve private-route authentication and CSP; provide a visible landing-page link on auth screens without redesigning them.
+Evidence: fresh production HEAD requests returned apex -> www (307) -> homepage (200). Reproduced the existing refresh_token_already_used homepage-to-login redirect in a failing proxy test; missing auth configuration also prevented the public homepage. Fixed by skipping session lookup only on `/`, retaining the shared security-header path. Auth layout now exposes Go to Landing Page on desktop/mobile. Dashboard links retain `/dashboard`, which remains protected. Also fixed an unbound crypto.randomUUID callback exposed by proxy tests on Node 24.
+Validation: 904 unit tests passed (including seven new proxy regressions), lint/type-check and production build passed; eight local production-server Playwright smoke/health tests passed with dummy auth configuration. No real auth/model/database calls made by tests. Public production header inspection was read-only.
+Review: no API/schema/billing/extension changes, no new dependency or persistence. Supabase SSR documentation and changelog consulted 2026-09-17; auth checks retained on private routes. React guidance applied to avoid unnecessary auth work on the public page. Existing auth refresh/redirect behavior outside `/` remains unchanged. No independent Critical-tier approval or live signed-in browser verification claimed.
+Rollout: commit/review/merge and redeploy required; not pushed or deployed by this task. Rollback by reverting this scoped change and redeploying; no migration. The user's particular browser session was not inspected, so stale-token handling is a reproduced cause, not a confirmed diagnosis of their cookie state.

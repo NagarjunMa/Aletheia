@@ -8,6 +8,22 @@ test("landing page loads @smoke", async ({ page }) => {
   const response = await page.goto("/");
   expect(response?.status()).toBeLessThan(500);
   await expect(page).toHaveTitle(/Aletheia/);
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.locator("#hero")).toBeVisible();
+});
+
+test("visitors can return from login to the landing page and open dashboard @smoke", async ({
+  page,
+}) => {
+  await page.goto("/auth/login");
+  await page.getByRole("link", { name: "Go to Landing Page" }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.locator("#hero")).toBeVisible();
+  await page
+    .getByRole("link", { name: "Open Dashboard", exact: true })
+    .filter({ visible: true })
+    .click();
+  await expect(page).toHaveURL(/\/auth\/login\?redirectTo=%2Fdashboard$/);
 });
 
 test("login page renders @smoke", async ({ page }) => {
@@ -79,6 +95,9 @@ test("login remains contained at mobile width @smoke", async ({ page }) => {
     () => document.documentElement.scrollWidth > window.innerWidth,
   );
   expect(hasHorizontalOverflow).toBe(false);
+  await page.getByRole("link", { name: "Go to Landing Page" }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.locator("#hero")).toBeVisible();
 });
 
 test("health endpoint responds @smoke", async ({ request }) => {

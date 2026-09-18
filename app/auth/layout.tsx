@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import ShaderBackground from "@/components/ShaderBackground";
 
 const features = [
@@ -38,7 +39,12 @@ export default function AuthLayout({
             pointerEvents: "none",
           }}
         />
-        <div className="relative z-10 w-full max-w-[420px]">{children}</div>
+        <div className="relative z-10 w-full max-w-[420px]">
+          <Link href="/" className="btn-secondary mb-8 inline-flex">
+            Go to Landing Page
+          </Link>
+          {children}
+        </div>
       </div>
 
       {/* ── Right: branding panel ─────────────────────────── */}

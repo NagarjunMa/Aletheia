@@ -55,14 +55,12 @@ export function createLogger(module: string) {
 
 export function getEdgeCorrelationIds(headers: Headers) {
   return {
-    requestId: createCorrelationId(
-      headers.get("x-request-id"),
-      crypto.randomUUID,
+    requestId: createCorrelationId(headers.get("x-request-id"), () =>
+      crypto.randomUUID(),
     ),
     operationId: headers.get("x-aletheia-operation-id")
-      ? createCorrelationId(
-          headers.get("x-aletheia-operation-id"),
-          crypto.randomUUID,
+      ? createCorrelationId(headers.get("x-aletheia-operation-id"), () =>
+          crypto.randomUUID(),
         )
       : undefined,
   };

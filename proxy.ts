@@ -92,32 +92,40 @@ export async function proxy(request: NextRequest) {
     return response;
   }
 
-  const supabase = createServerClient(
-    getRequiredEnv("NEXT_PUBLIC_SUPABASE_URL"),
-    getRequiredEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) => {
-            request.cookies.set(name, value);
-          });
-          response = createForwardedResponse(requestHeaders, requestId);
-          cookiesToSet.forEach(({ name, value, options }) => {
-            response.cookies.set(name, value, options);
-          });
-        },
-      },
-    },
-  );
+  // The marketing homepage has no session-dependent content. Do not let stale
+  // cookies or an unavailable auth provider turn it into a login redirect.
+  // Continue through the shared security-header/CSP path below.
+  const supabase =
+    pathname === "/"
+      ? null
+      : createServerClient(
+          getRequiredEnv("NEXT_PUBLIC_SUPABASE_URL"),
+          getRequiredEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
+          {
+            cookies: {
+              getAll() {
+                return request.cookies.getAll();
+              },
+              setAll(cookiesToSet) {
+                cookiesToSet.forEach(({ name, value }) => {
+                  request.cookies.set(name, value);
+                });
+                response = createForwardedResponse(requestHeaders, requestId);
+                cookiesToSet.forEach(({ name, value, options }) => {
+                  response.cookies.set(name, value, options);
+                });
+              },
+            },
+          },
+        );
 
   // Refresh session if expired - required for Server Components
   const {
     data: { user },
     error,
-  } = await supabase.auth.getUser();
+  } = supabase
+    ? await supabase.auth.getUser()
+    : { data: { user: null }, error: null };
 
   if (isAuthRelated) {
     log.info(
