@@ -1,3 +1,15 @@
+const billingForCapture = vi.hoisted(() => ({ enabled: false }));
+vi.mock("@/lib/billing/credits", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/billing/credits")>()),
+  get CREDIT_BILLING_ENABLED() {
+    return billingForCapture.enabled;
+  },
+}));
+const captureFailureMock = vi.hoisted(() => vi.fn());
+vi.mock(
+  "@/modules/refund-review/infrastructure/refund-review.repository",
+  () => ({ captureFailure: captureFailureMock }),
+);
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { generateRequestSchema } from "./schema";
 import {
@@ -1538,4 +1550,138 @@ describe("OPTIONS /api/extension/generate", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("Access-Control-Max-Age")).toBe("86400");
   });
+});
+
+describe("ALE-53 server failure capture", () => {
+  it.each(["timeout", "provider429", "invalid", "success", "input"])(
+    "captures %s only when server generation fails",
+    async (kind) => {
+      vi.stubEnv("REFUND_REVIEW_ENABLED", "true");
+      mockAuthGetUser.mockResolvedValueOnce({
+        data: {
+          user: {
+            id: "22222222-2222-4222-8222-222222222222",
+            email: "test@example.com",
+          },
+        },
+        error: null,
+      });
+      captureFailureMock.mockClear();
+      captureFailureMock.mockResolvedValue(undefined);
+      try {
+        if (kind === "timeout") {
+          const Anthropic = (await import("@anthropic-ai/sdk")).default;
+          mockAnthropicCreate.mockRejectedValueOnce(
+            new Anthropic.APIConnectionTimeoutError(),
+          );
+        }
+        if (kind === "provider429") {
+          const Anthropic = (await import("@anthropic-ai/sdk")).default;
+          mockAnthropicCreate.mockRejectedValueOnce(
+            new Anthropic.APIError(429, {}, "Upstream rate limit", {}),
+          );
+        }
+        if (kind === "invalid")
+          mockAnthropicCreate.mockResolvedValueOnce({
+            content: [],
+            usage: { input_tokens: 1, output_tokens: 0 },
+          });
+        const response = await POST(
+          makeRequest({
+            method: "POST",
+            headers: { Authorization: "Bearer test-token" },
+            body:
+              kind === "input"
+                ? { ...validPayload, intent: "PRIVATE" }
+                : validPayload,
+          }),
+        );
+        if (
+          kind === "timeout" ||
+          kind === "invalid" ||
+          kind === "provider429"
+        ) {
+          expect(response.status).toBe(
+            kind === "provider429" ? 429 : kind === "timeout" ? 504 : 502,
+          );
+          expect(captureFailureMock).toHaveBeenCalledTimes(1);
+          expect(captureFailureMock).toHaveBeenCalledWith(
+            expect.objectContaining({
+              category: validPayload.category,
+              code:
+                kind === "provider429"
+                  ? "MODEL_REQUEST_FAILED"
+                  : kind === "timeout"
+                    ? "MODEL_TIMEOUT"
+                    : "OUTPUT_VALIDATION_FAILED",
+              debitId: null,
+            }),
+          );
+          expect(JSON.stringify(captureFailureMock.mock.calls)).not.toContain(
+            validPayload.profileMarkdown,
+          );
+        } else expect(captureFailureMock).not.toHaveBeenCalled();
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    },
+  );
+});
+
+it("ALE-53 captures original debit when provider throttling and auto-refund both fail", async () => {
+  billingForCapture.enabled = true;
+  vi.stubEnv("REFUND_REVIEW_ENABLED", "true");
+  captureFailureMock.mockClear();
+  captureFailureMock.mockResolvedValue(undefined);
+  const user = "22222222-2222-4222-8222-222222222222",
+    debit = "33333333-3333-4333-8333-333333333333";
+  try {
+    mockAuthGetUser.mockResolvedValue({
+      data: { user: { id: user, email: "customer@example.com" } },
+      error: null,
+    });
+    mockRpc.mockImplementation(async (name) => {
+      if (name === "grant_trial_credits_once")
+        return { data: [{ granted: false, balance: 40 }], error: null };
+      if (name === "reserve_generation_credits")
+        return {
+          data: [{ allowed: true, reservation_id: debit, balance_after: 38 }],
+          error: null,
+        };
+      if (name === "refund_generation_credits")
+        return { data: null, error: { message: "DATABASE_PRIVATE" } };
+      return {
+        data: [
+          { allowed: true, remaining: 29, reset_time: Date.now() + 86400000 },
+        ],
+        error: null,
+      };
+    });
+    const Anthropic = (await import("@anthropic-ai/sdk")).default;
+    mockAnthropicCreate.mockRejectedValue(
+      new Anthropic.APIError(429, {}, "UPSTREAM_PRIVATE", {}),
+    );
+    const response = await POST(
+      makeRequest({
+        method: "POST",
+        headers: { Authorization: "Bearer test-token" },
+        body: validPayload,
+      }),
+    );
+    expect(response.status).toBe(429);
+    expect(captureFailureMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: user,
+        debitId: debit,
+        debitUncertain: false,
+        code: "MODEL_REQUEST_FAILED",
+      }),
+    );
+    expect(JSON.stringify(captureFailureMock.mock.calls)).not.toContain(
+      "PRIVATE",
+    );
+  } finally {
+    billingForCapture.enabled = false;
+    vi.unstubAllEnvs();
+  }
 });

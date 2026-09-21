@@ -717,3 +717,54 @@ describe("ALE-37 batch orchestration", () => {
     expect(deps.refundCredits).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("ALE-53 debit capture callbacks", () => {
+  it("retains original debit after failed automatic compensation", async () => {
+    const onCreditReserved = vi.fn(),
+      onCreditReservationPending = vi.fn();
+    const deps = dependencies({
+      createMessage: vi
+        .fn()
+        .mockRejectedValue(new Anthropic.APIConnectionTimeoutError()),
+      refundCredits: vi.fn().mockResolvedValue(false),
+    });
+    const response = await generateYcApplication(
+      {
+        caller,
+        request,
+        corsHeaders: {},
+        applicationBaseUrl: "https://aletheia.live",
+        onCreditReserved,
+        onCreditReservationPending,
+      },
+      deps,
+    );
+    expect(response.status).toBe(504);
+    expect(onCreditReserved).toHaveBeenCalledWith(
+      "22222222-2222-4222-8222-222222222222",
+    );
+    expect(onCreditReservationPending.mock.calls).toEqual([[true], [false]]);
+    expect(deps.refundCredits).toHaveBeenCalledTimes(1);
+  });
+  it("preserves uncertainty when reservation acknowledgement is lost", async () => {
+    const onCreditReserved = vi.fn(),
+      onCreditReservationPending = vi.fn();
+    const deps = dependencies({
+      reserveCredits: vi.fn().mockRejectedValue(new Error("Connection lost")),
+    });
+    await generateYcApplication(
+      {
+        caller,
+        request,
+        corsHeaders: {},
+        applicationBaseUrl: "https://aletheia.live",
+        onCreditReserved,
+        onCreditReservationPending,
+      },
+      deps,
+    );
+    expect(onCreditReserved).not.toHaveBeenCalled();
+    expect(onCreditReservationPending.mock.calls).toEqual([[true]]);
+    expect(deps.refundCredits).not.toHaveBeenCalled();
+  });
+});

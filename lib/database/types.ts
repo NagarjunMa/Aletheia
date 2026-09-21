@@ -661,6 +661,47 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      prepare_next_refund_week: { Args: { p_anchor: string }; Returns: Json };
+      claim_refund_receipt: { Args: Record<string, never>; Returns: Json };
+      freeze_refund_receipt_payload: {
+        Args: { p_id: string; p_lease: string; p_payload: Json };
+        Returns: Json;
+      };
+      finish_refund_receipt: {
+        Args: {
+          p_id: string;
+          p_lease: string;
+          p_provider: string | null;
+          p_code: string | null;
+        };
+        Returns: boolean;
+      };
+      expire_refund_receipt_leases: {
+        Args: Record<string, never>;
+        Returns: number;
+      };
+      prepare_refund_receipts: {
+        Args: { p_start: string; p_end: string };
+        Returns: Json;
+      };
+      list_refund_receipts: { Args: { p_offset: number }; Returns: Json };
+      capture_generation_failure: {
+        Args: { p_failure: Json };
+        Returns: string;
+      };
+      list_refund_cases: { Args: { p_query: Json }; Returns: Json };
+      get_refund_case: { Args: { p_id: string }; Returns: Json };
+      review_refund_case: {
+        Args: {
+          p_id: string;
+          p_actor: string;
+          p_action: string;
+          p_note: string;
+          p_action_id: string;
+        };
+        Returns: Json;
+      };
+      execute_reviewed_refund: { Args: { p_id: string }; Returns: Json };
       aggregate_style_analytics: {
         Args: { end_date: string; start_date: string; target_user_id: string };
         Returns: undefined;
