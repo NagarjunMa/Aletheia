@@ -209,6 +209,8 @@ export async function generateYcApplication(
     request: YcApplicationRequest;
     corsHeaders: Record<string, string>;
     applicationBaseUrl: string;
+    onCreditReserved?: (_id: string) => void;
+    onCreditReservationPending?: (_pending: boolean) => void;
     logger?: SafeLogger;
     timing?: GenerationTiming;
   },
@@ -342,9 +344,11 @@ export async function generateYcApplication(
       timing?.config({ billingMode: "metered" });
       timing?.enter("billing");
       await dependencies.grantTrialCredits(input.caller.userId);
+      input.onCreditReservationPending?.(true);
       const reservation = await dependencies.reserveCredits(
         input.caller.userId,
       );
+      input.onCreditReservationPending?.(false);
       creditCost = reservation.cost;
       creditsRemaining = reservation.balanceAfter;
       billingMode = "credits";
@@ -374,6 +378,7 @@ export async function generateYcApplication(
         );
       }
 
+      input.onCreditReserved?.(reservation.reservationId);
       reservedCredit = {
         userId: input.caller.userId,
         reservationId: reservation.reservationId,

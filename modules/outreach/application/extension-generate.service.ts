@@ -1,3 +1,8 @@
+import {
+  createFailureContext,
+  recordFailedGeneration,
+  type FailureContext,
+} from "@/modules/refund-review/application/capture-generation-failure";
 import { recordMeasurement } from "@/lib/provider-attempt-timing";
 import { NextRequest, NextResponse } from "next/server";
 import {
@@ -91,17 +96,19 @@ let hasHandledGeneration = false;
 export async function POST(request: NextRequest) {
   return withRequestLifecycle("generate-route", request, async (log) => {
     const timing = createGenerationTiming();
+    const failureContext = createFailureContext();
     const firstInvocation = !hasHandledGeneration;
     hasHandledGeneration = true;
     let status = 500;
     try {
-      const response = await handlePost(request, log, timing);
+      const response = await handlePost(request, log, timing, failureContext);
       status = response.status;
       return response;
     } finally {
       // Exactly one bounded summary, including rejected/failed requests. No
-      // response-body parsing and no additional network or persistence work.
+      // response-body parsing. Failure queue capture is separately bounded.
       const summary = timing.finish(status);
+      await recordFailedGeneration(failureContext, status, summary.errorCode);
       recordMeasurement(log, {
         ...summary,
         deployment: /^[a-f0-9]{7,40}$/i.test(
@@ -124,6 +131,7 @@ async function handlePost(
   request: NextRequest,
   log: SafeLogger,
   timing: GenerationTiming,
+  failureContext: FailureContext,
 ) {
   const corsHeaders = createGenerateCorsHeaders(request);
 
@@ -183,7 +191,15 @@ async function handlePost(
         );
       }
 
+      failureContext.userId = authResult.userId;
+      failureContext.category = "yc_application";
       return generateYcApplication({
+        onCreditReserved: (id) => {
+          failureContext.debitId = id;
+        },
+        onCreditReservationPending: (pending) => {
+          failureContext.debitUncertain = pending;
+        },
         caller: authResult,
         request: parsed.data,
         corsHeaders,
@@ -199,6 +215,8 @@ async function handlePost(
     // Phase 1 deliberately does not yet inject these sources into prompts.
     const validatedData = generateRequestSchema.parse(dispatchBody);
     timing.category(validatedData.category);
+    failureContext.userId = authResult.userId;
+    failureContext.category = validatedData.category;
     timing.config({
       ...OUTREACH_GENERATION_SETTINGS,
       intent: validatedData.intent ?? "networking",
@@ -334,11 +352,13 @@ async function handlePost(
         timing.enter("billing");
         const billingClient = getSupabaseService();
         await grantTrialCreditsOnce(billingClient, authResult.userId);
+        failureContext.debitUncertain = true;
         const reservation = await reserveGenerationCredits(
           billingClient,
           authResult.userId,
           category,
         );
+        failureContext.debitUncertain = false;
         creditCost = reservation.cost;
         creditsRemaining = reservation.balanceAfter;
         billingMode = "credits";
@@ -370,6 +390,7 @@ async function handlePost(
           );
         }
 
+        failureContext.debitId = reservation.reservationId;
         reservedCredit = {
           userId: authResult.userId,
           reservationId: reservation.reservationId,

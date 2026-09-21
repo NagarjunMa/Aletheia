@@ -1,3 +1,29 @@
+## 2026-09-21 — ALE-53 PR handoff
+
+User authorized commit and remote branch push for PR creation. Scope: failure queue/admin recovery and disabled-by-default receipt delivery, including reviewed IND-1/IND-2 corrections. Pre-commit repository gates run for this handoff. Existing hosted verification, sender/schedule, backlog draining and retention rollout gates remain open; no deployment, hosted migration or email is included. Preserve unrelated ALE-38/ALE-52 notes outside this commit.
+
+## 2026-09-20/21 — ALE-53 receipt audit corrections
+
+Fixed confirmed P2 IND-1 (late refunds behind reporting cursor) and IND-2 (false no-backlog signal). Every scheduled preparation now detects valid unassociated historical refunds, including after catch-up, with capped count/overflow for manual reconciliation. Frozen receipts and balances remain unchanged. Worker carries preparation backlog and latest reconciliation snapshot. Added partial ledger timestamp index to unreleased migration.
+Observed worker/database regressions fail before corrections and pass afterward. Fresh make ci: 1,033 tests/90 files, 15 guardrails, lint/type/build pass; coverage thresholds pass unchanged. Real PostgreSQL tests cover concurrent late commit, 101-record cap, repeat detection, missing prior receipts and manual preparation. Fresh independent correction review passed: both findings closed, no material findings; 13 targeted tests plus database harness independently rerun. Evidence: docs/operations/ale-53-review.md.
+ALE-53 remains In Progress pending existing release setup/retention/hosted checks. No commit, push, hosted migration, production credit changes or email. Unrelated edits preserved.
+
+## 2026-09-20 — ALE-53 local implementation and review
+
+- Implemented server failure capture, protected operator queue/actions, original-debit-only restoration, audit events and weekly receipt preparation/delivery on ale-53/refund-review-workflow, based on 61c89c3. Existing automatic restoration is preserved; manual approval is for unresolved cases.
+- Capture and receipt delivery default disabled. Operator UUID allowlist, verified sender, immutable reporting anchor/schedule with backlog draining, bounded retention policy/cleanup and hosted verification remain release prerequisites.
+- Passed make ci: 1,029 tests/90 files, 15 guardrails, lint (one declaration warning), type checks and production build. Coverage passed: 88.65% statements / 81.75% branches / 88.75% functions / 90.06% lines. Mocked browser flow and real disposable PostgreSQL concurrency/role/receipt-delivery tests passed.
+- Two-round independent Critical review: provider-429 capture finding fixed and regression-tested; no remaining material findings in reviewed local scope. Evidence: docs/operations/ale-53-review.md; implementation and runbook: docs/operations/ale-53-implementation.md and docs/operations/refund-review.md.
+- Preserved unrelated documentation. Changes remain uncommitted; no push, hosted migration, production credit mutation, real email or deployment. ALE-53 remains In Progress.
+
+## 2026-09-20 — ALE-53 implementation kickoff
+
+- Synced local main to 61c89c3 and created ale-53/refund-review-workflow; preserved unrelated notes.
+- Read complete Linear scope and current compensation paths; Critical tier, full documentation mode, production-engineering-loop v0.5.0.
+- Existing billing/application baseline: 38 tests passed. Feature implementation and independent review remain pending.
+- Refund policy requires user selection before changing compensation; provider/sender/schedule remain unconfigured.
+- Execution context: docs/operations/ale-53-implementation.md. No runtime/schema changes, push, deployment, credit mutation or email send.
+
 ## 2026-09-18 — ALE-37 PR handoff preparation
 
 User authorized commit and remote branch push, with hands-on application verification planned after merge. ALE-53 separately owns the refund review queue/admin UI/weekly emails; no ALE-53 implementation included. Preserved unrelated ALE-38/ALE-52 notes outside this commit.

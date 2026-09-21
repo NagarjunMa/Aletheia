@@ -2,6 +2,8 @@
 
 ## Active Work
 
+ALE-53 refund operations: see `docs/operations/ale-53-implementation.md` for the active execution context and `docs/operations/refund-review.md` for operator boundaries. Queue/admin and opt-in email delivery are implemented locally; delivery defaults disabled and rollout remains pending.
+
 See `docs/progress.txt` for the current implementation and decision log.
 Update that file whenever a phase completes or progress is made.
 
