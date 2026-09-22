@@ -3,6 +3,10 @@ import { observeAnthropicAttempts } from "@/lib/provider-attempt-timing";
 import { z } from "zod";
 import { createLogger, startTimedStage, type SafeLogger } from "@/lib/logger";
 import { CLAUDE_MODEL } from "@/modules/outreach/infrastructure/anthropic.repository";
+import {
+  APPLICATION_ANSWER_MAX_WORDS,
+  APPLICATION_ANSWER_MIN_WORDS,
+} from "@/lib/ai/output-constraints";
 
 export const YC_GENERATION_SETTINGS = {
   temperature: 0.3,
@@ -23,7 +27,14 @@ export const ycApplicationTool = {
         type: "string",
         minLength: 1,
         maxLength: 3_000,
-        description: "The final 50 to 150 word application answer.",
+        description: `The final ${APPLICATION_ANSWER_MIN_WORDS} to ${APPLICATION_ANSWER_MAX_WORDS} word application answer.`,
+      },
+      word_count: {
+        type: "integer",
+        minimum: APPLICATION_ANSWER_MIN_WORDS,
+        maximum: APPLICATION_ANSWER_MAX_WORDS,
+        description:
+          "Declared body word count. The server recalculates and validates the final body independently.",
       },
       claims: {
         type: "array",
@@ -52,13 +63,18 @@ export const ycApplicationTool = {
         },
       },
     },
-    required: ["body", "claims"],
+    required: ["body", "word_count", "claims"],
   },
 } as const;
 
 const ycApplicationToolInputSchema = z
   .object({
     body: z.string().trim().min(1).max(3_000),
+    word_count: z
+      .number()
+      .int()
+      .min(APPLICATION_ANSWER_MIN_WORDS)
+      .max(APPLICATION_ANSWER_MAX_WORDS),
     claims: z
       .array(
         z
@@ -104,7 +120,7 @@ export const applicationBatchTool = {
             },
             ...ycApplicationTool.input_schema.properties,
           },
-          required: ["questionId", "body", "claims"],
+          required: ["questionId", "body", "word_count", "claims"],
         },
       },
     },

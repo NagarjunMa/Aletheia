@@ -26,6 +26,7 @@ describe("getYcApplicationToolInput", () => {
       getYcApplicationToolInput(
         response({
           body: "I build and operate customer-facing TypeScript services.",
+          word_count: 50,
           claims: [
             {
               text: "I build and operate customer-facing TypeScript services.",
@@ -54,12 +55,17 @@ describe("getYcApplicationToolInput", () => {
     ["missing claims", response({ body: "Body" })],
     [
       "missing source references",
-      response({ body: "Body", claims: [{ text: "Claim", source_ids: [] }] }),
+      response({
+        body: "Body",
+        word_count: 50,
+        claims: [{ text: "Claim", source_ids: [] }],
+      }),
     ],
     [
       "unknown fields",
       response({
         body: "Body",
+        word_count: 50,
         claims: [{ text: "Claim", source_ids: ["profile.current_role"] }],
         explanation: "Hidden chain of thought",
       }),
@@ -69,9 +75,34 @@ describe("getYcApplicationToolInput", () => {
       YcApplicationStructuredOutputError,
     );
   });
+
+  it.each([49, 151])("rejects declared word count %i", (wordCount) => {
+    expect(() =>
+      getYcApplicationToolInput(
+        response({
+          body: "A valid-looking answer body.",
+          word_count: wordCount,
+          claims: [
+            {
+              text: "A valid-looking answer body.",
+              source_ids: ["profile.current_role"],
+            },
+          ],
+        }),
+      ),
+    ).toThrow(YcApplicationStructuredOutputError);
+  });
 });
 
 describe("createYcApplicationMessage", () => {
+  it("publishes the application word constraint in the tool schema", () => {
+    expect(ycApplicationTool.input_schema.properties.word_count).toMatchObject({
+      minimum: 50,
+      maximum: 150,
+    });
+    expect(ycApplicationTool.input_schema.required).toContain("word_count");
+  });
+
   it("forces the structured YC tool through the shared model and timeout", async () => {
     const create = vi.fn().mockResolvedValue({ content: [] });
 

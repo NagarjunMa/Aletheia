@@ -308,6 +308,14 @@ describe("sanitizeAIOutput - AI fingerprint humanization", () => {
 });
 
 describe("sanitizeForLinkedIn", () => {
+  it("preserves a genuine low-friction CTA", async () => {
+    const cta = "Would you be open to a brief chat?";
+    const result = await sanitizeForLinkedIn(cta);
+
+    expect(result.success).toBe(true);
+    expect(result.sanitizedContent).toBe(cta);
+  });
+
   it("returns success: true for valid content", async () => {
     const result = await sanitizeForLinkedIn(
       "Hi, I wanted to connect with you!",

@@ -1,15 +1,39 @@
 import type { CandidateGroundingSource } from "@/modules/candidate-context/domain/candidate-context.types";
+import { compareDeclaredOutputCount } from "@/lib/ai/output-constraints";
 import {
   LINKEDIN_CONNECTION_MAX_CHARACTERS,
   type LinkedinConnectionDraft,
 } from "../domain/outreach-draft.types";
 
 export class LinkedinConnectionValidationError extends Error {
-  constructor() {
+  public readonly code: LinkedinConnectionValidationCode;
+  public readonly safeMetadata: LinkedinConnectionValidationMetadata;
+
+  constructor(
+    _code: LinkedinConnectionValidationCode,
+    _safeMetadata: LinkedinConnectionValidationMetadata = {},
+  ) {
     super("Generated LinkedIn connection note could not be verified");
     this.name = "LinkedinConnectionValidationError";
+    this.code = _code;
+    this.safeMetadata = _safeMetadata;
   }
 }
+
+export interface LinkedinConnectionValidationMetadata {
+  actualCharacterCount?: number;
+  declaredCharacterCount?: number;
+  maximumCharacterCount?: number;
+}
+
+export type LinkedinConnectionValidationCode =
+  | "CONNECTION_OVER_LIMIT"
+  | "CONNECTION_UNKNOWN_SOURCE"
+  | "CONNECTION_SOURCE_OVERLAP_FAILED"
+  | "CONNECTION_EMPTY_SECTION"
+  | "CONNECTION_CTA_INVALIDATED"
+  | "CONNECTION_DECLARED_COUNT_MISMATCH"
+  | "CONNECTION_TOOL_OUTPUT_INVALID";
 
 const STOP_WORDS = new Set([
   "a",
@@ -59,7 +83,7 @@ function validateRelevance(
     byId.get(id),
   );
   if (supporting.some((source) => !source)) {
-    throw new LinkedinConnectionValidationError();
+    throw new LinkedinConnectionValidationError("CONNECTION_UNKNOWN_SOURCE");
   }
   const sourceTokens = new Set(
     supporting.flatMap((source) => tokens(source!.content)),
@@ -69,13 +93,17 @@ function validateRelevance(
     claimTokens.length > 0 &&
     !claimTokens.some((token) => sourceTokens.has(token))
   ) {
-    throw new LinkedinConnectionValidationError();
+    throw new LinkedinConnectionValidationError(
+      "CONNECTION_SOURCE_OVERLAP_FAILED",
+    );
   }
 }
 
 /** Validates provenance and deterministically composes a complete note. */
 export function renderLinkedinConnection(input: {
   draft: LinkedinConnectionDraft;
+  /** Raw model composition used only to verify the model-declared count. */
+  declaredCountDraft?: LinkedinConnectionDraft;
   sources: CandidateGroundingSource[];
 }): { body: string; characterCount: number; hasCandidateRelevance: boolean } {
   validateRelevance(input.draft, input.sources);
@@ -85,11 +113,40 @@ export function renderLinkedinConnection(input: {
     : "";
   const cta = normalize(input.draft.cta);
   if (!observation || !cta || (input.draft.candidate_relevance && !relevance)) {
-    throw new LinkedinConnectionValidationError();
+    throw new LinkedinConnectionValidationError("CONNECTION_EMPTY_SECTION");
   }
   const body = [observation, relevance, cta].filter(Boolean).join(" ");
-  if (body.length > LINKEDIN_CONNECTION_MAX_CHARACTERS || !body.endsWith(cta)) {
-    throw new LinkedinConnectionValidationError();
+  if (body.length > LINKEDIN_CONNECTION_MAX_CHARACTERS) {
+    throw new LinkedinConnectionValidationError("CONNECTION_OVER_LIMIT", {
+      actualCharacterCount: body.length,
+      maximumCharacterCount: LINKEDIN_CONNECTION_MAX_CHARACTERS,
+    });
+  }
+  if (!body.endsWith(cta)) {
+    throw new LinkedinConnectionValidationError("CONNECTION_CTA_INVALIDATED");
+  }
+  const declaredCountDraft = input.declaredCountDraft ?? input.draft;
+  const declaredCount = compareDeclaredOutputCount({
+    content: [
+      normalize(declaredCountDraft.target_observation),
+      declaredCountDraft.candidate_relevance
+        ? normalize(declaredCountDraft.candidate_relevance.text)
+        : "",
+      normalize(declaredCountDraft.cta),
+    ]
+      .filter(Boolean)
+      .join(" "),
+    unit: "characters",
+    declaredCount: declaredCountDraft.character_count,
+  });
+  if (!declaredCount.matches) {
+    throw new LinkedinConnectionValidationError(
+      "CONNECTION_DECLARED_COUNT_MISMATCH",
+      {
+        actualCharacterCount: declaredCount.actualCount,
+        declaredCharacterCount: declaredCountDraft.character_count,
+      },
+    );
   }
   return {
     body,

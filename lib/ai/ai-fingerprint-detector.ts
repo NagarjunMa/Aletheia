@@ -46,13 +46,6 @@ export const AI_FINGERPRINT_PATTERNS: AIFingerprintPattern[] = [
     description: "Common AI opening disclaimer",
   },
   {
-    pattern: /would you be (open to|interested in)/gi,
-    replacement: (match) =>
-      match.includes("open to") ? "interested in" : "want to",
-    name: "ai_politeness",
-    description: "Overly formal AI politeness pattern",
-  },
-  {
     pattern: /appreciate it either way/gi,
     replacement: "thanks!",
     name: "ai_courtesy_closing",

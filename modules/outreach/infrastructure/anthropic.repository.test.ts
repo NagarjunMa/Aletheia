@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { EMAIL_MODES } from "@/lib/ai/email-formatter";
+import { resolveOutputConstraint } from "@/lib/ai/output-constraints";
 import {
+  buildColdEmailDraftTool,
+  buildEmailDraftTool,
+  buildLinkedinConnectionDraftTool,
   coldEmailDraftTool,
   getColdEmailDraftToolInput,
   getLinkedinConnectionDraftToolInput,
@@ -54,6 +59,7 @@ describe("LinkedIn connection Anthropic tool", () => {
       source_ids: ["evidence:1"],
     },
     cta: "Open to a brief chat?",
+    character_count: 118,
   };
 
   it("forces the bounded provenance-aware connection contract", () => {
@@ -74,6 +80,61 @@ describe("LinkedIn connection Anthropic tool", () => {
       getLinkedinConnectionDraftToolInput(connectionMessage(connection)),
     ).toEqual(connection);
   });
+
+  it("builds LinkedIn schema maxima from the authoritative component budgets", () => {
+    const tool = buildLinkedinConnectionDraftTool();
+    expect(tool.input_schema.properties.target_observation.maxLength).toBe(96);
+    expect(
+      tool.input_schema.properties.candidate_relevance.anyOf[1].properties.text
+        .maxLength,
+    ).toBe(112);
+    expect(tool.input_schema.properties.cta.maxLength).toBe(72);
+    expect(tool.input_schema.properties.character_count.maximum).toBe(300);
+    expect(tool.input_schema.required).toContain("character_count");
+  });
+
+  it("builds the email tool from the requested mode policy", () => {
+    const followUp = buildEmailDraftTool("linkedin_inmail", "follow_up");
+    const initial = buildEmailDraftTool("linkedin_inmail", "initial_outreach");
+    expect(followUp.input_schema.properties.word_count).toMatchObject({
+      minimum: 30,
+      maximum: 90,
+    });
+    expect(initial.input_schema.properties.word_count).toMatchObject({
+      minimum: 80,
+      maximum: 120,
+    });
+  });
+
+  it.each(EMAIL_MODES)(
+    "publishes the %s InMail word policy in its completed-response schema",
+    (emailMode) => {
+      const constraint = resolveOutputConstraint({
+        category: "linkedin_inmail",
+        emailMode,
+      });
+      expect(
+        buildEmailDraftTool("linkedin_inmail", emailMode).input_schema
+          .properties.word_count,
+      ).toMatchObject({
+        minimum: constraint.minimum,
+        maximum: constraint.maximum,
+      });
+    },
+  );
+
+  it.each(EMAIL_MODES)(
+    "publishes the %s cold-email word policy in the composition tool",
+    (emailMode) => {
+      const constraint = resolveOutputConstraint({
+        category: "cold_email",
+        emailMode,
+      });
+      expect(buildColdEmailDraftTool(emailMode).description).toContain(
+        `${constraint.minimum}-${constraint.maximum} words`,
+      );
+    },
+  );
 
   it("allows only an explicit null relevance for target-only fallback", () => {
     const connectionMessage = (input: unknown) =>
@@ -99,5 +160,37 @@ describe("LinkedIn connection Anthropic tool", () => {
         }),
       ),
     ).toThrow();
+  });
+
+  it("rejects over-budget components and out-of-range declared counts", () => {
+    const connectionMessage = (input: unknown) =>
+      ({
+        content: [
+          {
+            type: "tool_use",
+            name: "return_linkedin_connection_composition",
+            input,
+          },
+        ],
+      }) as never;
+
+    expect(() =>
+      getLinkedinConnectionDraftToolInput(
+        connectionMessage({
+          ...connection,
+          target_observation: "x".repeat(97),
+        }),
+      ),
+    ).toThrow();
+    for (const characterCount of [0, 301]) {
+      expect(() =>
+        getLinkedinConnectionDraftToolInput(
+          connectionMessage({
+            ...connection,
+            character_count: characterCount,
+          }),
+        ),
+      ).toThrow();
+    }
   });
 });

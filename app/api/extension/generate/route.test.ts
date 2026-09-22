@@ -20,6 +20,7 @@ import {
 import { POST } from "./route";
 import { makeRequest } from "@/__tests__/helpers/request";
 import { getCorsHeaders } from "@/lib/cors";
+import { EMAIL_MODES } from "@/lib/ai/email-formatter";
 import { OutreachGroundingUnavailableError } from "@/modules/outreach/domain/outreach-grounding.types";
 import * as loggerModule from "@/lib/logger";
 
@@ -262,6 +263,7 @@ const mockFrom = vi.hoisted(() =>
   })),
 );
 const mockAnthropicCreate = vi.hoisted(() => vi.fn());
+const mockSanitizeForLinkedIn = vi.hoisted(() => vi.fn());
 const mockGenerateYcApplication = vi.hoisted(() => vi.fn());
 const mockPrepareOutreachGroundingContext = vi.hoisted(() => vi.fn());
 
@@ -320,11 +322,7 @@ vi.mock("@/lib/cors", async (importOriginal) => {
 });
 
 vi.mock("@/lib/ai/sanitizer", () => ({
-  sanitizeForLinkedIn: vi.fn().mockImplementation(async (content) => ({
-    success: true,
-    sanitizedContent: content,
-    isAIGenerated: false,
-  })),
+  sanitizeForLinkedIn: mockSanitizeForLinkedIn,
   stripSurrogates: vi.fn((str) => str),
   stripModelPreambleAndSuffix: vi.fn((str) => str),
 }));
@@ -341,6 +339,11 @@ beforeEach(() => {
   mockMaybeSingle.mockReset();
   mockRpc.mockReset();
   mockAnthropicCreate.mockReset();
+  mockSanitizeForLinkedIn.mockReset().mockImplementation(async (content) => ({
+    success: true,
+    sanitizedContent: content,
+    isAIGenerated: false,
+  }));
   mockGenerateYcApplication.mockReset();
   mockPrepareOutreachGroundingContext.mockReset();
   vi.mocked(getCorsHeaders).mockClear();
@@ -412,8 +415,7 @@ function coldEmailCompositionBlock(overrides: Record<string, unknown> = {}) {
       subject_line: "Mock Subject",
       greeting: "Megan",
       target_opening: "Your product work stood out.",
-      candidate_positioning:
-        "I build practical software for engineering teams.",
+      candidate_positioning: Array.from({ length: 120 }, () => "x").join(" "),
       proof_points: [],
       value_statement: "That background maps well to the role.",
       cta: "Would you be open to a brief chat?",
@@ -423,15 +425,32 @@ function coldEmailCompositionBlock(overrides: Record<string, unknown> = {}) {
 }
 
 function connectionCompositionBlock(overrides: Record<string, unknown> = {}) {
+  const input = {
+    target_observation: "Your engineering work stood out.",
+    candidate_relevance: null as null | {
+      text: string;
+      source_ids: string[];
+    },
+    cta: "Open to a brief chat?",
+    ...overrides,
+  };
+  const rendered = [
+    input.target_observation,
+    input.candidate_relevance?.text,
+    input.cta,
+  ]
+    .filter(Boolean)
+    .join(" ");
   return {
     type: "tool_use",
     id: "toolu_linkedin_connection",
     name: "return_linkedin_connection_composition",
     input: {
-      target_observation: "Your engineering work stood out.",
-      candidate_relevance: null,
-      cta: "Open to a brief chat?",
-      ...overrides,
+      ...input,
+      character_count:
+        typeof overrides.character_count === "number"
+          ? overrides.character_count
+          : rendered.length,
     },
   };
 }
@@ -823,6 +842,129 @@ describe("POST /api/extension/generate", () => {
     expect(body.code).toBe("PARSE_FAILED");
   });
 
+  it("rejects a connection note when component sanitation expands it past 300 characters", async () => {
+    mockSanitizeForLinkedIn.mockImplementation(async (content: string) => ({
+      success: true,
+      sanitizedContent: content.startsWith("Your engineering")
+        ? "x".repeat(290)
+        : content,
+      isAIGenerated: false,
+    }));
+
+    const res = await POST(
+      makeRequest({
+        method: "POST",
+        headers: { authorization: "Bearer test" },
+        body: validPayload,
+      }),
+    );
+
+    expect(res.status).toBe(502);
+    await expect(res.json()).resolves.toMatchObject({ code: "PARSE_FAILED" });
+    expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a model-declared LinkedIn count mismatch using the server count", async () => {
+    mockAnthropicCreate.mockResolvedValueOnce({
+      content: [connectionCompositionBlock({ character_count: 1 })],
+      usage: { input_tokens: 10, output_tokens: 20 },
+    });
+
+    const res = await POST(
+      makeRequest({
+        method: "POST",
+        headers: { authorization: "Bearer test" },
+        body: validPayload,
+      }),
+    );
+
+    expect(res.status).toBe(502);
+    await expect(res.json()).resolves.toMatchObject({ code: "PARSE_FAILED" });
+    expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it("accepts a correct raw LinkedIn count when sanitation expands punctuation", async () => {
+    const targetObservation =
+      "Your engineering work — especially reliability — stood out.";
+    mockAnthropicCreate.mockResolvedValueOnce({
+      content: [
+        connectionCompositionBlock({ target_observation: targetObservation }),
+      ],
+      usage: { input_tokens: 10, output_tokens: 20 },
+    });
+    mockSanitizeForLinkedIn.mockImplementation(async (content: string) => ({
+      success: true,
+      sanitizedContent: content.replaceAll("—", " - "),
+      isAIGenerated: false,
+    }));
+
+    const res = await POST(
+      makeRequest({
+        method: "POST",
+        headers: { authorization: "Bearer test" },
+        body: validPayload,
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      success: true,
+      character_count: expect.any(Number),
+    });
+    expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it("logs a privacy-safe CTA validation code when component sanitation fails", async () => {
+    const warn = vi.fn();
+    const logger = {
+      info: vi.fn(),
+      debug: vi.fn(),
+      warn,
+      error: vi.fn(),
+      child: vi.fn(),
+    };
+    const spy = vi
+      .spyOn(loggerModule, "createRequestLogger")
+      .mockReturnValue(logger);
+    mockSanitizeForLinkedIn
+      .mockResolvedValueOnce({
+        success: true,
+        sanitizedContent: "Your engineering work stood out.",
+        isAIGenerated: false,
+      })
+      .mockResolvedValueOnce({
+        success: false,
+        sanitizedContent: "",
+        isAIGenerated: false,
+      });
+
+    try {
+      const res = await POST(
+        makeRequest({
+          method: "POST",
+          headers: { authorization: "Bearer test" },
+          body: validPayload,
+        }),
+      );
+
+      expect(res.status).toBe(502);
+      const validationLog = warn.mock.calls.find(
+        ([fields]) =>
+          fields?.errorCode === "CONNECTION_CTA_INVALIDATED" &&
+          fields?.category === "linkedin_connection",
+      );
+      expect(validationLog).toBeDefined();
+      expect(JSON.stringify(validationLog)).not.toContain(
+        "Open to a brief chat?",
+      );
+      expect(JSON.stringify(validationLog)).not.toContain(
+        validPayload.profileMarkdown,
+      );
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it("returns only a provenance-validated structured LinkedIn connection note", async () => {
     mockPrepareOutreachGroundingContext.mockResolvedValueOnce({
       identity: { fullName: "Candidate Name", linkedinUrl: "" },
@@ -869,6 +1011,19 @@ describe("POST /api/extension/generate", () => {
     expect(body.body).toContain("LLM-assisted review workflow");
     expect(body.body).toMatch(/Open to a brief chat\?$/);
     expect(body.evalMetadata.hasCandidateRelevance).toBe(true);
+    expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
+    expect(mockSanitizeForLinkedIn).toHaveBeenNthCalledWith(
+      1,
+      "Your engineering work stood out.",
+    );
+    expect(mockSanitizeForLinkedIn).toHaveBeenNthCalledWith(
+      2,
+      "I built an LLM-assisted review workflow for engineers.",
+    );
+    expect(mockSanitizeForLinkedIn).toHaveBeenNthCalledWith(
+      3,
+      "Open to a brief chat?",
+    );
     const callArgs = mockAnthropicCreate.mock.calls[0]?.[0];
     expect(callArgs.tool_choice).toEqual({
       type: "tool",
@@ -941,12 +1096,13 @@ describe("POST /api/extension/generate", () => {
 
   // T4 — linkedin_inmail happy path
   it("returns 200 with subject_line + body + word_count for linkedin_inmail", async () => {
+    const inmailBody = Array.from({ length: 120 }, () => "signal").join(" ");
     mockAnthropicCreate.mockResolvedValueOnce({
       content: [
         emailDraftToolBlock({
           subject_line: "Quick question about sparse attention",
-          body: "Hi Priya — read your NeurIPS talk and the edge-deploy point matched what we saw in fraud-detection inference.",
-          word_count: 24,
+          body: inmailBody,
+          word_count: 120,
         }),
       ],
       usage: { input_tokens: 100, output_tokens: 80 },
@@ -968,6 +1124,49 @@ describe("POST /api/extension/generate", () => {
     expect(body.body).toBeTruthy();
     expect(body.word_count).toBeGreaterThan(0);
   });
+
+  it.each(
+    EMAIL_MODES.flatMap((emailMode) =>
+      (["cold_email", "linkedin_inmail"] as const).map((category) => ({
+        category,
+        emailMode,
+      })),
+    ),
+  )(
+    "rejects a final $category body below the $emailMode minimum",
+    async ({ category, emailMode }) => {
+      mockAnthropicCreate.mockResolvedValueOnce({
+        content: [
+          category === "cold_email"
+            ? coldEmailCompositionBlock({
+                greeting: "M",
+                target_opening: "Hello",
+                candidate_positioning: "Builder",
+                value_statement: "Relevant",
+                cta: "Chat?",
+              })
+            : emailDraftToolBlock({
+                subject_line: "Hello",
+                body: "Hello",
+                word_count: 1,
+              }),
+        ],
+        usage: { input_tokens: 100, output_tokens: 20 },
+      });
+
+      const res = await POST(
+        makeRequest({
+          method: "POST",
+          headers: { authorization: "Bearer test" },
+          body: { ...validPayload, category, emailMode },
+        }),
+      );
+
+      expect(res.status).toBe(502);
+      await expect(res.json()).resolves.toMatchObject({ code: "PARSE_FAILED" });
+      expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
+    },
+  );
 
   // T5 — 504 timeout via APIConnectionTimeoutError
   it("returns 504 when Anthropic raises APIConnectionTimeoutError", async () => {

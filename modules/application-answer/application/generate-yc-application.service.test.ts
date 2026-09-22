@@ -585,6 +585,7 @@ describe("ALE-37 batch orchestration", () => {
     answers: ids.map((questionId) => ({
       questionId,
       body: answer,
+      word_count: 50,
       claims: [
         {
           text: answer,

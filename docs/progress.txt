@@ -1364,3 +1364,47 @@ Follow-up:
 
 - Implement a real CPL scoring service before treating CPL as a production metric.
 - Add tests around popup/settings dashboard navigation if the extension test harness is expanded for DOM click flows.
+
+### 2026-09-21
+
+Branch: `fix/ale-42-channel-output-constraints`
+
+Area: ALE-42 channel-specific generation constraints and LinkedIn CTA preservation
+
+Problem: The LinkedIn connection tool permitted independently valid sections whose combined length could exceed the final 300-character product limit. A general AI-fingerprint rewrite also mutated genuine “Would you be open to…” CTAs after rendering, causing avoidable refunded 502 responses.
+
+Decision: Introduce a channel-aware constraint resolver, build Anthropic tools from the requested category and email mode, constrain LinkedIn component budgets to a worst-case 282-character composition, remove the CTA rewrite, sanitize LinkedIn components before deterministic rendering, recompute final counts server-side, and emit privacy-safe typed validation codes. Preserve one model request, fail-closed provenance, public API compatibility, and refund behavior.
+
+Files changed:
+
+- `lib/ai/output-constraints.ts` and tests
+- outreach Anthropic tool, structured draft, renderer, and generation service modules
+- application-answer Anthropic tool and shared schema constants
+- LinkedIn prompt, fingerprint, sanitizer, route, billing, and regression tests
+
+Tests/checks:
+
+- Focused ALE-42 suite: 10 files, 287 tests passed on Node 24.16.0.
+- Full unit suite: 91 files, 1,094 tests passed.
+- Guardrails: 2 files, 15 tests passed.
+- Type check passed.
+- Production build passed.
+- Lint passed with one unrelated existing warning in `lib/auth/refund-admin.ts`.
+- Changed-file Prettier and `git diff --check` passed.
+
+Result: The implementation and Critical-tier final pre-merge audit are complete locally. Schema-valid LinkedIn compositions fit the channel envelope, final server counts remain authoritative, valid CTAs are preserved, malformed/unsupported output remains fail-closed and refunded, and valid connection requests retain exactly one Anthropic call.
+
+Final audit:
+
+- The first independent review found two material issues: sanitizer expansion could cause a false LinkedIn declared-count mismatch, and final cold-email/InMail minimums were not server-enforced.
+- Both issues were fixed with regressions. LinkedIn declared metadata is checked against the raw normalized composition while the sanitized final body remains authoritative; all six email modes now enforce final minimum/maximum word limits and refund unusable output.
+- Independent return review approved corrected snapshot `1736659d44c8ef956b92d8661273bec3c30007790c81a9264e9c731304be2a90` with no unresolved material findings.
+- Full checks passed: lint with one unrelated existing warning, type-check, 91 files/1,094 tests, 2 files/15 guardrails, production build, changed-file Prettier, `git diff --check`, 20 files/207 extension tests, and the extension version gate.
+- Browser E2E was not run because no UI/browser workflow changed. A live paid Anthropic request was not run; deterministic tool, route, provenance, billing/refund, and one-call tests cover the code contract.
+- Rollout: merge and deploy the backend normally, then monitor output-validation and refund rates. No database migration or extension release is required.
+- Rollback: revert the ALE-42 merge and redeploy the prior backend build.
+- Remaining non-blocking risk: provider-format variance not exercised through a paid live request; strict schemas, server recomputation, fail-closed handling, refunds, and monitoring bound this risk.
+
+Follow-up:
+
+- Commit, push, and open the pull request when requested.
