@@ -3,8 +3,14 @@ import { observeAnthropicAttempts } from "@/lib/provider-attempt-timing";
 import { z } from "zod";
 import { createLogger, startTimedStage, type SafeLogger } from "@/lib/logger";
 import {
+  resolveOutputConstraint,
+  type OutputConstraint,
+} from "@/lib/ai/output-constraints";
+import type { EmailMode } from "@/lib/ai/email-formatter";
+import {
   coldEmailDraftSchema,
   type ColdEmailDraft,
+  LINKEDIN_CONNECTION_COMPONENT_MAX_CHARACTERS,
   linkedinConnectionDraftSchema,
   type LinkedinConnectionDraft,
 } from "../domain/outreach-draft.types";
@@ -21,118 +27,171 @@ const COLD_EMAIL_DRAFT_TOOL_NAME = "return_cold_email_composition";
 const LINKEDIN_CONNECTION_DRAFT_TOOL_NAME =
   "return_linkedin_connection_composition";
 
-export const emailDraftTool = {
-  name: EMAIL_DRAFT_TOOL_NAME,
-  description:
-    "Return the final outreach draft as structured fields. Use the body field for the complete message text with paragraph breaks preserved.",
-  input_schema: {
-    type: "object",
-    additionalProperties: false,
-    properties: {
-      subject_line: {
-        type: "string",
-        description:
-          "The final subject line. Must follow the approved subject templates from the system instructions.",
-        minLength: 1,
-        maxLength: 160,
-      },
-      body: {
-        type: "string",
-        description:
-          "The final email or InMail body. Preserve intentional paragraph breaks and proof-point lines.",
-        minLength: 1,
-        maxLength: 5000,
-      },
-      word_count: {
-        type: "integer",
-        description:
-          "Approximate word count for the body. The server recalculates the final count after sanitization.",
-        minimum: 1,
-        maximum: 250,
-      },
-    },
-    required: ["subject_line", "body", "word_count"],
-  },
-} as const;
+function describeConstraint(constraint: OutputConstraint): string {
+  return `${constraint.minimum}-${constraint.maximum} ${constraint.unit}`;
+}
 
-export const coldEmailDraftTool = {
-  name: COLD_EMAIL_DRAFT_TOOL_NAME,
-  description:
-    "Return semantic cold-email sections and source IDs for every candidate proof. Do not provide a final signature.",
-  input_schema: {
-    type: "object",
-    additionalProperties: false,
-    properties: {
-      subject_line: { type: "string", minLength: 1, maxLength: 160 },
-      greeting: { type: "string", minLength: 1, maxLength: 80 },
-      target_opening: { type: "string", minLength: 1, maxLength: 500 },
-      candidate_positioning: { type: "string", minLength: 1, maxLength: 500 },
-      proof_points: {
-        type: "array",
-        maxItems: 2,
-        items: {
-          type: "object",
-          additionalProperties: false,
-          properties: {
-            text: { type: "string", minLength: 1, maxLength: 420 },
-            source_ids: {
-              type: "array",
-              minItems: 1,
-              maxItems: 3,
-              items: { type: "string", minLength: 1, maxLength: 120 },
-            },
-          },
-          required: ["text", "source_ids"],
+export function buildEmailDraftTool(
+  category: "linkedin_inmail",
+  emailMode: EmailMode,
+) {
+  const constraint = resolveOutputConstraint({ category, emailMode });
+  return {
+    name: EMAIL_DRAFT_TOOL_NAME,
+    description: `Return the final ${category} draft as structured fields. The body must contain ${describeConstraint(constraint)} for ${emailMode}. Preserve intentional paragraph breaks.`,
+    input_schema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        subject_line: {
+          type: "string",
+          description:
+            "The final subject line. Must follow the approved subject templates from the system instructions.",
+          minLength: 1,
+          maxLength: 160,
+        },
+        body: {
+          type: "string",
+          description:
+            "The final email or InMail body. Preserve intentional paragraph breaks and proof-point lines.",
+          minLength: 1,
+          maxLength: 5000,
+        },
+        word_count: {
+          type: "integer",
+          description:
+            "Declared body word count. The server recalculates the final count after sanitization and remains authoritative.",
+          minimum: constraint.minimum,
+          maximum: constraint.maximum,
         },
       },
-      value_statement: { type: "string", minLength: 1, maxLength: 500 },
-      cta: { type: "string", minLength: 1, maxLength: 300 },
+      required: ["subject_line", "body", "word_count"],
     },
-    required: [
-      "subject_line",
-      "greeting",
-      "target_opening",
-      "candidate_positioning",
-      "proof_points",
-      "value_statement",
-      "cta",
-    ],
-  },
-} as const;
+  } as const;
+}
 
-export const linkedinConnectionDraftTool = {
-  name: LINKEDIN_CONNECTION_DRAFT_TOOL_NAME,
-  description:
-    "Return a complete LinkedIn connection-note composition. Use candidate_relevance only when it is directly supported by one selected candidate source; otherwise return null.",
-  input_schema: {
-    type: "object",
-    additionalProperties: false,
-    properties: {
-      target_observation: { type: "string", minLength: 1, maxLength: 220 },
-      candidate_relevance: {
-        anyOf: [
-          { type: "null" },
-          {
+export const emailDraftTool = buildEmailDraftTool(
+  "linkedin_inmail",
+  "initial_outreach",
+);
+
+export function buildColdEmailDraftTool(emailMode: EmailMode) {
+  const constraint = resolveOutputConstraint({
+    category: "cold_email",
+    emailMode,
+  });
+  return {
+    name: COLD_EMAIL_DRAFT_TOOL_NAME,
+    description: `Return semantic cold-email sections and source IDs for every candidate proof. The server-rendered final body uses a ${describeConstraint(constraint)} limit for ${emailMode}. Do not provide a final signature.`,
+    input_schema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        subject_line: { type: "string", minLength: 1, maxLength: 160 },
+        greeting: { type: "string", minLength: 1, maxLength: 80 },
+        target_opening: { type: "string", minLength: 1, maxLength: 500 },
+        candidate_positioning: { type: "string", minLength: 1, maxLength: 500 },
+        proof_points: {
+          type: "array",
+          maxItems: 2,
+          items: {
             type: "object",
             additionalProperties: false,
             properties: {
-              text: { type: "string", minLength: 1, maxLength: 220 },
+              text: { type: "string", minLength: 1, maxLength: 420 },
               source_ids: {
                 type: "array",
                 minItems: 1,
-                maxItems: 1,
+                maxItems: 3,
                 items: { type: "string", minLength: 1, maxLength: 120 },
               },
             },
             required: ["text", "source_ids"],
           },
-        ],
+        },
+        value_statement: { type: "string", minLength: 1, maxLength: 500 },
+        cta: { type: "string", minLength: 1, maxLength: 300 },
       },
-      cta: { type: "string", minLength: 1, maxLength: 140 },
+      required: [
+        "subject_line",
+        "greeting",
+        "target_opening",
+        "candidate_positioning",
+        "proof_points",
+        "value_statement",
+        "cta",
+      ],
     },
-    required: ["target_observation", "candidate_relevance", "cta"],
-  },
-} as const;
+  } as const;
+}
+
+export const coldEmailDraftTool = buildColdEmailDraftTool("initial_outreach");
+
+export function buildLinkedinConnectionDraftTool() {
+  const constraint = resolveOutputConstraint({
+    category: "linkedin_connection",
+  });
+  return {
+    name: LINKEDIN_CONNECTION_DRAFT_TOOL_NAME,
+    description: `Return a LinkedIn connection-note composition that renders to at most ${constraint.maximum} ${constraint.unit}. Use candidate_relevance only when directly supported by one selected candidate source; otherwise return null.`,
+    input_schema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        target_observation: {
+          type: "string",
+          minLength: 1,
+          maxLength:
+            LINKEDIN_CONNECTION_COMPONENT_MAX_CHARACTERS.targetObservation,
+        },
+        candidate_relevance: {
+          anyOf: [
+            { type: "null" },
+            {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                text: {
+                  type: "string",
+                  minLength: 1,
+                  maxLength:
+                    LINKEDIN_CONNECTION_COMPONENT_MAX_CHARACTERS.candidateRelevance,
+                },
+                source_ids: {
+                  type: "array",
+                  minItems: 1,
+                  maxItems: 1,
+                  items: { type: "string", minLength: 1, maxLength: 120 },
+                },
+              },
+              required: ["text", "source_ids"],
+            },
+          ],
+        },
+        cta: {
+          type: "string",
+          minLength: 1,
+          maxLength: LINKEDIN_CONNECTION_COMPONENT_MAX_CHARACTERS.cta,
+        },
+        character_count: {
+          type: "integer",
+          description:
+            "Declared character count for the rendered note, including spaces between sections. The server recalculates and validates it.",
+          minimum: constraint.minimum,
+          maximum: constraint.maximum,
+        },
+      },
+      required: [
+        "target_observation",
+        "candidate_relevance",
+        "cta",
+        "character_count",
+      ],
+    },
+  } as const;
+}
+
+export const linkedinConnectionDraftTool = buildLinkedinConnectionDraftTool();
 
 const emailDraftToolInputSchema = z
   .object({
@@ -155,27 +214,21 @@ function getAnthropic(logger: SafeLogger) {
 export async function createOutreachDraftMessage(input: {
   systemPrompt: string;
   userPrompt: string;
-  useEmailDraftTool: boolean;
-  useStructuredColdEmailTool?: boolean;
-  useStructuredLinkedinConnectionTool?: boolean;
+  category: "linkedin_connection" | "cold_email" | "linkedin_inmail";
+  emailMode: EmailMode;
   logger?: SafeLogger;
 }) {
   const stageLogger = input.logger ?? log;
   const complete = startTimedStage(stageLogger, "model.outreach_generate", {
     model: CLAUDE_MODEL,
   });
-  const tool = input.useStructuredColdEmailTool
-    ? coldEmailDraftTool
-    : input.useStructuredLinkedinConnectionTool
-      ? linkedinConnectionDraftTool
-      : emailDraftTool;
-  const toolName = input.useStructuredColdEmailTool
-    ? COLD_EMAIL_DRAFT_TOOL_NAME
-    : input.useStructuredLinkedinConnectionTool
-      ? LINKEDIN_CONNECTION_DRAFT_TOOL_NAME
-      : EMAIL_DRAFT_TOOL_NAME;
-  const requiresTool =
-    input.useEmailDraftTool || input.useStructuredLinkedinConnectionTool;
+  const tool =
+    input.category === "cold_email"
+      ? buildColdEmailDraftTool(input.emailMode)
+      : input.category === "linkedin_connection"
+        ? buildLinkedinConnectionDraftTool()
+        : buildEmailDraftTool("linkedin_inmail", input.emailMode);
+  const toolName = tool.name;
   try {
     const client = getAnthropic(stageLogger);
     const response = await client.messages.create(
@@ -185,15 +238,11 @@ export async function createOutreachDraftMessage(input: {
         temperature: OUTREACH_GENERATION_SETTINGS.temperature,
         system: input.systemPrompt,
         messages: [{ role: "user", content: input.userPrompt }],
-        ...(requiresTool
-          ? {
-              tools: [tool],
-              tool_choice: {
-                type: "tool" as const,
-                name: toolName,
-              },
-            }
-          : {}),
+        tools: [tool],
+        tool_choice: {
+          type: "tool" as const,
+          name: toolName,
+        },
       },
       { timeout: 30_000 },
     );

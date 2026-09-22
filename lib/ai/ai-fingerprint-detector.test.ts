@@ -48,10 +48,18 @@ describe("detectAIFingerprints", () => {
     expect(result.sanitizedContent).toBe(text);
   });
 
-  it('detects "would you be open to" pattern (ai_politeness)', () => {
+  it('preserves genuine "would you be open to" CTA language', () => {
     const text = "Would you be open to a quick chat about this?";
-    const result = detectAIFingerprints(text, "general");
-    expect(result.detectedPatterns).toContain("ai_politeness");
+    const result = detectAIFingerprints(text, "linkedin");
+    expect(result.detectedPatterns).not.toContain("ai_politeness");
+    expect(result.sanitizedContent).toBe(text);
+  });
+
+  it('preserves genuine "would you be interested in" CTA language', () => {
+    const text = "Would you be interested in comparing notes?";
+    const result = detectAIFingerprints(text, "linkedin");
+    expect(result.detectedPatterns).not.toContain("ai_politeness");
+    expect(result.sanitizedContent).toBe(text);
   });
 
   it('detects "at your earliest convenience" pattern (formal_convenience)', () => {

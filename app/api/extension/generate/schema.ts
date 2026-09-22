@@ -1,5 +1,9 @@
 import { z } from "zod";
 import { EMAIL_MODES } from "@/lib/ai/email-formatter";
+import {
+  APPLICATION_ANSWER_MAX_WORDS,
+  APPLICATION_ANSWER_MIN_WORDS,
+} from "@/lib/ai/output-constraints";
 
 const legacyGenerateRequestFields = {
   profileMarkdown: z.string().trim().min(10).max(10000),
@@ -38,8 +42,8 @@ export const YC_APPLICATION_JOB_DESCRIPTION_MIN_CHARS = 80;
 export const YC_APPLICATION_JOB_DESCRIPTION_MAX_CHARS = 20_000;
 export const YC_APPLICATION_QUESTION_MIN_CHARS = 10;
 export const YC_APPLICATION_QUESTION_MAX_CHARS = 1_000;
-export const YC_APPLICATION_MIN_WORDS = 50;
-export const YC_APPLICATION_MAX_WORDS = 150;
+export const YC_APPLICATION_MIN_WORDS = APPLICATION_ANSWER_MIN_WORDS;
+export const YC_APPLICATION_MAX_WORDS = APPLICATION_ANSWER_MAX_WORDS;
 
 function normalizeYcInput(value: string): string {
   return value.normalize("NFKC").replace(/\r\n?/gu, "\n").trim();

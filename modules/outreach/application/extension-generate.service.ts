@@ -22,8 +22,12 @@ import { scanForInjection } from "@/lib/ai/prompts/injection-heuristic";
 import { deriveSafeCandidateSummary } from "@/lib/ai/candidate-summary";
 import {
   formatGeneratedEmailBody,
-  getEmailWordLimit,
+  type EmailMode,
 } from "@/lib/ai/email-formatter";
+import {
+  countOutputUnits,
+  resolveOutputConstraint,
+} from "@/lib/ai/output-constraints";
 import {
   CREDIT_BILLING_ENABLED,
   grantTrialCreditsOnce,
@@ -88,10 +92,55 @@ import {
 import { generateYcApplication } from "@/modules/application-answer/application/generate-yc-application.service";
 import { prepareOutreachGroundingContext } from "./prepare-outreach-grounding-context";
 import { renderColdEmail } from "./render-cold-email";
-import { renderLinkedinConnection } from "./render-linkedin-connection";
+import {
+  LinkedinConnectionValidationError,
+  renderLinkedinConnection,
+  type LinkedinConnectionValidationCode,
+} from "./render-linkedin-connection";
 import { validateOutreachDraft } from "./validate-outreach-draft";
 
 let hasHandledGeneration = false;
+
+class EmailOutputConstraintError extends Error {
+  readonly actualWordCount: number;
+  readonly minimumWordCount: number;
+  readonly maximumWordCount: number;
+
+  constructor(
+    actualWordCount: number,
+    minimumWordCount: number,
+    maximumWordCount: number,
+  ) {
+    super("Generated email did not satisfy its output constraint");
+    this.name = "EmailOutputConstraintError";
+    this.actualWordCount = actualWordCount;
+    this.minimumWordCount = minimumWordCount;
+    this.maximumWordCount = maximumWordCount;
+  }
+}
+
+function validateFinalEmailWordCount(input: {
+  body: string;
+  category: "cold_email" | "linkedin_inmail";
+  emailMode: EmailMode;
+}): number {
+  const constraint = resolveOutputConstraint({
+    category: input.category,
+    emailMode: input.emailMode,
+  });
+  const actualWordCount = countOutputUnits(input.body, constraint.unit);
+  if (
+    actualWordCount < constraint.minimum ||
+    actualWordCount > constraint.maximum
+  ) {
+    throw new EmailOutputConstraintError(
+      actualWordCount,
+      constraint.minimum,
+      constraint.maximum,
+    );
+  }
+  return actualWordCount;
+}
 
 export async function POST(request: NextRequest) {
   return withRequestLifecycle("generate-route", request, async (log) => {
@@ -535,18 +584,14 @@ async function handlePost(
       promptInput.styleProfile = styleProfile;
     }
     const userPrompt = buildPrompt(promptInput);
-    const shouldUseEmailDraftTool =
-      category === "cold_email" || category === "linkedin_inmail";
-
     timing.metrics({ inputChars: systemPrompt.length + userPrompt.length });
     timing.enter("model");
     const startTime = Date.now();
     const response = await createOutreachDraftMessage({
       systemPrompt,
       userPrompt,
-      useEmailDraftTool: shouldUseEmailDraftTool,
-      useStructuredColdEmailTool: category === "cold_email",
-      useStructuredLinkedinConnectionTool: category === "linkedin_connection",
+      category,
+      emailMode,
       logger: log,
     });
 
@@ -632,6 +677,11 @@ async function handlePost(
           .map((paragraph) => sanitize(paragraph))
           .filter(Boolean)
           .join("\n\n");
+        const wordCount = validateFinalEmailWordCount({
+          body,
+          category,
+          emailMode,
+        });
 
         timing.metrics({
           resultChars: body.length,
@@ -645,7 +695,7 @@ async function handlePost(
             subject_line: subject,
             body,
             category,
-            word_count: countWords(body),
+            word_count: wordCount,
             character_count: body.length,
             usage: tokenUsage,
             processingTime,
@@ -664,11 +714,24 @@ async function handlePost(
           },
           { headers: { ...corsHeaders, ...rateLimitHeaders } },
         );
-      } catch {
+      } catch (error) {
         timing.failure("OUTPUT_VALIDATION_FAILED");
         timing.enter("refund");
         log.warn(
-          { errorCode: "COLD_EMAIL_VALIDATION_FAILED", category },
+          {
+            errorCode:
+              error instanceof EmailOutputConstraintError
+                ? "EMAIL_OUTPUT_CONSTRAINT_FAILED"
+                : "COLD_EMAIL_VALIDATION_FAILED",
+            category,
+            ...(error instanceof EmailOutputConstraintError
+              ? {
+                  actualWordCount: error.actualWordCount,
+                  minimumWordCount: error.minimumWordCount,
+                  maximumWordCount: error.maximumWordCount,
+                }
+              : {}),
+          },
           "Failed to validate cold email composition",
         );
         if (reservedCredit) {
@@ -733,7 +796,10 @@ async function handlePost(
           mode: emailMode,
         });
         let wordCount = countWords(finalBody);
-        const { max: maxWords } = getEmailWordLimit(category, emailMode);
+        const { maximum: maxWords } = resolveOutputConstraint({
+          category,
+          emailMode,
+        });
         if (wordCount > maxWords) {
           log.warn(
             { category, wordCount, maxWords },
@@ -742,6 +808,11 @@ async function handlePost(
           finalBody = truncateToWordLimit(finalBody, maxWords);
           wordCount = countWords(finalBody);
         }
+        wordCount = validateFinalEmailWordCount({
+          body: finalBody,
+          category,
+          emailMode,
+        });
 
         timing.metrics({ resultChars: finalBody.length });
         // Mark slot consumed — successful response, no refund needed.
@@ -771,11 +842,24 @@ async function handlePost(
             headers: { ...corsHeaders, ...rateLimitHeaders },
           },
         );
-      } catch {
+      } catch (error) {
         timing.failure("OUTPUT_VALIDATION_FAILED");
         timing.enter("refund");
         log.warn(
-          { errorCode: "EMAIL_DRAFT_VALIDATION_FAILED" },
+          {
+            errorCode:
+              error instanceof EmailOutputConstraintError
+                ? "EMAIL_OUTPUT_CONSTRAINT_FAILED"
+                : "EMAIL_DRAFT_VALIDATION_FAILED",
+            category,
+            ...(error instanceof EmailOutputConstraintError
+              ? {
+                  actualWordCount: error.actualWordCount,
+                  minimumWordCount: error.minimumWordCount,
+                  maximumWordCount: error.maximumWordCount,
+                }
+              : {}),
+          },
           "Failed to validate email draft tool response",
         );
 
@@ -806,35 +890,57 @@ async function handlePost(
     // composition. Unlike the legacy path, invalid or overlength output is
     // refunded instead of being cut after generation.
     try {
-      const draft = getLinkedinConnectionDraftToolInput(response);
-      const sanitizedCta = sanitize(stripModelPreambleAndSuffix(draft.cta));
+      let draft;
+      try {
+        draft = getLinkedinConnectionDraftToolInput(response);
+      } catch {
+        throw new LinkedinConnectionValidationError(
+          "CONNECTION_TOOL_OUTPUT_INVALID",
+        );
+      }
+
+      const sanitizeComponent = async (
+        content: string,
+        failureCode: LinkedinConnectionValidationCode,
+      ) => {
+        const basic = sanitize(stripModelPreambleAndSuffix(content));
+        const result = await sanitizeForLinkedIn(basic);
+        if (!result.success || !result.sanitizedContent.trim()) {
+          throw new LinkedinConnectionValidationError(failureCode);
+        }
+        return result.sanitizedContent.trim();
+      };
+
+      const targetObservation = await sanitizeComponent(
+        draft.target_observation,
+        "CONNECTION_EMPTY_SECTION",
+      );
+      const candidateRelevance = draft.candidate_relevance
+        ? await sanitizeComponent(
+            draft.candidate_relevance.text,
+            "CONNECTION_EMPTY_SECTION",
+          )
+        : null;
+      const sanitizedCta = await sanitizeComponent(
+        draft.cta,
+        "CONNECTION_CTA_INVALIDATED",
+      );
       const rendered = renderLinkedinConnection({
         draft: {
           ...draft,
-          target_observation: sanitize(
-            stripModelPreambleAndSuffix(draft.target_observation),
-          ),
+          target_observation: targetObservation,
           candidate_relevance: draft.candidate_relevance
             ? {
                 ...draft.candidate_relevance,
-                text: sanitize(
-                  stripModelPreambleAndSuffix(draft.candidate_relevance.text),
-                ),
+                text: candidateRelevance ?? "",
               }
             : null,
           cta: sanitizedCta,
         },
+        declaredCountDraft: draft,
         sources: preparedGrounding.sources,
       });
-      const enhancedSanitization = await sanitizeForLinkedIn(rendered.body);
-      const body = enhancedSanitization.success
-        ? enhancedSanitization.sanitizedContent.trim()
-        : rendered.body;
-      if (body.length > 300 || !body.endsWith(sanitizedCta)) {
-        throw new Error(
-          "Sanitization invalidated connection-note CTA or limit",
-        );
-      }
+      const body = rendered.body;
 
       timing.metrics({
         resultChars: body.length,
@@ -865,11 +971,21 @@ async function handlePost(
         },
         { headers: { ...corsHeaders, ...rateLimitHeaders } },
       );
-    } catch {
+    } catch (error) {
       timing.failure("OUTPUT_VALIDATION_FAILED");
       timing.enter("refund");
+      const errorCode =
+        error instanceof LinkedinConnectionValidationError
+          ? error.code
+          : "CONNECTION_TOOL_OUTPUT_INVALID";
       log.warn(
-        { errorCode: "LINKEDIN_DRAFT_VALIDATION_FAILED", category },
+        {
+          errorCode,
+          category,
+          ...(error instanceof LinkedinConnectionValidationError
+            ? error.safeMetadata
+            : {}),
+        },
         "Failed to validate LinkedIn connection composition",
       );
       if (reservedCredit) {

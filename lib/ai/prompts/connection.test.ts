@@ -421,7 +421,7 @@ describe("COLD_EMAIL_PROMPT subject line policy", () => {
   ];
 
   it("tracks the prompt behavior change with a new version", () => {
-    expect(PROMPT_VERSION).toBe("3.0.0");
+    expect(PROMPT_VERSION).toBe("3.1.0");
   });
 
   it("documents scenario-specific email modes", () => {
@@ -490,6 +490,16 @@ describe("COLD_EMAIL_PROMPT subject line policy", () => {
     );
     expect(LINKEDIN_CONNECTION_PROMPT).toContain(
       "whether referrals are something you're open to discussing.",
+    );
+    expect(LINKEDIN_CONNECTION_PROMPT).toContain(
+      "target_observation: at most 96 characters",
+    );
+    expect(LINKEDIN_CONNECTION_PROMPT).toContain(
+      "candidate_relevance: at most 112 characters",
+    );
+    expect(LINKEDIN_CONNECTION_PROMPT).toContain("cta: at most 72 characters");
+    expect(LINKEDIN_CONNECTION_PROMPT).toContain(
+      "character_count: the exact rendered character count",
     );
   });
 

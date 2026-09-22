@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { LINKEDIN_CONNECTION_MAX_CHARACTERS } from "@/lib/ai/output-constraints";
 
 export const COLD_EMAIL_MAX_PROOF_POINTS = 2;
 
@@ -33,11 +34,23 @@ export const coldEmailDraftSchema = z
 export type ColdEmailProofPoint = z.infer<typeof coldEmailProofPointSchema>;
 export type ColdEmailDraft = z.infer<typeof coldEmailDraftSchema>;
 
-export const LINKEDIN_CONNECTION_MAX_CHARACTERS = 300;
+export { LINKEDIN_CONNECTION_MAX_CHARACTERS };
+
+/**
+ * The raw composition leaves 18 characters of headroom for separator and
+ * bounded punctuation normalization before the final 300-character check.
+ */
+export const LINKEDIN_CONNECTION_COMPONENT_MAX_CHARACTERS = {
+  targetObservation: 96,
+  candidateRelevance: 112,
+  cta: 72,
+} as const;
 
 const linkedinConnectionRelevanceSchema = z
   .object({
-    text: boundedSection(220),
+    text: boundedSection(
+      LINKEDIN_CONNECTION_COMPONENT_MAX_CHARACTERS.candidateRelevance,
+    ),
     source_ids: z.array(z.string().trim().min(1).max(120)).min(1).max(1),
   })
   .strict();
@@ -48,9 +61,16 @@ const linkedinConnectionRelevanceSchema = z
  */
 export const linkedinConnectionDraftSchema = z
   .object({
-    target_observation: boundedSection(220),
+    target_observation: boundedSection(
+      LINKEDIN_CONNECTION_COMPONENT_MAX_CHARACTERS.targetObservation,
+    ),
     candidate_relevance: linkedinConnectionRelevanceSchema.nullable(),
-    cta: boundedSection(140),
+    cta: boundedSection(LINKEDIN_CONNECTION_COMPONENT_MAX_CHARACTERS.cta),
+    character_count: z
+      .number()
+      .int()
+      .min(1)
+      .max(LINKEDIN_CONNECTION_MAX_CHARACTERS),
   })
   .strict();
 

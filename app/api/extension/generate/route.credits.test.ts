@@ -76,14 +76,47 @@ const validPayload = {
 };
 
 function connectionCompositionBlock() {
+  const targetObservation = "Your engineering work stood out.";
+  const cta = "Open to a brief chat?";
   return {
     type: "tool_use",
     id: "toolu_linkedin_connection",
     name: "return_linkedin_connection_composition",
     input: {
-      target_observation: "Your engineering work stood out.",
+      target_observation: targetObservation,
       candidate_relevance: null,
-      cta: "Open to a brief chat?",
+      cta,
+      character_count: `${targetObservation} ${cta}`.length,
+    },
+  };
+}
+
+function coldEmailCompositionBlock() {
+  return {
+    type: "tool_use",
+    id: "toolu_cold_email",
+    name: "return_cold_email_composition",
+    input: {
+      subject_line: "Hello",
+      greeting: "M",
+      target_opening: "Hello",
+      candidate_positioning: "Builder",
+      proof_points: [],
+      value_statement: "Relevant",
+      cta: "Chat?",
+    },
+  };
+}
+
+function inmailDraftToolBlock() {
+  return {
+    type: "tool_use",
+    id: "toolu_inmail",
+    name: "return_email_draft",
+    input: {
+      subject_line: "Hello",
+      body: "Hello",
+      word_count: 1,
     },
   };
 }
@@ -334,6 +367,74 @@ describe("POST /api/extension/generate with credit billing enabled", () => {
       p_user_id: "test-user-id",
       p_reservation_id: "reservation-1",
       p_amount: 4,
+      p_metadata: { reason: "parse_failed" },
+    });
+    expect(mockRpc.mock.calls.map((call) => call[0])).toContain(
+      "release_rate_limit_reservation",
+    );
+  });
+
+  it.each([
+    ["cold_email", coldEmailCompositionBlock],
+    ["linkedin_inmail", inmailDraftToolBlock],
+  ] as const)(
+    "refunds reserved credits when a %s body is below its minimum",
+    async (category, buildBlock) => {
+      mockAnthropicCreate.mockResolvedValueOnce({
+        content: [buildBlock()],
+        usage: { input_tokens: 100, output_tokens: 40 },
+      });
+      const { POST } = await importRouteWithBillingEnabled();
+
+      const res = await POST(
+        makeRequest({
+          method: "POST",
+          headers: { authorization: "Bearer test" },
+          body: { ...validPayload, category },
+        }),
+      );
+
+      expect(res.status).toBe(502);
+      expect(mockRpc).toHaveBeenCalledWith(
+        "refund_generation_credits",
+        expect.objectContaining({
+          p_user_id: "test-user-id",
+          p_reservation_id: "reservation-1",
+          p_metadata: { reason: "parse_failed" },
+        }),
+      );
+      expect(mockRpc.mock.calls.map((call) => call[0])).toContain(
+        "release_rate_limit_reservation",
+      );
+    },
+  );
+
+  it("refunds reserved credits when LinkedIn declared count validation fails", async () => {
+    const block = connectionCompositionBlock();
+    mockAnthropicCreate.mockResolvedValueOnce({
+      content: [
+        {
+          ...block,
+          input: { ...block.input, character_count: 1 },
+        },
+      ],
+      usage: { input_tokens: 100, output_tokens: 40 },
+    });
+    const { POST } = await importRouteWithBillingEnabled();
+
+    const res = await POST(
+      makeRequest({
+        method: "POST",
+        headers: { authorization: "Bearer test" },
+        body: validPayload,
+      }),
+    );
+
+    expect(res.status).toBe(502);
+    expect(mockRpc).toHaveBeenCalledWith("refund_generation_credits", {
+      p_user_id: "test-user-id",
+      p_reservation_id: "reservation-1",
+      p_amount: 2,
       p_metadata: { reason: "parse_failed" },
     });
     expect(mockRpc.mock.calls.map((call) => call[0])).toContain(
