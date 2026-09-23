@@ -1,0 +1,60 @@
+/* Shared Phthalo border treatment for popup and settings controls. */
+@property --extension-beam-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes extension-beam-orbit {
+  to {
+    --extension-beam-angle: 360deg;
+  }
+}
+
+button {
+  position: relative;
+}
+
+button::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  padding: 1px;
+  border-radius: inherit;
+  background: conic-gradient(
+    from var(--extension-beam-angle),
+    transparent 0% 68%,
+    rgba(40, 93, 73, 0.18) 76%,
+    rgba(120, 180, 155, 0.85) 85%,
+    rgba(247, 250, 249, 0.9) 90%,
+    transparent 98%
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  opacity: 0.65;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+
+button:not(:disabled):is(:hover, :focus-visible)::after,
+button[aria-busy="true"]::after {
+  opacity: 1;
+  animation: extension-beam-orbit 2.4s linear infinite;
+}
+
+button:disabled:not([aria-busy="true"])::after {
+  opacity: 0.18;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button::after {
+    animation: none !important;
+    transition: none;
+  }
+}

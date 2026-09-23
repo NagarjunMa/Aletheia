@@ -1,6 +1,6 @@
 {
   "name": "aletheia-extension",
-  "version": "1.0.16",
+  "version": "1.0.17",
   "description": "Draft professional introductions and application answers from context you choose. Review and edit every result before use.",
   "private": true,
   "scripts": {
@@ -13,6 +13,7 @@
     "clean": "rm -rf dist",
     "prebuild": "npm run clean",
     "security:audit": "npm audit --audit-level moderate",
+    "vendor:thinking-orbs": "node vendor-thinking-orbs.mjs",
     "test": "vitest --run",
     "test:watch": "vitest",
     "build:ext": "node build.mjs"
@@ -26,6 +27,7 @@
     "esbuild": "^0.28.1",
     "eslint": "^10.8.0",
     "globals": "^17.8.0",
+    "thinking-orbs": "0.3.2",
     "typescript": "^5.3.3",
     "vitest": "^4.1.11"
   },

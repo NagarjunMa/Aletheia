@@ -94,7 +94,7 @@ export default function Navbar() {
         </Link>
 
         {/* Desktop Nav — colors via .landing-nav-link */}
-        <div className="hidden items-center gap-10 md:flex">
+        <div className="hidden items-center gap-10 xl:flex">
           {navLinks.map((link) => {
             const sectionId = link.href.replace("#", "");
             const isActive = activeSection === sectionId;
@@ -125,7 +125,7 @@ export default function Navbar() {
         </div>
 
         {/* Right side: CTA */}
-        <div className="hidden md:flex items-center gap-3">
+        <div className="hidden xl:flex items-center gap-3">
           <Link
             href="/dashboard"
             className="btn-secondary"
@@ -151,7 +151,7 @@ export default function Navbar() {
         </div>
 
         {/* Mobile */}
-        <div className="flex md:hidden items-center gap-3">
+        <div className="flex xl:hidden items-center gap-3">
           <button
             type="button"
             onClick={() => setMobileOpen(!mobileOpen)}
@@ -177,7 +177,7 @@ export default function Navbar() {
           not the forward ease played backward). */}
       <div
         id="landing-mobile-navigation"
-        className={`landing-mobile-menu md:hidden px-5 sm:px-8 pb-6 pt-2 max-h-[calc(100dvh-64px)] overflow-y-auto ${
+        className={`landing-mobile-menu xl:hidden px-5 sm:px-8 pb-6 pt-2 max-h-[calc(100dvh-64px)] overflow-y-auto ${
           mobileOpen ? "open" : ""
         }`}
         aria-hidden={!mobileOpen}

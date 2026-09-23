@@ -160,6 +160,7 @@ describe("ALE-38 popup elapsed time", () => {
         currentProfile: null,
         validateGenerationInput: () => ({ valid: true }),
         setGeneratingState: vi.fn(),
+        setGenerationPhase: vi.fn(),
         chrome: {
           storage: {
             local: {
