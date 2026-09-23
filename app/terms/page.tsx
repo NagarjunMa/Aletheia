@@ -14,7 +14,7 @@ export const metadata: Metadata = {
   },
 };
 
-const EFFECTIVE_DATE = "May 19, 2026";
+const EFFECTIVE_DATE = "September 22, 2026";
 const CONTACT_EMAIL = "hello@aletheia.live";
 const OPERATOR_NAME = "Nagarjun Mallesh";
 const OPERATOR_LOCATION = "Boston, Massachusetts, United States";
@@ -60,14 +60,17 @@ export default function TermsPage() {
 
         <Section title="2. What the Service does">
           <p>
-            Aletheia uses the profile or opportunity context you choose to
-            reference, combines it with your resume, application-profile
-            evidence where supported, and intent, and produces a draft
-            connection note, cold email, InMail, follow-up, referral request,
-            role-fit reply, or YC application answer. You review the draft and
-            decide whether to use it. The Service can optionally fill a reviewed
-            draft into a supported field, but does not send messages, submit
-            forms, auto-connect, or contact people on your behalf.
+            After you consent, the extension can read visible details from
+            supported LinkedIn profiles you visit; it does not extract Apollo
+            profiles. When you request a draft, Aletheia combines selected
+            profile or opportunity context with your available resume,
+            application-profile evidence, approved examples where applicable,
+            and stated intent. It prepares a connection note, cold email,
+            InMail, follow-up, referral request, role-fit reply, or YC
+            application answer for you to review. The Service can optionally
+            fill a reviewed draft into a supported field, but does not send
+            messages, submit forms, auto-connect, or contact people on your
+            behalf.
           </p>
         </Section>
 
@@ -137,6 +140,10 @@ export default function TermsPage() {
             messages, and we do not indemnify you against account actions taken
             by LinkedIn.
           </p>
+          <p>
+            Aletheia is also independent of Apollo.io. Your use of Apollo is
+            subject to Apollo’s own terms and policies.
+          </p>
         </Section>
 
         <Section title="6. Your content">
@@ -145,8 +152,8 @@ export default function TermsPage() {
             inputs you provide, and of the messages the Service generates for
             you. You grant us a limited licence to process those inputs for the
             sole purpose of operating the Service for you (including sending
-            them to the AI model that drafts your message and storing your
-            accept/reject feedback to improve your future drafts).
+            them to the AI model that drafts your message and using approved
+            examples and accept/reject feedback to guide future drafts).
           </p>
           <p>
             You are responsible for the content of any message you send.

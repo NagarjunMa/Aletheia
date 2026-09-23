@@ -10,7 +10,7 @@ const faqs = [
   },
   {
     q: "What does the extension access?",
-    a: "Aletheia works from supported LinkedIn and Apollo pages you open, plus the resume and application-profile context you choose in your Aletheia account. It does not ask for your LinkedIn password.",
+    a: "After you consent, Aletheia can read visible details on supported LinkedIn profiles you visit. It does not read Apollo profiles; on supported Apollo pages, it can place a draft you choose into a compose field. Selected LinkedIn profile content is sent to Aletheia only when you request a draft. Resumes and application-profile details are saved separately in your Aletheia account. You can withdraw profile-reading consent in the extension settings.",
   },
   {
     q: "How do resumes and evidence work?",
