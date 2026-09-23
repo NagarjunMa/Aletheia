@@ -20,6 +20,11 @@ import {
   validateGenerationInput,
 } from "./popup-core.js";
 import { createExtensionLogger, createOperationId } from "../lib/logger.js";
+import {
+  formatGenerationElapsed,
+  getGenerationProgress,
+} from "./generation-progress.js";
+import { startGenerationOrb } from "./generation-orb.js";
 
 let currentProfile = null;
 let currentOutput = null;
@@ -31,6 +36,11 @@ const DEFAULT_API_URL = "https://www.aletheia.live";
 const PROFILE_EXTRACTION_CONSENT_KEY = "profileExtractionConsent";
 let profileMonitoringStarted = false;
 const log = createExtensionLogger("popup");
+let generationProgressTimer = null;
+let generationProgressStartedAt = 0;
+let generationProgressPhase = "preparing";
+let generationOrb = null;
+let generationOrbRun = 0;
 
 function normalizeApiUrl(apiUrl) {
   let value = String(apiUrl || "").trim();
@@ -722,6 +732,7 @@ async function generateMessage() {
       questionValue,
     );
 
+    setGenerationPhase("generating");
     const response = await sendBackgroundMessage({
       action: "generate",
       payload,
@@ -900,9 +911,10 @@ function updateCharacterCountDisplay(text, category) {
 function setGeneratingState(isGenerating) {
   const generateBtn = document.getElementById("generateBtn");
   const generateText = document.getElementById("generateText");
-  const generateSpinner = document.getElementById("generateSpinner");
+  const progress = document.getElementById("generationProgress");
 
   generateBtn.disabled = isGenerating;
+  generateBtn.setAttribute("aria-busy", String(isGenerating));
   for (const id of [
     "regenerateApplicationBtn",
     "acceptBtn",
@@ -920,11 +932,64 @@ function setGeneratingState(isGenerating) {
 
   if (isGenerating) {
     generateText.textContent = "Generating...";
-    generateSpinner.classList.remove("hidden");
+    generationProgressStartedAt = performance.now();
+    generationProgressPhase = "preparing";
+    progress?.classList.remove("hidden");
+    updateGenerationProgress();
+    clearInterval(generationProgressTimer);
+    generationProgressTimer = setInterval(updateGenerationProgress, 1000);
+    const run = ++generationOrbRun;
+    startGenerationOrb(document.getElementById("generationOrb"), "weaving")
+      .then((orb) => {
+        if (run !== generationOrbRun) {
+          orb.stop();
+          return;
+        }
+        generationOrb = orb;
+        orb.setState(
+          getGenerationProgress(generationProgressPhase, 0).orbState,
+        );
+      })
+      .catch(() => {
+        // Text progress remains usable if canvas rendering is unavailable.
+      });
   } else {
-    generateSpinner.classList.add("hidden");
+    ++generationOrbRun;
+    clearInterval(generationProgressTimer);
+    generationProgressTimer = null;
+    generationOrb?.stop();
+    generationOrb = null;
+    progress?.classList.add("hidden");
     updateGenerateAvailability();
   }
+}
+
+function setGenerationPhase(phase) {
+  generationProgressPhase = phase;
+  updateGenerationProgress();
+  generationOrb?.setState(
+    getGenerationProgress(
+      phase,
+      performance.now() - generationProgressStartedAt,
+    ).orbState,
+  );
+}
+
+function updateGenerationProgress() {
+  const elapsedMs = Math.max(
+    0,
+    performance.now() - generationProgressStartedAt,
+  );
+  const presentation = getGenerationProgress(
+    generationProgressPhase,
+    elapsedMs,
+  );
+  document.getElementById("generationProgressLabel").textContent =
+    presentation.label;
+  document.getElementById("generationProgressHint").textContent =
+    presentation.hint;
+  document.getElementById("generationElapsed").textContent =
+    `${formatGenerationElapsed(elapsedMs)} elapsed`;
 }
 
 function handleCopyClick(event) {

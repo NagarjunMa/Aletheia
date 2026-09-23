@@ -14,6 +14,11 @@ it("packages the auth-draft helper and every relative runtime module dependency"
     await readFile("ascendia-extension/dist/aletheia-extension.zip"),
   );
   expect(zip.file("lib/application-auth-draft.js")).not.toBeNull();
+  expect(zip.file("assets/thinking-orbs-engine.js")).not.toBeNull();
+  expect(zip.file("assets/LICENSE.thinking-orbs")).not.toBeNull();
+  expect(await zip.file("popup/generation-orb.js")!.async("string")).toContain(
+    "../assets/thinking-orbs-engine.js",
+  );
   const missing: string[] = [];
   for (const file of Object.values(zip.files)) {
     if (file.dir || !file.name.endsWith(".js")) continue;

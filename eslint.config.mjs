@@ -8,6 +8,7 @@ const config = [
       ".next/**",
       "node_modules/**",
       "coverage/**",
+      "ascendia-extension/assets/thinking-orbs-engine.js",
     ],
   },
   {

@@ -8,6 +8,9 @@ declare global {
       messages: Array<{ action: string; payload?: Record<string, unknown> }>;
       copied: string;
       feedbackFails: boolean;
+      holdGeneration: boolean;
+      generationCallback?: (response: unknown) => void;
+      generationResponse?: Record<string, unknown>;
     };
   }
 }
@@ -36,7 +39,12 @@ async function openPopup(page: Page, authenticated = true) {
   });
   await page.addInitScript(
     ({ authenticated }) => {
-      window.aleTest = { messages: [], copied: "", feedbackFails: false };
+      window.aleTest = {
+        messages: [],
+        copied: "",
+        feedbackFails: false,
+        holdGeneration: false,
+      };
       const storage = (
         key: string,
         defaults: Record<string, unknown> = {},
@@ -86,7 +94,7 @@ async function openPopup(page: Page, authenticated = true) {
             create: async () => {},
           },
           runtime: {
-            getManifest: () => ({ version: "1.0.16" }),
+            getManifest: () => ({ version: "1.0.17" }),
             sendMessage: (
               message: { action: string; payload?: { questions?: string[] } },
               callback?: (value: unknown) => void,
@@ -143,6 +151,11 @@ async function openPopup(page: Page, authenticated = true) {
                     groundingValidationPassed: true,
                   },
                 };
+                if (window.aleTest.holdGeneration && callback) {
+                  window.aleTest.generationCallback = callback;
+                  window.aleTest.generationResponse = response;
+                  return;
+                }
               }
               if (callback) callback(response);
               return Promise.resolve(response);
@@ -295,4 +308,94 @@ test("invalid question input explains how to recover without a request @smoke", 
       ),
     ),
   ).toHaveLength(0);
+});
+
+test("ZIP-source popup paints the orb, reports elapsed time, and stops after success @smoke", async ({
+  page,
+}) => {
+  await openPopup(page);
+  await page.selectOption("#category", "yc_application");
+  await page.fill("#jdInput", jd);
+  await page.fill("#ycQuestionInput", "Describe your relevant experience?");
+  await page.evaluate(() => {
+    window.aleTest.holdGeneration = true;
+  });
+  await page.click("#generateBtn");
+  await expect(page.locator("#generationProgress")).toBeVisible();
+  await expect(page.locator("#generationProgressLabel")).toHaveText(
+    "Generating your draft",
+  );
+  await expect(page.locator("#generateBtn")).toHaveAttribute(
+    "aria-busy",
+    "true",
+  );
+  await expect
+    .poll(() =>
+      page.locator("#generationOrb").evaluate((canvas) => {
+        const surface = canvas as HTMLCanvasElement;
+        const pixels = surface
+          .getContext("2d")!
+          .getImageData(0, 0, surface.width, surface.height).data;
+        return pixels.some((value, index) => index % 4 === 3 && value > 0);
+      }),
+    )
+    .toBe(true);
+  await expect(page.locator("#generationElapsed")).not.toHaveText(
+    "0:00 elapsed",
+    { timeout: 3_000 },
+  );
+  await page.screenshot({ path: "/tmp/aletheia-extension-orb.png" });
+  await page.evaluate(() => {
+    window.aleTest.generationCallback?.(window.aleTest.generationResponse);
+  });
+  await expect(page.locator("#generationProgress")).toBeHidden();
+  await expect(page.locator("#generateBtn")).toHaveAttribute(
+    "aria-busy",
+    "false",
+  );
+  await expect(page.locator(".application-answer")).toHaveCount(1);
+});
+
+test("ZIP-source popup clears progress after failure and respects reduced motion @smoke", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await openPopup(page);
+  await page.selectOption("#category", "yc_application");
+  await page.fill("#jdInput", jd);
+  await page.fill("#ycQuestionInput", "Describe your relevant experience?");
+  await page.evaluate(() => {
+    window.aleTest.holdGeneration = true;
+  });
+  await page.click("#generateBtn");
+  await expect(page.locator("#generationProgress")).toBeVisible();
+  await expect
+    .poll(() =>
+      page.locator("#generationOrb").evaluate((canvas) => {
+        const surface = canvas as HTMLCanvasElement;
+        return surface
+          .getContext("2d")!
+          .getImageData(0, 0, surface.width, surface.height)
+          .data.some((value, index) => index % 4 === 3 && value > 0);
+      }),
+    )
+    .toBe(true);
+  expect(
+    await page
+      .locator("#generateBtn")
+      .evaluate((button) => getComputedStyle(button, "::after").animationName),
+  ).toBe("none");
+  await page.evaluate(() => {
+    window.aleTest.generationCallback?.({
+      success: false,
+      code: "GENERATION_FAILED",
+      message: "Please try again.",
+    });
+  });
+  await expect(page.locator("#generationProgress")).toBeHidden();
+  await expect(page.locator("#generateBtn")).toBeEnabled();
+  await expect(page.locator("#generateBtn")).toHaveAttribute(
+    "aria-busy",
+    "false",
+  );
 });

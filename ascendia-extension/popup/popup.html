@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Aletheia</title>
     <link rel="stylesheet" href="popup.css" />
+    <link rel="stylesheet" href="../assets/button-beam.css" />
   </head>
 
   <body>
@@ -254,17 +255,30 @@ Why are you a strong candidate for this role?</textarea>
         <!-- Generate Button -->
         <button id="generateBtn" class="generate-btn" disabled>
           <span id="generateText">Generate Message</span>
-          <svg
-            id="generateSpinner"
-            class="spinner hidden"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            <path d="M21 12a9 9 0 11-6.219-8.56" />
-          </svg>
         </button>
+        <div id="generationProgress" class="generation-progress hidden">
+          <canvas
+            id="generationOrb"
+            class="generation-orb"
+            width="48"
+            height="48"
+            aria-hidden="true"
+          ></canvas>
+          <div class="generation-progress-copy">
+            <div class="generation-progress-heading">
+              <strong
+                id="generationProgressLabel"
+                role="status"
+                aria-live="polite"
+                >Preparing your selected context</strong
+              >
+              <span id="generationElapsed" aria-live="off">0:00 elapsed</span>
+            </div>
+            <p id="generationProgressHint">
+              This can take around two minutes; actual time varies.
+            </p>
+          </div>
+        </div>
 
         <!-- Output Section -->
         <div
