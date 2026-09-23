@@ -1408,3 +1408,35 @@ Final audit:
 Follow-up:
 
 - Commit, push, and open the pull request when requested.
+
+### 2026-09-22
+
+Branch: `fix/ale-43-web-runtime-security`
+
+Area: ALE-43 web runtime dependency disposition
+
+Problem: The fresh root dependency audit reported 13 advisories, including one critical Next.js advisory and seven high-severity advisories. The production-only graph contained one critical and six high-severity advisories, so ALE-43's dependency-disposition launch gate remained unresolved.
+
+Decision: Upgrade Next.js and its coupled tooling to 16.3.6, update Sentry to its compatible current release, refresh the affected test/PostCSS toolchain and transitive lockfile, remove obsolete Next.js development-indicator configuration, adopt Sentry's supported configuration import, and enforce `npm audit --audit-level high` in local and pull-request CI. No extension package changed.
+
+Files changed:
+
+- `package.json` and `package-lock.json`
+- `next.config.js` and generated `next-env.d.ts`
+- `Makefile` and `.github/workflows/ci.yml`
+
+Validation:
+
+- Clean `npm ci` completed and both full-tree and production-only dependency audits report zero vulnerabilities.
+- Repository CI passed: lint (one unrelated existing warning), type-check, 91 files/1,094 unit tests, 2 files/15 guardrails, and production build.
+- Focused resume security passed: 12 files/145 tests; coverage passed at 88.78% statements, 81.96% branches, 88.80% functions, and 90.17% lines.
+- Browser smoke passed: 22/22, including the existing unauthenticated `/profile` login redirect contract.
+- Scoped Prettier and `git diff --check` passed.
+- Critical-tier fresh independent review approved snapshot `30154710da99210e91589281356889d1f4eab42a6fd4c685b6eaf5a22bb22d01` with no material findings.
+
+Risk and rollout:
+
+- Final risk tier for this dependency change is **Critical** because it updates the framework authentication/proxy boundary and the Sharp-backed image optimizer.
+- Roll out through the normal Vercel preview and production promotion path; verify a real authenticated login/profile flow and a Supabase-hosted avatar before production promotion.
+- Roll back by reverting this dependency commit and redeploying the prior lockfile/build if authentication, image optimization, or runtime compatibility regresses.
+- The dependency-disposition gate is resolved, but ALE-43 remains In Progress until its remaining parent-level environment and migration evidence is complete.

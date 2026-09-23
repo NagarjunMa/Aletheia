@@ -1,4 +1,4 @@
-.PHONY: help dev build start serve lint type-check format format-check \
+.PHONY: help dev build start serve lint type-check format format-check security-audit \
         test test-watch test-coverage test-ui \
         guardrails guardrails-watch \
         e2e e2e-ui e2e-debug \
@@ -48,6 +48,9 @@ format: ## Format all files with Prettier
 
 format-check: ## Check formatting without writing (CI-safe)
 	npm run format:check
+
+security-audit: ## Audit web dependencies for high or critical advisories
+	npm run security:audit
 
 # ─── Unit Tests ───────────────────────────────────────────────────────────────
 
@@ -113,4 +116,4 @@ extension-ci: ## Run the same extension audit and validation used by CI
 
 # ─── CI Simulation ────────────────────────────────────────────────────────────
 
-ci: lint type-check test guardrails build ## Run full CI pipeline locally (lint → type-check → test → guardrails → build)
+ci: security-audit lint type-check test guardrails build ## Run full CI pipeline locally (audit → lint → type-check → test → guardrails → build)
