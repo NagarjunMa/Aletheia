@@ -1440,3 +1440,13 @@ Risk and rollout:
 - Roll out through the normal Vercel preview and production promotion path; verify a real authenticated login/profile flow and a Supabase-hosted avatar before production promotion.
 - Roll back by reverting this dependency commit and redeploying the prior lockfile/build if authentication, image optimization, or runtime compatibility regresses.
 - The dependency-disposition gate is resolved, but ALE-43 remains In Progress until its remaining parent-level environment and migration evidence is complete.
+
+### 2026-09-22 — Landing access disclosure
+
+Branch: `fix/landing-profile-access-disclosure`
+
+Updated the landing FAQ, trust section, process steps, and install page to distinguish consent-based LinkedIn profile reading from Apollo's supported-field filling. Updated the Privacy Policy and Terms to explain persistent profile-reading consent, request-triggered LinkedIn profile transmission, saved resume/application context, approved examples, and the independent Apollo relationship. The policy now avoids an unverified zero-data-retention claim for Anthropic and includes the optional support-chat processor in its transfer summary. No extension or backend behavior changed.
+
+Risk tier: Significant — public privacy/terms claims changed, but no processing or authorization behavior changed. Rollout is the normal web deployment after merge; rollback is a revert and redeploy. The site owner should review the final legal wording before publication.
+
+Checks: changed-file Prettier, ESLint, type-check, production build, and `git diff --check` passed; Prettier, ESLint, production build, and diff check were rerun after the final copy correction. Browser tests were not run for this copy-only update. A fresh review found and prompted correction of an overbroad claim about when saved account context is sent; its return review found no remaining material copy issue. Deployment remains pending merge.

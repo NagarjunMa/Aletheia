@@ -50,8 +50,10 @@ export default function TrustProof() {
                 color: "var(--l-text-muted)",
               }}
             >
-              Aletheia uses the supported page you open and the account context
-              you choose. It does not ask for your LinkedIn password.
+              After you consent, Aletheia can read visible details on supported
+              LinkedIn profiles you visit. Selected LinkedIn profile content is
+              sent to Aletheia and its disclosed AI processor only when you
+              request a draft. It never asks for your LinkedIn password.
             </p>
             <p
               className="p-6 text-sm leading-relaxed"

@@ -7,7 +7,7 @@ const steps = [
   {
     num: "02",
     title: "Choose the target and purpose",
-    body: "Open a supported profile or opportunity, then select the professional conversation you want to begin—from a connection note to a role-fit response.",
+    body: "After consenting to profile reading, open a supported LinkedIn profile for outreach or enter opportunity details for an application answer. Then choose the draft you want to prepare.",
   },
   {
     num: "03",

@@ -14,7 +14,7 @@ export const metadata: Metadata = {
   },
 };
 
-const EFFECTIVE_DATE = "September 7, 2026";
+const EFFECTIVE_DATE = "September 22, 2026";
 const CONTACT_EMAIL = "hello@aletheia.live";
 const OPERATOR_NAME = "Nagarjun Mallesh";
 const OPERATOR_LOCATION = "Boston, Massachusetts, United States";
@@ -62,11 +62,12 @@ export default function PrivacyPage() {
           <p>We collect only what we need to operate the service:</p>
           <ul>
             <li>
-              <strong>Selected supported-page context</strong> from the LinkedIn
-              profile you choose to reference — such as name, headline,
-              location, role, and profile details. This is read only after you
-              provide consent and is transmitted only when you request a draft.
-              On Apollo, Aletheia only places a draft you have reviewed into a
+              <strong>Supported LinkedIn profile context</strong> — such as
+              name, headline, location, role, and visible profile details. After
+              you consent in the extension, it can read supported LinkedIn
+              profiles you visit even when its panel is closed. Selected profile
+              content is sent to Aletheia only when you request a draft. On
+              Apollo, Aletheia only places a draft you have reviewed into a
               supported compose field; it does not extract Apollo profiles.
             </li>
             <li>
@@ -76,8 +77,9 @@ export default function PrivacyPage() {
               application answers from your recorded background.
             </li>
             <li>
-              <strong>Generated drafts</strong>, plus accept/reject feedback you
-              give. This feedback can be used to improve future drafts for your
+              <strong>Generated drafts and examples you approve,</strong> plus
+              accept/reject feedback you give. Approved examples and feedback
+              can guide the wording and structure of future drafts for your
               account.
             </li>
             <li>
@@ -132,9 +134,11 @@ export default function PrivacyPage() {
             </li>
             <li>
               <strong>Anthropic</strong> (Claude API) — runs the AI model that
-              writes your messages. We send only the data needed to generate the
-              requested message. We configure zero data retention where
-              available.{" "}
+              writes your drafts. Depending on the request, selected profile,
+              resume, application-profile, role or opportunity, prior
+              conversation, and approved-example context may be sent to generate
+              the draft. Anthropic handles submitted content under its published
+              API data-handling and retention terms.{" "}
               <a
                 href="https://www.anthropic.com/privacy"
                 target="_blank"
@@ -186,9 +190,10 @@ export default function PrivacyPage() {
             </li>
           </ul>
           <p>
-            We do not sell, rent, or share your data with advertisers. We do not
-            use your message content to train any third-party AI model beyond
-            the single request that generates your message.
+            We do not sell, rent, or share your data with advertisers. Aletheia
+            does not train AI models on your drafting context. Selected context
+            is shared with Anthropic to generate the draft you request, subject
+            to Anthropic’s published API terms.
           </p>
           <p>
             Aletheia’s use and transfer of information received through Chrome
@@ -313,10 +318,10 @@ export default function PrivacyPage() {
 
         <Section title="9. International transfers">
           <p>
-            Our processors (Supabase, Anthropic, Vercel, Sentry) operate in the
-            United States and other regions. By using Aletheia you consent to
-            transfer of your data to those jurisdictions for the purposes
-            described above.
+            Our processors (Supabase, Anthropic, Vercel, Sentry, and the
+            optional OpenSpeechAI support chat) operate in the United States and
+            other regions. By using Aletheia you consent to transfer of your
+            data to those jurisdictions for the purposes described above.
           </p>
         </Section>
 

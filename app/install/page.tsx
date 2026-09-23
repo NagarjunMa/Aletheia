@@ -29,7 +29,7 @@ const STEPS: { title: string; body: string }[] = [
   },
   {
     title: "Sign in to Aletheia",
-    body: "Open the extension, sign in, and connect it to your Aletheia account.",
+    body: "Open the extension, sign in to your Aletheia account, and review the first-use profile-reading disclosure before choosing whether to consent.",
   },
   {
     title: "Add your primary resume",
@@ -37,7 +37,7 @@ const STEPS: { title: string; body: string }[] = [
   },
   {
     title: "Draft and review",
-    body: "Open a supported profile or opportunity, choose your message type, and review the draft before you use it. Optional auto-fill can place a reviewed draft in a supported field; it never sends or submits anything.",
+    body: "Open a supported LinkedIn profile for outreach or enter opportunity details for an application answer. Review the draft before use. Optional auto-fill can place it in a supported LinkedIn or Apollo field; it never sends or submits anything.",
   },
 ];
 
