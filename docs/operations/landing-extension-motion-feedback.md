@@ -95,3 +95,65 @@ not block local implementation validation. Rollout remains a normal web merge
 followed by a separate clean extension package/release. Rollback is reverting
 the UI change and redeploying web; the previously published extension remains
 untouched until an authorized release.
+
+## 2026-09-23 — Intermediate-width hero follow-up
+
+Risk: **Significant** for final review because the fix also adds the focused
+landing browser check to the shared PR smoke job; the CSS correction itself is
+Standard. No extension, API, authentication, or data behavior changes. The
+approved editorial evergreen design, headline, copy, and navigation
+destinations remain intact.
+
+Contract:
+
+1. Around a 1257 CSS-pixel viewport, the hero copy and context ledger appear
+   side by side, without horizontal overflow, clipping, or overlap with the
+   fixed navigation. The compact navigation may remain until its links fit.
+2. Narrow tablet/mobile widths retain a readable stacked hero; full desktop
+   widths retain the existing two-column arrangement.
+3. Existing keyboard navigation and reduced-motion behavior remain unchanged.
+
+Evaluation: add a regression-first Playwright check for the reported width and
+both sides of the responsive transition, asserting visible geometry and no
+horizontal overflow. A simple breakpoint reduction without scaling the type
+and spacing could still squeeze the columns; include that case in the check.
+Inspect representative screenshots and run the relevant web checks. Rollout is
+the normal web merge/deploy; rollback is a revert and redeploy. No Store package
+change is required.
+
+### Local result — 2026-09-24
+
+The new Playwright geometry assertion failed against the deployed pre-fix CSS
+at 1257px, confirming the reported stacked hero. The candidate CSS moves the
+stacked layout to 1023px and below, with narrower typography and spacing for
+the 1024–1279px two-column range. Injecting the exact candidate stylesheet into
+the live page passed browser geometry assertions at 390, 900, 1023, 1024,
+1120, 1257, 1279, 1280, and 1440px: expected stack/columns, no horizontal
+overflow, clipped card, or header/heading overlap. Representative 1024,
+1120, and 1257px screenshots were inspected. The compact menu remains visible
+at 1257px.
+
+Root lint, type-check, 1,094 unit tests (91 files), 15 guardrail tests, scoped
+ESLint/Prettier, and `git diff --check` passed on the final source. Lint retains
+one unrelated existing warning in `lib/auth/refund-admin.ts`. The CI YAML
+parses and Playwright discovers all four landing checks. The PR smoke job now
+installs Chromium and runs that suite against its built local server. The
+repository-native local Playwright run did not complete: this disk-constrained
+isolated checkout could not install its own dependencies; the symlink fallback
+conflicted with the default Next dev bundler, while the alternate bundler
+lacked this checkout's Supabase environment configuration and could not serve
+`/`. Browser stylesheet injection verifies layout but is not a substitute for
+the CI end-to-end run.
+
+No security/privacy/data behavior or dependencies changed. The CI addition
+increases PR execution time but uses existing Playwright dependencies and no
+new secrets. Merge only after the new landing browser check passes in PR CI.
+Rollout: merge and deploy web; rollback: revert this CSS/test/CI change and
+redeploy. No extension release needed.
+
+Fresh-context review found one CI setup defect: the new server-side browser
+check inherited none of the build-only Supabase placeholders, so the health
+route could pass while `/` failed. Moving those placeholders to smoke-job scope
+resolved the mismatch for both build and server. The reviewer found no further
+material source issue on the corrected diff. The CI browser result remains
+pending until a pull request runs; the review is not a substitute for it.

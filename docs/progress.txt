@@ -1463,3 +1463,15 @@ Branch: `feat/throughline-logo-rollout`. Replaced the old blue A logo with the a
 Standard risk, compact brand record at `docs/brand/throughline-exploration.md`. The new landing smoke check failed on the old SVG and passed after replacement. Node 24 checks passed: root dependency audit (zero findings), lint (one pre-existing refund-admin warning), type-check, 91 files/1,094 unit tests, 15 guardrails, 27 browser smoke tests with the canonical app URL, extension security audit/type-check/lint/21 files/214 tests/build, extension version policy, scoped formatting, and local ZIP packaging. The first local smoke run inherited a noncanonical `NEXT_PUBLIC_APP_URL` and failed an unchanged robots.txt assertion; rerun with the canonical URL passed. Extension package test verifies the icon bytes inside the ZIP. Desktop landing and auth screenshots were inspected for wordmark pairing; the evaluation ZIP had `-dirty` metadata and was not a Store upload artifact.
 
 No commit, push, deployment, Store listing update, screenshots update, or publication was requested. The local ZIP generated during implementation carried `-dirty` metadata; subsequent extension CI cleared `dist`, so there is no current upload artifact. After a clean commit/merge, rebuild the extension ZIP for traceable source metadata; update the Chrome Web Store icon/screenshots separately if desired. Before Store publication, rollback is reverting the web and extension source changes. After publishing 1.0.18, restore the prior extension artwork in a new, higher-numbered package rather than trying to upload 1.0.17 again; revert and redeploy the web assets separately.
+
+## 2026-09-24 — Landing hero intermediate-width repair
+
+On `fix/landing-hero-responsive-layout`, corrected the 1024–1279px hero
+breakpoint so copy and context card stay side by side, while mobile/tablet
+remain stacked. Added a red-first Playwright geometry regression. Browser
+assertions with the candidate stylesheet passed at nine widths from 390–1440px;
+root lint, type-check, 1,094 unit tests, 15 guardrails, scoped formatting and
+diff whitespace passed. Native local Playwright was blocked by isolated
+checkout disk/dependency/environment setup, so the existing PR smoke job now
+installs Chromium and runs the focused landing suite. Its result remains the
+merge gate. No deployment. Details: docs/operations/landing-extension-motion-feedback.md.

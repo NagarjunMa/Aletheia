@@ -102,6 +102,10 @@ jobs:
     name: Smoke Test & Health Check
     runs-on: ubuntu-latest
     needs: [test, extension-security]
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key-for-build-only
+      NEXT_PUBLIC_APP_ENV: dev
     steps:
       - name: Checkout repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -119,25 +123,22 @@ jobs:
         run: npm ci
 
       - name: Build Next.js
-        env:
-          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key-for-build-only
-          NEXT_PUBLIC_APP_ENV: dev
         run: npm run build
 
-      - name: Start Server & Check Health
-        run: |
-          # Start the server in the background
-          npm run start &
-          SERVER_PID=$!
+      - name: Install Chromium for landing smoke test
+        run: npx playwright install --with-deps chromium
 
-          # Wait for the server to be ready (max 30 seconds)
+      - name: Start Server, Check Health & Landing
+        env:
+          PLAYWRIGHT_BASE_URL: http://localhost:3000
+        run: |
+          ./node_modules/.bin/next start &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID"' EXIT
+
           echo "Waiting for server to start..."
           timeout 30 bash -c 'until curl -s http://localhost:3000/api/health > /dev/null; do sleep 2; done'
 
-          # Check health endpoint using curl
           echo "Testing health endpoint..."
           curl -f http://localhost:3000/api/health || exit 1
-
-          # Kill server
-          kill $SERVER_PID
+          npx playwright test e2e/landing-navigation.spec.ts --project=chromium
