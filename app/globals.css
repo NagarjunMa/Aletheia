@@ -2021,7 +2021,7 @@
   touch-action: manipulation;
 }
 
-@media (max-width: 1279px) {
+@media (max-width: 1023px) {
   .landing-marketing .landing-hero {
     align-items: flex-start;
   }
@@ -2047,6 +2047,26 @@
   .landing-context-ledger {
     width: min(100%, 38rem);
     justify-self: end;
+  }
+}
+
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .landing-hero-shell {
+    grid-template-columns: minmax(0, 1.16fr) minmax(20rem, 0.84fr);
+    gap: clamp(2rem, 3.5vw, 3rem);
+  }
+
+  .landing-marketing .landing-hero-title {
+    font-size: clamp(4.3rem, 6.5vw, 5.5rem);
+  }
+
+  .landing-hero-support {
+    grid-template-columns: 1fr;
+    margin-top: 2.5rem;
+  }
+
+  .landing-hero-kicker {
+    margin-bottom: 2.5rem;
   }
 }
 
