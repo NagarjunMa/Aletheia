@@ -44,6 +44,33 @@ test("login page renders @smoke", async ({ page }) => {
   expect(page.url()).toContain("/auth/login");
 });
 
+test("auth forms expose a main landmark @smoke", async ({ page }) => {
+  test.setTimeout(60_000);
+  for (const route of [
+    "/auth/login",
+    "/auth/register",
+    "/auth/forgot-password",
+    "/auth/reset-password",
+  ]) {
+    await page.goto(route, { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("main")).toHaveCount(1);
+  }
+});
+
+test("status page follows the shared editorial surface @smoke", async ({
+  page,
+}) => {
+  await page.goto("/status");
+  await expect(
+    page.getByRole("navigation", { name: "Primary navigation" }),
+  ).toBeVisible();
+  await expect(page.locator(".shader-background")).toHaveCount(1);
+  const headingFont = await page
+    .getByRole("heading", { name: "Status" })
+    .evaluate((heading) => getComputedStyle(heading).fontFamily.toLowerCase());
+  expect(headingFont).toContain("cormorant");
+});
+
 test("login content is visually available without an animation dependency @smoke", async ({
   page,
 }) => {

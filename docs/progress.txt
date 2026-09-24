@@ -1475,3 +1475,57 @@ diff whitespace passed. Native local Playwright was blocked by isolated
 checkout disk/dependency/environment setup, so the existing PR smoke job now
 installs Chromium and runs the focused landing suite. Its result remains the
 merge gate. No deployment. Details: docs/operations/landing-extension-motion-feedback.md.
+
+## 2026-09-24 — Founder note first-screen layout
+
+On `fix/landing-founder-note-layout`, recast the founder section as a compact
+two-column editorial note on desktop, stacked on phone/tablet. Corrected the
+global heading-size override locally, preserved the full copy and signature,
+and added a red-first Playwright regression to the existing landing smoke file.
+The updated component/styles passed browser geometry checks at six widths;
+the signature fits within 1716×1180, 1440×900, 1279×900, and 1024×800 views.
+Lint, type-check, 1,094 unit tests, and 15 guardrails passed. Local native
+Playwright remained blocked by isolated checkout setup; PR smoke CI is the
+merge gate. No push or deployment. See docs/operations/landing-founder-note-layout.md.
+
+## 2026-09-24 — Illustrative example visual refresh
+
+Extended the same public-page branch to align /demo with the editorial
+evergreen design. Replaced Flaviotte content typography with Cormorant/DM Sans,
+made the selected-context and reviewed-draft panels responsive, preserved the
+fictional-data disclosure, and derived the example's character count from its
+actual text. A red-first browser check exposed the old heading font. Browser
+render probes at 1440px, 1024px, and 390px showed no overflow; native local
+Next E2E remains blocked by isolated setup, with PR smoke CI required before
+merge. Details: docs/operations/landing-founder-note-layout.md. No push or
+deployment.
+
+## 2026-09-24 — Frontend audit hardening (local)
+
+Branch: `fix/landing-founder-note-layout`. Follow-up to the requested full
+frontend audit; no Linear issue was assigned. Fixed secondary-page section
+links in the shared header/footer, aligned `/status` with the editorial
+background/type/navigation, added a main landmark to auth forms, and narrowed
+the demo disclosure locator. Bundled locally licensed DM Sans for extension UI
+while reserving Flaviotte for the brand mark; bumped candidate extension
+version to 1.0.19. Added browser/extension checks and selected the affected
+browser files in PR CI after fresh review identified a gate gap.
+
+Significant-tier evidence: isolated production build and 27 Chromium checks;
+root lint/type/coverage/unit/guardrail/resume-security/audit; extension
+lint/type/217 tests/build/audit/version policy; unpacked extension font load;
+changed-file formatting and diff checks passed. Root lint retained one
+unrelated existing warning. Protected signed-in/admin screens and hosted CI
+remain unverified. See `docs/operations/frontend-audit-hardening.md` for the
+contract, red/green evidence, review, rollout, and rollback. No commit, push,
+deploy, Store upload, or Linear mutation was performed.
+
+Final local pre-merge audit on 2026-09-24: complete diff against local `main`
+and all dirty/untracked files inspected; final risk Significant. Fresh-context
+read-only review found no material issue. Source-matched production build,
+27/27 public browser checks, coverage-gated 1,094 unit tests, 15 guardrails,
+145 resume security tests, web lint/type/audit, extension audit/lint/type/
+217 tests/build/ZIP, version policy, changed-file format, and whitespace
+checks passed. Hosted CI, signed-in/admin visual flows, and Store publication
+remain unverified; candidate extension ZIP in scratch is not a release
+artifact. No push or deployment.

@@ -1,5 +1,3 @@
-"use client";
-
 import {
   SAMPLE_PROFILE,
   SAMPLE_RESUME,
@@ -8,86 +6,55 @@ import {
 
 export default function DemoExample() {
   return (
-    <div className="grid gap-8 md:grid-cols-2 max-w-5xl mx-auto">
-      <section
-        className="p-6"
-        style={{
-          background: "var(--l-surface)",
-          border: "1px solid var(--l-border)",
-        }}
-      >
-        <p
-          className="mb-3 text-[0.65rem] tracking-widest uppercase"
-          style={{ color: "var(--l-text-dim)" }}
-        >
-          Illustrative input — selected profile + your resume
-        </p>
-        <h3
-          style={{
-            fontFamily: "var(--font-flaviotte), serif",
-            fontSize: "1.4rem",
-          }}
-        >
-          {SAMPLE_PROFILE.name}
-        </h3>
-        <p className="text-sm" style={{ color: "var(--l-text-muted)" }}>
-          {SAMPLE_PROFILE.headline}
-        </p>
-        <p className="mt-2 text-xs" style={{ color: "var(--l-text-dim)" }}>
-          {SAMPLE_PROFILE.location}
-        </p>
-        <p className="mt-4 text-sm" style={{ color: "var(--l-text-muted)" }}>
-          {SAMPLE_PROFILE.about}
-        </p>
-        <p
-          className="mt-4 text-xs uppercase tracking-widest"
-          style={{ color: "var(--l-text-dim)" }}
-        >
-          Recent post
-        </p>
-        <p className="text-sm italic" style={{ color: "var(--l-text-muted)" }}>
-          &ldquo;{SAMPLE_PROFILE.recentPost}&rdquo;
-        </p>
-        <p
-          className="mt-6 text-xs uppercase tracking-widest"
-          style={{ color: "var(--l-text-dim)" }}
-        >
-          Your resume snippet
-        </p>
-        <p
-          className="mt-2 text-xs whitespace-pre-line"
-          style={{ color: "var(--l-text-muted)" }}
-        >
-          {SAMPLE_RESUME}
-        </p>
+    <div className="landing-demo-flow">
+      <section className="landing-demo-panel" data-testid="demo-input">
+        <div className="landing-demo-panel-heading">
+          <span className="landing-demo-step">01</span>
+          <div>
+            <p className="landing-demo-eyebrow">Context you select</p>
+            <h2>The starting point.</h2>
+          </div>
+        </div>
+
+        <div className="landing-demo-profile">
+          <p className="landing-demo-field-label">Illustrative profile</p>
+          <h3>{SAMPLE_PROFILE.name}</h3>
+          <p>{SAMPLE_PROFILE.headline}</p>
+          <p className="landing-demo-location">{SAMPLE_PROFILE.location}</p>
+          <p className="landing-demo-about">{SAMPLE_PROFILE.about}</p>
+          <p className="landing-demo-field-label landing-demo-field-spaced">
+            Recent post
+          </p>
+          <blockquote>“{SAMPLE_PROFILE.recentPost}”</blockquote>
+        </div>
+
+        <div className="landing-demo-resume">
+          <p className="landing-demo-field-label">Your resume snippet</p>
+          <p>{SAMPLE_RESUME}</p>
+        </div>
       </section>
 
       <section
-        className="p-6"
-        style={{
-          background: "var(--l-surface-2)",
-          border: "1px solid var(--l-border)",
-        }}
+        className="landing-demo-panel landing-demo-output"
+        data-testid="demo-output"
       >
-        <p
-          className="mb-3 text-[0.65rem] tracking-widest uppercase"
-          style={{ color: "var(--l-blue)" }}
-        >
-          Illustrative output — connection note ({SAMPLE_DRAFT.character_count}{" "}
-          chars)
+        <div className="landing-demo-panel-heading">
+          <span className="landing-demo-step">02</span>
+          <div>
+            <p className="landing-demo-eyebrow">Draft to review</p>
+            <h2>Made to be yours.</h2>
+          </div>
+        </div>
+        <p className="landing-demo-field-label">
+          Illustrative connection note · {SAMPLE_DRAFT.character_count}{" "}
+          characters
         </p>
-        <p
-          data-testid="demo-draft"
-          className="text-base leading-relaxed"
-          style={{
-            fontFamily: "var(--font-flaviotte), serif",
-            color: "var(--l-text)",
-          }}
-        >
+        <blockquote data-testid="demo-draft" className="landing-demo-draft">
           {SAMPLE_DRAFT.body}
-        </p>
-        <p className="mt-6 text-xs" style={{ color: "var(--l-text-dim)" }}>
-          Fictional example · review and edit before using
+        </blockquote>
+        <p className="landing-demo-review">
+          <span aria-hidden="true">↗</span> Fictional example · review and edit
+          before using
         </p>
       </section>
     </div>

@@ -67,7 +67,7 @@ export default function Footer() {
               ) : (
                 <a
                   key={link.href}
-                  href={link.href}
+                  href={`/${link.href}`}
                   className={`${linkClasses} text-[var(--l-text-dim)] hover:text-[var(--l-text)] transition-colors duration-150`}
                 >
                   {link.label}

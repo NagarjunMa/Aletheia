@@ -26,7 +26,7 @@ export default function AuthLayout({
       <ShaderBackground />
 
       {/* ── Left: form panel ─────────────────────────────── */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center px-6 py-16 relative z-10 overflow-hidden">
+      <main className="w-full lg:w-1/2 flex items-center justify-center px-6 py-16 relative z-10 overflow-hidden">
         {/* Vignette to focus attention on form */}
         <div
           aria-hidden
@@ -39,7 +39,7 @@ export default function AuthLayout({
           }}
         />
         <div className="relative z-10 w-full max-w-[420px]">{children}</div>
-      </div>
+      </main>
 
       {/* ── Right: branding panel ─────────────────────────── */}
       <div

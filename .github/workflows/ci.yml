@@ -125,10 +125,10 @@ jobs:
       - name: Build Next.js
         run: npm run build
 
-      - name: Install Chromium for landing smoke test
+      - name: Install Chromium for public UI smoke tests
         run: npx playwright install --with-deps chromium
 
-      - name: Start Server, Check Health & Landing
+      - name: Start Server, Check Health & Public UI
         env:
           PLAYWRIGHT_BASE_URL: http://localhost:3000
         run: |
@@ -141,4 +141,4 @@ jobs:
 
           echo "Testing health endpoint..."
           curl -f http://localhost:3000/api/health || exit 1
-          npx playwright test e2e/landing-navigation.spec.ts --project=chromium
+          npx playwright test e2e/landing-navigation.spec.ts e2e/landing-content.spec.ts e2e/demo.spec.ts e2e/ui-smoke.spec.ts --project=chromium

@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════════════════════════
    Aletheia Extension Settings — Phthalo Green Theme
    Matches the web palette: #020403 → #10291F with Phthalo ambient light
-   Typography: Flaviotte (UI + brand) with DM Sans / Georgia fallback
+   Typography: DM Sans for UI, Flaviotte for the Aletheia brand mark
    ═══════════════════════════════════════════════════════════════ */
 
 @font-face {
@@ -12,6 +12,14 @@
   src:
     url("../assets/fonts/Flaviotte.woff2") format("woff2"),
     url("../assets/fonts/Flaviotte.woff") format("woff");
+}
+
+@font-face {
+  font-family: "DM Sans";
+  font-style: normal;
+  font-weight: 100 1000;
+  font-display: swap;
+  src: url("../assets/fonts/DM-Sans-Latin.woff2") format("woff2");
 }
 
 /* ── Design Tokens ────────────────────────────────────────────────────────── */
@@ -50,8 +58,8 @@
 
   /* Typography */
   --font-ui:
-    "Flaviotte", "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI",
-    system-ui, sans-serif;
+    "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui,
+    sans-serif;
   --font-brand: "Flaviotte", Georgia, serif;
   --font-mono: "SF Mono", Monaco, "Cascadia Code", Consolas, monospace;
 

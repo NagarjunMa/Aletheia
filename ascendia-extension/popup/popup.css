@@ -11,6 +11,14 @@
     url("../assets/fonts/Flaviotte.woff") format("woff");
 }
 
+@font-face {
+  font-family: "DM Sans";
+  font-style: normal;
+  font-weight: 100 1000;
+  font-display: swap;
+  src: url("../assets/fonts/DM-Sans-Latin.woff2") format("woff2");
+}
+
 /* Reference palette: black canvas, sampled Phthalo ramp, white text. */
 :root {
   --green-deepest: #020403;
@@ -66,8 +74,8 @@
 
   /* Typography */
   --font-family:
-    "Flaviotte", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
-    system-ui, sans-serif;
+    "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui,
+    sans-serif;
   --font-family-mono:
     "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas, monospace;
 

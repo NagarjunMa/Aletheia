@@ -17,8 +17,11 @@ export const SAMPLE_RESUME = `Alex Rowan (fictional) — MS in Information Syste
 Built workflow tools for a small logistics team and maintained data-quality checks for daily operations.
 Interested in practical systems work where better handoffs reduce the burden on people.`;
 
+const SAMPLE_DRAFT_BODY =
+  "Hi Elena — your note on reducing field-team handoffs stood out. I have worked on smaller operational workflows where clearer ownership made the biggest difference, and your focus on making the work easier for the people doing it resonated. I would value following what your team is learning.";
+
 export const SAMPLE_DRAFT = {
   category: "linkedin_connection" as const,
-  body: "Hi Elena — your note on reducing field-team handoffs stood out. I have worked on smaller operational workflows where clearer ownership made the biggest difference, and your focus on making the work easier for the people doing it resonated. I would value following what your team is learning.",
-  character_count: 298,
+  body: SAMPLE_DRAFT_BODY,
+  character_count: SAMPLE_DRAFT_BODY.length,
 };

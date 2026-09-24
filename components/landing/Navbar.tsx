@@ -85,7 +85,7 @@ export default function Navbar() {
       >
         {/* Logo — color driven by .landing-nav-logo CSS class */}
         <Link
-          href="#hero"
+          href="/"
           className="landing-brand flex items-center gap-2.5"
           aria-label="Aletheia home"
         >
@@ -101,7 +101,7 @@ export default function Navbar() {
             return (
               <a
                 key={link.href}
-                href={link.href}
+                href={`/${link.href}`}
                 className={`landing-nav-link relative ${isActive ? "active" : ""}`}
                 aria-current={isActive ? "location" : undefined}
               >
@@ -188,7 +188,7 @@ export default function Navbar() {
           return (
             <a
               key={link.href}
-              href={link.href}
+              href={`/${link.href}`}
               data-mobile-item
               onClick={closeMobileMenu}
               className={`landing-nav-link block w-full py-3.5 text-left ${isActive ? "active" : ""}`}
