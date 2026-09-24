@@ -10,6 +10,33 @@ test("landing page loads @smoke", async ({ page }) => {
   await expect(page).toHaveTitle(/Aletheia/);
 });
 
+test("approved Throughline mark loads on the landing page @smoke", async ({
+  page,
+  request,
+}) => {
+  await page.goto("/");
+
+  const logo = page.getByRole("img", { name: "Aletheia" }).first();
+  await expect(logo).toBeVisible();
+  await expect(logo).toHaveAttribute("src", /Aletheia\.svg/u);
+  await expect
+    .poll(() => logo.evaluate((image: HTMLImageElement) => image.naturalWidth))
+    .toBeGreaterThan(0);
+
+  const asset = await request.get("/Aletheia.svg");
+  expect(asset.ok()).toBe(true);
+  const svg = await asset.text();
+  expect(svg.includes("Aletheia Throughline offset badge")).toBe(true);
+  expect(svg.includes("M30 44h29c25 0 17 56 43 56")).toBe(true);
+  expect(svg.includes("<image")).toBe(false);
+
+  await expect(page.locator('link[rel="apple-touch-icon"]')).toHaveAttribute(
+    "href",
+    "/aletheia-apple-touch.png",
+  );
+  expect((await request.get("/aletheia-apple-touch.png")).ok()).toBe(true);
+});
+
 test("login page renders @smoke", async ({ page }) => {
   await page.goto("/auth/login");
   // Middleware may redirect authenticated sessions, but an unauthenticated

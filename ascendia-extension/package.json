@@ -1,6 +1,6 @@
 {
   "name": "aletheia-extension",
-  "version": "1.0.17",
+  "version": "1.0.18",
   "description": "Draft professional introductions and application answers from context you choose. Review and edit every result before use.",
   "private": true,
   "scripts": {

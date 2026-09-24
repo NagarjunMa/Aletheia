@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img" aria-labelledby="title desc">
+  <title id="title">Aletheia Throughline, offset joins</title>
+  <desc id="desc">Context joins a shared draft line at widely separated positions rather than at an arrow-like point.</desc>
+  <g fill="none" stroke="#285D49" stroke-width="16" stroke-linecap="square" stroke-linejoin="round">
+    <path d="M30 44h29c25 0 17 56 43 56"/>
+    <path d="M30 100h140"/>
+    <path d="M30 156h72c28 0 25-56 55-56"/>
+  </g>
+</svg>
