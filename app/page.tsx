@@ -13,6 +13,9 @@ import ShaderBackground from "@/components/ShaderBackground";
 const Pricing = dynamic(() => import("@/components/landing/Pricing"));
 const FAQ = dynamic(() => import("@/components/landing/FAQ"));
 const FounderNote = dynamic(() => import("@/components/landing/FounderNote"));
+const FeedbackSection = dynamic(
+  () => import("@/components/landing/FeedbackSection"),
+);
 const CTA = dynamic(() => import("@/components/landing/CTA"));
 
 export const metadata: Metadata = {
@@ -85,6 +88,7 @@ export default function Home() {
         <Pricing />
         <FAQ />
         <FounderNote />
+        <FeedbackSection />
         <CTA />
       </main>
       <Footer />

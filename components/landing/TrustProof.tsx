@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/public-contact";
 
 const CHROME_WEB_STORE_URL =
   process.env.NEXT_PUBLIC_CHROME_WEB_STORE_URL ??
@@ -97,11 +98,11 @@ export default function TrustProof() {
             ),
           )}
           <a
-            href="mailto:hello@aletheia.live"
+            href={SUPPORT_MAILTO}
             className="text-[10px] font-bold uppercase tracking-[0.16em]"
             style={{ color: "var(--l-blue)" }}
           >
-            hello@aletheia.live →
+            {SUPPORT_EMAIL} →
           </a>
         </nav>
       </div>

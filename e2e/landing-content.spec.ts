@@ -169,6 +169,52 @@ test("public metadata uses route-specific canonical URLs @smoke", async ({
   }
 });
 
+test("public contact links use the support inbox @smoke", async ({ page }) => {
+  for (const route of ["/", "/privacy", "/terms"]) {
+    await page.goto(route);
+    await expect(
+      page.locator('a[href="mailto:support@aletheia.live"]').first(),
+    ).toBeVisible();
+    await expect(page.locator('a[href^="mailto:hello@"]')).toHaveCount(0);
+  }
+});
+
+test("public feedback form explains the email-app handoff @smoke", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const feedback = page.locator("#feedback");
+  await expect(
+    feedback.getByRole("heading", { name: /share your perspective/i }),
+  ).toBeVisible();
+  await expect(
+    feedback.getByRole("textbox", { name: "Your name" }),
+  ).toBeVisible();
+  await expect(
+    feedback.getByRole("textbox", { name: "Your message" }),
+  ).toHaveAttribute("maxlength", "1200");
+  await expect(
+    feedback.getByRole("button", { name: /open email draft/i }),
+  ).toBeVisible();
+  await expect(
+    feedback.getByText(
+      /nothing is sent until you send it from your email app/i,
+    ),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("contentinfo").getByRole("link", { name: "Feedback" }),
+  ).toHaveAttribute("href", "/#feedback");
+
+  const message = feedback.getByRole("textbox", { name: "Your message" });
+  await message.fill("            ");
+  await feedback.getByRole("button", { name: /open email draft/i }).click();
+  expect(
+    await message.evaluate(
+      (element: HTMLTextAreaElement) => element.validity.customError,
+    ),
+  ).toBe(true);
+});
+
 test("crawler metadata exposes only public canonical routes @smoke", async ({
   request,
 }) => {

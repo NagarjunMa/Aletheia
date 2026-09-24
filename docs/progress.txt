@@ -1529,3 +1529,21 @@ read-only review found no material issue. Source-matched production build,
 checks passed. Hosted CI, signed-in/admin visual flows, and Store publication
 remain unverified; candidate extension ZIP in scratch is not a release
 artifact. No push or deployment.
+
+## 2026-09-24 — Public support email and feedback composer (local follow-up)
+
+On `fix/landing-founder-note-layout`, added a landing-page feedback composer
+that opens a pre-addressed draft in the visitor's email app. It explicitly
+says no message is sent until the visitor sends it. Updated public and legal
+contact links to the canonical `support@aletheia.live` address; the existing
+database-only `/api/feedback` route remains untouched. Privacy text describes
+the email-app handoff. Risk: Significant for the cross-page public contact
+change, with no new server-side data flow.
+
+The support-link and form browser checks failed on the old page as intended.
+The source-matched copy passed lint/type/build, 29 public Chromium tests,
+1,097 coverage-gated unit tests, and dependency audit. Desktop/mobile
+feedback sections were inspected without overflow. Real email-app delivery,
+hosted CI, and mailbox receipt are unverified. See
+`docs/operations/public-feedback-contact.md`. Fresh independent source review
+found no material issue. No new commit or push yet.

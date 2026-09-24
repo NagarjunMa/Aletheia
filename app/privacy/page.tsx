@@ -3,6 +3,7 @@ import Link from "next/link";
 import Navbar from "@/components/landing/Navbar";
 import Footer from "@/components/landing/Footer";
 import ShaderBackground from "@/components/ShaderBackground";
+import { SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/public-contact";
 
 export const metadata: Metadata = {
   title: "Privacy Policy",
@@ -14,8 +15,7 @@ export const metadata: Metadata = {
   },
 };
 
-const EFFECTIVE_DATE = "September 22, 2026";
-const CONTACT_EMAIL = "hello@aletheia.live";
+const EFFECTIVE_DATE = "September 24, 2026";
 const OPERATOR_NAME = "Nagarjun Mallesh";
 const OPERATOR_LOCATION = "Boston, Massachusetts, United States";
 
@@ -94,6 +94,13 @@ export default function PrivacyPage() {
               <strong>Optional support-chat information</strong> — questions,
               name, and email address you voluntarily submit through the chat
               widget on our landing page.
+            </li>
+            <li>
+              <strong>Optional support email and feedback</strong> — the
+              message, sender address, and any name you choose to include when
+              you send us an email. The landing-page feedback form only prepares
+              an email draft in your email app; it does not submit your text to
+              Aletheia when you click the button.
             </li>
           </ul>
           <p>
@@ -389,8 +396,8 @@ function Section({
 
 function ContactLink() {
   return (
-    <a href="mailto:hello@aletheia.live" className="underline">
-      {CONTACT_EMAIL}
+    <a href={SUPPORT_MAILTO} className="underline">
+      {SUPPORT_EMAIL}
     </a>
   );
 }

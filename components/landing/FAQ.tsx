@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Plus, Minus } from "lucide-react";
+import { SUPPORT_MAILTO } from "@/lib/public-contact";
 
 const faqs = [
   {
@@ -78,7 +79,7 @@ export default function FAQ() {
           >
             Can&apos;t find the answer you&apos;re looking for?{" "}
             <a
-              href="mailto:hello@aletheia.live"
+              href={SUPPORT_MAILTO}
               style={{
                 color: "var(--l-blue)",
                 fontWeight: 700,

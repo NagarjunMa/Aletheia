@@ -1979,6 +1979,112 @@
   padding-top: 1.25rem;
 }
 
+.landing-marketing #feedback .landing-feedback-title {
+  max-width: 11ch;
+  font-size: clamp(3.2rem, 5.3vw, 5.5rem) !important;
+  line-height: 0.96 !important;
+}
+
+.landing-feedback-title em {
+  color: var(--ref-phthalo-400);
+  font-weight: 300;
+}
+
+.landing-feedback-email {
+  color: var(--l-accent);
+  text-decoration: underline;
+  text-underline-offset: 0.25em;
+}
+
+.landing-feedback-form {
+  min-width: 0;
+  padding: clamp(1.5rem, 3vw, 3rem);
+  border: 1px solid var(--l-border-strong);
+  background: linear-gradient(
+    155deg,
+    rgba(30, 73, 56, 0.35),
+    rgba(9, 24, 20, 0.78) 52%
+  );
+}
+
+.landing-feedback-topline {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 2rem;
+  border-bottom: 1px solid var(--l-border);
+  color: var(--l-text-dim);
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.landing-feedback-field {
+  display: grid;
+  gap: 0.7rem;
+  margin-top: 1.7rem;
+}
+
+.landing-feedback-field label {
+  color: var(--l-text);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.landing-feedback-field :is(input, textarea) {
+  width: 100%;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--l-border-strong);
+  border-radius: 2px;
+  background: rgba(2, 4, 3, 0.42);
+  color: var(--l-text);
+  font: inherit;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.landing-feedback-field textarea {
+  resize: vertical;
+  min-height: 8rem;
+}
+
+.landing-feedback-field :is(input, textarea)::placeholder {
+  color: var(--l-text-dim);
+}
+
+.landing-feedback-field :is(input, textarea):focus-visible,
+.landing-feedback-email:focus-visible {
+  outline: 2px solid var(--l-accent);
+  outline-offset: 3px;
+}
+
+.landing-feedback-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+.landing-feedback-actions p {
+  max-width: 22rem;
+  color: var(--l-text-dim);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+@media (max-width: 639px) {
+  .landing-feedback-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .landing-feedback-actions button {
+    width: 100%;
+  }
+}
+
 @media (min-width: 1024px) {
   .landing-marketing .founder-note {
     padding-block: 3.5rem;

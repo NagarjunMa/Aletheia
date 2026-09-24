@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/public-contact";
 
 const CHROME_WEB_STORE_URL =
   process.env.NEXT_PUBLIC_CHROME_WEB_STORE_URL ??
@@ -15,6 +16,7 @@ const footerLinks: FooterLink[] = [
   { label: "Trust", type: "scroll", href: "#trust" },
   { label: "Pricing", type: "scroll", href: "#pricing" },
   { label: "FAQ", type: "scroll", href: "#faq" },
+  { label: "Feedback", type: "scroll", href: "#feedback" },
   { label: "Demo", type: "route", href: "/demo" },
   { label: "Install", type: "route", href: "/install" },
   { label: "Status", type: "route", href: "/status" },
@@ -100,11 +102,11 @@ export default function Footer() {
               Corporation or Apollo.io. Aletheia is an independent product.
             </p>
             <a
-              href="mailto:hello@aletheia.live"
+              href={SUPPORT_MAILTO}
               className="text-[9px]"
               style={{ color: "var(--l-blue)" }}
             >
-              hello@aletheia.live
+              {SUPPORT_EMAIL}
             </a>
           </div>
         </div>
