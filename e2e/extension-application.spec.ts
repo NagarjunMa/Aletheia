@@ -94,7 +94,7 @@ async function openPopup(page: Page, authenticated = true) {
             create: async () => {},
           },
           runtime: {
-            getManifest: () => ({ version: "1.0.17" }),
+            getManifest: () => ({ version: "1.0.18" }),
             sendMessage: (
               message: { action: string; payload?: { questions?: string[] } },
               callback?: (value: unknown) => void,

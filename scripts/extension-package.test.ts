@@ -16,6 +16,12 @@ it("packages the auth-draft helper and every relative runtime module dependency"
   expect(zip.file("lib/application-auth-draft.js")).not.toBeNull();
   expect(zip.file("assets/thinking-orbs-engine.js")).not.toBeNull();
   expect(zip.file("assets/LICENSE.thinking-orbs")).not.toBeNull();
+  for (const size of [16, 32, 48, 128]) {
+    const iconPath = `icons/icon-${size}.png`;
+    expect(await zip.file(iconPath)?.async("nodebuffer")).toEqual(
+      await readFile(`ascendia-extension/${iconPath}`),
+    );
+  }
   expect(await zip.file("popup/generation-orb.js")!.async("string")).toContain(
     "../assets/thinking-orbs-engine.js",
   );

@@ -54,7 +54,9 @@ export const metadata: Metadata = {
   authors: [{ name: "Nagarjun Mallesh" }],
   icons: {
     icon: "/Aletheia.svg",
-    apple: "/Aletheia.svg",
+    apple: [
+      { url: "/aletheia-apple-touch.png", sizes: "180x180", type: "image/png" },
+    ],
   },
   openGraph: {
     title: "LinkedIn Messaging & Professional Outreach Assistant | Aletheia",
