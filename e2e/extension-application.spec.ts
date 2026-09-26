@@ -96,7 +96,13 @@ async function openPopup(page: Page, authenticated = true) {
           runtime: {
             getManifest: () => ({ version: "1.0.18" }),
             sendMessage: (
-              message: { action: string; payload?: { questions?: string[] } },
+              message: {
+                action: string;
+                payload?: { questions?: string[] };
+                kind?: string;
+                requesterId?: string;
+                record?: Record<string, unknown>;
+              },
               callback?: (value: unknown) => void,
             ) => {
               window.aleTest.messages.push(message);
@@ -107,11 +113,39 @@ async function openPopup(page: Page, authenticated = true) {
               if (
                 message.action === "getAuthStatus" ||
                 message.action === "silentAuthCheck"
-              )
+              ) {
+                if (authed) {
+                  const local = JSON.parse(
+                    sessionStorage.getItem("test-local") || "{}",
+                  );
+                  local.aletheia_auth = {
+                    access_token: "test-token",
+                    user: { id: "user-1" },
+                  };
+                  sessionStorage.setItem("test-local", JSON.stringify(local));
+                }
                 response = { authenticated: authed, user: { id: "user-1" } };
+              }
               if (message.action === "authenticate") {
                 sessionStorage.setItem("test-authenticated", "true");
                 response = { success: true, user: { id: "user-1" } };
+              }
+              if (message.action === "saveAccountRecord") {
+                const local = JSON.parse(
+                  sessionStorage.getItem("test-local") || "{}",
+                );
+                if (
+                  local.aletheia_auth?.user?.id !== message.requesterId ||
+                  message.record?.ownerId !== message.requesterId
+                ) {
+                  response = { success: false };
+                } else if (message.kind === "lastGeneration") {
+                  local.lastGeneration = message.record;
+                  sessionStorage.setItem("test-local", JSON.stringify(local));
+                } else if (message.kind === "accepted") {
+                  local.accepted = [...(local.accepted || []), message.record];
+                  sessionStorage.setItem("test-local", JSON.stringify(local));
+                }
               }
               if (
                 message.action === "sendFeedback" &&
@@ -354,6 +388,34 @@ test("ZIP-source popup paints the orb, reports elapsed time, and stops after suc
     "false",
   );
   await expect(page.locator(".application-answer")).toHaveCount(1);
+});
+
+test("generation response is discarded if the connected account changes @smoke", async ({
+  page,
+}) => {
+  await openPopup(page);
+  await page.selectOption("#category", "yc_application");
+  await page.fill("#jdInput", jd);
+  await page.fill("#ycQuestionInput", "Describe your relevant experience?");
+  await page.evaluate(() => {
+    window.aleTest.holdGeneration = true;
+  });
+  await page.click("#generateBtn");
+  await expect(page.locator("#generationProgress")).toBeVisible();
+  await page.evaluate(() => {
+    const local = JSON.parse(sessionStorage.getItem("test-local") || "{}");
+    local.aletheia_auth.user.id = "user-b";
+    sessionStorage.setItem("test-local", JSON.stringify(local));
+    window.aleTest.generationCallback?.(window.aleTest.generationResponse);
+  });
+  await expect(page.locator("#generationProgress")).toBeHidden();
+  await expect(page.locator(".application-answer")).toHaveCount(0);
+  expect(
+    await page.evaluate(
+      () =>
+        JSON.parse(sessionStorage.getItem("test-local") || "{}").lastGeneration,
+    ),
+  ).toBeUndefined();
 });
 
 test("ZIP-source popup clears progress after failure and respects reduced motion @smoke", async ({

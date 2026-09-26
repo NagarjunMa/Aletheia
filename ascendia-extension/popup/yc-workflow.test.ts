@@ -8,6 +8,7 @@ import {
   parseGenerationResponse,
 } from "./popup-core.js";
 import { isValidOperationId } from "../lib/logger-core.js";
+import { filterOwnedAccepted } from "../lib/account-owned-cache.js";
 const popupHtml = readFileSync(
   new URL("./popup.html", import.meta.url),
   "utf8",
@@ -48,6 +49,7 @@ describe("ALE-37 private question handling at persistence boundaries", () => {
       YC_APPLICATION_CATEGORY: "yc_application",
       projectStoredApplication,
       buildApplicationFeedback,
+      sendBackgroundMessage: vi.fn().mockResolvedValue({ success: true }),
       currentUserId: "user-1",
       currentOutput: structuredClone(output),
       currentProfile: null,
@@ -61,7 +63,13 @@ describe("ALE-37 private question handling at persistence boundaries", () => {
       chrome: {
         storage: {
           local: {
-            get: vi.fn().mockResolvedValue({ accepted: [] }),
+            get: vi
+              .fn()
+              .mockImplementation(async (key: string) =>
+                key === "aletheia_auth"
+                  ? { aletheia_auth: { user: { id: "user-1" } } }
+                  : { accepted: [] },
+              ),
             set: vi.fn().mockResolvedValue(undefined),
           },
         },
@@ -81,10 +89,10 @@ describe("ALE-37 private question handling at persistence boundaries", () => {
     );
     await runInNewContext(`(${source})(currentOutput)`, context);
     expect(context.console.error).not.toHaveBeenCalled();
-    expect(context.chrome.storage.local.set).toHaveBeenCalledTimes(1);
-    const stored = context.chrome.storage.local.set.mock.calls[0]?.[0];
-    expect(stored.lastGeneration.output.body).toBe(answerOnlyBody);
-    expect(stored.lastGeneration.inputs).toEqual({
+    expect(context.sendBackgroundMessage).toHaveBeenCalledTimes(1);
+    const stored = context.sendBackgroundMessage.mock.calls[0]?.[0].record;
+    expect(stored.output.body).toBe(answerOnlyBody);
+    expect(stored.inputs).toEqual({
       category: "yc_application",
     });
     expect(JSON.stringify(stored)).not.toMatch(
@@ -100,9 +108,9 @@ describe("ALE-37 private question handling at persistence boundaries", () => {
       popupSource.indexOf("\nfunction updateUIForCategory()"),
     );
     await runInNewContext(`(${source})()`, context);
-    expect(context.chrome.storage.local.set).toHaveBeenCalledTimes(1);
-    const stored = context.chrome.storage.local.set.mock.calls[0]?.[0];
-    expect(stored.accepted[0].body).toBe(answerOnlyBody);
+    expect(context.sendBackgroundMessage).toHaveBeenCalledTimes(1);
+    const stored = context.sendBackgroundMessage.mock.calls[0]?.[0].record;
+    expect(stored.body).toBe(answerOnlyBody);
     expect(JSON.stringify(stored)).not.toMatch(
       /PRIVATE QUESTION|PRIVATE_JOB_DESCRIPTION/,
     );
@@ -158,20 +166,24 @@ describe("ALE-38 popup elapsed time", () => {
         popupAuthenticated: true,
         document: { getElementById: () => ({ value: "yc_application" }) },
         currentProfile: null,
+        currentUserId: "user-1",
         validateGenerationInput: () => ({ valid: true }),
         setGeneratingState: vi.fn(),
         setGenerationPhase: vi.fn(),
         chrome: {
           storage: {
             local: {
-              get: async () => {
+              get: async (key: string) => {
                 time += 5;
-                return { accepted: [] };
+                return key === "aletheia_auth"
+                  ? { aletheia_auth: { user: { id: "user-1" } } }
+                  : { accepted: [] };
               },
             },
           },
         },
         buildGeneratePayload: () => ({}),
+        filterOwnedAccepted,
         createOperationId: () => "11111111-1111-4111-8111-111111111111",
         Date: { now: () => time },
         log: { info, warn },
@@ -186,7 +198,7 @@ describe("ALE-38 popup elapsed time", () => {
         storeGeneration: async () => {
           time += 7;
         },
-        incrementUsageCount: async () => {
+        updateUsageStats: async () => {
           time += 2;
         },
         isAuthError: () => false,
@@ -203,13 +215,13 @@ describe("ALE-38 popup elapsed time", () => {
       );
       expect(entries).toHaveLength(1);
       expect(entries[0][1]).toMatchObject({
-        durationMs: failed ? 25 : 28,
+        durationMs: failed ? 25 : 33,
         outcome: failed ? "failure" : "success",
       });
       expect(
         info.mock.calls.find(([event]) => event === "generation.finished")?.[1],
       ).toMatchObject({
-        durationMs: failed ? 25 : 37,
+        durationMs: failed ? 25 : 42,
         outcome: failed ? "failure" : "success",
       });
       expect(sandbox.setGeneratingState).toHaveBeenLastCalledWith(false);

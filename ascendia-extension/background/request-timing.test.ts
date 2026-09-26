@@ -115,3 +115,50 @@ it("does not automatically repeat a chargeable batch after an ambiguous transpor
   expect(fetch).toHaveBeenCalledTimes(1);
   expect(clearTimeout).toHaveBeenCalledWith(1);
 });
+
+it("does not retry with a previous account's token after an account switch", async () => {
+  let activeAccount = "user-a";
+  const fetch = vi.fn().mockImplementation(async () => {
+    activeAccount = "user-b";
+    return {
+      ok: false,
+      status: 503,
+      statusText: "Unavailable",
+      headers: { get: () => null },
+      json: async () => ({ error: "Unavailable" }),
+    };
+  });
+  const sandbox = {
+    CONFIG: {
+      DEFAULT_API_URL: "https://example.test",
+      MAX_RETRIES: 3,
+      TIMEOUT: 30000,
+    },
+    Date,
+    log: { info: vi.fn(), warn: vi.fn() },
+    AbortController,
+    setTimeout: (callback: () => void, ms: number) => {
+      if (ms !== 30000) callback();
+      return 1;
+    },
+    clearTimeout: vi.fn(),
+    getAletheiaRequestHeaders: (value: unknown) => value,
+    getSafeErrorCode: () => "API_REQUEST_FAILED",
+    fetch,
+    isValidOperationId,
+    assertActiveAccount: () => {
+      if (activeAccount !== "user-a") {
+        const error = new Error("The connected account changed");
+        (error as Error & { code: string }).code = "AUTH_ACCOUNT_CHANGED";
+        throw error;
+      }
+    },
+  };
+  await expect(
+    runInNewContext(
+      `(${fn})("/api/extension/generate", {headers: {Authorization: "Bearer token-a"}}, null, "operation", {assertBeforeAttempt: assertActiveAccount})`,
+      sandbox,
+    ),
+  ).rejects.toThrow(/account changed/);
+  expect(fetch).toHaveBeenCalledTimes(1);
+});
