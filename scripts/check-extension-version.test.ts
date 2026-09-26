@@ -16,6 +16,9 @@ describe("extension version guard", () => {
     expect(
       isPackagedExtensionPath("ascendia-extension/assets/fonts/font.woff2"),
     ).toBe(true);
+    expect(
+      isPackagedExtensionPath("ascendia-extension/lib/account-owned-cache.js"),
+    ).toBe(true);
     expect(isPackagedExtensionPath("scripts/build-extension-zip.mjs")).toBe(
       true,
     );

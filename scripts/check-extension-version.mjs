@@ -13,6 +13,7 @@ const PACKAGED_PREFIXES = [
   "ascendia-extension/content/",
   "ascendia-extension/popup/",
   "ascendia-extension/settings/",
+  "ascendia-extension/lib/",
   "ascendia-extension/icons/",
   "ascendia-extension/assets/",
 ];

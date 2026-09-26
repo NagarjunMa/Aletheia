@@ -3,6 +3,12 @@ import {
   saveApplicationAuthDraft,
 } from "../lib/application-auth-draft.js";
 import { isValidOperationId } from "../lib/logger-core.js";
+import {
+  filterOwnedAccepted,
+  getOwnedUsage,
+  isMatchingAccountToken,
+  isOwnedRecord,
+} from "../lib/account-owned-cache.js";
 // Aletheia Extension Background Service Worker
 // Handles API communication with the Aletheia backend
 
@@ -49,6 +55,12 @@ function getSafeErrorCode(error, fallback) {
 
 // In-flight guard: prevents duplicate authenticate calls from opening multiple tabs
 let authenticatePromise = null;
+// Serialize local usage writes so overlapping generations cannot replace one
+// another's counters. The epoch invalidates responses from before logout.
+let usageMutation = Promise.resolve();
+let usageEpoch = 0;
+let personalStorageMutation = Promise.resolve();
+let logoutInProgress = false;
 
 // Recover from service worker restart during login
 (async function recoverPendingLogin() {
@@ -257,7 +269,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === "generate") {
-    handleGenerateRequest(message.payload, operationId)
+    handleGenerateRequest(message.payload, operationId, message.requesterId)
       .then((result) => {
         log.info("runtime.message.complete", {
           operationId,
@@ -350,6 +362,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.action === "saveAccountRecord") {
+    saveAccountRecord(message.kind, message.requesterId, message.record)
+      .then(() => sendResponse({ success: true }))
+      .catch(() => sendResponse({ success: false }));
+    return true;
+  }
+
   if (message.action === "getAuthStatus") {
     getAuthStatus()
       .then((result) => sendResponse(result))
@@ -397,26 +416,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   // Acknowledge only after persistence; the modal retains unsaved reports.
   if (message.action === "sendFeedback") {
-    (async () => {
-      try {
-        const url = await getEffectiveApiUrl();
-        const accessToken = await getValidAccessToken(url, { operationId });
-        const response = await fetch(`${url}/api/extension/feedback`, {
-          method: "POST",
-          headers: getAletheiaRequestHeaders({
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${accessToken}`,
-          }),
-          body: JSON.stringify(message.payload),
-          signal: AbortSignal.timeout(15000),
-        });
-        if (!response.ok) throw new Error("Feedback persistence failed");
+    handleFeedbackRequest(message.payload, message.requesterId, operationId)
+      .then(() => {
         sendResponse({ success: true });
         log.info("feedback.dispatch.complete", {
           operationId,
           outcome: "success",
         });
-      } catch (error) {
+      })
+      .catch((error) => {
         sendResponse({
           success: false,
           error: "Feedback could not be saved. Please retry.",
@@ -426,8 +434,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           outcome: "failure",
           errorCode: getSafeErrorCode(error, "FEEDBACK_DISPATCH_FAILED"),
         });
-      }
-    })();
+      });
     return true;
   }
 
@@ -532,11 +539,22 @@ async function handleAuthenticate(operationId) {
 }
 
 async function handleLogout(operationId) {
+  usageEpoch++;
+  logoutInProgress = true;
   const complete = startExtensionTimedStage(log, "auth.logout", {
     operationId,
   });
   try {
     await clearAuth();
+    await usageMutation;
+    await personalStorageMutation;
+    await chrome.storage.local.remove([
+      "accepted",
+      "lastGeneration",
+      "dailyUsage",
+      "categoryUsage",
+      "usageOwnerId",
+    ]);
     await chrome.storage.session.remove("applicationAuthDraft");
     await chrome.alarms.clear("application-auth-draft-expiry");
     complete("success");
@@ -546,24 +564,72 @@ async function handleLogout(operationId) {
       errorCode: getSafeErrorCode(error, "LOGOUT_FAILED"),
     });
     throw error;
+  } finally {
+    logoutInProgress = false;
   }
 }
 
-async function handleGenerateRequest(payload, operationId) {
+async function saveAccountRecord(kind, requesterId, record) {
+  if (
+    logoutInProgress ||
+    !requesterId ||
+    record?.ownerId !== requesterId ||
+    (kind !== "accepted" && kind !== "lastGeneration")
+  ) {
+    throw new Error("The connected account changed.");
+  }
+  const writeEpoch = usageEpoch;
+  const pending = personalStorageMutation.then(async () => {
+    const { aletheia_auth: auth, accepted = [] } =
+      await chrome.storage.local.get(["aletheia_auth", "accepted"]);
+    if (
+      logoutInProgress ||
+      writeEpoch !== usageEpoch ||
+      auth?.user?.id !== requesterId
+    ) {
+      throw new Error("The connected account changed.");
+    }
+    if (kind === "accepted") {
+      const recentAccepted = (Array.isArray(accepted) ? accepted : [])
+        .filter((item) => isOwnedRecord(item, requesterId))
+        .concat(record)
+        .slice(-20);
+      await chrome.storage.local.set({ accepted: recentAccepted });
+    } else {
+      await chrome.storage.local.set({ lastGeneration: record });
+    }
+  });
+  personalStorageMutation = pending.catch(() => {});
+  await pending;
+}
+
+async function handleFeedbackRequest(payload, requesterId, operationId) {
+  const url = await getEffectiveApiUrl();
+  const accessToken = await getValidAccessToken(url, { operationId });
+  const { aletheia_auth } = await chrome.storage.local.get("aletheia_auth");
+  if (!isMatchingAccountToken(requesterId, accessToken, aletheia_auth)) {
+    throw new Error("The connected account changed. Reopen the extension.");
+  }
+  const response = await fetch(`${url}/api/extension/feedback`, {
+    method: "POST",
+    headers: getAletheiaRequestHeaders({
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    }),
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(15000),
+  });
+  if (!response.ok) throw new Error("Feedback persistence failed");
+}
+
+async function handleGenerateRequest(payload, operationId, requesterId) {
+  const generationUsageEpoch = usageEpoch;
   const complete = startExtensionTimedStage(log, "generation.workflow", {
     operationId,
   });
   try {
     const url = await getEffectiveApiUrl();
-    const { accepted = [], aletheia_auth } = await chrome.storage.local.get([
-      "accepted",
-      "aletheia_auth",
-    ]);
-    const relevantExamples = accepted
-      .filter((item) => item.category === payload.category)
-      .map((item) => item.body || item.message)
-      .slice(-3);
-    const requestData = buildGenerationRequestData(payload, relevantExamples);
+    const { aletheia_auth } = await chrome.storage.local.get("aletheia_auth");
     let usageChecked = false;
 
     const response = await generateWithAuthRecovery({
@@ -592,8 +658,26 @@ async function handleGenerateRequest(payload, operationId) {
         return handleAuthenticate(operationId);
       },
       generate: async (accessToken) => {
+        const { accepted = [], aletheia_auth: requestAuth } =
+          await chrome.storage.local.get(["accepted", "aletheia_auth"]);
+        if (!isMatchingAccountToken(requesterId, accessToken, requestAuth)) {
+          const accountError = new Error(
+            "The connected account changed. Reopen the extension and try again.",
+          );
+          accountError.code = "AUTH_ACCOUNT_CHANGED";
+          throw accountError;
+        }
+        const relevantExamples = filterOwnedAccepted(
+          accepted,
+          payload.category,
+          requesterId,
+        );
+        const requestData = buildGenerationRequestData(
+          payload,
+          relevantExamples,
+        );
         if (!usageChecked) {
-          await checkUsageLimit();
+          await checkUsageLimit(requesterId);
           usageChecked = true;
         }
         const result = await makeAPIRequest(
@@ -608,9 +692,24 @@ async function handleGenerateRequest(payload, operationId) {
           },
           url,
           operationId,
-          payload.category === "yc_application"
-            ? { maxAttempts: 1, timeoutMs: 120000 }
-            : undefined,
+          {
+            ...(payload.category === "yc_application"
+              ? { maxAttempts: 1, timeoutMs: 120000 }
+              : {}),
+            assertBeforeAttempt: async () => {
+              const { aletheia_auth: activeAuth } =
+                await chrome.storage.local.get("aletheia_auth");
+              if (
+                !isMatchingAccountToken(requesterId, accessToken, activeAuth)
+              ) {
+                const error = new Error(
+                  "The connected account changed. Reopen the extension and try again.",
+                );
+                error.code = "AUTH_ACCOUNT_CHANGED";
+                throw error;
+              }
+            },
+          },
         );
 
         if (!result.success) {
@@ -635,7 +734,7 @@ async function handleGenerateRequest(payload, operationId) {
       });
       return response;
     }
-    await logUsage(payload.category);
+    await logUsage(payload.category, requesterId, generationUsageEpoch);
     complete("success", { category: payload.category });
     return response;
   } catch (error) {
@@ -674,6 +773,8 @@ async function makeAPIRequest(
 
       const controller = new AbortController();
       timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+      await policy.assertBeforeAttempt?.();
 
       const response = await fetch(url, {
         ...options,
@@ -758,6 +859,8 @@ async function makeAPIRequest(
         );
       }
 
+      if (error.code === "AUTH_ACCOUNT_CHANGED") throw error;
+
       if (
         error.status === 402 ||
         error.code === "INSUFFICIENT_CREDITS" ||
@@ -834,14 +937,20 @@ async function handleHealthCheck() {
   }
 }
 
-async function checkUsageLimit() {
-  const { dailyUsage = {}, settings = {} } = await chrome.storage.local.get([
+async function checkUsageLimit(ownerId) {
+  const {
+    dailyUsage,
+    usageOwnerId,
+    settings = {},
+  } = await chrome.storage.local.get([
     "dailyUsage",
+    "usageOwnerId",
     "settings",
   ]);
 
   const today = new Date().toISOString().split("T")[0];
-  const todayUsage = dailyUsage[today] || 0;
+  const todayUsage =
+    getOwnedUsage(dailyUsage, usageOwnerId, ownerId)[today] || 0;
   const maxDailyUsage = settings.maxDailyUsage || 50;
 
   if (todayUsage >= maxDailyUsage) {
@@ -851,34 +960,63 @@ async function checkUsageLimit() {
   }
 }
 
-async function logUsage(category) {
+async function logUsage(category, ownerId, generationEpoch = usageEpoch) {
   try {
-    const { dailyUsage = {}, categoryUsage = {} } =
-      await chrome.storage.local.get(["dailyUsage", "categoryUsage"]);
+    if (!ownerId) return;
+    const pending = usageMutation.then(async () => {
+      if (generationEpoch !== usageEpoch) return;
+      const {
+        dailyUsage: storedDaily,
+        categoryUsage: storedCategory,
+        usageOwnerId,
+        aletheia_auth: activeAuth,
+      } = await chrome.storage.local.get([
+        "dailyUsage",
+        "categoryUsage",
+        "usageOwnerId",
+        "aletheia_auth",
+      ]);
+      if (generationEpoch !== usageEpoch || activeAuth?.user?.id !== ownerId) {
+        return;
+      }
+      const dailyUsage = {
+        ...getOwnedUsage(storedDaily, usageOwnerId, ownerId),
+      };
+      const categoryUsage = {
+        ...getOwnedUsage(storedCategory, usageOwnerId, ownerId),
+      };
 
-    const today = new Date().toISOString().split("T")[0];
+      const today = new Date().toISOString().split("T")[0];
 
-    dailyUsage[today] = (dailyUsage[today] || 0) + 1;
+      dailyUsage[today] = (dailyUsage[today] || 0) + 1;
 
-    if (!categoryUsage[today]) {
-      categoryUsage[today] = {};
-    }
-    categoryUsage[today][category] = (categoryUsage[today][category] || 0) + 1;
+      if (!categoryUsage[today]) {
+        categoryUsage[today] = {};
+      }
+      categoryUsage[today][category] =
+        (categoryUsage[today][category] || 0) + 1;
 
-    // Clean up old usage data (keep last 30 days)
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const cutoffDate = thirtyDaysAgo.toISOString().split("T")[0];
+      // Clean up old usage data (keep last 30 days)
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const cutoffDate = thirtyDaysAgo.toISOString().split("T")[0];
 
-    Object.keys(dailyUsage).forEach((date) => {
-      if (date < cutoffDate) delete dailyUsage[date];
+      Object.keys(dailyUsage).forEach((date) => {
+        if (date < cutoffDate) delete dailyUsage[date];
+      });
+
+      Object.keys(categoryUsage).forEach((date) => {
+        if (date < cutoffDate) delete categoryUsage[date];
+      });
+
+      await chrome.storage.local.set({
+        dailyUsage,
+        categoryUsage,
+        usageOwnerId: ownerId,
+      });
     });
-
-    Object.keys(categoryUsage).forEach((date) => {
-      if (date < cutoffDate) delete categoryUsage[date];
-    });
-
-    await chrome.storage.local.set({ dailyUsage, categoryUsage });
+    usageMutation = pending.catch(() => {});
+    await pending;
   } catch (error) {
     log.warn("usage.record.complete", {
       outcome: "failure",

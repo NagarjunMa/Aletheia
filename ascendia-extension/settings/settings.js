@@ -490,14 +490,23 @@ async function exportUsageData() {
       "dailyUsage",
       "categoryUsage",
       "accepted",
+      "usageOwnerId",
+      "aletheia_auth",
     ]);
+    const ownerId = data.aletheia_auth?.user?.id;
+    if (!ownerId) {
+      throw new Error("Connect your account before exporting usage data.");
+    }
+    const ownsUsage = data.usageOwnerId === ownerId;
 
     const exportData = {
       exportedAt: new Date().toISOString(),
       version: chrome.runtime.getManifest().version,
-      dailyUsage: data.dailyUsage || {},
-      categoryUsage: data.categoryUsage || {},
-      acceptedMessages: data.accepted || [],
+      dailyUsage: ownsUsage ? data.dailyUsage || {} : {},
+      categoryUsage: ownsUsage ? data.categoryUsage || {} : {},
+      acceptedMessages: Array.isArray(data.accepted)
+        ? data.accepted.filter((item) => item?.ownerId === ownerId)
+        : [],
       settings: {
         maxDailyUsage: currentSettings.maxDailyUsage,
         autoFillEnabled: currentSettings.autoFillEnabled,

@@ -25,6 +25,11 @@ import {
   getGenerationProgress,
 } from "./generation-progress.js";
 import { startGenerationOrb } from "./generation-orb.js";
+import {
+  filterOwnedAccepted,
+  getOwnedUsage,
+  isOwnedRecord,
+} from "../lib/account-owned-cache.js";
 
 let currentProfile = null;
 let currentOutput = null;
@@ -41,6 +46,8 @@ let generationProgressStartedAt = 0;
 let generationProgressPhase = "preparing";
 let generationOrb = null;
 let generationOrbRun = 0;
+let generationInFlight = false;
+let generationRequesterId = null;
 
 function normalizeApiUrl(apiUrl) {
   let value = String(apiUrl || "").trim();
@@ -122,7 +129,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   // React to auth state changes (e.g., auth-bridge stores session while popup is open).
   // Full reload is the safest path: showAuthRequired() may have wiped #mainContent
   // contents, so a fresh DOM is needed to restore #jdInput, #category, etc.
-  chrome.storage.onChanged.addListener((changes, area) => {
+  chrome.storage.onChanged.addListener(async (changes, area) => {
     if (area === "local" && changes[PROFILE_EXTRACTION_CONSENT_KEY]) {
       if (changes[PROFILE_EXTRACTION_CONSENT_KEY].newValue !== true) {
         currentProfile = null;
@@ -135,16 +142,37 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (area === "local" && changes.aletheia_auth) {
       const before = changes.aletheia_auth.oldValue;
       const after = changes.aletheia_auth.newValue;
-      if (before?.access_token && !after?.access_token) {
+      // A visible draft belongs to the authenticated account that created it.
+      if (before?.user?.id !== after?.user?.id) {
+        // Storage events can arrive after a refresh has already restored the
+        // same account, so decide using the latest stored auth state.
+        const { aletheia_auth: latestAuth } =
+          await chrome.storage.local.get("aletheia_auth");
+        const latestId = latestAuth?.user?.id ?? null;
+        if (latestId === currentUserId && popupAuthenticated) return;
+        if (
+          latestId === currentUserId ||
+          (generationInFlight && latestId === generationRequesterId)
+        ) {
+          currentUserId = latestId;
+          popupAuthenticated = true;
+          if (currentOutput) {
+            document.getElementById("output")?.classList.remove("hidden");
+          }
+          return;
+        }
+        if (!latestId) {
+          popupAuthenticated = false;
+          document.getElementById("output")?.classList.add("hidden");
+          document.getElementById("applicationFeedbackDialog")?.close?.();
+          return;
+        }
         currentOutput = null;
+        feedbackOutput = null;
+        popupAuthenticated = false;
         document.getElementById("output")?.classList.add("hidden");
-      }
-      // Only reload on transition into authenticated state — avoid reload
-      // loops when the SW writes the same auth back on a refresh tick.
-      if (!before?.access_token && after?.access_token) {
-        console.log(
-          "[POPUP] Auth state changed → authenticated, reloading popup",
-        );
+        currentProfile = null;
+        currentUserId = null;
         window.location.reload();
       }
     }
@@ -697,6 +725,9 @@ async function generateMessage() {
     return;
   }
   const operationId = createOperationId();
+  const requesterId = currentUserId;
+  generationInFlight = true;
+  generationRequesterId = requesterId;
   let generationCompleted = false;
   let generationOutcome = "failure";
   let generationRequestId;
@@ -716,10 +747,11 @@ async function generateMessage() {
 
     const { accepted = [] } = await chrome.storage.local.get(["accepted"]);
 
-    const relevantExamples = accepted
-      .filter((item) => item.category === category)
-      .map((item) => item.body)
-      .slice(-3);
+    const relevantExamples = filterOwnedAccepted(
+      accepted,
+      category,
+      currentUserId,
+    );
 
     const payload = buildGeneratePayload(
       currentProfile,
@@ -736,10 +768,20 @@ async function generateMessage() {
     const response = await sendBackgroundMessage({
       action: "generate",
       payload,
+      requesterId,
       operationId,
     });
 
     if (response.success) {
+      const { aletheia_auth: activeAuth } =
+        await chrome.storage.local.get("aletheia_auth");
+      if (
+        !requesterId ||
+        currentUserId !== requesterId ||
+        activeAuth?.user?.id !== requesterId
+      ) {
+        throw new Error("The connected account changed during generation.");
+      }
       const validatedResponse = parseGenerationResponse(
         response,
         payload.questions,
@@ -758,7 +800,7 @@ async function generateMessage() {
         clientVersion,
       });
       await storeGeneration(validatedResponse);
-      await incrementUsageCount();
+      await updateUsageStats();
       generationOutcome = "success";
     } else {
       generationCompleted = true;
@@ -799,6 +841,9 @@ async function generateMessage() {
       showError("Network error. Please check your connection and try again.");
     }
   } finally {
+    generationInFlight = false;
+    generationRequesterId = null;
+    if (!popupAuthenticated) window.location.reload();
     setGeneratingState(false);
     try {
       log.info("generation.finished", {
@@ -1171,7 +1216,12 @@ function showRejectReasonPicker() {
 }
 
 async function handleFeedback(type, rejectionReason, summary) {
-  if (!currentOutput) return;
+  if (!currentOutput || !currentUserId) return;
+  const { aletheia_auth: activeAuth } =
+    await chrome.storage.local.get("aletheia_auth");
+  if (activeAuth?.user?.id !== currentUserId) {
+    throw new Error("The connected account changed. Reopen the extension.");
+  }
 
   // Hide reason picker if visible
   document.getElementById("reject-reason")?.classList.add("hidden");
@@ -1187,6 +1237,7 @@ async function handleFeedback(type, rejectionReason, summary) {
     const response = await chrome.runtime.sendMessage({
       action: "sendFeedback",
       payload,
+      requesterId: currentUserId,
     });
     if (!response?.success)
       throw new Error("Feedback could not be saved. Please retry.");
@@ -1207,6 +1258,7 @@ async function handleFeedback(type, rejectionReason, summary) {
     chrome.runtime
       .sendMessage({
         action: "sendFeedback",
+        requesterId: currentUserId,
         payload: {
           message: messageBody,
           category,
@@ -1220,6 +1272,7 @@ async function handleFeedback(type, rejectionReason, summary) {
     chrome.runtime
       .sendMessage({
         action: "sendFeedback",
+        requesterId: currentUserId,
         payload: {
           message: messageBody,
           category,
@@ -1234,15 +1287,13 @@ async function handleFeedback(type, rejectionReason, summary) {
 }
 
 async function saveAcceptedMessage() {
-  const { accepted = [] } = await chrome.storage.local.get("accepted");
-
+  if (!currentUserId) return;
+  const requesterId = currentUserId;
   const feedbackData = {
     ...(currentOutput.category === YC_APPLICATION_CATEGORY
       ? projectStoredApplication(currentOutput)
       : currentOutput),
-    ...(currentOutput.category === YC_APPLICATION_CATEGORY
-      ? { ownerId: currentUserId }
-      : {}),
+    ownerId: requesterId,
     category:
       currentOutput.category || document.getElementById("category").value,
     ...(currentOutput.category !== YC_APPLICATION_CATEGORY
@@ -1254,11 +1305,15 @@ async function saveAcceptedMessage() {
     timestamp: Date.now(),
   };
 
-  accepted.push(feedbackData);
-
-  const recentAccepted = accepted.slice(-20);
-
-  await chrome.storage.local.set({ accepted: recentAccepted });
+  const result = await sendBackgroundMessage({
+    action: "saveAccountRecord",
+    kind: "accepted",
+    requesterId,
+    record: feedbackData,
+  });
+  if (!result?.success) {
+    throw new Error("The connected account changed. Reopen the extension.");
+  }
 }
 
 function updateUIForCategory() {
@@ -1380,30 +1435,15 @@ function updateGenerateAvailability() {
 }
 
 async function updateUsageStats() {
-  const { dailyUsage = {} } = await chrome.storage.local.get("dailyUsage");
+  const { dailyUsage, usageOwnerId } = await chrome.storage.local.get([
+    "dailyUsage",
+    "usageOwnerId",
+  ]);
   const today = new Date().toISOString().split("T")[0];
-  const todayCount = dailyUsage[today] || 0;
+  const todayCount =
+    getOwnedUsage(dailyUsage, usageOwnerId, currentUserId)[today] || 0;
 
   document.getElementById("usageCount").textContent = todayCount;
-}
-
-async function incrementUsageCount() {
-  const { dailyUsage = {} } = await chrome.storage.local.get("dailyUsage");
-  const today = new Date().toISOString().split("T")[0];
-
-  dailyUsage[today] = (dailyUsage[today] || 0) + 1;
-
-  const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-  Object.keys(dailyUsage).forEach((date) => {
-    if (new Date(date) < thirtyDaysAgo) {
-      delete dailyUsage[date];
-    }
-  });
-
-  await chrome.storage.local.set({ dailyUsage });
-  await updateUsageStats();
 }
 
 function openSettings() {
@@ -1747,11 +1787,12 @@ function toggleValidationDetails() {
 
 async function storeGeneration(output) {
   try {
+    if (!currentUserId) return;
     const category = document.getElementById("category").value;
     const isYcApplication = category === YC_APPLICATION_CATEGORY;
     const generationData = {
       output: isYcApplication ? projectStoredApplication(output) : output,
-      ...(isYcApplication ? { ownerId: currentUserId } : {}),
+      ownerId: currentUserId,
       timestamp: Date.now(),
       profile: isYcApplication ? null : currentProfile,
       inputs: isYcApplication
@@ -1765,7 +1806,15 @@ async function storeGeneration(output) {
           },
     };
 
-    await chrome.storage.local.set({ lastGeneration: generationData });
+    const result = await sendBackgroundMessage({
+      action: "saveAccountRecord",
+      kind: "lastGeneration",
+      requesterId: currentUserId,
+      record: generationData,
+    });
+    if (!result?.success) {
+      throw new Error("The connected account changed. Reopen the extension.");
+    }
   } catch (error) {
     console.error("Error storing generation:", error);
   }
@@ -1776,10 +1825,7 @@ async function restoreLastGeneration() {
     const { lastGeneration } = await chrome.storage.local.get("lastGeneration");
 
     if (!lastGeneration) return;
-    if (
-      lastGeneration.output?.category === YC_APPLICATION_CATEGORY &&
-      (!currentUserId || lastGeneration.ownerId !== currentUserId)
-    ) {
+    if (!isOwnedRecord(lastGeneration, currentUserId)) {
       await chrome.storage.local.remove("lastGeneration");
       return;
     }
