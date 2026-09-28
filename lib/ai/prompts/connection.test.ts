@@ -421,7 +421,7 @@ describe("COLD_EMAIL_PROMPT subject line policy", () => {
   ];
 
   it("tracks the prompt behavior change with a new version", () => {
-    expect(PROMPT_VERSION).toBe("3.1.0");
+    expect(PROMPT_VERSION).toBe("3.2.0");
   });
 
   it("documents scenario-specific email modes", () => {
@@ -498,9 +498,7 @@ describe("COLD_EMAIL_PROMPT subject line policy", () => {
       "candidate_relevance: at most 112 characters",
     );
     expect(LINKEDIN_CONNECTION_PROMPT).toContain("cta: at most 72 characters");
-    expect(LINKEDIN_CONNECTION_PROMPT).toContain(
-      "character_count: the exact rendered character count",
-    );
+    expect(LINKEDIN_CONNECTION_PROMPT).not.toContain("character_count:");
   });
 
   it("contains every approved cold-email subject template exactly", () => {

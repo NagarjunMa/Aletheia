@@ -24,7 +24,6 @@ const draft = {
     source_ids: [source.id],
   },
   cta: "Open to a brief chat?",
-  character_count: 118,
 };
 
 describe("renderLinkedinConnection", () => {
@@ -32,7 +31,7 @@ describe("renderLinkedinConnection", () => {
     const expectedBody =
       "Your developer tooling work stood out. I built an LLM-assisted review workflow for engineers. Open to a brief chat?";
     const result = renderLinkedinConnection({
-      draft: { ...draft, character_count: expectedBody.length },
+      draft,
       sources: [source],
     });
     expect(result.body).toBe(expectedBody);
@@ -40,13 +39,33 @@ describe("renderLinkedinConnection", () => {
     expect(result.hasCandidateRelevance).toBe(true);
   });
 
+  it.each([
+    [90, 62, 254],
+    [80, 57, 239],
+  ])(
+    "renders %i-character observation and %i-character CTA to %i characters",
+    (observationLength, ctaLength, actualCount) => {
+      const result = renderLinkedinConnection({
+        draft: {
+          target_observation: "T".repeat(observationLength),
+          candidate_relevance: {
+            text: `workflow ${"x".repeat(91)}`,
+            source_ids: [source.id],
+          },
+          cta: "C".repeat(ctaLength),
+        },
+        sources: [source],
+      });
+      expect(result.body.length).toBe(actualCount);
+      expect(result.characterCount).toBe(actualCount);
+    },
+  );
+
   it("permits target-only notes only with an explicit null relevance", () => {
-    const body = `${draft.target_observation} ${draft.cta}`;
     const result = renderLinkedinConnection({
       draft: {
         ...draft,
         candidate_relevance: null,
-        character_count: body.length,
       },
       sources: [],
     });
@@ -86,10 +105,8 @@ describe("renderLinkedinConnection", () => {
       "CONNECTION_OVER_LIMIT",
       {
         target_observation: "x".repeat(250),
-        character_count: 350,
       },
     ],
-    ["CONNECTION_DECLARED_COUNT_MISMATCH", { character_count: 1 }],
   ])("reports %s without exposing content", (code, overrides) => {
     try {
       renderLinkedinConnection({
@@ -106,14 +123,6 @@ describe("renderLinkedinConnection", () => {
         ).toMatchObject({
           actualCharacterCount: expect.any(Number),
           maximumCharacterCount: 300,
-        });
-      }
-      if (code === "CONNECTION_DECLARED_COUNT_MISMATCH") {
-        expect(
-          (error as LinkedinConnectionValidationError).safeMetadata,
-        ).toMatchObject({
-          actualCharacterCount: expect.any(Number),
-          declaredCharacterCount: 1,
         });
       }
       expect((error as Error).message).not.toContain(source.content);

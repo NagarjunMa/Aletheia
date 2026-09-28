@@ -173,20 +173,8 @@ export function buildLinkedinConnectionDraftTool() {
           minLength: 1,
           maxLength: LINKEDIN_CONNECTION_COMPONENT_MAX_CHARACTERS.cta,
         },
-        character_count: {
-          type: "integer",
-          description:
-            "Declared character count for the rendered note, including spaces between sections. The server recalculates and validates it.",
-          minimum: constraint.minimum,
-          maximum: constraint.maximum,
-        },
       },
-      required: [
-        "target_observation",
-        "candidate_relevance",
-        "cta",
-        "character_count",
-      ],
+      required: ["target_observation", "candidate_relevance", "cta"],
     },
   } as const;
 }
@@ -294,7 +282,11 @@ export function getLinkedinConnectionDraftToolInput(
       "Claude did not return the required LinkedIn connection composition tool",
     );
   }
-  return linkedinConnectionDraftSchema.parse(toolBlock.input);
+  // Older model responses may still include this obsolete declaration. Only
+  // this one legacy key is ignored; all other unknown keys remain invalid.
+  const { character_count: _legacyCount, ...composition } =
+    toolBlock.input as Record<string, unknown>;
+  return linkedinConnectionDraftSchema.parse(composition);
 }
 
 export function getEmailDraftToolInput(response: Anthropic.Messages.Message) {

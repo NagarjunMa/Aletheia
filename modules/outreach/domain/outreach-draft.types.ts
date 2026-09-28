@@ -66,11 +66,6 @@ export const linkedinConnectionDraftSchema = z
     ),
     candidate_relevance: linkedinConnectionRelevanceSchema.nullable(),
     cta: boundedSection(LINKEDIN_CONNECTION_COMPONENT_MAX_CHARACTERS.cta),
-    character_count: z
-      .number()
-      .int()
-      .min(1)
-      .max(LINKEDIN_CONNECTION_MAX_CHARACTERS),
   })
   .strict();
 
