@@ -409,13 +409,13 @@ describe("POST /api/extension/generate with credit billing enabled", () => {
     },
   );
 
-  it("refunds reserved credits when LinkedIn declared count validation fails", async () => {
+  it("refunds reserved credits when LinkedIn tool input is malformed", async () => {
     const block = connectionCompositionBlock();
     mockAnthropicCreate.mockResolvedValueOnce({
       content: [
         {
           ...block,
-          input: { ...block.input, character_count: 1 },
+          input: { ...block.input, cta: "" },
         },
       ],
       usage: { input_tokens: 100, output_tokens: 40 },

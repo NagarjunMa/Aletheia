@@ -864,7 +864,7 @@ describe("POST /api/extension/generate", () => {
     expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
   });
 
-  it("rejects a model-declared LinkedIn count mismatch using the server count", async () => {
+  it("accepts a valid LinkedIn note despite a stale model-declared count", async () => {
     mockAnthropicCreate.mockResolvedValueOnce({
       content: [connectionCompositionBlock({ character_count: 1 })],
       usage: { input_tokens: 10, output_tokens: 20 },
@@ -878,12 +878,34 @@ describe("POST /api/extension/generate", () => {
       }),
     );
 
-    expect(res.status).toBe(502);
-    await expect(res.json()).resolves.toMatchObject({ code: "PARSE_FAILED" });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.character_count).toBe(body.body.length);
     expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
   });
 
-  it("accepts a correct raw LinkedIn count when sanitation expands punctuation", async () => {
+  it("accepts a LinkedIn composition without any declared count", async () => {
+    const block = connectionCompositionBlock();
+    const { character_count: _legacyCount, ...input } = block.input;
+    mockAnthropicCreate.mockResolvedValueOnce({
+      content: [{ ...block, input }],
+      usage: { input_tokens: 10, output_tokens: 20 },
+    });
+
+    const res = await POST(
+      makeRequest({
+        method: "POST",
+        headers: { authorization: "Bearer test" },
+        body: validPayload,
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.character_count).toBe(body.body.length);
+  });
+
+  it("accepts a LinkedIn note when sanitation expands punctuation", async () => {
     const targetObservation =
       "Your engineering work — especially reliability — stood out.";
     mockAnthropicCreate.mockResolvedValueOnce({
@@ -957,6 +979,58 @@ describe("POST /api/extension/generate", () => {
       expect(JSON.stringify(validationLog)).not.toContain(
         "Open to a brief chat?",
       );
+      expect(JSON.stringify(validationLog)).not.toContain(
+        validPayload.profileMarkdown,
+      );
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("logs allowlisted validation fields and codes without malformed model content", async () => {
+    const warn = vi.fn();
+    const logger = {
+      info: vi.fn(),
+      debug: vi.fn(),
+      warn,
+      error: vi.fn(),
+      child: vi.fn(),
+    };
+    const spy = vi
+      .spyOn(loggerModule, "createRequestLogger")
+      .mockReturnValue(logger);
+    const block = connectionCompositionBlock();
+    mockAnthropicCreate.mockResolvedValueOnce({
+      content: [
+        {
+          ...block,
+          input: { ...block.input, cta: 42, private_note: "PRIVATE_CANARY" },
+        },
+      ],
+      usage: { input_tokens: 10, output_tokens: 20 },
+    });
+
+    try {
+      const res = await POST(
+        makeRequest({
+          method: "POST",
+          headers: { authorization: "Bearer test" },
+          body: validPayload,
+        }),
+      );
+      expect(res.status).toBe(502);
+      const validationLog = warn.mock.calls.find(
+        ([fields]) => fields?.errorCode === "CONNECTION_TOOL_OUTPUT_INVALID",
+      );
+      expect(validationLog?.[0]).toMatchObject({
+        invalidFields: ["cta"],
+        validationCodes: expect.arrayContaining([
+          "invalid_type",
+          "unrecognized_keys",
+        ]),
+      });
+      expect(JSON.stringify(validationLog)).not.toContain("PRIVATE_CANARY");
+      expect(JSON.stringify(validationLog)).not.toContain("private_note");
       expect(JSON.stringify(validationLog)).not.toContain(
         validPayload.profileMarkdown,
       );

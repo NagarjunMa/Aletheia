@@ -61,24 +61,48 @@ describe("LinkedIn connection Anthropic tool", () => {
     cta: "Open to a brief chat?",
     character_count: 118,
   };
+  const connectionMessage = (input: unknown) =>
+    ({
+      content: [
+        {
+          type: "tool_use",
+          name: "return_linkedin_connection_composition",
+          input,
+        },
+      ],
+    }) as never;
 
   it("forces the bounded provenance-aware connection contract", () => {
-    const connectionMessage = (input: unknown) =>
-      ({
-        content: [
-          {
-            type: "tool_use",
-            name: "return_linkedin_connection_composition",
-            input,
-          },
-        ],
-      }) as never;
     expect(linkedinConnectionDraftTool.name).toBe(
       "return_linkedin_connection_composition",
     );
     expect(
       getLinkedinConnectionDraftToolInput(connectionMessage(connection)),
-    ).toEqual(connection);
+    ).toEqual({
+      target_observation: connection.target_observation,
+      candidate_relevance: connection.candidate_relevance,
+      cta: connection.cta,
+    });
+  });
+
+  it("ignores only a legacy character count", () => {
+    const { character_count: _count, ...withoutCount } = connection;
+    for (const input of [
+      withoutCount,
+      { ...connection, character_count: 1 },
+      { ...connection, character_count: 245 },
+      { ...connection, character_count: 231 },
+      { ...connection, character_count: "not-a-count" },
+    ]) {
+      expect(
+        getLinkedinConnectionDraftToolInput(connectionMessage(input)),
+      ).toEqual(withoutCount);
+    }
+    expect(() =>
+      getLinkedinConnectionDraftToolInput(
+        connectionMessage({ ...withoutCount, body: "unexpected" }),
+      ),
+    ).toThrow();
   });
 
   it("builds LinkedIn schema maxima from the authoritative component budgets", () => {
@@ -89,8 +113,8 @@ describe("LinkedIn connection Anthropic tool", () => {
         .maxLength,
     ).toBe(112);
     expect(tool.input_schema.properties.cta.maxLength).toBe(72);
-    expect(tool.input_schema.properties.character_count.maximum).toBe(300);
-    expect(tool.input_schema.required).toContain("character_count");
+    expect(tool.input_schema.properties).not.toHaveProperty("character_count");
+    expect(tool.input_schema.required).not.toContain("character_count");
   });
 
   it("builds the email tool from the requested mode policy", () => {
@@ -137,16 +161,6 @@ describe("LinkedIn connection Anthropic tool", () => {
   );
 
   it("allows only an explicit null relevance for target-only fallback", () => {
-    const connectionMessage = (input: unknown) =>
-      ({
-        content: [
-          {
-            type: "tool_use",
-            name: "return_linkedin_connection_composition",
-            input,
-          },
-        ],
-      }) as never;
     expect(
       getLinkedinConnectionDraftToolInput(
         connectionMessage({ ...connection, candidate_relevance: null }),
@@ -162,18 +176,7 @@ describe("LinkedIn connection Anthropic tool", () => {
     ).toThrow();
   });
 
-  it("rejects over-budget components and out-of-range declared counts", () => {
-    const connectionMessage = (input: unknown) =>
-      ({
-        content: [
-          {
-            type: "tool_use",
-            name: "return_linkedin_connection_composition",
-            input,
-          },
-        ],
-      }) as never;
-
+  it("rejects over-budget components and malformed compositions", () => {
     expect(() =>
       getLinkedinConnectionDraftToolInput(
         connectionMessage({
@@ -182,15 +185,10 @@ describe("LinkedIn connection Anthropic tool", () => {
         }),
       ),
     ).toThrow();
-    for (const characterCount of [0, 301]) {
-      expect(() =>
-        getLinkedinConnectionDraftToolInput(
-          connectionMessage({
-            ...connection,
-            character_count: characterCount,
-          }),
-        ),
-      ).toThrow();
-    }
+    expect(() =>
+      getLinkedinConnectionDraftToolInput(
+        connectionMessage({ ...connection, cta: undefined }),
+      ),
+    ).toThrow();
   });
 });

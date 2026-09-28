@@ -893,9 +893,28 @@ async function handlePost(
       let draft;
       try {
         draft = getLinkedinConnectionDraftToolInput(response);
-      } catch {
+      } catch (error) {
         throw new LinkedinConnectionValidationError(
           "CONNECTION_TOOL_OUTPUT_INVALID",
+          error instanceof z.ZodError
+            ? {
+                invalidFields: [
+                  ...new Set(
+                    error.issues
+                      .map((issue) => issue.path[0])
+                      .filter(
+                        (field): field is string =>
+                          field === "target_observation" ||
+                          field === "candidate_relevance" ||
+                          field === "cta",
+                      ),
+                  ),
+                ],
+                validationCodes: [
+                  ...new Set(error.issues.map((issue) => issue.code)),
+                ],
+              }
+            : { validationCodes: ["missing_or_invalid_tool"] },
         );
       }
 
@@ -937,7 +956,6 @@ async function handlePost(
             : null,
           cta: sanitizedCta,
         },
-        declaredCountDraft: draft,
         sources: preparedGrounding.sources,
       });
       const body = rendered.body;
