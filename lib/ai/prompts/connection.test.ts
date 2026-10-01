@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import { linkedinConnectionDraftSchema } from "@/modules/outreach/domain/outreach-draft.types";
+import { renderLinkedinConnection } from "@/modules/outreach/application/render-linkedin-connection";
 import {
   PROMPT_VERSION,
   sanitize,
@@ -421,7 +423,7 @@ describe("COLD_EMAIL_PROMPT subject line policy", () => {
   ];
 
   it("tracks the prompt behavior change with a new version", () => {
-    expect(PROMPT_VERSION).toBe("3.2.0");
+    expect(PROMPT_VERSION).toBe("3.3.0");
   });
 
   it("documents scenario-specific email modes", () => {
@@ -491,14 +493,50 @@ describe("COLD_EMAIL_PROMPT subject line policy", () => {
     expect(LINKEDIN_CONNECTION_PROMPT).toContain(
       "whether referrals are something you're open to discussing.",
     );
+    expect(LINKEDIN_CONNECTION_PROMPT).toContain("SHARED BUDGET:");
     expect(LINKEDIN_CONNECTION_PROMPT).toContain(
-      "target_observation: at most 96 characters",
+      "Each raw text section is bounded at 300 characters",
     );
     expect(LINKEDIN_CONNECTION_PROMPT).toContain(
-      "candidate_relevance: at most 112 characters",
+      "These rules override examples and writing preferences",
     );
-    expect(LINKEDIN_CONNECTION_PROMPT).toContain("cta: at most 72 characters");
     expect(LINKEDIN_CONNECTION_PROMPT).not.toContain("character_count:");
+  });
+
+  it("renders every literal prompt CTA example within the shared budget", () => {
+    const examples = (
+      LINKEDIN_CONNECTION_PROMPT.split("CTA EXAMPLES")[1] ?? ""
+    ).split("CTA STYLE:")[0];
+    const ctas = [...(examples ?? "").matchAll(/- "([^"]+)"/gu)].map(
+      (match) => match[1] ?? "",
+    );
+    expect(ctas).toHaveLength(5);
+    const source = {
+      id: "evidence:workflow",
+      label: "Workflow",
+      type: "evidence" as const,
+      priority: 1 as const,
+      content: "Built a documentation review workflow.",
+    };
+    for (const example of ctas) {
+      for (const company of [
+        "Acme",
+        "Documentation and Policy Systems International",
+      ]) {
+        const cta = example.replace("[Company]", company);
+        const draft = linkedinConnectionDraftSchema.parse({
+          target_observation: "Your documentation work stood out.",
+          candidate_relevance: {
+            text: "I built a documentation review workflow.",
+            source_ids: [source.id],
+          },
+          cta,
+        });
+        const rendered = renderLinkedinConnection({ draft, sources: [source] });
+        expect(rendered.characterCount).toBeLessThanOrEqual(300);
+        expect(rendered.body.endsWith(cta)).toBe(true);
+      }
+    }
   });
 
   it("contains every approved cold-email subject template exactly", () => {

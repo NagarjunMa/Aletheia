@@ -4,8 +4,8 @@ import {
   renderLinkedinConnection,
 } from "./render-linkedin-connection";
 import {
-  LINKEDIN_CONNECTION_COMPONENT_MAX_CHARACTERS,
   LINKEDIN_CONNECTION_MAX_CHARACTERS,
+  linkedinConnectionDraftSchema,
 } from "../domain/outreach-draft.types";
 
 const source = {
@@ -73,13 +73,24 @@ describe("renderLinkedinConnection", () => {
     expect(result.hasCandidateRelevance).toBe(false);
   });
 
-  it("keeps the worst-case schema composition inside the final envelope", () => {
-    const { targetObservation, candidateRelevance, cta } =
-      LINKEDIN_CONNECTION_COMPONENT_MAX_CHARACTERS;
-    expect(
-      targetObservation + candidateRelevance + cta + 2,
-    ).toBeLessThanOrEqual(LINKEDIN_CONNECTION_MAX_CHARACTERS);
-  });
+  it.each([299, 300, 301])(
+    "enforces the %i-character normalized final envelope",
+    (length) => {
+      const input = linkedinConnectionDraftSchema.parse({
+        target_observation: `  ${"é".repeat(length - 24)}😀\n\t`,
+        candidate_relevance: null,
+        cta: "Open to a brief chat?",
+      });
+      const render = () =>
+        renderLinkedinConnection({ draft: input, sources: [] });
+      if (length > LINKEDIN_CONNECTION_MAX_CHARACTERS) {
+        expect(render).toThrow(LinkedinConnectionValidationError);
+      } else {
+        expect(render().body.length).toBe(length);
+        expect(render().body).toMatch(/ Open to a brief chat\?$/);
+      }
+    },
+  );
 
   it.each([
     [

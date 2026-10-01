@@ -1484,4 +1484,41 @@ Prepared a corrected 1.0.19 extension ZIP after dashboard evidence showed draft 
 2026-09-26: A second return review found that popup approved-draft writes could finish after sign-out cleanup. Accepted drafts and saved generations now go through worker-serialized account-checked writes; logout drains both personal and usage writes before removal. A delayed-write/logout regression test and the full extension suite (230/230) passed, as did lint, type-check, audit, build, version policy, package contract, ZIP rebuild, six Chrome smoke tests, and root type-check. The final independent return review found no unresolved material issue in the account-isolation change. Store upload and publication remain pending.
 ## 2026-09-27 — LinkedIn connection output-validation repair
 
+Follow-up 2026-10-01 — ALE-57: implemented locally on isolated branch
+`fix/ale-57-linkedin-shared-output-budget` from remote main 38089c3. Significant
+risk; contract/evidence at docs/operations/ale-57-linkedin-output-budget.md.
+Red-first tests reproduced rejection by old 96/112/72 section caps. Raw sections
+now share bounded 300-character input; final sanitized total, grounding, CTA,
+server count, API and compensation remain enforced. Prompt 3.3.0; bounded safe
+nested diagnostics. Two-round fresh-context review resolved ALE57-R1 diagnostic
+length accuracy and found no unresolved material implementation defect.
+Checks: 307 focused tests, 1,129 coverage tests, 15 guardrails, 145 resume-security,
+native types/build/lint, web audit, 5 browser smoke tests, formatting and separate
+extension compatibility checks passed. Extension-ci fails inherited high
+brace-expansion advisory; hosted CI and authorized 24-call preview evaluation not
+run. ALE-57 remains In Progress. No commit/push/deployment or live model calls.
+Unrelated original-workspace and ALE-56 changes preserved.
+
+2026-10-01 requested pre-merge verification refresh: re-read live ALE-57 and
+refreshed origin/main (still 38089c3). Third/final fresh-context review confirmed
+no new material defect and ALE57-R1 remains resolved; snapshot 6e4d14bd609ebf41.
+Fresh 307 focused, 1,129 coverage, 15 guardrail, 145 resume-security and 230
+extension tests passed, as did native types/lint, web audit, CI-placeholder build,
+5 Chromium smoke checks, formatting, extension version and esbuild bundle.
+Inherited brace-expansion audit still fails extension-ci; hosted PR CI and
+authorized 24-call preview/human/extension evaluation remain unrun. Significant
+risk; ALE-57 stays In Progress, not deployment-ready. Full dated refresh and
+failed-command details: docs/operations/ale-57-linkedin-output-budget.md.
+No source-code corrections, commit, push, deployment or live calls in this audit.
+
+2026-10-01 publication handoff: user applied brace-expansion 5.0.9 → 5.0.12 in
+the ALE-57 extension lockfile under Node 24. Only that package's version, URL and
+integrity changed; extension source/version and backend code are unchanged.
+User and coordinator extension-ci runs passed: zero vulnerabilities, native
+types/lint, 230 tests and bundle. Dependency blocker resolved locally. The prior
+three-round review predates this tooling patch; local patch inspection and affected
+checks are recorded separately. User authorized commit/push and will create the
+PR manually. Hosted CI and the 24-generation preview/human/extension evaluation
+remain pending; ALE-57 stays In Progress. No production deployment or live calls.
+
 Started backend-only fix on `fix/linkedin-connection-output-validation` from verified `origin/main` 37ee9e0 in an isolated worktree; original checkout and unrelated edits remain untouched. Significant tier. Production count mismatches (254/245 and 239/231) motivated removing the model-declared count from the tool/prompt and using the server-rendered count only. TDD red check reproduced 502 for a valid stale-count note; focused green check passed 180 tests across route, refund, renderer, tool schema and prompt files. Safe tool-validation field/code diagnostics added without content logging. Full coverage (1,098 tests), guardrails, resume security, audits, lint/type/build, extension CI, and four Chromium smoke checks passed locally. Fresh-context read-only review found no material in-scope defect and independently passed 182 focused tests; hosted PR CI and live monitoring remain pending. No commit, push, PR, deployment, extension release or Linear status change. Contract and rollout: docs/operations/linkedin-connection-output-validation.md.

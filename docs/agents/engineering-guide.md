@@ -48,7 +48,7 @@ Chrome Extension (MV3)              Next.js Web App
 - **Lazy factory functions:** `getAnthropic()`, `getSupabaseService()` — no module-level instantiation
 - **Hybrid feedback persistence:** `POST /api/extension/feedback` synchronously inserts the `user_feedback` row (eval signal must not be lost on worker crash), then returns 200 and runs style merge fire-and-forget
 - **Single-pass parsing:** JSON → on failure, 502 with retry instruction. No regex extraction layer.
-- **Smart truncation:** LinkedIn 270-char limit enforced by last-sentence boundary, not hard cut
+- **Connection composition:** LinkedIn notes use a shared 300-character budget, enforced after sanitation and whitespace normalization. Never truncate a note or drop its CTA/relevance; unusable output fails with compensation.
 - **Fail-closed rate limiting:** if Supabase RPC fails, requests are denied (not allowed) — prevents unlimited API burn during outages
 - **Prompt injection defense:** all user inputs escaped via `escapeForXmlTag()` before injection into `<user_input>` tags
 

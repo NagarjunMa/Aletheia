@@ -1,4 +1,5 @@
 import type { CandidateGroundingSource } from "@/modules/candidate-context/domain/candidate-context.types";
+import type { ConnectionValidationDetail } from "../domain/linkedin-connection-diagnostics";
 import {
   LINKEDIN_CONNECTION_MAX_CHARACTERS,
   type LinkedinConnectionDraft,
@@ -24,6 +25,7 @@ export interface LinkedinConnectionValidationMetadata {
   maximumCharacterCount?: number;
   invalidFields?: string[];
   validationCodes?: string[];
+  validationDetails?: ConnectionValidationDetail[];
 }
 
 export type LinkedinConnectionValidationCode =

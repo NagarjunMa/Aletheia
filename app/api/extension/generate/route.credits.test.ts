@@ -207,6 +207,40 @@ beforeEach(() => {
 });
 
 describe("POST /api/extension/generate with credit billing enabled", () => {
+  it.each([97, 280, 301])(
+    "preserves once-only credit/quota compensation for observation length %i",
+    async (length) => {
+      const block = connectionCompositionBlock();
+      mockAnthropicCreate.mockResolvedValueOnce({
+        content: [
+          {
+            ...block,
+            input: { ...block.input, target_observation: "x".repeat(length) },
+          },
+        ],
+        usage: { input_tokens: 10, output_tokens: 20 },
+      });
+      const { POST } = await importRouteWithBillingEnabled();
+      const res = await POST(
+        makeRequest({
+          method: "POST",
+          headers: { authorization: "Bearer test" },
+          body: validPayload,
+        }),
+      );
+      const failed = length !== 97;
+      expect(res.status).toBe(failed ? 502 : 200);
+      expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
+      for (const name of [
+        "refund_generation_credits",
+        "release_rate_limit_reservation",
+      ]) {
+        expect(mockRpc.mock.calls.filter(([rpc]) => rpc === name)).toHaveLength(
+          failed ? 1 : 0,
+        );
+      }
+    },
+  );
   it("does not reserve quota or credits when candidate context is unavailable", async () => {
     mockPrepareOutreachGroundingContext.mockRejectedValueOnce(
       new OutreachGroundingUnavailableError(),

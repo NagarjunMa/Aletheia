@@ -884,6 +884,102 @@ describe("POST /api/extension/generate", () => {
     expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
   });
 
+  it("accepts the 119-character note with a 97-character observation", async () => {
+    mockAnthropicCreate.mockResolvedValueOnce({
+      content: [
+        connectionCompositionBlock({
+          target_observation: "x".repeat(97),
+          candidate_relevance: null,
+        }),
+      ],
+      usage: { input_tokens: 10, output_tokens: 20 },
+    });
+    const res = await POST(
+      makeRequest({
+        method: "POST",
+        headers: { authorization: "Bearer test" },
+        body: validPayload,
+      }),
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.character_count).toBe(119);
+    expect(body.body).toMatch(/Open to a brief chat\?$/);
+    expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
+    expect(
+      mockRpc.mock.calls.filter(
+        ([name]) => name === "release_rate_limit_reservation",
+      ),
+    ).toHaveLength(0);
+  });
+
+  it.each(["relevance", "cta"])(
+    "accepts a valid note with a longer %s section without dropping context",
+    async (section) => {
+      const source = {
+        id: "evidence:workflow",
+        label: "Workflow",
+        type: "evidence",
+        priority: 1,
+        content:
+          "Built a documentation workflow for policy review and engineering decisions.",
+      };
+      mockPrepareOutreachGroundingContext.mockResolvedValueOnce({
+        identity: { fullName: "Candidate Name", linkedinUrl: "" },
+        sources: [source],
+        metadata: {
+          groundingLevel: "verified_evidence",
+          fallbackReason: "none",
+          selectedSourceCount: 1,
+          selectedEvidenceCount: 1,
+          selectedSourceKinds: ["evidence"],
+          injectionSafeMode: false,
+        },
+      });
+      const relevance =
+        section === "relevance"
+          ? `I built a documentation workflow ${"for policy review ".repeat(5).trim()}.`
+          : "I built a documentation workflow.";
+      const cta =
+        section === "cta"
+          ? "I'd like to hear about your experience at Acme and whether you're open to discussing referrals."
+          : "Open to a brief chat?";
+      mockAnthropicCreate.mockResolvedValueOnce({
+        content: [
+          connectionCompositionBlock({
+            target_observation: "Your documentation work stood out.",
+            candidate_relevance: { text: relevance, source_ids: [source.id] },
+            cta,
+          }),
+        ],
+        usage: { input_tokens: 10, output_tokens: 20 },
+      });
+      const res = await POST(
+        makeRequest({
+          method: "POST",
+          headers: { authorization: "Bearer test" },
+          body: validPayload,
+        }),
+      );
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.body).toContain(relevance);
+      expect(body.body.endsWith(cta)).toBe(true);
+      expect(body.character_count).toBe(body.body.length);
+      expect(body.character_count).toBeLessThanOrEqual(300);
+      expect(body.evalMetadata).toMatchObject({
+        promptVersion: "3.3.0",
+        hasCandidateRelevance: true,
+      });
+      expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
+      expect(
+        mockRpc.mock.calls.filter(
+          ([name]) => name === "release_rate_limit_reservation",
+        ),
+      ).toHaveLength(0);
+    },
+  );
+
   it("accepts a LinkedIn composition without any declared count", async () => {
     const block = connectionCompositionBlock();
     const { character_count: _legacyCount, ...input } = block.input;
@@ -1027,6 +1123,9 @@ describe("POST /api/extension/generate", () => {
         validationCodes: expect.arrayContaining([
           "invalid_type",
           "unrecognized_keys",
+        ]),
+        validationDetails: expect.arrayContaining([
+          { field: "cta", code: "invalid_type" },
         ]),
       });
       expect(JSON.stringify(validationLog)).not.toContain("PRIVATE_CANARY");
