@@ -1,5 +1,9 @@
 # LinkedIn connection output-validation repair
 
+Follow-up: [ALE-57 shared output budget](ale-57-linkedin-output-budget.md)
+addresses separate per-section allocation failures. The evidence below is
+historical for the model-declared count repair, not ALE-57 readiness evidence.
+
 ## Change contract
 
 Risk tier: **Significant**. This changes the Claude tool-output contract, but not

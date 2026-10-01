@@ -73,6 +73,7 @@ import {
   createOutreachDraftMessage,
   getColdEmailDraftToolInput,
   getLinkedinConnectionDraftToolInput,
+  getLinkedinConnectionDraftDiagnostics,
   getAnthropicApiErrorStatus,
   getEmailDraftToolInput,
   isAnthropicTimeoutError,
@@ -896,25 +897,7 @@ async function handlePost(
       } catch (error) {
         throw new LinkedinConnectionValidationError(
           "CONNECTION_TOOL_OUTPUT_INVALID",
-          error instanceof z.ZodError
-            ? {
-                invalidFields: [
-                  ...new Set(
-                    error.issues
-                      .map((issue) => issue.path[0])
-                      .filter(
-                        (field): field is string =>
-                          field === "target_observation" ||
-                          field === "candidate_relevance" ||
-                          field === "cta",
-                      ),
-                  ),
-                ],
-                validationCodes: [
-                  ...new Set(error.issues.map((issue) => issue.code)),
-                ],
-              }
-            : { validationCodes: ["missing_or_invalid_tool"] },
+          getLinkedinConnectionDraftDiagnostics(error, response),
         );
       }
 

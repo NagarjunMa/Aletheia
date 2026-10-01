@@ -36,21 +36,17 @@ export type ColdEmailDraft = z.infer<typeof coldEmailDraftSchema>;
 
 export { LINKEDIN_CONNECTION_MAX_CHARACTERS };
 
-/**
- * The raw composition leaves 18 characters of headroom for separator and
- * bounded punctuation normalization before the final 300-character check.
- */
-export const LINKEDIN_CONNECTION_COMPONENT_MAX_CHARACTERS = {
-  targetObservation: 96,
-  candidateRelevance: 112,
-  cta: 72,
-} as const;
+// Bound raw provider text before trimming; the final normalized envelope is
+// independently checked by the renderer.
+const connectionSection = z
+  .string()
+  .max(LINKEDIN_CONNECTION_MAX_CHARACTERS)
+  .trim()
+  .min(1);
 
 const linkedinConnectionRelevanceSchema = z
   .object({
-    text: boundedSection(
-      LINKEDIN_CONNECTION_COMPONENT_MAX_CHARACTERS.candidateRelevance,
-    ),
+    text: connectionSection,
     source_ids: z.array(z.string().trim().min(1).max(120)).min(1).max(1),
   })
   .strict();
@@ -58,14 +54,14 @@ const linkedinConnectionRelevanceSchema = z
 /**
  * Server-only semantic composition for a connection note. A null relevance
  * section is the explicit target-only fallback; it cannot imply candidate fit.
+ * Raw sections share the final budget instead of fixed allocations. The renderer
+ * enforces the combined sanitized length, including separating spaces.
  */
 export const linkedinConnectionDraftSchema = z
   .object({
-    target_observation: boundedSection(
-      LINKEDIN_CONNECTION_COMPONENT_MAX_CHARACTERS.targetObservation,
-    ),
+    target_observation: connectionSection,
     candidate_relevance: linkedinConnectionRelevanceSchema.nullable(),
-    cta: boundedSection(LINKEDIN_CONNECTION_COMPONENT_MAX_CHARACTERS.cta),
+    cta: connectionSection,
   })
   .strict();
 

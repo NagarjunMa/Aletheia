@@ -105,14 +105,14 @@ describe("LinkedIn connection Anthropic tool", () => {
     ).toThrow();
   });
 
-  it("builds LinkedIn schema maxima from the authoritative component budgets", () => {
+  it("shares the final budget across raw sections without fixed allocations", () => {
     const tool = buildLinkedinConnectionDraftTool();
-    expect(tool.input_schema.properties.target_observation.maxLength).toBe(96);
+    expect(tool.input_schema.properties.target_observation.maxLength).toBe(300);
     expect(
       tool.input_schema.properties.candidate_relevance.anyOf[1].properties.text
         .maxLength,
-    ).toBe(112);
-    expect(tool.input_schema.properties.cta.maxLength).toBe(72);
+    ).toBe(300);
+    expect(tool.input_schema.properties.cta.maxLength).toBe(300);
     expect(tool.input_schema.properties).not.toHaveProperty("character_count");
     expect(tool.input_schema.required).not.toContain("character_count");
   });
@@ -176,12 +176,41 @@ describe("LinkedIn connection Anthropic tool", () => {
     ).toThrow();
   });
 
+  it.each([
+    { target_observation: undefined },
+    { target_observation: " " },
+    { cta: 42 },
+    { cta: " " },
+    { cta: "x".repeat(301) },
+    { cta: ` ${"x".repeat(300)} ` },
+    { candidate_relevance: undefined },
+    { candidate_relevance: { text: "workflow", source_ids: [] } },
+    { candidate_relevance: { text: "workflow", source_ids: ["a", "b"] } },
+    {
+      candidate_relevance: { text: "workflow", source_ids: ["x".repeat(121)] },
+    },
+    { candidate_relevance: { text: "x".repeat(301), source_ids: ["a"] } },
+    {
+      candidate_relevance: {
+        text: "workflow",
+        source_ids: ["a"],
+        extra: "unexpected",
+      },
+    },
+  ])("retains bounded strict structure for malformed input", (override) => {
+    expect(() =>
+      getLinkedinConnectionDraftToolInput(
+        connectionMessage({ ...connection, ...override }),
+      ),
+    ).toThrow();
+  });
+
   it("rejects over-budget components and malformed compositions", () => {
     expect(() =>
       getLinkedinConnectionDraftToolInput(
         connectionMessage({
           ...connection,
-          target_observation: "x".repeat(97),
+          target_observation: "x".repeat(301),
         }),
       ),
     ).toThrow();
@@ -191,4 +220,32 @@ describe("LinkedIn connection Anthropic tool", () => {
       ),
     ).toThrow();
   });
+
+  it.each([
+    {
+      target_observation: "x".repeat(97),
+      candidate_relevance: null,
+      cta: "Open to a brief chat?",
+    },
+    {
+      target_observation: "Work stood out.",
+      candidate_relevance: null,
+      cta: "c".repeat(100),
+    },
+    {
+      target_observation: "Work stood out.",
+      candidate_relevance: {
+        text: "workflow ".repeat(15).trim(),
+        source_ids: ["evidence:1"],
+      },
+      cta: "Chat?",
+    },
+  ])(
+    "accepts bounded compositions exceeding former section limits",
+    (input) => {
+      expect(
+        getLinkedinConnectionDraftToolInput(connectionMessage(input)),
+      ).toEqual(input);
+    },
+  );
 });

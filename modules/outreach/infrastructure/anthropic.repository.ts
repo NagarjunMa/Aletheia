@@ -7,10 +7,11 @@ import {
   type OutputConstraint,
 } from "@/lib/ai/output-constraints";
 import type { EmailMode } from "@/lib/ai/email-formatter";
+import { connectionValidationDiagnostics } from "../domain/linkedin-connection-diagnostics";
 import {
   coldEmailDraftSchema,
   type ColdEmailDraft,
-  LINKEDIN_CONNECTION_COMPONENT_MAX_CHARACTERS,
+  LINKEDIN_CONNECTION_MAX_CHARACTERS,
   linkedinConnectionDraftSchema,
   type LinkedinConnectionDraft,
 } from "../domain/outreach-draft.types";
@@ -141,8 +142,7 @@ export function buildLinkedinConnectionDraftTool() {
         target_observation: {
           type: "string",
           minLength: 1,
-          maxLength:
-            LINKEDIN_CONNECTION_COMPONENT_MAX_CHARACTERS.targetObservation,
+          maxLength: LINKEDIN_CONNECTION_MAX_CHARACTERS,
         },
         candidate_relevance: {
           anyOf: [
@@ -154,8 +154,7 @@ export function buildLinkedinConnectionDraftTool() {
                 text: {
                   type: "string",
                   minLength: 1,
-                  maxLength:
-                    LINKEDIN_CONNECTION_COMPONENT_MAX_CHARACTERS.candidateRelevance,
+                  maxLength: LINKEDIN_CONNECTION_MAX_CHARACTERS,
                 },
                 source_ids: {
                   type: "array",
@@ -171,7 +170,7 @@ export function buildLinkedinConnectionDraftTool() {
         cta: {
           type: "string",
           minLength: 1,
-          maxLength: LINKEDIN_CONNECTION_COMPONENT_MAX_CHARACTERS.cta,
+          maxLength: LINKEDIN_CONNECTION_MAX_CHARACTERS,
         },
       },
       required: ["target_observation", "candidate_relevance", "cta"],
@@ -267,16 +266,20 @@ export function getColdEmailDraftToolInput(
   return coldEmailDraftSchema.parse(toolBlock.input);
 }
 
-export function getLinkedinConnectionDraftToolInput(
-  response: Anthropic.Messages.Message,
-): LinkedinConnectionDraft {
-  const toolBlock = response.content.find(
+function findLinkedinConnectionTool(response: Anthropic.Messages.Message) {
+  return response.content.find(
     (block) =>
       block.type === "tool_use" &&
       block.name === LINKEDIN_CONNECTION_DRAFT_TOOL_NAME &&
       typeof block.input === "object" &&
       block.input !== null,
   );
+}
+
+export function getLinkedinConnectionDraftToolInput(
+  response: Anthropic.Messages.Message,
+): LinkedinConnectionDraft {
+  const toolBlock = findLinkedinConnectionTool(response);
   if (!toolBlock || toolBlock.type !== "tool_use") {
     throw new Error(
       "Claude did not return the required LinkedIn connection composition tool",
@@ -287,6 +290,19 @@ export function getLinkedinConnectionDraftToolInput(
   const { character_count: _legacyCount, ...composition } =
     toolBlock.input as Record<string, unknown>;
   return linkedinConnectionDraftSchema.parse(composition);
+}
+
+export function getLinkedinConnectionDraftDiagnostics(
+  error: unknown,
+  response: Anthropic.Messages.Message,
+) {
+  if (!(error instanceof z.ZodError))
+    return { validationCodes: ["missing_or_invalid_tool"] };
+  const block = findLinkedinConnectionTool(response);
+  return connectionValidationDiagnostics(
+    error,
+    block?.type === "tool_use" ? block.input : undefined,
+  );
 }
 
 export function getEmailDraftToolInput(response: Anthropic.Messages.Message) {
