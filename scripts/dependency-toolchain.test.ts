@@ -28,14 +28,13 @@ afterAll(() => rmSync(scratch, { recursive: true, force: true }));
 
 describe("dependency toolchain contracts", () => {
   it.each([
-    ["sharp", [0, 35, 5]],
-    ["source-map-js", [1, 2, 2]],
+    ["package-lock.json", "sharp", [0, 35, 5]],
+    ["package-lock.json", "source-map-js", [1, 2, 2]],
+    ["ascendia-extension/package-lock.json", "source-map-js", [1, 2, 2]],
   ] as const)(
-    "locks patched %s versions at every dependency path",
-    (name, minimum) => {
-      const lock = JSON.parse(
-        readFileSync(path.join(root, "package-lock.json"), "utf8"),
-      );
+    "%s locks patched %s versions at every dependency path",
+    (lockPath, name, minimum) => {
+      const lock = JSON.parse(readFileSync(path.join(root, lockPath), "utf8"));
       const versions = Object.entries(lock.packages)
         .filter(
           ([entry]) =>
