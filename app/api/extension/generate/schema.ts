@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { messageFocusSchema } from "@/modules/outreach/domain/message-focus";
 import { EMAIL_MODES } from "@/lib/ai/email-formatter";
 import {
   APPLICATION_ANSWER_MAX_WORDS,
@@ -9,6 +10,7 @@ const legacyGenerateRequestFields = {
   profileMarkdown: z.string().trim().min(10).max(10000),
   resume: z.string().max(50000).nullish().default(""),
   jd: z.string().max(20000).nullish().default(""),
+  messageFocus: messageFocusSchema,
   conversationContext: z.string().max(12000).nullish().default(""),
   intent: z
     .enum(["networking", "referral", "mentorship", "job_inquiry"])

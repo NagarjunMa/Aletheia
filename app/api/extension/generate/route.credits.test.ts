@@ -121,6 +121,40 @@ function inmailDraftToolBlock() {
   };
 }
 
+describe("ALE-63 focus rejection with credit billing enabled", () => {
+  it.each([
+    { messageFocus: "f".repeat(500), status: 409 },
+    { messageFocus: "ALE63_PRIVATE_FOCUS".repeat(30), status: 400 },
+    { messageFocus: " ".repeat(501), status: 400 },
+    { messageFocus: "\ufb03".repeat(167), status: 400 },
+    { messageFocus: { topic: "ALE63_PRIVATE_FOCUS" }, status: 400 },
+    { messageFocus: null, status: 400 },
+  ])(
+    "returns $status without charging or calling the model %#",
+    async ({ messageFocus, status }) => {
+      const { POST } = await importRouteWithBillingEnabled();
+      const response = await POST(
+        makeRequest({
+          method: "POST",
+          headers: { Authorization: "Bearer test-token" },
+          body: { ...validPayload, messageFocus },
+        }),
+      );
+      expect(response.status).toBe(status);
+      const body = await response.json();
+      expect(JSON.stringify(body)).not.toContain("ALE63_PRIVATE_FOCUS");
+      if (status === 400)
+        expect(body.details).toContainEqual(
+          expect.objectContaining({ field: "messageFocus" }),
+        );
+      expect(mockRpc).not.toHaveBeenCalled();
+      expect(mockFrom).not.toHaveBeenCalled();
+      expect(mockPrepareOutreachGroundingContext).not.toHaveBeenCalled();
+      expect(mockAnthropicCreate).not.toHaveBeenCalled();
+    },
+  );
+});
+
 async function importRouteWithBillingEnabled() {
   vi.resetModules();
   vi.stubEnv("CREDIT_BILLING_ENABLED", "true");

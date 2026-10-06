@@ -6,7 +6,7 @@
 //
 // What we redact:
 //  - Auth credentials: authorization headers, cookies, set-cookie, tokens
-//  - User PII: resume, profileMarkdown, jd, acceptedExamples, email
+//  - User PII: resume, profileMarkdown, jd, messageFocus, acceptedExamples, email
 //  - Backend secrets: service-role key (in case it ever lands in a stack)
 
 // Local structural types — avoids depending on the Sentry types subpath,
@@ -45,6 +45,7 @@ const SENSITIVE_FIELDS = new Set([
   "resume",
   "profilemarkdown",
   "jd",
+  "messagefocus",
   "acceptedexamples",
   "accepted_examples",
   "access_token",
