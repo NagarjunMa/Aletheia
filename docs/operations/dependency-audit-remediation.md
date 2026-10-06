@@ -279,3 +279,38 @@ behavior requires hosted CI/preview; local macOS testing cannot establish that.
 Rollback restores prior locks but also restores the two advisories; it is not
 durable remediation. Sources: [Sharp advisory](https://github.com/advisories/GHSA-wq5f-xc86-pv6w)
 and [source-map-js advisory](https://github.com/advisories/GHSA-68fv-2mgg-jv7q).
+
+## Extension lock follow-up — 2026-10-06
+
+CI still fails because the extension independently locks source-map-js 1.2.1
+through Vitest → Vite → PostCSS. The root lock repair does not update this tree.
+Standard risk for this bounded development-tool dependency patch; compact record
+inside the existing remediation document. Contract: update only this extension
+lock entry to the patched 1.2.2, keep manifests/version/runtime source unchanged,
+preserve the moderate audit threshold, and pass a clean extension install and
+make extension-ci. Extend the existing lock-floor regression to both lockfiles
+before refreshing dependencies so a root-only repair is rejected. Inspect the
+version/packaging policy to confirm tooling-only changes do not require a release
+version bump. Root native-image evidence remains historical for unchanged code;
+no production or Chrome Store action is authorized. Rollback restores the prior
+lock and vulnerability, so only use it for diagnosis, not durable remediation.
+The new extension-lock regression failed before the patch (ten other cases
+passed), then all eleven toolchain tests passed. Only source-map-js's extension
+lock version, resolved URL and integrity changed; it remains dev-only. Fresh
+Node 24 npm ci --prefix ascendia-extension and make extension-ci pass: audit
+zero findings, types/lint, 230 tests/23 files and build. Root audit zero findings,
+root type-check, explicit regression-test lint and extension version policy pass.
+Self-review confirms the actual PostCSS range accepts 1.2.2, both locks now carry
+patched versions, and no audit threshold, extension manifest/version, runtime
+source or application behavior changed. Standard local tooling scope does not
+require another independent review; prior native-runtime review applies only to
+unchanged native-runtime source. Hosted Linux CI remains not run for this patch.
+No full root CI/browser/coverage rerun: root lock/runtime source are unchanged;
+the changed root regression and type/lint checks ran freshly. Next step: commit
+and push this extension follow-up, then await hosted CI. No commit/push/deployment
+or store publication performed during this correction.
+
+Scoped lesson: this repository has two independent npm lockfiles. When an
+advisory affects a shared transitive dependency, inspect both trees and run both
+audit targets; a clean root audit alone does not establish extension compliance.
+The patched-version regression now rejects a vulnerable copy in either tree.
