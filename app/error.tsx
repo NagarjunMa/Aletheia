@@ -40,13 +40,13 @@ export default function Error({
         <div className="flex items-center justify-center gap-3">
           <button
             onClick={reset}
-            className="rounded-lg bg-[hsl(var(--primary))] px-6 py-2.5 text-sm font-medium text-white hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] focus:ring-offset-2 focus:ring-offset-[hsl(var(--background))] transition-all"
+            className="rounded-lg bg-[hsl(var(--primary))] px-6 py-2.5 text-sm font-medium text-white hover:brightness-110 focus:outline-hidden focus:ring-2 focus:ring-[hsl(var(--ring))] focus:ring-offset-2 focus:ring-offset-[hsl(var(--background))] transition-all"
           >
             Try again
           </button>
           <Link
             href="/"
-            className="rounded-lg border border-[hsl(var(--border))] px-6 py-2.5 text-sm font-medium text-white hover:bg-[hsl(var(--accent))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] focus:ring-offset-2 focus:ring-offset-[hsl(var(--background))] transition-all"
+            className="rounded-lg border border-[hsl(var(--border))] px-6 py-2.5 text-sm font-medium text-white hover:bg-[hsl(var(--accent))] focus:outline-hidden focus:ring-2 focus:ring-[hsl(var(--ring))] focus:ring-offset-2 focus:ring-offset-[hsl(var(--background))] transition-all"
           >
             Go home
           </Link>

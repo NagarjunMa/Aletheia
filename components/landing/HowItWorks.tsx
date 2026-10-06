@@ -49,7 +49,7 @@ const MockupCard = () => (
     {/* Profile */}
     <div className="mb-5 flex items-center gap-3">
       <div
-        className="h-10 w-10 rounded-full flex-shrink-0"
+        className="h-10 w-10 rounded-full shrink-0"
         style={{
           background:
             "linear-gradient(135deg, var(--ref-phthalo-600), var(--ref-phthalo-900))",
