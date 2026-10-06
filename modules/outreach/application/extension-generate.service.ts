@@ -57,6 +57,7 @@ import {
 } from "@/app/api/extension/generate/utils";
 import {
   candidateContextUnavailableResponse,
+  messageFocusUnavailableResponse,
   contractFailureResponse,
   createGenerateCorsHeaders,
   createRateLimitHeaders,
@@ -67,6 +68,7 @@ import type {
   ResumeSource,
 } from "@/modules/outreach/domain/extension-generate.types";
 import type { OutreachGroundingContext } from "@/modules/outreach/domain/outreach-grounding.types";
+import { MESSAGE_FOCUS_SUPPORTED } from "../domain/message-focus";
 import {
   CLAUDE_MODEL,
   OUTREACH_GENERATION_SETTINGS,
@@ -265,6 +267,10 @@ async function handlePost(
     // Phase 1 deliberately does not yet inject these sources into prompts.
     const validatedData = generateRequestSchema.parse(dispatchBody);
     timing.category(validatedData.category);
+    if (validatedData.messageFocus && !MESSAGE_FOCUS_SUPPORTED) {
+      timing.failure("MESSAGE_FOCUS_UNAVAILABLE");
+      return messageFocusUnavailableResponse(corsHeaders);
+    }
     failureContext.userId = authResult.userId;
     failureContext.category = validatedData.category;
     timing.config({

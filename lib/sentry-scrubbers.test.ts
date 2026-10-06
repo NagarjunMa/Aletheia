@@ -80,6 +80,23 @@ describe("sentryBeforeSend", () => {
     expect(body.acceptedExamples).toBe(REDACTED);
   });
 
+  it("redacts Message focus from request bodies and nested error context", () => {
+    const note = "ALE63_PRIVATE_FOCUS";
+    const out = sentryBeforeSend(
+      makeEvent({
+        request: { data: { messageFocus: note, category: "cold_email" } },
+        extra: { payload: { messageFocus: note } },
+        contexts: { request: { messageFocus: note } },
+        tags: { messageFocus: note },
+      }),
+    );
+    expect(JSON.stringify(out)).not.toContain(note);
+    expect(out!.request!.data).toEqual({
+      messageFocus: REDACTED,
+      category: "cold_email",
+    });
+  });
+
   it("redacts access_token and refresh_token in extras", () => {
     const event = makeEvent({
       extra: {
@@ -136,6 +153,21 @@ describe("sentryBeforeSend", () => {
 });
 
 describe("sentryBeforeBreadcrumb", () => {
+  it("redacts Message focus without removing safe breadcrumb metadata", () => {
+    const out = sentryBeforeBreadcrumb({
+      category: "fetch",
+      data: {
+        method: "POST",
+        payload: { messageFocus: "ALE63_PRIVATE_FOCUS" },
+      },
+    });
+    expect(JSON.stringify(out)).not.toContain("ALE63_PRIVATE_FOCUS");
+    expect(out!.data).toEqual({
+      method: "POST",
+      payload: { messageFocus: REDACTED },
+    });
+  });
+
   it("strips request_headers from fetch breadcrumbs", () => {
     const bc: ScrubberBreadcrumb = {
       category: "fetch",

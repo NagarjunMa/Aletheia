@@ -5,6 +5,13 @@ export type AuthenticatedExtensionUser = {
   accessToken: string;
 };
 
+export type MessageFocusUnavailableResponse = {
+  success: false;
+  error: string;
+  code: "MESSAGE_FOCUS_UNAVAILABLE";
+  message: string;
+};
+
 export type RateLimitResult = {
   allowed: boolean;
   remainingRequests: number;

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { SafeLogger } from "@/lib/logger";
 import { getCorsHeaders } from "@/lib/cors";
 import { withRequestLifecycle } from "@/lib/request-lifecycle";
+import { MESSAGE_FOCUS_SUPPORTED } from "@/modules/outreach/domain/message-focus";
 import {
   CURRENT_EXTENSION_API_VERSION,
   getChromeWebStoreUrl,
@@ -40,6 +41,7 @@ async function handleGet(request: NextRequest, log: SafeLogger) {
         currentVersion: CURRENT_EXTENSION_API_VERSION,
         supportedVersions: SUPPORTED_EXTENSION_API_VERSIONS,
       },
+      capabilities: { messageFocus: MESSAGE_FOCUS_SUPPORTED },
       extension: {
         publishedVersion: getPublishedExtensionVersion(),
         minimumSupportedVersion: getMinimumSupportedExtensionVersion(),

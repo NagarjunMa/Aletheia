@@ -455,6 +455,96 @@ function connectionCompositionBlock(overrides: Record<string, unknown> = {}) {
   };
 }
 
+describe("ALE-63 unavailable Message focus boundary", () => {
+  it.each(["linkedin_connection", "cold_email", "linkedin_inmail"])(
+    "rejects focus for %s before private context or any reservation",
+    async (category) => {
+      vi.stubEnv("MESSAGE_FOCUS_ENABLED", "true");
+      const log = {
+        info: vi.fn(),
+        debug: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        child: vi.fn(),
+      };
+      const spy = vi
+        .spyOn(loggerModule, "createRequestLogger")
+        .mockReturnValue(log);
+      try {
+        const response = await POST(
+          makeRequest({
+            method: "POST",
+            headers: {
+              Authorization: "Bearer test-token",
+              origin: "http://localhost:3000",
+            },
+            body: {
+              ...validPayload,
+              category,
+              messageFocus: "ALE63_PRIVATE_FOCUS",
+            },
+          }),
+        );
+        expect(response.status).toBe(409);
+        expect(await response.json()).toEqual({
+          success: false,
+          error: "Message focus is not available yet",
+          code: "MESSAGE_FOCUS_UNAVAILABLE",
+          message: "Clear Message focus to use automatic generation.",
+        });
+        expect(response.headers.get("X-Aletheia-API-Version")).toBe("1");
+        expect(response.headers.get("Access-Control-Allow-Origin")).toBe(
+          "http://localhost:3000",
+        );
+        expect(mockPrepareOutreachGroundingContext).not.toHaveBeenCalled();
+        expect(mockFrom).not.toHaveBeenCalled();
+        expect(mockRpc).not.toHaveBeenCalled();
+        expect(mockAnthropicCreate).not.toHaveBeenCalled();
+        const logged = Object.values(log).flatMap((fn) => fn.mock.calls);
+        expect(JSON.stringify(logged)).not.toContain("ALE63_PRIVATE_FOCUS");
+        expect(log.info.mock.calls.map(([fields]) => fields)).toContainEqual(
+          expect.objectContaining({
+            event: "generation.timing",
+            errorCode: "MESSAGE_FOCUS_UNAVAILABLE",
+            status: 409,
+          }),
+        );
+      } finally {
+        spy.mockRestore();
+        vi.unstubAllEnvs();
+      }
+    },
+  );
+
+  it.each(["", " \t\r\n\u3000 "])(
+    "keeps blank focus on the legacy path %#",
+    async (messageFocus) => {
+      const response = await POST(
+        makeRequest({
+          method: "POST",
+          headers: { Authorization: "Bearer test-token" },
+          body: { ...validPayload, messageFocus },
+        }),
+      );
+      expect(response.status).toBe(200);
+      expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
+      expect(await response.json()).not.toHaveProperty("messageFocus");
+    },
+  );
+
+  it("authenticates before revealing focus capability", async () => {
+    const response = await POST(
+      makeRequest({
+        method: "POST",
+        body: { ...validPayload, messageFocus: "evals" },
+      }),
+    );
+    expect(response.status).toBe(401);
+    expect(mockRpc).not.toHaveBeenCalled();
+    expect(mockAnthropicCreate).not.toHaveBeenCalled();
+  });
+});
+
 describe("generateRequestSchema", () => {
   it("parses a minimal valid payload", () => {
     const result = generateRequestSchema.safeParse(validPayload);

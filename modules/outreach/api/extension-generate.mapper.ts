@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import type { z } from "zod";
+import type { MessageFocusUnavailableResponse } from "../domain/extension-generate.types";
 import { getCorsHeaders } from "@/lib/cors";
 import {
   getExtensionContractResponseHeaders,
@@ -56,5 +57,19 @@ export function candidateContextUnavailableResponse(
       code: "CANDIDATE_CONTEXT_UNAVAILABLE",
     },
     { status: 503, headers },
+  );
+}
+
+export function messageFocusUnavailableResponse(
+  headers: Record<string, string>,
+) {
+  return NextResponse.json<MessageFocusUnavailableResponse>(
+    {
+      success: false,
+      error: "Message focus is not available yet",
+      code: "MESSAGE_FOCUS_UNAVAILABLE",
+      message: "Clear Message focus to use automatic generation.",
+    },
+    { status: 409, headers },
   );
 }

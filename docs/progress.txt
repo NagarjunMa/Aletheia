@@ -1,3 +1,80 @@
+## 2026-10-06 — ALE-63 final publication audit
+
+Re-read Linear acceptance; complete dirty/untracked diff audited against24ea99b.
+Final risk Significant. All local Stage1 criteria pass; no material source
+finding or code correction. Fresh makeci1202tests/95files,15guardrails,rootaudit0,
+lint/types/build; coverage89/82.14/89.29/90.36;145resume-security,230extension
+tests/audit0/lint/types/build/versionpolicy;29Chromium/runtimeprobes pass.
+Changedformat/whitespace pass; fullformat19failures all byte-identical to main.
+User explicitly extended independent-review budget by one round: fresh reviewer
+ale63_publication_review passed330tests/14files and reallegacyconfig/provenance,
+no material findings; snapshot89edce306ffad900dcbaa1b050fb8ce1993521a61a2953ae68215393721751ce.
+HostedCI/liveauth/model/storage/productionlogs/authenticatedbrowser/SafariFirefox
+notrun. Prior audit gate resolved. Ready for authorizedcommit/push only; capability
+staysfalse,ALE63InProgress,parentALE58open. No commit/push/release/paidcall.
+Evidence/rollback: docs/operations/ale-63-message-focus-contract.md.
+
+## 2026-10-06 — ALE-63 resumed after dependency merge
+
+Re-read current ALE-63/ALE-58 contracts; scope remains disabled Message focus
+Stage 1, Significant risk. Synchronized local main and the existing
+feat/ale-63-message-focus-contract branch to origin/main 24ea99b. Scoped recovery
+stash 9ccecb31381c29dc0b47a6b6e98ed493d3372a14 preserved original work; restored
+without conflicts and verified15files byte-identical, progress histories merged.
+No feature source/test edits needed; primary and other dirty worktrees preserved.
+Fresh clean installs/root+extension audits zero findings; make ci passes1202tests,
+15guardrails,lint/types/build; coverage passes;145resume-security and230extension
+tests pass, version policy unchanged;29new-buildChromium checks and config/auth
+probes pass. Previous root audit blocker resolved locally. No new independent
+review or final pre-merge audit claimed; historical source review retained and
+original three-round budget exhausted. Hosted CI/live calls/full-repo format and
+Safari/Firefox not run. ALE-63/ALE-58 stay open, no commit/push/deployment/Done.
+Next: final verification/handoff and separately authorized publication. Details:
+docs/operations/ale-63-message-focus-contract.md.
+
+## 2026-10-05 — ALE-63 final pre-merge audit
+
+Executed the requested production-engineering-loop audit for Stage 1: re-read
+current Linear acceptance, inspected all tracked/untracked changes against
+a9dffaf, traced actual parser/service/config/error/timing/privacy consumers.
+Final risk Significant; no introduced material defect or runtime correction.
+Fresh checks passed: 1,191 root coverage tests, 15 guardrails, 145 resume tests,
+lint/types/production build, five Chromium smoke tests, production-server API
+probes, extension CI (230 tests, audit zero), version policy and changed-file
+formatting/diff hygiene. Fresh independent reviewer inspected the full change,
+ran 299 tests/15 files and verified source hashes before/after; no material
+introduced finding. Root audit still fails seven inherited high entries from
+braces; repo-wide formatting reports 21 byte-unchanged main files. No audit
+waiver or dependency/framework upgrade. Hosted PR CI and live deployment checks
+not run. ALE-63 remains In Progress because the required dependency gate fails;
+ALE-58 stays open. Full dated evidence/commands/rollout/rollback in
+docs/operations/ale-63-message-focus-contract.md. Only evidence/progress records
+updated by this audit; no commit, push, deployment, paid call or unrelated edit.
+
+## 2026-10-04 — ALE-63 Message focus contract foundation
+
+Started Stage 1 of ALE-58 using production-engineering-loop, Significant risk,
+on feat/ale-63-message-focus-contract from synchronized main a9dffaf in an
+isolated worktree. Existing primary/ALE-46 changes preserved. The bounded
+optional focus contract normalizes at most 500 raw and normalized UTF-16 units;
+blank remains legacy behavior, populated focus returns a fixed 409 before
+context/quota/credits/model. Config capability is hard-disabled, including when
+the proposed future environment flag is true. YC, prompts, selection, model
+budgets, extension package and billing policy are unchanged.
+Baseline 176 tests passed; 44 intended red failures preceded implementation.
+Focused 236 tests and final 1,191-test coverage suite pass, as do 15 guardrails,
+145 resume-security tests, type-check, lint (one inherited warning), production
+build, five Chromium smoke tests and extension CI (230 tests, audit zero).
+Independent review found no material issues; its optional new-field Sentry
+redaction hardening was implemented with two failing-then-passing canary tests
+and independently rechecked. Final implementation-review risk Significant.
+Evidence/snapshot/rollback: docs/operations/ale-63-message-focus-contract.md.
+Root dependency audit fails with seven inherited high entries from the braces
+advisory chain in the unchanged lockfile; no automatic upgrade or waiver made.
+Hosted PR CI and live deployment/provider validation are not run. Final pre-merge
+audit remains pending; this is not a claim of merge or production readiness.
+ALE-63 stays In Progress. No commit, push, deployment, paid calls or Done change.
+
 ## 2026-09-21 — ALE-53 PR handoff
 
 User authorized commit and remote branch push for PR creation. Scope: failure queue/admin recovery and disabled-by-default receipt delivery, including reviewed IND-1/IND-2 corrections. Pre-commit repository gates run for this handoff. Existing hosted verification, sender/schedule, backlog draining and retention rollout gates remain open; no deployment, hosted migration or email is included. Preserve unrelated ALE-38/ALE-52 notes outside this commit.
