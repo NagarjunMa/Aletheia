@@ -224,3 +224,58 @@ mocked browser coverage must disclose this limit.
 
 Local implementation/checks and required independent review complete. Final risk
 Significant. No Linear status changed; no commit, push or deployment.
+
+## CI advisory follow-up — 2026-10-06
+
+The original fix was committed/pushed as 3128209. Its October 5 clean audit
+is historical: the October 6 registry audit now reproduces two high advisories,
+Sharp <0.35.5 and source-map-js <1.2.2. The braces chain remains absent.
+This follow-up raises the risk tier to **Critical** because Sharp/libvips/librsvg
+decode runtime images. No authentication, data, API, extension or audit policy
+change is planned. Keep Next 16.3.6 and the existing Tailwind configuration.
+
+Contract: refresh only the compatible Sharp/source-map-js lock subtrees; clean
+install; full audit must pass with development dependencies; native synthetic
+image conversion and actual PostCSS/source-map round-trip must pass. Existing
+Next image settings (including dangerouslyAllowSVG=false) must remain unchanged.
+Regressions first reject vulnerable locked versions; compatibility tests must
+exercise real libraries rather than mocks. Re-run native CI/coverage and browser
+checks against the new build, then obtain fresh independent review. A version
+change invalidates relevant prior evidence; do not relabel it as a new pass.
+
+Implemented compatible lock-only updates: Sharp 0.35.4 → 0.35.5, its native
+platform packages 0.35.5/libvips 1.3.4, and source-map-js 1.2.1 → 1.2.2.
+Semantic lock comparison confirms only those 28 package entries changed;
+package.json, Next/image settings, extension dependencies and application source
+are unchanged. Next's ^0.35.4 and PostCSS's ^1.2.1 ranges accept these patches.
+
+TDD: two patched-version regressions failed on the original lock; eight other
+toolchain tests passed. After the refresh, all ten pass, including actual native
+SVG/raster conversion, malformed-image rejection and PostCSS source-map lookup.
+Fresh Node 24 clean install and full security audit report zero vulnerabilities.
+Fresh make ci passes lint (one inherited refund-admin unused-argument warning),
+type checking, 1,139 tests/93 files, 15 guardrails and production build. Coverage
+passes unchanged thresholds: 88.91% statements, 82.02% branches, 89.29% functions,
+90.27% lines. New-build Chromium checks pass 25 theme/health plus four landing
+navigation tests. Explicit tooling-test lint, changed-file formatting and diff
+whitespace checks pass. No authenticated API/model calls were made.
+
+Current checked source SHA-256: package-lock.json
+`4de09a8acd7961b3bc44c4261521e95d2e10699398054ba34f11644c7266d819`;
+scripts/dependency-toolchain.test.ts
+`e4a046b10ec11b7ab3405e7e1d4ea5a2d48b6c9c416b2a98f2138b2b6930f1ad`.
+Fresh-context independent review found no material findings on the frozen
+source (serving model unknown). It independently passed ten toolchain tests,
+actual Next WebP/AVIF conversion, invalid-image and SVG-policy rejection,
+optional-platform consistency and lock-scope/whitespace checks. Review report:
+`/tmp/dependency-oct6-review.md` (local evidence, not a repository artifact).
+Final risk remains Critical; human release approval and hosted Linux CI are
+required before merge. Next incomplete step: publication/hosted CI.
+Extension checks and full-repository formatting were not rerun for this lock-only
+follow-up; prior extension pass and 19 unchanged baseline format failures remain
+historical evidence. Authenticated UI and Safari/Firefox remain unverified.
+No live data or hosted deployment tests authorized. Linux/glibc native binary
+behavior requires hosted CI/preview; local macOS testing cannot establish that.
+Rollback restores prior locks but also restores the two advisories; it is not
+durable remediation. Sources: [Sharp advisory](https://github.com/advisories/GHSA-wq5f-xc86-pv6w)
+and [source-map-js advisory](https://github.com/advisories/GHSA-68fv-2mgg-jv7q).
