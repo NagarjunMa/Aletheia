@@ -289,7 +289,7 @@ export default function SettingsContent() {
               onClick={() =>
                 setPrefs((p) => ({ ...p, share_analytics: !p.share_analytics }))
               }
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${prefs.share_analytics ? "bg-[hsl(var(--primary))]" : "bg-[hsl(var(--border))]"}`}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-hidden ${prefs.share_analytics ? "bg-[hsl(var(--primary))]" : "bg-[hsl(var(--border))]"}`}
             >
               <span
                 className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${prefs.share_analytics ? "translate-x-6" : "translate-x-1"}`}
@@ -352,7 +352,7 @@ function SelectField({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="bg-transparent text-sm font-medium text-white focus:outline-none cursor-pointer"
+        className="bg-transparent text-sm font-medium text-white focus:outline-hidden cursor-pointer"
       >
         {options.map((o) => (
           <option

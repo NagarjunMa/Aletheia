@@ -141,4 +141,4 @@ jobs:
 
           echo "Testing health endpoint..."
           curl -f http://localhost:3000/api/health || exit 1
-          npx playwright test e2e/landing-navigation.spec.ts --project=chromium
+          npx playwright test e2e/landing-navigation.spec.ts e2e/frontend-theme.spec.ts --project=chromium

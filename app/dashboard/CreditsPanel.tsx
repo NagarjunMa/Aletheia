@@ -66,7 +66,7 @@ export default function CreditsPanel({ className }: { className?: string }) {
   return (
     <Card
       className={cn(
-        "flex flex-col p-5 transition-[border-color,background-color,transform] duration-300 hover:-translate-y-0.5 hover:border-primary/25 hover:bg-card sm:p-6",
+        "flex flex-col p-5 transition-[border-color,background-color,transform,translate] duration-300 hover:-translate-y-0.5 hover:border-primary/25 hover:bg-card sm:p-6",
         className,
       )}
     >

@@ -68,7 +68,7 @@ const STAGE_LABELS: Record<(typeof TARGET_COMPANY_STAGES)[number], string> = {
 };
 
 const inputClass =
-  "mt-2 w-full rounded-lg border border-accent/20 bg-background/55 px-3.5 py-3 text-sm text-foreground outline-none transition-[border-color,box-shadow,background-color] placeholder:text-muted-foreground/60 focus:border-accent/55 focus:ring-2 focus:ring-accent/15";
+  "mt-2 w-full rounded-lg border border-accent/20 bg-background/55 px-3.5 py-3 text-sm text-foreground outline-hidden transition-[border-color,box-shadow,background-color] placeholder:text-muted-foreground/60 focus:border-accent/55 focus:ring-2 focus:ring-accent/15";
 
 export default function ApplicationProfileEditor({
   initialProfile,
