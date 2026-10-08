@@ -1,5 +1,41 @@
 # ALE-46 — Atomic claim provenance
 
+## CI security follow-up — 2026-10-08
+
+On published commit `96e5d33`, reproduced the newly reported Next.js advisory
+failure with `npm run security:audit` (one high-severity dependency finding).
+Contract: replace locked Next.js 16.3.6 with patched 16.3.8, align its bundle
+analyzer and ESLint config, preserve ALE-46 behavior and extension assets, and
+keep the security gate unchanged. Exact pins avoid unintentionally selecting
+the newer 16.4 minor release. This is a framework security dependency change;
+the parent ALE-46 risk remains Critical. Reuse this existing full feature record.
+
+Acceptance evidence: clean Node 24 installation and audit must pass; inspect the
+lockfile to exclude unrelated upgrades; rerun coverage, guardrails, lint/types,
+production build, and mocked browser checks against the patched runtime. The
+audit is the red/green regression check, rather than a redundant unit test of
+third-party version metadata.
+
+Verified locally on Node 24.16.0, against `96e5d33` plus this dependency-only
+update: clean `npm ci --ignore-scripts` installed 808 packages; the audit passed
+with zero vulnerabilities. All changed lock entries are Next.js packages or
+root manifest metadata, and every Next.js package resolves to 16.3.8.
+`npm run test:coverage -- --run` passed 1,260 tests with coverage thresholds;
+15 guardrails, lint, type-check, and dummy-environment production build passed.
+Production-build Playwright health/landing/theme passed 29 checks; the mocked
+fact-review browser diagnostic passed at 375/900/1440px. Extension CI passed
+230 tests, audit, types, lint, and build; extension source/lockfile is unchanged.
+Known baseline warnings remain: unused refund-admin parameter and module-type
+warnings for Tailwind/Vite. No hosted or real-provider test was performed.
+
+Hosted CI and the existing ALE-46 acceptance/review gates remain pending. Do not
+deploy or mark Done. Apply the fact-review migration before eventual reader
+rollout. Reverting this dependency update would restore the known advisory;
+any emergency application rollback must retain a patched runtime.
+
+Upstream evidence (accessed 2026-10-08):
+[Next.js advisory and patched version](https://github.com/advisories/GHSA-3w37-wq28-93x7).
+
 ## Approved preparation contract — 2026-10-07
 
 The user explicitly approved one-time profile fact review and owner-scoped
