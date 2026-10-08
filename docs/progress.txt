@@ -1,3 +1,15 @@
+## 2026-10-08 — ALE-46 CI Next.js security follow-up
+
+Reproduced security:audit failure on published96e5d33 (one high finding).
+Pinned Next.js, bundle analyzer and eslint-config-next to patched16.3.8;
+regenerated lockfile contains only Next-family updates, no unrelated upgrades.
+Clean Node24 install/audit0,1260coverage tests,15guardrails,lint/types/build,
+29 production-build browser checks and mocked fact-review UI checks passed.
+Extension CI230tests/audit0/types/lint/build passed; extension source unchanged.
+Existing ALE46 Critical risk and hosted/schema/model-fit/additional-review
+gates remain pending. No deployment/Done. Runtime rollback must retain security
+patches. Detailed criteria/evidence: docs/operations/ale-46-atomic-provenance.md.
+
 ## 2026-10-07 — ALE-46 one-time reviewed-fact preparation
 
 User explicitly approved preparation UI/storage within ALE46. Critical risk.
