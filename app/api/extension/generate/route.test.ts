@@ -375,13 +375,30 @@ beforeEach(() => {
   );
   mockPrepareOutreachGroundingContext.mockResolvedValue({
     identity: { fullName: "Candidate Name", linkedinUrl: "" },
-    sources: [],
+    sources: [
+      {
+        id: "profile.current_responsibilities",
+        type: "profile",
+        label: "Responsibilities",
+        priority: 2,
+        content: "I build tools and I help teams.",
+      },
+    ],
+    atomicSources: [
+      {
+        id: "profile.current_responsibilities.value",
+        rootId: "profile.current_responsibilities",
+        scope: "candidate",
+        kind: "action",
+        content: "I build tools and I help teams.",
+      },
+    ],
     metadata: {
-      groundingLevel: "target_only",
-      fallbackReason: "no_resume_context",
-      selectedSourceCount: 0,
+      groundingLevel: "profile_grounded",
+      fallbackReason: "no_confirmed_evidence",
+      selectedSourceCount: 1,
       selectedEvidenceCount: 0,
-      selectedSourceKinds: [],
+      selectedSourceKinds: ["profile"],
       injectionSafeMode: false,
     },
   });
@@ -402,7 +419,7 @@ function emailDraftToolBlock(input: {
     type: "tool_use",
     id: "toolu_test",
     name: "return_email_draft",
-    input,
+    input: { ...input, claims: [] },
   };
 }
 
@@ -412,12 +429,22 @@ function coldEmailCompositionBlock(overrides: Record<string, unknown> = {}) {
     id: "toolu_cold_email",
     name: "return_cold_email_composition",
     input: {
-      subject_line: "Mock Subject",
-      greeting: "Megan",
-      target_opening: "Your product work stood out.",
-      candidate_positioning: Array.from({ length: 120 }, () => "x").join(" "),
+      claims: [
+        {
+          text: "I build tools and I help teams.",
+          kind: "action",
+          source_id: "profile.current_responsibilities.value",
+          supporting_excerpt: "I build tools and I help teams.",
+        },
+      ],
+      subject_line: "A brief introduction",
+      greeting: "there",
+      target_opening: "I'd welcome a conversation.",
+      candidate_positioning: Array(15)
+        .fill("I build tools and I help teams.")
+        .join(" "),
       proof_points: [],
-      value_statement: "That background maps well to the role.",
+      value_statement: "I'd welcome a conversation.",
       cta: "Would you be open to a brief chat?",
       ...overrides,
     },
@@ -426,7 +453,8 @@ function coldEmailCompositionBlock(overrides: Record<string, unknown> = {}) {
 
 function connectionCompositionBlock(overrides: Record<string, unknown> = {}) {
   const input = {
-    target_observation: "Your engineering work stood out.",
+    claims: [],
+    target_observation: "I'd welcome a conversation.",
     candidate_relevance: null as null | {
       text: string;
       source_ids: string[];
@@ -677,6 +705,73 @@ describe("generateRequestSchema", () => {
   });
 });
 
+describe("ALE-46 private atomic provenance", () => {
+  it.each(["linkedin_connection", "cold_email", "linkedin_inmail"] as const)(
+    "rejects malformed evidence for %s without leaking values or losing refunds",
+    async (category) => {
+      const base =
+        category === "linkedin_connection"
+          ? connectionCompositionBlock()
+          : category === "cold_email"
+            ? coldEmailCompositionBlock()
+            : emailDraftToolBlock({
+                subject_line: "A brief introduction",
+                body: Array(24).fill("I'd welcome a conversation.").join(" "),
+                word_count: 96,
+              });
+      mockAnthropicCreate.mockResolvedValueOnce({
+        content: [
+          {
+            ...base,
+            input: {
+              ...base.input,
+              claims: [
+                {
+                  text: "PRIVATE_CONTENT_CANARY",
+                  kind: "action",
+                  source_id: "PRIVATE_SOURCE_CANARY",
+                  supporting_excerpt: "PRIVATE_EXCERPT_CANARY",
+                },
+              ],
+            },
+          },
+        ],
+        usage: { input_tokens: 10, output_tokens: 20 },
+      });
+      const warn = vi.fn();
+      const spy = vi
+        .spyOn(loggerModule, "createRequestLogger")
+        .mockReturnValue({
+          info: vi.fn(),
+          debug: vi.fn(),
+          warn,
+          error: vi.fn(),
+          child: vi.fn(),
+        });
+      try {
+        const result = await POST(
+          makeRequest({
+            method: "POST",
+            headers: { Authorization: "Bearer test-token" },
+            body: { ...validPayload, category },
+          }),
+        );
+        expect(result.status).toBe(502);
+        expect(await result.text()).not.toContain("CANARY");
+        expect(JSON.stringify(warn.mock.calls)).not.toContain("CANARY");
+        expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
+        expect(
+          mockRpc.mock.calls.filter(
+            ([name]) => name === "release_rate_limit_reservation",
+          ),
+        ).toHaveLength(1);
+      } finally {
+        spy.mockRestore();
+      }
+    },
+  );
+});
+
 describe("Utility Functions", () => {
   describe("countWords", () => {
     it("returns 0 for empty string", () => {
@@ -867,8 +962,8 @@ describe("POST /api/extension/generate", () => {
     );
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.subject_line).toBe("Mock Subject");
-    expect(body.body).toContain("Hi Megan,");
+    expect(body.subject_line).toBe("A brief introduction");
+    expect(body.body).toContain("Hi there,");
     const callArgs = mockAnthropicCreate.mock.calls[0]?.[0];
     expect(callArgs.tools).toEqual(
       expect.arrayContaining([
@@ -885,7 +980,7 @@ describe("POST /api/extension/generate", () => {
     mockAnthropicCreate.mockResolvedValueOnce({
       content: [
         coldEmailCompositionBlock({
-          subject_line: "Backend Engineering Interest",
+          subject_line: "A brief introduction",
         }),
       ],
       usage: { input_tokens: 100, output_tokens: 80 },
@@ -905,7 +1000,7 @@ describe("POST /api/extension/generate", () => {
 
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.body).toContain("Hi Megan,\n\n");
+    expect(body.body).toContain("Hi there,\n\n");
     expect(body.body).toContain("Would you be open to a brief chat?");
     expect(body.body).toContain("Best,\nCandidate Name");
     expect(body.evalMetadata.emailMode).toBe("initial_outreach");
@@ -935,7 +1030,7 @@ describe("POST /api/extension/generate", () => {
   it("rejects a connection note when component sanitation expands it past 300 characters", async () => {
     mockSanitizeForLinkedIn.mockImplementation(async (content: string) => ({
       success: true,
-      sanitizedContent: content.startsWith("Your engineering")
+      sanitizedContent: content.startsWith("I'd welcome")
         ? "x".repeat(290)
         : content,
       isAIGenerated: false,
@@ -975,10 +1070,33 @@ describe("POST /api/extension/generate", () => {
   });
 
   it("accepts the 119-character note with a 97-character observation", async () => {
+    const excerpt = "x".repeat(68);
+    const observation = `The supplied context says: "${excerpt}"`;
+    mockPrepareOutreachGroundingContext.mockResolvedValueOnce({
+      identity: { fullName: "", linkedinUrl: "" },
+      sources: [],
+      metadata: {},
+      atomicSources: [
+        {
+          id: "target.length",
+          scope: "target",
+          kind: "target_observation",
+          content: excerpt,
+        },
+      ],
+    });
     mockAnthropicCreate.mockResolvedValueOnce({
       content: [
         connectionCompositionBlock({
-          target_observation: "x".repeat(97),
+          target_observation: observation,
+          claims: [
+            {
+              text: observation,
+              source_id: "target.length",
+              kind: "target_observation",
+              supporting_excerpt: excerpt,
+            },
+          ],
           candidate_relevance: null,
         }),
       ],
@@ -1014,9 +1132,26 @@ describe("POST /api/extension/generate", () => {
         content:
           "Built a documentation workflow for policy review and engineering decisions.",
       };
+
+      const relevance =
+        section === "relevance"
+          ? `I built a documentation workflow ${"for policy review ".repeat(5).trim()}.`
+          : "I built a documentation workflow.";
+      const cta =
+        section === "cta"
+          ? "Would you be open to a brief conversation? Would you be open to discussing the role?"
+          : "Open to a brief chat?";
       mockPrepareOutreachGroundingContext.mockResolvedValueOnce({
         identity: { fullName: "Candidate Name", linkedinUrl: "" },
         sources: [source],
+        atomicSources: [
+          {
+            id: source.id,
+            scope: "candidate",
+            kind: "action",
+            content: relevance,
+          },
+        ],
         metadata: {
           groundingLevel: "verified_evidence",
           fallbackReason: "none",
@@ -1026,20 +1161,20 @@ describe("POST /api/extension/generate", () => {
           injectionSafeMode: false,
         },
       });
-      const relevance =
-        section === "relevance"
-          ? `I built a documentation workflow ${"for policy review ".repeat(5).trim()}.`
-          : "I built a documentation workflow.";
-      const cta =
-        section === "cta"
-          ? "I'd like to hear about your experience at Acme and whether you're open to discussing referrals."
-          : "Open to a brief chat?";
       mockAnthropicCreate.mockResolvedValueOnce({
         content: [
           connectionCompositionBlock({
-            target_observation: "Your documentation work stood out.",
+            target_observation: "I'd welcome a conversation.",
             candidate_relevance: { text: relevance, source_ids: [source.id] },
             cta,
+            claims: [
+              {
+                text: relevance,
+                kind: "action",
+                source_id: source.id,
+                supporting_excerpt: relevance,
+              },
+            ],
           }),
         ],
         usage: { input_tokens: 10, output_tokens: 20 },
@@ -1058,7 +1193,7 @@ describe("POST /api/extension/generate", () => {
       expect(body.character_count).toBe(body.body.length);
       expect(body.character_count).toBeLessThanOrEqual(300);
       expect(body.evalMetadata).toMatchObject({
-        promptVersion: "3.3.0",
+        promptVersion: "4.0.0",
         hasCandidateRelevance: true,
       });
       expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
@@ -1091,12 +1226,34 @@ describe("POST /api/extension/generate", () => {
     expect(body.character_count).toBe(body.body.length);
   });
 
-  it("accepts a LinkedIn note when sanitation expands punctuation", async () => {
-    const targetObservation =
-      "Your engineering work — especially reliability — stood out.";
+  it("rejects unsupported punctuation rewrites after sanitation", async () => {
+    mockPrepareOutreachGroundingContext.mockResolvedValueOnce({
+      identity: { fullName: "", linkedinUrl: "" },
+      sources: [],
+      metadata: {},
+      atomicSources: [
+        {
+          id: "target.test",
+          scope: "target",
+          kind: "target_observation",
+          content: "Engineering — reliability.",
+        },
+      ],
+    });
     mockAnthropicCreate.mockResolvedValueOnce({
       content: [
-        connectionCompositionBlock({ target_observation: targetObservation }),
+        connectionCompositionBlock({
+          target_observation:
+            'The supplied context says: "Engineering — reliability."',
+          claims: [
+            {
+              text: 'The supplied context says: "Engineering — reliability."',
+              source_id: "target.test",
+              kind: "target_observation",
+              supporting_excerpt: "Engineering — reliability.",
+            },
+          ],
+        }),
       ],
       usage: { input_tokens: 10, output_tokens: 20 },
     });
@@ -1114,10 +1271,9 @@ describe("POST /api/extension/generate", () => {
       }),
     );
 
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(502);
     await expect(res.json()).resolves.toMatchObject({
-      success: true,
-      character_count: expect.any(Number),
+      code: "PARSE_FAILED",
     });
     expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
   });
@@ -1137,7 +1293,7 @@ describe("POST /api/extension/generate", () => {
     mockSanitizeForLinkedIn
       .mockResolvedValueOnce({
         success: true,
-        sanitizedContent: "Your engineering work stood out.",
+        sanitizedContent: "I'd welcome a conversation.",
         isAIGenerated: false,
       })
       .mockResolvedValueOnce({
@@ -1231,6 +1387,14 @@ describe("POST /api/extension/generate", () => {
   it("returns only a provenance-validated structured LinkedIn connection note", async () => {
     mockPrepareOutreachGroundingContext.mockResolvedValueOnce({
       identity: { fullName: "Candidate Name", linkedinUrl: "" },
+      atomicSources: [
+        {
+          id: "evidence:workflow",
+          scope: "candidate",
+          kind: "action",
+          content: "I built an LLM-assisted review workflow for engineers.",
+        },
+      ],
       sources: [
         {
           id: "evidence:workflow",
@@ -1252,6 +1416,15 @@ describe("POST /api/extension/generate", () => {
     mockAnthropicCreate.mockResolvedValueOnce({
       content: [
         connectionCompositionBlock({
+          claims: [
+            {
+              text: "I built an LLM-assisted review workflow for engineers.",
+              kind: "action",
+              source_id: "evidence:workflow",
+              supporting_excerpt:
+                "I built an LLM-assisted review workflow for engineers.",
+            },
+          ],
           candidate_relevance: {
             text: "I built an LLM-assisted review workflow for engineers.",
             source_ids: ["evidence:workflow"],
@@ -1277,7 +1450,7 @@ describe("POST /api/extension/generate", () => {
     expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
     expect(mockSanitizeForLinkedIn).toHaveBeenNthCalledWith(
       1,
-      "Your engineering work stood out.",
+      "I'd welcome a conversation.",
     );
     expect(mockSanitizeForLinkedIn).toHaveBeenNthCalledWith(
       2,
@@ -1359,11 +1532,11 @@ describe("POST /api/extension/generate", () => {
 
   // T4 — linkedin_inmail happy path
   it("returns 200 with subject_line + body + word_count for linkedin_inmail", async () => {
-    const inmailBody = Array.from({ length: 120 }, () => "signal").join(" ");
+    const inmailBody = Array(24).fill("I'd welcome a conversation.").join(" ");
     mockAnthropicCreate.mockResolvedValueOnce({
       content: [
         emailDraftToolBlock({
-          subject_line: "Quick question about sparse attention",
+          subject_line: "A brief introduction",
           body: inmailBody,
           word_count: 120,
         }),
@@ -1488,7 +1661,7 @@ describe("POST /api/extension/generate", () => {
           name: "return_cold_email_composition",
           input: {
             subject_line: "",
-            greeting: "Megan",
+            greeting: "there",
             target_opening: "Target work.",
             candidate_positioning: "Candidate work.",
             proof_points: [],
@@ -1856,6 +2029,19 @@ I build distributed systems. Previously at BigCo.`;
     });
 
     it("skips hydration when profile row missing (new user)", async () => {
+      mockPrepareOutreachGroundingContext.mockResolvedValueOnce({
+        identity: { fullName: "", linkedinUrl: "" },
+        sources: [],
+        atomicSources: [],
+        metadata: {
+          groundingLevel: "target_only",
+          fallbackReason: "no_resume_context",
+          selectedSourceCount: 0,
+          selectedEvidenceCount: 0,
+          selectedSourceKinds: [],
+          injectionSafeMode: false,
+        },
+      });
       mockMaybeSingle.mockResolvedValueOnce({ data: null, error: null });
       mockMaybeSingle.mockResolvedValueOnce({ data: null, error: null });
       mockMaybeSingle.mockResolvedValueOnce({ data: null, error: null });

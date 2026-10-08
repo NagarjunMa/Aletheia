@@ -4,6 +4,15 @@ import {
   type FailureContext,
 } from "@/modules/refund-review/application/capture-generation-failure";
 import { recordMeasurement } from "@/lib/provider-attempt-timing";
+import {
+  ATOMIC_PROVENANCE_INSTRUCTIONS,
+  buildAtomicProvenancePrompt,
+} from "@/lib/ai/prompts/atomic-provenance";
+import {
+  AtomicClaimValidationError,
+  validateAtomicOutput,
+} from "@/modules/grounding/application/validate-atomic-claims";
+import { validateOutreachProvenance } from "./validate-outreach-provenance";
 import { NextRequest, NextResponse } from "next/server";
 import {
   getSystemPrompt,
@@ -573,7 +582,7 @@ async function handlePost(
       "Prepared generation context",
     );
 
-    const systemPrompt = getSystemPrompt(category);
+    const systemPrompt = `${getSystemPrompt(category)}\n\n${ATOMIC_PROVENANCE_INSTRUCTIONS}`;
     const promptInput: GenerateInput = {
       profileMarkdown: cleanMarkdown,
       resume: resumeForPrompt,
@@ -590,7 +599,7 @@ async function handlePost(
     if (styleProfile) {
       promptInput.styleProfile = styleProfile;
     }
-    const userPrompt = buildPrompt(promptInput);
+    const userPrompt = `${buildPrompt(promptInput)}\n\n${buildAtomicProvenancePrompt(preparedGrounding.atomicSources ?? [])}`;
     timing.metrics({ inputChars: systemPrompt.length + userPrompt.length });
     timing.enter("model");
     const startTime = Date.now();
@@ -690,6 +699,14 @@ async function handlePost(
           emailMode,
         });
 
+        validateOutreachProvenance({
+          body,
+          subject,
+          claims: draft.claims,
+          context: preparedGrounding,
+          renderedSignature: true,
+        });
+
         timing.metrics({
           resultChars: body.length,
           claimCount: draft.proof_points.length,
@@ -727,9 +744,11 @@ async function handlePost(
         log.warn(
           {
             errorCode:
-              error instanceof EmailOutputConstraintError
-                ? "EMAIL_OUTPUT_CONSTRAINT_FAILED"
-                : "COLD_EMAIL_VALIDATION_FAILED",
+              error instanceof AtomicClaimValidationError
+                ? error.code
+                : error instanceof EmailOutputConstraintError
+                  ? "EMAIL_OUTPUT_CONSTRAINT_FAILED"
+                  : "COLD_EMAIL_VALIDATION_FAILED",
             category,
             ...(error instanceof EmailOutputConstraintError
               ? {
@@ -821,6 +840,13 @@ async function handlePost(
           emailMode,
         });
 
+        validateOutreachProvenance({
+          body: finalBody,
+          subject: sanitizedSubject,
+          claims: parsed.claims,
+          context: preparedGrounding,
+        });
+
         timing.metrics({ resultChars: finalBody.length });
         // Mark slot consumed — successful response, no refund needed.
         reservedUserId = undefined;
@@ -857,7 +883,9 @@ async function handlePost(
             errorCode:
               error instanceof EmailOutputConstraintError
                 ? "EMAIL_OUTPUT_CONSTRAINT_FAILED"
-                : "EMAIL_DRAFT_VALIDATION_FAILED",
+                : error instanceof AtomicClaimValidationError
+                  ? error.code
+                  : "EMAIL_DRAFT_VALIDATION_FAILED",
             category,
             ...(error instanceof EmailOutputConstraintError
               ? {
@@ -949,6 +977,19 @@ async function handlePost(
       });
       const body = rendered.body;
 
+      validateAtomicOutput({
+        claims: draft.claims,
+        sources: preparedGrounding.atomicSources ?? [],
+        excludedClaims: preparedGrounding.excludedClaims ?? [],
+        fields: [
+          { text: targetObservation, scope: "target" },
+          ...(candidateRelevance
+            ? [{ text: candidateRelevance, scope: "candidate" as const }]
+            : []),
+          { text: sanitizedCta, scope: "either" },
+        ],
+      });
+
       timing.metrics({
         resultChars: body.length,
         claimCount: draft.candidate_relevance ? 1 : 0,
@@ -984,7 +1025,9 @@ async function handlePost(
       const errorCode =
         error instanceof LinkedinConnectionValidationError
           ? error.code
-          : "CONNECTION_TOOL_OUTPUT_INVALID";
+          : error instanceof AtomicClaimValidationError
+            ? error.code
+            : "CONNECTION_TOOL_OUTPUT_INVALID";
       log.warn(
         {
           errorCode,

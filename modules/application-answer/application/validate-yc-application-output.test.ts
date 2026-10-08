@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { AtomicClaimValidationError } from "@/modules/grounding/application/validate-atomic-claims";
 import type { YcGroundingContext } from "../domain/yc-grounding.types";
 import {
   validateYcApplicationOutput,
@@ -31,6 +32,23 @@ function context(
         priority: 2,
       },
     ],
+    atomicSources: [
+      {
+        id: evidenceId,
+        scope: "candidate",
+        kind: "action",
+        content: bodyWithWords(50),
+      },
+      {
+        id: "metric",
+        scope: "candidate",
+        kind: "metric",
+        content: bodyWithWords(
+          50,
+          "I reduced incident response time by 40 percent.",
+        ),
+      },
+    ],
     excludedClaims: ["FastAPI", "people management"],
     readiness: { ready: true, missingFields: [], recommendedFields: [] },
     metadata: {
@@ -46,6 +64,7 @@ const groundedClaim =
   "I built and operated customer-facing TypeScript services.";
 
 function bodyWithWords(count: number, prefix = groundedClaim): string {
+  if (count === 150) return Array(3).fill(bodyWithWords(50, prefix)).join(" ");
   const prefixWords = prefix.trim().split(/\s+/u);
   const remaining = Math.max(0, count - prefixWords.length);
   return `${prefix} ${Array.from({ length: remaining }, () => "delivery").join(" ")}`.trim();
@@ -54,7 +73,15 @@ function bodyWithWords(count: number, prefix = groundedClaim): string {
 function output(body = bodyWithWords(50)) {
   return {
     body,
-    claims: [{ text: groundedClaim, sourceIds: [evidenceId] }],
+    claims: [
+      {
+        text: bodyWithWords(50),
+        sourceIds: [evidenceId],
+        source_id: evidenceId,
+        kind: "action" as const,
+        supporting_excerpt: bodyWithWords(50),
+      },
+    ],
   };
 }
 
@@ -71,7 +98,7 @@ describe("validateYcApplicationOutput", () => {
         expect.objectContaining({
           wordCount,
           characterCount: expect.any(Number),
-          claims: [{ text: groundedClaim, sourceIds: [evidenceId] }],
+          claims: [{ text: bodyWithWords(50), sourceIds: [evidenceId] }],
         }),
       );
     },
@@ -91,11 +118,11 @@ describe("validateYcApplicationOutput", () => {
       validateYcApplicationOutput({
         output: {
           ...output(),
-          claims: [{ text: groundedClaim, sourceIds: ["evidence:unknown"] }],
+          claims: [{ ...output().claims[0]!, source_id: "evidence:unknown" }],
         },
         context: context(),
       }),
-    ).toThrow(/unknown source/iu);
+    ).toThrow(expect.objectContaining({ code: "CLAIM_SOURCE" }));
 
     expect(() =>
       validateYcApplicationOutput({
@@ -110,14 +137,14 @@ describe("validateYcApplicationOutput", () => {
           ...output(),
           claims: [
             {
+              ...output().claims[0]!,
               text: "This claim does not appear in the answer.",
-              sourceIds: [evidenceId],
             },
           ],
         },
         context: context(),
       }),
-    ).toThrow(/verbatim/iu);
+    ).toThrow(expect.objectContaining({ code: "CLAIM_REWRITE" }));
   });
 
   it.each(["FastAPI", "Fast API", "people-management"])(
@@ -151,34 +178,50 @@ describe("validateYcApplicationOutput", () => {
     ).toThrow(/forbidden framing/iu);
   });
 
-  it("rejects a metric that is absent from every cited source", () => {
-    const fabricatedMetric = "I reduced incident response time by 75 percent.";
+  it("rejects a metric that is absent from the exact cited excerpt", () => {
+    const supported = bodyWithWords(
+      50,
+      "I reduced incident response time by 40 percent.",
+    );
+    const fabricated = supported.replace("40", "75");
     expect(() =>
       validateYcApplicationOutput({
+        context: context(),
         output: {
-          body: bodyWithWords(50, `${groundedClaim} ${fabricatedMetric}`),
+          body: fabricated,
           claims: [
-            { text: groundedClaim, sourceIds: [evidenceId] },
-            { text: fabricatedMetric, sourceIds: [evidenceId] },
+            {
+              text: fabricated,
+              sourceIds: ["metric"],
+              source_id: "metric",
+              kind: "metric",
+              supporting_excerpt: supported,
+            },
           ],
         },
-        context: context(),
       }),
-    ).toThrow(/unsupported metric/iu);
+    ).toThrow(AtomicClaimValidationError);
   });
-
-  it("allows a metric found in a cited source", () => {
-    const supportedMetric = "I reduced incident response time by 40 percent.";
+  it("allows the unchanged metric in a complete supported source", () => {
+    const supported = bodyWithWords(
+      50,
+      "I reduced incident response time by 40 percent.",
+    );
     expect(() =>
       validateYcApplicationOutput({
+        context: context(),
         output: {
-          body: bodyWithWords(50, `${groundedClaim} ${supportedMetric}`),
+          body: supported,
           claims: [
-            { text: groundedClaim, sourceIds: [evidenceId] },
-            { text: supportedMetric, sourceIds: [evidenceId] },
+            {
+              text: supported,
+              sourceIds: ["metric"],
+              source_id: "metric",
+              kind: "metric",
+              supporting_excerpt: supported,
+            },
           ],
         },
-        context: context(),
       }),
     ).not.toThrow();
   });

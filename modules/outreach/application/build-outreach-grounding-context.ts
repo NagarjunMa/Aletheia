@@ -1,4 +1,8 @@
 import { deriveSafeCandidateSummary } from "@/lib/ai/candidate-summary";
+import {
+  buildAtomicCandidateSources,
+  buildAtomicTargetSources,
+} from "@/modules/grounding/application/build-atomic-sources";
 import { escapeForXmlTag } from "@/lib/ai/prompts/linkedin-connection";
 import { scanForInjection } from "@/lib/ai/prompts/injection-heuristic";
 import type { CandidateEvidenceRecord } from "@/lib/candidate-profile/service";
@@ -323,6 +327,19 @@ export function buildOutreachGroundingContext(input: {
   return {
     identity: input.candidate.identity,
     sources,
+    atomicSources: [
+      ...buildAtomicCandidateSources(input.candidate, sources),
+      ...buildAtomicTargetSources(
+        injectionSafeMode
+          ? {}
+          : {
+              profile: target.profileMarkdown,
+              jobDescription: target.jobDescription,
+              conversation: target.conversationContext,
+            },
+      ),
+    ],
+    excludedClaims: input.candidate.profile.excludedClaims,
     metadata: {
       groundingLevel,
       fallbackReason,

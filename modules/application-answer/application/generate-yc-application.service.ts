@@ -1,3 +1,4 @@
+import { AtomicClaimValidationError } from "@/modules/grounding/application/validate-atomic-claims";
 import { randomUUID } from "node:crypto";
 import type { GenerationTiming } from "@/lib/generation-timing";
 import { NextResponse } from "next/server";
@@ -463,6 +464,11 @@ export async function generateYcApplication(
         ? {
             ...context,
             question: selection.question,
+            atomicSources: (context.atomicSources ?? []).filter(
+              (source) =>
+                source.scope === "target" ||
+                (source.rootId && selection.sourceIds.includes(source.rootId)),
+            ),
             sources: context.sources.filter((source) =>
               selection.sourceIds.includes(source.id),
             ),
@@ -536,6 +542,7 @@ export async function generateYcApplication(
     });
   } catch (error) {
     const outputInvalid =
+      error instanceof AtomicClaimValidationError ||
       error instanceof YcApplicationOutputValidationError ||
       error instanceof YcApplicationOutputSanitizationError ||
       error instanceof YcApplicationStructuredOutputError ||

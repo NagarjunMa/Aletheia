@@ -42,6 +42,13 @@ const SENSITIVE_HEADERS = new Set([
 
 // Body / context field names always scrubbed.
 const SENSITIVE_FIELDS = new Set([
+  "fact_review",
+  "factreview",
+  "facts",
+  "claims",
+  "supporting_excerpt",
+  "supportingexcerpt",
+  "excerpt",
   "resume",
   "profilemarkdown",
   "jd",

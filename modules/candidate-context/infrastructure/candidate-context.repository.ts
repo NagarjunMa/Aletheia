@@ -16,7 +16,7 @@ const PROFILE_FIELDS =
   "user_id,current_role,current_responsibilities,startup_motivation,career_goals,target_roles,target_company_stages,target_industries,github_url,linkedin_url,portfolio_url,location,work_authorization,relocation_preference,availability,excluded_claims,schema_version,created_at,updated_at" as const;
 
 const EVIDENCE_FIELDS =
-  "id,user_id,kind,title,context,actions,outcome,metrics,skills,links,confirmed_at,sort_order,created_at,updated_at" as const;
+  "id,user_id,kind,title,context,actions,outcome,metrics,skills,links,confirmed_at,sort_order,created_at,updated_at,fact_review" as const;
 const log = createLogger("candidate-context-repository");
 
 export class CandidateContextRepositoryError extends Error {

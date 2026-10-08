@@ -77,6 +77,7 @@ describe("renderLinkedinConnection", () => {
     "enforces the %i-character normalized final envelope",
     (length) => {
       const input = linkedinConnectionDraftSchema.parse({
+        claims: [],
         target_observation: `  ${"é".repeat(length - 24)}😀\n\t`,
         candidate_relevance: null,
         cta: "Open to a brief chat?",

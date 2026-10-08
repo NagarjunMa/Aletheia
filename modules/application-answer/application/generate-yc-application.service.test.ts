@@ -9,6 +9,51 @@ import {
 import { YcApplicationOutputSanitizationError } from "./sanitize-yc-application-output";
 import { createGenerationTiming } from "@/lib/generation-timing";
 import { createLogger } from "@/lib/logger";
+import { buildYcGroundingContext } from "./build-yc-grounding-context";
+import { candidateProfileInputSchema } from "@/lib/candidate-profile/schema";
+
+it("rejects unusable bounded evidence before any quota, credit or model request", async () => {
+  const context = buildYcGroundingContext({
+    question: "Describe your work?",
+    jobDescription: "",
+    candidate: {
+      identity: { fullName: "", linkedinUrl: "" },
+      profile: candidateProfileInputSchema.parse({}),
+      resume: { text: "background ".repeat(100), source: "user_resumes" },
+      confirmedEvidence: [
+        {
+          id: "oversized",
+          kind: "achievement",
+          title: "Work",
+          context: "",
+          actions: "experience ".repeat(100),
+          outcome: "",
+          metrics: [],
+          skills: [],
+          links: [],
+          confirmed: true,
+          sortOrder: 0,
+        },
+      ],
+    },
+  });
+  const deps = dependencies({
+    prepareGrounding: vi.fn().mockResolvedValue(context),
+  });
+  const response = await generateYcApplication(
+    {
+      caller,
+      request,
+      corsHeaders: {},
+      applicationBaseUrl: "https://aletheia.live",
+    },
+    deps,
+  );
+  expect(response.status).toBe(422);
+  expect(deps.checkRateLimit).not.toHaveBeenCalled();
+  expect(deps.reserveCredits).not.toHaveBeenCalled();
+  expect(deps.createMessage).not.toHaveBeenCalled();
+});
 
 describe("ALE-38 application timings", () => {
   it.each([
@@ -168,6 +213,17 @@ function grounding(ready = true): YcGroundingContext {
           },
         ]
       : [],
+    atomicSources: ready
+      ? [
+          {
+            id: "evidence:11111111-1111-4111-8111-111111111111",
+            rootId: "evidence:11111111-1111-4111-8111-111111111111",
+            scope: "candidate",
+            kind: "action",
+            content: answer,
+          },
+        ]
+      : [],
     excludedClaims: [],
     readiness: {
       ready,
@@ -218,6 +274,9 @@ function dependencies(
       claims: [
         {
           text: answer,
+          kind: "action",
+          source_id: "evidence:11111111-1111-4111-8111-111111111111",
+          supporting_excerpt: answer,
           sourceIds: ["evidence:11111111-1111-4111-8111-111111111111"],
         },
       ],
@@ -310,7 +369,7 @@ describe("generateYcApplication", () => {
       creditsRemaining: 36,
       evalMetadata: {
         generationId: "33333333-3333-4333-8333-333333333333",
-        promptVersion: "yc-1.2.0",
+        promptVersion: "yc-2.0.0",
         model: "claude-test-model",
         category: "yc_application",
         profileFieldCount: 2,
@@ -335,6 +394,9 @@ describe("generateYcApplication", () => {
       claims: [
         {
           text: answer,
+          kind: "action",
+          source_id: "evidence:11111111-1111-4111-8111-111111111111",
+          supporting_excerpt: answer,
           sourceIds: ["evidence:11111111-1111-4111-8111-111111111111"],
         },
       ],
@@ -589,7 +651,9 @@ describe("ALE-37 batch orchestration", () => {
       claims: [
         {
           text: answer,
-          source_ids: ["evidence:11111111-1111-4111-8111-111111111111"],
+          kind: "action",
+          source_id: "evidence:11111111-1111-4111-8111-111111111111",
+          supporting_excerpt: answer,
         },
       ],
     })),
@@ -629,6 +693,24 @@ describe("ALE-37 batch orchestration", () => {
     expect(deps.checkRateLimit).toHaveBeenCalledTimes(1);
     expect(deps.refundCredits).not.toHaveBeenCalled();
     expect(JSON.stringify(result)).not.toContain('"claims"');
+  });
+  it("rejects an otherwise valid atomic source excluded from one question", async () => {
+    const deps = batchDeps();
+    const selected = grounding();
+    selected.questions = [
+      { questionId: "q1", question: questions[0]!, sourceIds: [] },
+      {
+        questionId: "q2",
+        question: questions[1]!,
+        sourceIds: selected.sources.map((source) => source.id),
+      },
+    ];
+    deps.prepareGrounding = vi.fn().mockResolvedValue(selected);
+    const result = await run(deps);
+    expect(result.status).toBe(502);
+    expect(deps.refundCredits).toHaveBeenCalledTimes(1);
+    expect(deps.releaseRateLimit).toHaveBeenCalledTimes(1);
+    expect(await result.text()).not.toContain(answer);
   });
   it("delivers five answers in request order with one reservation and provider call", async () => {
     const fiveQuestions = Array.from(

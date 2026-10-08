@@ -2,6 +2,7 @@ import type {
   CandidateGroundingSource,
   CandidateResumeSource,
 } from "@/modules/candidate-context/domain/candidate-context.types";
+import type { AtomicSource } from "@/modules/grounding/domain/atomic-claim";
 
 export type {
   CandidateGroundingData,
@@ -26,6 +27,7 @@ export type YcGroundingContext = {
   }>;
   jobDescription: string;
   sources: YcGroundingSource[];
+  atomicSources?: AtomicSource[];
   excludedClaims: string[];
   readiness: YcGroundingReadiness;
   metadata: {

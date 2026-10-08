@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { candidateProfileInputSchema } from "@/lib/candidate-profile/schema";
+import { prepareFactReview } from "@/lib/candidate-profile/fact-review";
 import type { CandidateGroundingData } from "../domain/yc-grounding.types";
 import { prepareYcGroundingContext } from "./prepare-yc-grounding-context";
 import { createGenerationTiming } from "@/lib/generation-timing";
@@ -17,7 +18,7 @@ const target = {
 function candidateData(
   overrides: Partial<CandidateGroundingData> = {},
 ): CandidateGroundingData {
-  return {
+  const candidate: CandidateGroundingData = {
     identity: { fullName: "", linkedinUrl: "" },
     profile: candidateProfileInputSchema.parse({
       currentRole: "Platform Engineer",
@@ -41,6 +42,18 @@ function candidateData(
     resume: { text: "Server-owned resume text.", source: "user_resumes" },
     ...overrides,
   };
+  candidate.confirmedEvidence = candidate.confirmedEvidence.map((record) => ({
+    ...record,
+    factReview: prepareFactReview(record, [
+      {
+        id: "88888888-8888-4888-8888-888888888888",
+        kind: "action",
+        excerpt: record.actions,
+        confirmed: true,
+      },
+    ]),
+  }));
+  return candidate;
 }
 
 describe("prepareYcGroundingContext", () => {

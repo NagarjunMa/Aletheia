@@ -19,6 +19,7 @@ const message = (input: unknown) =>
   }) as never;
 
 const valid = {
+  claims: [],
   subject_line: "AI engineering interest",
   greeting: "Megan",
   target_opening: "Your product stood out.",
@@ -53,6 +54,7 @@ describe("cold email Anthropic tool", () => {
 
 describe("LinkedIn connection Anthropic tool", () => {
   const connection = {
+    claims: [],
     target_observation: "Your developer tooling work stood out.",
     candidate_relevance: {
       text: "I built an LLM review workflow for engineers.",
@@ -82,6 +84,7 @@ describe("LinkedIn connection Anthropic tool", () => {
       target_observation: connection.target_observation,
       candidate_relevance: connection.candidate_relevance,
       cta: connection.cta,
+      claims: [],
     });
   });
 
@@ -244,8 +247,10 @@ describe("LinkedIn connection Anthropic tool", () => {
     "accepts bounded compositions exceeding former section limits",
     (input) => {
       expect(
-        getLinkedinConnectionDraftToolInput(connectionMessage(input)),
-      ).toEqual(input);
+        getLinkedinConnectionDraftToolInput(
+          connectionMessage({ ...input, claims: [] }),
+        ),
+      ).toEqual({ ...input, claims: [] });
     },
   );
 });

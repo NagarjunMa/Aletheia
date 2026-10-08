@@ -13,6 +13,23 @@ function makeEvent(overrides: Partial<ScrubberEvent> = {}): ScrubberEvent {
 }
 
 describe("sentryBeforeSend", () => {
+  it("scrubs private fact reviews, excerpts and ledgers in events and breadcrumbs", () => {
+    const canary = "ALE46_PRIVATE_FACT_CANARY";
+    const data = {
+      fact_review: { source: canary },
+      factReview: canary,
+      facts: [canary],
+      claims: [canary],
+      supporting_excerpt: canary,
+      excerpt: canary,
+      claimCount: 2,
+    };
+    const event = sentryBeforeSend({ extra: data }, {});
+    const crumb = sentryBeforeBreadcrumb({ data });
+    expect(JSON.stringify(event)).not.toContain(canary);
+    expect(JSON.stringify(crumb)).not.toContain(canary);
+    expect(event?.extra?.claimCount).toBe(2);
+  });
   it("redacts Authorization header", () => {
     const event = makeEvent({
       request: {

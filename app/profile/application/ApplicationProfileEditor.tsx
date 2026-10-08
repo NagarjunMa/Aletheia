@@ -20,6 +20,7 @@ import {
   type CandidateProfileInput,
 } from "@/lib/candidate-profile/schema";
 import type { CandidateEvidenceRecord } from "@/lib/candidate-profile/service";
+import FactReview from "./FactReview";
 import {
   deleteCandidateEvidence,
   saveCandidateEvidence,
@@ -78,7 +79,15 @@ export default function ApplicationProfileEditor({
   const router = useRouter();
   const [profile, setProfile] = useState(initialProfile);
   const [evidence, setEvidence] = useState(initialEvidence);
+  const [lastServerEvidence, setLastServerEvidence] = useState(initialEvidence);
+  // Refresh delivers authoritative revisions, including trigger-invalidated reviews.
+  // Keep unsaved profile/editor state while replacing only saved evidence.
+  if (lastServerEvidence !== initialEvidence) {
+    setLastServerEvidence(initialEvidence);
+    setEvidence(initialEvidence);
+  }
   const [editor, setEditor] = useState<CandidateEvidenceInput | null>(null);
+  const [reviewId, setReviewId] = useState<string | null>(null);
   const [profileNotice, setProfileNotice] = useState<ProfileNotice>(null);
   const [evidenceNotice, setEvidenceNotice] = useState<Notice>(null);
   const [profilePending, startProfileTransition] = useTransition();
@@ -491,7 +500,15 @@ export default function ApplicationProfileEditor({
                       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                         <button
                           type="button"
-                          onClick={() => setEditor(item)}
+                          onClick={() => {
+                            const {
+                              factReview: _review,
+                              updatedAt: _revision,
+                              ...input
+                            } = item;
+                            setReviewId(null);
+                            setEditor(input);
+                          }}
                           className="min-w-0 text-left"
                         >
                           <div className="flex flex-wrap items-center gap-2">
@@ -510,10 +527,26 @@ export default function ApplicationProfileEditor({
                         <div className="flex shrink-0 items-center gap-2">
                           <button
                             type="button"
-                            onClick={() => setEditor(item)}
+                            onClick={() => {
+                              const {
+                                factReview: _review,
+                                updatedAt: _revision,
+                                ...input
+                              } = item;
+                              setReviewId(null);
+                              setEditor(input);
+                            }}
                             className="rounded-lg border border-accent/14 px-3 py-2 text-xs font-semibold text-white hover:bg-accent/10"
                           >
                             Edit
+                          </button>
+                          <button
+                            type="button"
+                            disabled={evidencePending || Boolean(editor)}
+                            onClick={() => setReviewId(item.id)}
+                            className="rounded-lg border border-accent/25 px-3 py-2 text-xs font-semibold text-accent disabled:opacity-50"
+                          >
+                            Review facts
                           </button>
                           <button
                             type="button"
@@ -526,6 +559,25 @@ export default function ApplicationProfileEditor({
                           </button>
                         </div>
                       </div>
+                      {reviewId === item.id ? (
+                        <FactReview
+                          key={`${item.id}:${item.updatedAt}`}
+                          evidence={item}
+                          onClose={() => setReviewId(null)}
+                          onSaved={(saved) => {
+                            setEvidence((current) =>
+                              current.map((entry) =>
+                                entry.id === saved.id ? saved : entry,
+                              ),
+                            );
+                            setEvidenceNotice({
+                              type: "success",
+                              message:
+                                "Reviewed facts saved. Source edits will require a new review.",
+                            });
+                          }}
+                        />
+                      ) : null}
                     </article>
                   );
                 })

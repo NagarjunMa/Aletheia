@@ -423,7 +423,7 @@ describe("COLD_EMAIL_PROMPT subject line policy", () => {
   ];
 
   it("tracks the prompt behavior change with a new version", () => {
-    expect(PROMPT_VERSION).toBe("3.3.0");
+    expect(PROMPT_VERSION).toBe("4.0.0");
   });
 
   it("documents scenario-specific email modes", () => {
@@ -525,6 +525,7 @@ describe("COLD_EMAIL_PROMPT subject line policy", () => {
       ]) {
         const cta = example.replace("[Company]", company);
         const draft = linkedinConnectionDraftSchema.parse({
+          claims: [],
           target_observation: "Your documentation work stood out.",
           candidate_relevance: {
             text: "I built a documentation review workflow.",

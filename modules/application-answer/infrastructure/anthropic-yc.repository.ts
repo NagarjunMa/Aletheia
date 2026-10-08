@@ -1,3 +1,8 @@
+import {
+  atomicClaimsSchema,
+  atomicClaimsToolSchema,
+  type AtomicClaim,
+} from "@/modules/grounding/domain/atomic-claim";
 import Anthropic from "@anthropic-ai/sdk";
 import { observeAnthropicAttempts } from "@/lib/provider-attempt-timing";
 import { z } from "zod";
@@ -36,32 +41,7 @@ export const ycApplicationTool = {
         description:
           "Declared body word count. The server recalculates and validates the final body independently.",
       },
-      claims: {
-        type: "array",
-        minItems: 1,
-        maxItems: 30,
-        description:
-          "Substantive candidate claims copied verbatim from body with supporting source IDs.",
-        items: {
-          type: "object",
-          additionalProperties: false,
-          properties: {
-            text: {
-              type: "string",
-              minLength: 1,
-              maxLength: 1_000,
-            },
-            source_ids: {
-              type: "array",
-              minItems: 1,
-              maxItems: 10,
-              uniqueItems: true,
-              items: { type: "string", minLength: 1, maxLength: 200 },
-            },
-          },
-          required: ["text", "source_ids"],
-        },
-      },
+      claims: { ...atomicClaimsToolSchema, minItems: 1 },
     },
     required: ["body", "word_count", "claims"],
   },
@@ -75,26 +55,10 @@ const ycApplicationToolInputSchema = z
       .int()
       .min(APPLICATION_ANSWER_MIN_WORDS)
       .max(APPLICATION_ANSWER_MAX_WORDS),
-    claims: z
-      .array(
-        z
-          .object({
-            text: z.string().trim().min(1).max(1_000),
-            source_ids: z
-              .array(z.string().trim().min(1).max(200))
-              .min(1)
-              .max(10)
-              .refine(
-                (sourceIds) => new Set(sourceIds).size === sourceIds.length,
-                {
-                  message: "source_ids must be unique",
-                },
-              ),
-          })
-          .strict(),
-      )
-      .min(1)
-      .max(30),
+    claims: atomicClaimsSchema.refine(
+      (claims) => claims.length > 0,
+      "Claims required",
+    ),
   })
   .strict();
 
@@ -177,8 +141,8 @@ export function getApplicationBatchToolInput(
       questionId: answer.questionId,
       body: answer.body,
       claims: answer.claims.map((claim) => ({
-        text: claim.text,
-        sourceIds: claim.source_ids,
+        ...claim,
+        sourceIds: [claim.source_id],
       })),
     }));
   } catch {
@@ -188,7 +152,9 @@ export function getApplicationBatchToolInput(
 
 export type YcApplicationToolOutput = {
   body: string;
-  claims: Array<{ text: string; sourceIds: string[] }>;
+  claims: Array<
+    { text: string; sourceIds: string[] } & Partial<Omit<AtomicClaim, "text">>
+  >;
 };
 
 export class YcApplicationStructuredOutputError extends Error {
@@ -218,8 +184,8 @@ export function getYcApplicationToolInput(
     return {
       body: parsed.body,
       claims: parsed.claims.map((claim) => ({
-        text: claim.text,
-        sourceIds: claim.source_ids,
+        ...claim,
+        sourceIds: [claim.source_id],
       })),
     };
   } catch {

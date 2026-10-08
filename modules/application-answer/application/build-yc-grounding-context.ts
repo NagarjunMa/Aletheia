@@ -1,4 +1,8 @@
 import { escapeForXmlTag } from "@/lib/ai/prompts/linkedin-connection";
+import {
+  buildAtomicCandidateSources,
+  buildAtomicTargetSources,
+} from "@/modules/grounding/application/build-atomic-sources";
 import type { CandidateEvidenceRecord } from "@/lib/candidate-profile/service";
 import type {
   CandidateGroundingData,
@@ -290,13 +294,18 @@ function applySafetyAndBudget(
 
 function buildReadiness(
   sources: YcGroundingSource[],
+  usableSources: YcGroundingSource[],
   candidate: CandidateGroundingData,
   selectedEvidence: CandidateEvidenceRecord[],
 ): YcGroundingReadiness {
   const sourceIds = new Set(sources.map((source) => source.id));
   const hasBackground =
     sourceIds.has("profile.current_role") || sourceIds.has("resume.primary");
-  const hasEvidence = sources.some((source) => source.type === "evidence");
+  // Background remains a profile-completeness requirement, not permission to
+  // cite raw profile/resume text. Candidate claims need a separately reviewed fact.
+  const hasEvidence = usableSources.some(
+    (source) => source.type === "evidence",
+  );
   const missingFields: YcGroundingReadiness["missingFields"] = [];
   if (!hasBackground) missingFields.push("current_role_or_resume");
   if (!hasEvidence) missingFields.push("confirmed_evidence");
@@ -409,7 +418,35 @@ export function buildYcGroundingContext(input: {
     ],
     excludedClaims,
   );
-  const readiness = buildReadiness(sources, input.candidate, selectedEvidence);
+  const atomicSources = [
+    ...buildAtomicCandidateSources(input.candidate, sources),
+    ...buildAtomicTargetSources({ jobDescription: normalizedJobDescription }),
+  ];
+  const usableRoots = new Set(
+    atomicSources
+      .filter((source) => source.scope === "candidate")
+      .map((source) => source.rootId),
+  );
+  const usableSources = sources.filter((source) => usableRoots.has(source.id));
+  const readiness = buildReadiness(
+    sources,
+    usableSources,
+    input.candidate,
+    selectedEvidence,
+  );
+  // Every batch question needs eligible evidence, not just the union. An
+  // unusable question must be caught before reserving quota/credits/model work.
+  if (
+    input.questions &&
+    rankedByQuestion.some(
+      (ranked) =>
+        !ranked.some((entry) => usableRoots.has(`evidence:${entry.id}`)),
+    )
+  ) {
+    readiness.ready = false;
+    if (!readiness.missingFields.includes("confirmed_evidence"))
+      readiness.missingFields.push("confirmed_evidence");
+  }
   const profileFieldCount = sources.filter(
     (source) => source.type === "profile",
   ).length;
@@ -442,6 +479,7 @@ export function buildYcGroundingContext(input: {
     jobDescription: escapeForXmlTag(normalizedJobDescription),
     sources,
     excludedClaims: excludedClaims.map(escapeForXmlTag),
+    atomicSources,
     readiness,
     metadata: {
       profileFieldCount,

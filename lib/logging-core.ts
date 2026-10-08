@@ -6,6 +6,8 @@ const UUID_PATTERN =
 const PROHIBITED_FIELD_PATTERN =
   /authorization|cookie|token|secret|password|api.?key|session|prompt|completion|message|body|profile|resume|job.?description|question|answer|email|user.?metadata|content|draft|headers?|url|search/i;
 const ERROR_FIELD_PATTERN = /^(?:err|error)$/i;
+const PRIVATE_FACT_PATTERN =
+  /^(?:fact_?review|facts|claims|supporting_?excerpt|excerpt)$/i;
 
 export type SafeLogFields = Record<string, unknown>;
 
@@ -22,7 +24,7 @@ export function normalizeLogString(value: unknown): string | undefined {
 }
 
 function isProhibitedField(key: string) {
-  return PROHIBITED_FIELD_PATTERN.test(key);
+  return PROHIBITED_FIELD_PATTERN.test(key) || PRIVATE_FACT_PATTERN.test(key);
 }
 
 function isErrorField(key: string) {

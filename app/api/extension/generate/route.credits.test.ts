@@ -76,13 +76,14 @@ const validPayload = {
 };
 
 function connectionCompositionBlock() {
-  const targetObservation = "Your engineering work stood out.";
+  const targetObservation = "I'd welcome a conversation.";
   const cta = "Open to a brief chat?";
   return {
     type: "tool_use",
     id: "toolu_linkedin_connection",
     name: "return_linkedin_connection_composition",
     input: {
+      claims: [],
       target_observation: targetObservation,
       candidate_relevance: null,
       cta,
@@ -245,11 +246,37 @@ describe("POST /api/extension/generate with credit billing enabled", () => {
     "preserves once-only credit/quota compensation for observation length %i",
     async (length) => {
       const block = connectionCompositionBlock();
+      const excerpt = "x".repeat(length - 29);
+      const observation = `The supplied context says: "${excerpt}"`;
+      mockPrepareOutreachGroundingContext.mockResolvedValueOnce({
+        identity: { fullName: "", linkedinUrl: "" },
+        sources: [],
+        metadata: {},
+        atomicSources: [
+          {
+            id: "target.length",
+            scope: "target",
+            kind: "target_observation",
+            content: excerpt,
+          },
+        ],
+      });
       mockAnthropicCreate.mockResolvedValueOnce({
         content: [
           {
             ...block,
-            input: { ...block.input, target_observation: "x".repeat(length) },
+            input: {
+              ...block.input,
+              target_observation: observation,
+              claims: [
+                {
+                  text: observation,
+                  kind: "target_observation",
+                  source_id: "target.length",
+                  supporting_excerpt: excerpt,
+                },
+              ],
+            },
           },
         ],
         usage: { input_tokens: 10, output_tokens: 20 },

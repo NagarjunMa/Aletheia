@@ -10,8 +10,8 @@ import { validateYcApplicationOutput } from "./validate-yc-application-output";
 
 const evidenceId = "evidence:11111111-1111-4111-8111-111111111111";
 const groundedClaim =
-  "I designed an observability workflow -- reduced incident response time by 40 percent.";
-const body = `${groundedClaim} With that in mind, I use that experience to make production work clearer for a small team. I have also built TypeScript services, partnered with operators, and handled the follow-up work needed after launch with close attention to reliability, customer feedback, and practical delivery tradeoffs.`;
+  "I designed an observability workflow -- reduced incident response time by 40 percent. With that in mind, I use that experience to make production work clearer for a small team. I have also built TypeScript services, partnered with operators, and handled the follow-up work needed after launch with close attention to reliability, customer feedback, and practical delivery tradeoffs.";
+const body = groundedClaim;
 
 const context: YcGroundingContext = {
   question: "Why are you a strong candidate for this role?",
@@ -27,6 +27,14 @@ const context: YcGroundingContext = {
     },
   ],
   excludedClaims: [],
+  atomicSources: [
+    {
+      id: evidenceId,
+      kind: "action",
+      scope: "candidate",
+      content: groundedClaim,
+    },
+  ],
   readiness: { ready: true, missingFields: [], recommendedFields: [] },
   metadata: {
     profileFieldCount: 0,
@@ -38,35 +46,38 @@ const context: YcGroundingContext = {
 function output(overrides: Partial<YcApplicationToolOutput> = {}) {
   return {
     body,
-    claims: [{ text: groundedClaim, sourceIds: [evidenceId] }],
+    claims: [
+      {
+        text: groundedClaim,
+        sourceIds: [evidenceId],
+        source_id: evidenceId,
+        kind: "action" as const,
+        supporting_excerpt: groundedClaim,
+      },
+    ],
     ...overrides,
   };
 }
 
 describe("sanitizeYcApplicationOutput", () => {
-  it("rewrites body and claim text together while retaining claim containment", async () => {
+  it("preserves immutable claims and rejects altered factual output", async () => {
+    expect(() =>
+      validateYcApplicationOutput({ context, output: output() }),
+    ).not.toThrow();
     const result = await sanitizeYcApplicationOutput(output());
 
     expect(result.output.body).not.toContain(" -- ");
     expect(result.output.body).not.toContain("With that in mind");
-    expect(result.output.claims[0]?.text).toBe(
-      "I designed an observability workflow - reduced incident response time by 40 percent.",
-    );
-    expect(result.output.body).toContain(result.output.claims[0]?.text ?? "");
+    expect(result.output.claims[0]?.text).toBe(groundedClaim);
     expect(result.metadata.fingerprintPatterns).toEqual(
       expect.arrayContaining(["spaced_double_hyphen", "ai_transition_mind"]),
     );
     expect(result.metadata.fingerprintPatternCount).toBe(
       result.metadata.fingerprintPatterns.length,
     );
-    expect(
+    expect(() =>
       validateYcApplicationOutput({ context, output: result.output }),
-    ).toEqual(
-      expect.objectContaining({
-        claims: result.output.claims,
-        wordCount: expect.any(Number),
-      }),
-    );
+    ).toThrow(expect.objectContaining({ code: "CLAIM_COVERAGE" }));
   });
 
   it("fails closed when sanitation removes a claim", async () => {

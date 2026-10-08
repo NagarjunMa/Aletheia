@@ -1,4 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
+import {
+  atomicClaimsSchema,
+  atomicClaimsToolSchema,
+} from "@/modules/grounding/domain/atomic-claim";
 import { observeAnthropicAttempts } from "@/lib/provider-attempt-timing";
 import { z } from "zod";
 import { createLogger, startTimedStage, type SafeLogger } from "@/lib/logger";
@@ -44,6 +48,7 @@ export function buildEmailDraftTool(
       type: "object",
       additionalProperties: false,
       properties: {
+        claims: atomicClaimsToolSchema,
         subject_line: {
           type: "string",
           description:
@@ -66,7 +71,7 @@ export function buildEmailDraftTool(
           maximum: constraint.maximum,
         },
       },
-      required: ["subject_line", "body", "word_count"],
+      required: ["subject_line", "body", "word_count", "claims"],
     },
   } as const;
 }
@@ -89,6 +94,7 @@ export function buildColdEmailDraftTool(emailMode: EmailMode) {
       additionalProperties: false,
       properties: {
         subject_line: { type: "string", minLength: 1, maxLength: 160 },
+        claims: atomicClaimsToolSchema,
         greeting: { type: "string", minLength: 1, maxLength: 80 },
         target_opening: { type: "string", minLength: 1, maxLength: 500 },
         candidate_positioning: { type: "string", minLength: 1, maxLength: 500 },
@@ -121,6 +127,7 @@ export function buildColdEmailDraftTool(emailMode: EmailMode) {
         "proof_points",
         "value_statement",
         "cta",
+        "claims",
       ],
     },
   } as const;
@@ -144,6 +151,7 @@ export function buildLinkedinConnectionDraftTool() {
           minLength: 1,
           maxLength: LINKEDIN_CONNECTION_MAX_CHARACTERS,
         },
+        claims: atomicClaimsToolSchema,
         candidate_relevance: {
           anyOf: [
             { type: "null" },
@@ -173,7 +181,7 @@ export function buildLinkedinConnectionDraftTool() {
           maxLength: LINKEDIN_CONNECTION_MAX_CHARACTERS,
         },
       },
-      required: ["target_observation", "candidate_relevance", "cta"],
+      required: ["target_observation", "candidate_relevance", "cta", "claims"],
     },
   } as const;
 }
@@ -185,6 +193,7 @@ const emailDraftToolInputSchema = z
     subject_line: z.string().trim().min(1).max(160),
     body: z.string().trim().min(1).max(5000),
     word_count: z.number().int().min(1).max(250),
+    claims: atomicClaimsSchema,
   })
   .strict();
 
