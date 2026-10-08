@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { candidateProfileInputSchema } from "@/lib/candidate-profile/schema";
+import { prepareFactReview } from "@/lib/candidate-profile/fact-review";
+import { buildYcGroundingContext } from "@/modules/application-answer/application/build-yc-grounding-context";
 import type { YcGroundingContext } from "@/modules/application-answer/domain/yc-grounding.types";
 import {
   buildYcApplicationPrompt,
@@ -46,9 +49,64 @@ function groundingContext(
 }
 
 describe("YC application prompt", () => {
+  it("lists real atomic IDs for each question, not the selected parent IDs", () => {
+    const record = {
+      id: "policy",
+      kind: "technical_project" as const,
+      title: "Policy project",
+      context: "",
+      actions: "I built a policy prototype.",
+      outcome: "",
+      metrics: [],
+      skills: [],
+      links: [],
+      confirmed: true,
+      sortOrder: 0,
+    };
+    const factId = "11111111-1111-4111-8111-111111111111";
+    const context = buildYcGroundingContext({
+      question: "Why this role?",
+      questions: ["Why this role?"],
+      jobDescription: "Build tools.",
+      candidate: {
+        identity: { fullName: "", linkedinUrl: "" },
+        profile: candidateProfileInputSchema.parse({ currentRole: "Engineer" }),
+        confirmedEvidence: [
+          {
+            ...record,
+            factReview: prepareFactReview(record, [
+              {
+                id: factId,
+                kind: "action",
+                excerpt: record.actions,
+                confirmed: true,
+              },
+            ]),
+          },
+        ],
+        resume: { text: "", source: "none" },
+      },
+    });
+    const prompt = buildYcApplicationPrompt(context);
+    const listed = prompt.userPrompt
+      .match(/source_ids="([^"]*)"/u)?.[1]
+      ?.split(" ");
+    expect(listed).toEqual(context.atomicSources?.map((source) => source.id));
+    expect(listed).toContain(`evidence:policy.fact.${factId}`);
+    expect(listed).not.toContain("profile.current_role.value");
+  });
   it("scans later batch questions and binds their server IDs to selected sources", () => {
     const result = buildYcApplicationPrompt(
       groundingContext({
+        atomicSources: [
+          {
+            id: "evidence:11111111-1111-4111-8111-111111111111.actions",
+            rootId: "evidence:11111111-1111-4111-8111-111111111111",
+            kind: "action",
+            scope: "candidate",
+            content: "I built tools.",
+          },
+        ],
         questions: [
           {
             questionId: "q1",
@@ -66,13 +124,13 @@ describe("YC application prompt", () => {
     );
     expect(result.injectionScan.triggered).toBe(true);
     expect(result.userPrompt).toContain(
-      '<application_question id="q2" source_ids="evidence:11111111-1111-4111-8111-111111111111">',
+      '<application_question id="q2" source_ids="evidence:11111111-1111-4111-8111-111111111111.actions">',
     );
     expect(result.systemPrompt).toContain("exactly one answer per questionId");
     expect(result.systemPrompt).toContain("independently to each answer");
   });
   it("freezes a dedicated prompt version and grounded output rules", () => {
-    expect(YC_APPLICATION_PROMPT_VERSION).toBe("yc-1.2.0");
+    expect(YC_APPLICATION_PROMPT_VERSION).toBe("yc-2.0.0");
     expect(YC_APPLICATION_SYSTEM_PROMPT).toContain("50 to 150 words");
     expect(YC_APPLICATION_SYSTEM_PROMPT).toContain("source_ids");
     expect(YC_APPLICATION_SYSTEM_PROMPT).toContain(

@@ -11,6 +11,15 @@ import {
 } from "@/lib/candidate-profile/schema";
 import type { TablesInsert } from "@/lib/database/types";
 import { createClient } from "@/lib/supabase/server";
+import {
+  candidateFactsSchema,
+  prepareFactReview,
+} from "@/lib/candidate-profile/fact-review";
+import {
+  mapCandidateEvidenceRow,
+  type CandidateEvidenceRecord,
+} from "@/lib/candidate-profile/service";
+import type { Tables } from "@/lib/database/types";
 
 const log = createLogger("candidate-profile-actions");
 const profileCategorySchema = z.enum([
@@ -32,6 +41,80 @@ function validationError(message: string): CandidateProfileActionResult {
 
 function refreshCandidateProfilePages() {
   revalidatePath("/dashboard");
+  revalidatePath("/profile/application");
+}
+
+export async function saveCandidateFactReview(
+  input: unknown,
+): Promise<
+  { ok: true; evidence: CandidateEvidenceRecord } | { ok: false; error: string }
+> {
+  const parsed = z
+    .object({
+      evidenceId: z.string().max(36).uuid(),
+      expectedRevision: z.string().max(64).datetime({ offset: true }),
+      facts: candidateFactsSchema,
+    })
+    .strict()
+    .safeParse(input);
+  const failure = {
+    ok: false as const,
+    error: "Could not save reviewed facts. Reload the evidence and try again.",
+  };
+  if (!parsed.success) return failure;
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+  if (authError || !user)
+    return { ok: false, error: "Authentication required" };
+  const complete = startTimedStage(log, "candidate_evidence.fact_review", {
+    userId: user.id,
+  });
+  const { evidenceId, expectedRevision, facts } = parsed.data;
+  try {
+    const loaded = await supabase
+      .from("candidate_evidence")
+      .select("*")
+      .eq("id", evidenceId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (
+      loaded.error ||
+      !loaded.data ||
+      loaded.data.user_id !== user.id ||
+      loaded.data.updated_at !== expectedRevision
+    ) {
+      complete("failure", { errorCode: "FACT_REVIEW_STALE" });
+      return failure;
+    }
+    const row = loaded.data as Tables<"candidate_evidence">;
+    const factReview = prepareFactReview(mapCandidateEvidenceRow(row), facts);
+    const result = await supabase
+      .from("candidate_evidence")
+      .update({ fact_review: factReview })
+      .eq("id", evidenceId)
+      .eq("user_id", user.id)
+      .eq("updated_at", expectedRevision)
+      .select("*")
+      .maybeSingle();
+    if (result.error || !result.data || result.data.user_id !== user.id) {
+      complete("failure", { errorCode: "FACT_REVIEW_SAVE_FAILED" });
+      return failure;
+    }
+    complete("success", { claimCount: facts.length });
+    refreshCandidateProfilePages();
+    return {
+      ok: true,
+      evidence: mapCandidateEvidenceRow(
+        result.data as Tables<"candidate_evidence">,
+      ),
+    };
+  } catch {
+    complete("failure", { errorCode: "FACT_REVIEW_INVALID" });
+    return failure;
+  }
 }
 
 function categoryPayload(

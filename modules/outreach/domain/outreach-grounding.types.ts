@@ -3,6 +3,7 @@ import type {
   CandidateGroundingSource,
   CandidateSourceKind,
 } from "@/modules/candidate-context/domain/candidate-context.types";
+import type { AtomicSource } from "@/modules/grounding/domain/atomic-claim";
 
 export const OUTREACH_GROUNDING_CATEGORIES = [
   "linkedin_connection",
@@ -85,6 +86,9 @@ export type OutreachGroundingContext = {
   /** Server-only; never return this field in the public generation response. */
   identity: CandidateIdentity;
   sources: CandidateGroundingSource[];
+  /** Server-only evidence; absence fails closed at final validation. */
+  atomicSources?: AtomicSource[];
+  excludedClaims?: string[];
   metadata: OutreachGroundingMetadata;
 };
 

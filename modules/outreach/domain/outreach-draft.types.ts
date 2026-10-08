@@ -1,5 +1,9 @@
 import { z } from "zod";
 import { LINKEDIN_CONNECTION_MAX_CHARACTERS } from "@/lib/ai/output-constraints";
+import {
+  atomicClaimsSchema,
+  type AtomicClaim,
+} from "@/modules/grounding/domain/atomic-claim";
 
 export const COLD_EMAIL_MAX_PROOF_POINTS = 2;
 
@@ -28,11 +32,15 @@ export const coldEmailDraftSchema = z
       .max(COLD_EMAIL_MAX_PROOF_POINTS),
     value_statement: boundedSection(500),
     cta: boundedSection(300),
+    claims: atomicClaimsSchema,
   })
   .strict();
 
 export type ColdEmailProofPoint = z.infer<typeof coldEmailProofPointSchema>;
-export type ColdEmailDraft = z.infer<typeof coldEmailDraftSchema>;
+export type ColdEmailDraft = Omit<
+  z.infer<typeof coldEmailDraftSchema>,
+  "claims"
+> & { claims?: AtomicClaim[] };
 
 export { LINKEDIN_CONNECTION_MAX_CHARACTERS };
 
@@ -62,12 +70,14 @@ export const linkedinConnectionDraftSchema = z
     target_observation: connectionSection,
     candidate_relevance: linkedinConnectionRelevanceSchema.nullable(),
     cta: connectionSection,
+    claims: atomicClaimsSchema,
   })
   .strict();
 
 export type LinkedinConnectionRelevance = z.infer<
   typeof linkedinConnectionRelevanceSchema
 >;
-export type LinkedinConnectionDraft = z.infer<
-  typeof linkedinConnectionDraftSchema
->;
+export type LinkedinConnectionDraft = Omit<
+  z.infer<typeof linkedinConnectionDraftSchema>,
+  "claims"
+> & { claims?: AtomicClaim[] };

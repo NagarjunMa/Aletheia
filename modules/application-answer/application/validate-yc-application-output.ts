@@ -1,3 +1,4 @@
+import { validateAtomicOutput } from "@/modules/grounding/application/validate-atomic-claims";
 import {
   YC_APPLICATION_MAX_WORDS,
   YC_APPLICATION_MIN_WORDS,
@@ -11,9 +12,6 @@ const FORBIDDEN_FRAMING = [
   /\b(?:let'?s connect|connect with me|reach out|schedule (?:a )?(?:call|chat)|happy to discuss|would love to discuss|open to a (?:call|chat)|contact me)\b/iu,
   /\b(?:perfect|ideal|best) candidate\b/iu,
 ];
-
-const METRIC_PATTERN =
-  /\b\d+(?:[.,]\d+)?(?:\s*(?:%|percent|x|k|m|million|billion))?\b/giu;
 
 export class YcApplicationOutputValidationError extends Error {
   constructor(message: string) {
@@ -41,12 +39,6 @@ function compactClaim(value: string): string {
 
 function countWords(value: string): number {
   return value.length === 0 ? 0 : value.split(/\s+/u).length;
-}
-
-function extractMetrics(value: string): string[] {
-  return [...value.matchAll(METRIC_PATTERN)].map((match) =>
-    normalizeForComparison(match[0]),
-  );
 }
 
 export function validateYcApplicationOutput(input: {
@@ -93,61 +85,20 @@ export function validateYcApplicationOutput(input: {
     );
   }
 
-  // A model must not evade numeric grounding by omitting the invented metric
-  // from its ledger. Source checks below then validate each covered metric.
-  for (const metric of extractMetrics(body)) {
-    if (
-      !input.output.claims.some((claim) =>
-        extractMetrics(claim.text).includes(metric),
-      )
-    ) {
-      throw new YcApplicationOutputValidationError(
-        "Answer contains an unledgered metric",
-      );
-    }
-  }
-  const sourceById = new Map(
-    input.context.sources.map((source) => [source.id, source] as const),
-  );
-  const normalizedBody = normalizeForComparison(body);
-  for (const claim of input.output.claims) {
-    const normalizedClaim = normalizeForComparison(claim.text);
-    if (!normalizedBody.includes(normalizedClaim)) {
-      throw new YcApplicationOutputValidationError(
-        "Claim text must appear verbatim in the answer",
-      );
-    }
-    if (claim.sourceIds.length === 0) {
-      throw new YcApplicationOutputValidationError(
-        "Every claim must cite at least one source",
-      );
-    }
-
-    const citedSources = claim.sourceIds.map((sourceId) => {
-      const source = sourceById.get(sourceId);
-      if (!source) {
-        throw new YcApplicationOutputValidationError(
-          `Claim references unknown source: ${sourceId}`,
-        );
-      }
-      return source;
-    });
-    const citedContent = normalizeForComparison(
-      citedSources.map((source) => source.content).join(" "),
-    );
-    for (const metric of extractMetrics(claim.text)) {
-      if (!citedContent.includes(metric)) {
-        throw new YcApplicationOutputValidationError(
-          `Claim contains unsupported metric: ${metric}`,
-        );
-      }
-    }
-  }
+  validateAtomicOutput({
+    claims: input.output.claims.map(({ sourceIds: _ids, ...claim }) => claim),
+    sources: input.context.atomicSources ?? [],
+    excludedClaims: input.context.excludedClaims,
+    fields: [{ text: body, scope: "either" }],
+  });
 
   return {
     body,
     wordCount,
     characterCount: body.length,
-    claims: input.output.claims,
+    claims: input.output.claims.map((claim) => ({
+      text: claim.text,
+      sourceIds: [claim.source_id ?? ""],
+    })),
   };
 }

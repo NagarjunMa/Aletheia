@@ -36,6 +36,7 @@ export type Database = {
     Tables: {
       candidate_evidence: {
         Row: {
+          fact_review: Json;
           actions: string;
           confirmed_at: string | null;
           context: string;
@@ -52,6 +53,7 @@ export type Database = {
           user_id: string;
         };
         Insert: {
+          fact_review?: Json;
           actions: string;
           confirmed_at?: string | null;
           context?: string;
@@ -68,6 +70,7 @@ export type Database = {
           user_id: string;
         };
         Update: {
+          fact_review?: Json;
           actions?: string;
           confirmed_at?: string | null;
           context?: string;

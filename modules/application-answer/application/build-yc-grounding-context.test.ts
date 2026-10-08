@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import goldenCases from "@/lib/ai/evals/yc-application-golden-cases.json";
 import { candidateProfileInputSchema } from "@/lib/candidate-profile/schema";
+import { prepareFactReview } from "@/lib/candidate-profile/fact-review";
 import type { CandidateGroundingData } from "../domain/yc-grounding.types";
 import {
   buildYcGroundingContext,
@@ -12,7 +13,7 @@ function evidence(
   id: string,
   overrides: Partial<CandidateGroundingData["confirmedEvidence"][number]> = {},
 ): CandidateGroundingData["confirmedEvidence"][number] {
-  return {
+  const record = {
     id,
     kind: "achievement",
     title: `Evidence ${id.slice(0, 4)}`,
@@ -25,7 +26,21 @@ function evidence(
     confirmed: true,
     sortOrder: 0,
     ...overrides,
-  };
+  } satisfies CandidateGroundingData["confirmedEvidence"][number];
+  return record.actions.length <= 600
+    ? {
+        ...record,
+        // Synthetic saved review, not automatic confirmation in application code.
+        factReview: prepareFactReview(record, [
+          {
+            id: "77777777-7777-4777-8777-777777777777",
+            kind: "action",
+            excerpt: record.actions,
+            confirmed: true,
+          },
+        ]),
+      }
+    : record;
 }
 
 function groundingData(
@@ -55,6 +70,27 @@ const target = {
 };
 
 describe("buildYcGroundingContext readiness", () => {
+  it("does not approve sources that have no admissible bounded evidence", () => {
+    const result = buildYcGroundingContext({
+      question: "Describe your experience?",
+      jobDescription: "",
+      candidate: groundingData({
+        profile: candidateProfileInputSchema.parse({}),
+        resume: { text: "background ".repeat(100), source: "user_resumes" },
+        confirmedEvidence: [
+          evidence("oversized", {
+            context: "",
+            actions: "experience ".repeat(100),
+            outcome: "",
+            skills: [],
+          }),
+        ],
+      }),
+    });
+    expect(result.atomicSources).toEqual([]);
+    expect(result.readiness.ready).toBe(false);
+    expect(result.readiness.missingFields).toEqual(["confirmed_evidence"]);
+  });
   it("returns a ready, source-referenced context for sparse but sufficient facts", () => {
     const result = buildYcGroundingContext({
       ...target,

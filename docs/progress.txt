@@ -1,3 +1,32 @@
+## 2026-10-07 — ALE-46 one-time reviewed-fact preparation
+
+User explicitly approved preparation UI/storage within ALE46. Critical risk.
+Existing feat/ale-46-atomic-claim-provenance isolated worktree remains based on
+verified main060e2cf; unrelated checkouts and recovery stash preserved.
+Implemented bounded typed exact excerpts, owner/revision-scoped review action,
+inline explicit confirmation UI, additive owner-RLS JSONB migration/trigger,
+source/revoke invalidation and legacy-unreviewed exclusion from atomic sources.
+No extra model calls/token-cap or extension changes. UI judgment is human
+attestation, not automated semantic/real-world truth. Private review/ledger fields
+redacted by existing logger/Sentry boundaries; public generation shapes unchanged.
+Red-first domain/action/builder/privacy reproducers passed after correction.
+Fresh clean Node24 install/audit0,1260coverage tests/99files,15guardrails,145resume
+security,lint/types/build,230extension tests/audit0/version policy pass. Disposable
+Postgres exercised foundation/review migrations,RLS,cross-owner/anon denial,
+invalidation/stale revisions/bounds. Realcomponent/CSS Playwright with mock action
+passes375/900/1440px. Browser diagnostic esbuild dependency made explicit and
+included in existing smoke CI. Changed formatting/whitespace pass; fullformat
+19 unrelated unchanged baseline files. No hosted/paid/production actions.
+Independent round3 fresh-context verified334tests/15guardrails/disposablePG and
+R1-R4 correction at snapshotbb1981dc; no confirmed material runtime defect,
+overall acceptance blocked by useful-output/token-fit and hosted/full-schema
+evidence. Reviewer diagnostic found undeclaredesbuild; corrected as pinneddevdep,
+strengthened bounds/tests and reran affected nativechecks. Additional review
+authorization requested; prior report not current approval of corrected paths.
+ALE46 InProgress, parentopen, no commit/push/deploy/Done. Migration-before-reader
+rollout and non-destructive revert rollback recorded in
+docs/operations/ale-46-atomic-provenance.md.
+
 ## 2026-10-06 — ALE-63 final publication audit
 
 Re-read Linear acceptance; complete dirty/untracked diff audited against24ea99b.
@@ -1599,6 +1628,7 @@ PR manually. Hosted CI and the 24-generation preview/human/extension evaluation
 remain pending; ALE-57 stays In Progress. No production deployment or live calls.
 
 Started backend-only fix on `fix/linkedin-connection-output-validation` from verified `origin/main` 37ee9e0 in an isolated worktree; original checkout and unrelated edits remain untouched. Significant tier. Production count mismatches (254/245 and 239/231) motivated removing the model-declared count from the tool/prompt and using the server-rendered count only. TDD red check reproduced 502 for a valid stale-count note; focused green check passed 180 tests across route, refund, renderer, tool schema and prompt files. Safe tool-validation field/code diagnostics added without content logging. Full coverage (1,098 tests), guardrails, resume security, audits, lint/type/build, extension CI, and four Chromium smoke checks passed locally. Fresh-context read-only review found no material in-scope defect and independently passed 182 focused tests; hosted PR CI and live monitoring remain pending. No commit, push, PR, deployment, extension release or Linear status change. Contract and rollout: docs/operations/linkedin-connection-output-validation.md.
+
 ## 2026-10-05 — Isolated dependency audit remediation
 
 User authorized a separate branch while ALE-63 stays aside. Created fix/dependency-audit-remediation from verified origin/main a9dffaffb889a521944cb29ab2bfa7cef4e4f81a in a managed worktree; unrelated checkouts preserved. Used production-engineering-loop; Significant risk because CSS/compiler/lint contracts change. No new Linear issue assigned or completed.
@@ -1610,3 +1640,56 @@ Final pre-merge audit requested 2026-10-05 using the user-specified production-e
 2026-10-06 — CI dependency follow-up on fix/dependency-audit-remediation after pushed commit 3128209. Fresh audit reproduced two high advisories; targeted compatible lock updates Sharp 0.35.5/native platform packages/libvips 1.3.4 and source-map-js 1.2.2 resolve them without manifest, application, Next image policy or extension changes. Production-engineering-loop risk escalated to Critical for native image decoding. Two version-floor tests failed before the patch, then all ten toolchain tests passed; clean npm ci/full audit zero findings, make ci (1,139 unit tests,15guardrails,lint/types/build), coverage and29Chromium checks pass. Fresh-context independent review found no material findings and independently verified ten tests and real Next image conversions/policy rejection. Linux/glibc hosted CI and human merge approval remain pending; no commit/push/deploy or Linear mutation for this follow-up. Evidence/limits/rollback in docs/operations/dependency-audit-remediation.md. Other worktrees remain untouched.
 
 2026-10-06 — Extension CI follow-up after pushed 97106bb: the independent extension lock still contained dev-only source-map-js 1.2.1. Standard-risk targeted patch to 1.2.2 changes only its version/URL/integrity; extension version 1.0.19 and runtime source stay unchanged. Extended the existing version-floor regression to both locks; it failed on the extension before repair, then all eleven tooling cases passed. Fresh extension clean install and make extension-ci pass (zero audit findings, types/lint,230tests/23files,build); root audit/types and explicit tooling-test lint pass, version policy reports no packaged change. Self-review complete; hosted CI pending. No commit/push/store release or Linear mutation for this correction. Evidence and two-lockfile lesson: docs/operations/dependency-audit-remediation.md.
+
+## 2026-10-07 — ALE-46 resumption (not complete)
+
+Continued existing feat/ale-46-atomic-claim-provenance on verified origin/main
+060e2cf9e3d09c0c218fd5bfc6c4d53dd297650c after ALE-63 merge. Recovery stash
+a5e30522308165699e1c3c085a625849b5a15409 retained; 30 files byte-identical,
+three route/service overlaps auto-merged, progress conflict preserves both
+histories. Fresh Node 24 install with scripts disabled audits zero; full unit
+suite passes 1,237 tests/97 files. No final-audit or atomicity-completion claim.
+Critical risk and ALE46-R4 remain: mixed records are not individual assertions.
+Short Message focus selects existing evidence; users must not rewrite stories
+or reconfirm facts for every generation. Scope choice requested before adding
+one-time profile fact review and owner-scoped storage, which expand the current
+backend-only/no-migration contract. No new feature source edits beyond baseline
+integration, no new TDD increment, model call, budget increase, commit or push.
+Current handoff: docs/operations/ale-46-atomic-provenance.md.
+
+## 2026-10-01 — ALE-46 atomic provenance (incomplete implementation)
+
+Isolated branch feat/ale-46-atomic-claim-provenance from verified remote main
+a9dffaffb889a521944cb29ab2bfa7cef4e4f81a. Critical risk. User approved source-backed
+wording and narrowly tested rewrites, rejecting unsupported rephrasing. Added
+private bounded ledger/tool schemas, candidate/target source separation and final
+coverage validation across outreach and YC; no extension/DB/public API change.
+Implementation, constraints and dated evidence: docs/operations/ale-46-atomic-provenance.md.
+
+Fresh independent round 1 found qualification loss, batch source-ID mismatch,
+empty-source readiness and non-atomic paragraph typing. The first three have
+corrections and passing reproduced regressions, awaiting independent return review.
+The fourth remains OPEN: source quotation is not individual typed proposition
+coverage. Useful-draft token fit and aggregate serialized prompt budgeting also
+remain unverified. Do not merge, deploy or mark ALE-46 complete on unit results.
+
+Current checks: 1,164 unit tests/94 files, 15 guardrails, lint (one inherited
+warning), build, scoped formatting and diff whitespace pass; web audit zero
+vulnerabilities on unchanged dependencies. Type-check rerun after resolving a
+local concurrent build/typegen race. Native build symlink limitation corrected
+using a local APFS dependency clone; no lockfile change. No live model/provider,
+hosted CI or deployment evaluation. No commit or push. Linear In Progress.
+Unrelated original checkout and other issue worktrees preserved.
+
+Lesson: a confirmed evidence action can be qualified by a different field. Never
+promote isolated fields without preserving their record context. Regression:
+build-atomic-sources.test.ts simulated-results case. Readiness and per-question
+prompt eligibility must reflect the actual sources final validation can accept,
+not merely pre-filter source availability.
+
+ALE-46 return review round 2: snapshot ed751c08049fc8af4d65aa84677cc0450746a4f6ca9932d4d5683c0ce010dcd0;
+reviewer independently verified R1-R3 resolved and the sanitation test correction.
+No new material correction finding. R4 remains open; overall changes_required.
+Separate native type-check after build passed. User choices requested on planning
+individual-fact preparation and a measured bounded token-cap increase if needed.
+No new cost, model judge, acceptance waiver or release approved.

@@ -30,7 +30,10 @@ describe("getYcApplicationToolInput", () => {
           claims: [
             {
               text: "I build and operate customer-facing TypeScript services.",
-              source_ids: ["evidence:11111111-1111-4111-8111-111111111111"],
+              kind: "action",
+              source_id: "evidence:11111111-1111-4111-8111-111111111111",
+              supporting_excerpt:
+                "I build and operate customer-facing TypeScript services.",
             },
           ],
         }),
@@ -40,6 +43,10 @@ describe("getYcApplicationToolInput", () => {
       claims: [
         {
           text: "I build and operate customer-facing TypeScript services.",
+          kind: "action",
+          source_id: "evidence:11111111-1111-4111-8111-111111111111",
+          supporting_excerpt:
+            "I build and operate customer-facing TypeScript services.",
           sourceIds: ["evidence:11111111-1111-4111-8111-111111111111"],
         },
       ],

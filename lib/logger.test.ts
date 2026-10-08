@@ -8,6 +8,20 @@ import {
 } from "./logging-core";
 
 describe("createLogger", () => {
+  it("drops private fact review and provenance ledgers without dropping safe counts", () => {
+    const canary = "ALE46_PRIVATE_FACT_CANARY";
+    const safe = sanitizeLogFields({
+      fact_review: { source: canary },
+      factReview: canary,
+      facts: [canary],
+      claims: [canary],
+      supporting_excerpt: canary,
+      excerpt: canary,
+      claimCount: 2,
+    });
+    expect(JSON.stringify(safe)).not.toContain(canary);
+    expect(safe).toEqual({ claimCount: 2 });
+  });
   it("returns an object with standard log methods", () => {
     const log = createLogger("test-module");
     expect(typeof log.info).toBe("function");

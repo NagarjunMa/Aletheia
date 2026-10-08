@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Tables } from "@/lib/database/types";
+import type { CandidateFactReview } from "./fact-review";
+import { readFactReview, evidenceReviewSource } from "./fact-review";
 import { createLogger, startTimedStage, type SafeLogger } from "@/lib/logger";
 import {
   candidateProfileInputSchema,
@@ -7,7 +9,11 @@ import {
   type CandidateProfileInput,
 } from "./schema";
 
-export type CandidateEvidenceRecord = CandidateEvidenceInput & { id: string };
+export type CandidateEvidenceRecord = CandidateEvidenceInput & {
+  id: string;
+  updatedAt?: string;
+  factReview?: CandidateFactReview;
+};
 
 export type CandidateApplicationProfile = {
   profile: CandidateProfileInput;
@@ -18,7 +24,7 @@ const PROFILE_FIELDS =
   "user_id,current_role,current_responsibilities,startup_motivation,career_goals,target_roles,target_company_stages,target_industries,github_url,linkedin_url,portfolio_url,location,work_authorization,relocation_preference,availability,excluded_claims,schema_version,created_at,updated_at" as const;
 
 const EVIDENCE_FIELDS =
-  "id,user_id,kind,title,context,actions,outcome,metrics,skills,links,confirmed_at,sort_order,created_at,updated_at" as const;
+  "id,user_id,kind,title,context,actions,outcome,metrics,skills,links,confirmed_at,sort_order,created_at,updated_at,fact_review" as const;
 const log = createLogger("candidate-profile-service");
 
 export function mapCandidateProfileRow(
@@ -48,7 +54,7 @@ export function mapCandidateProfileRow(
 export function mapCandidateEvidenceRow(
   row: Tables<"candidate_evidence">,
 ): CandidateEvidenceRecord {
-  return {
+  const evidence: CandidateEvidenceRecord = {
     id: row.id,
     kind: row.kind as CandidateEvidenceRecord["kind"],
     title: row.title,
@@ -60,6 +66,12 @@ export function mapCandidateEvidenceRow(
     links: row.links,
     confirmed: Boolean(row.confirmed_at),
     sortOrder: row.sort_order,
+  };
+  const facts = readFactReview(evidence, row.fact_review);
+  return {
+    ...evidence,
+    updatedAt: row.updated_at,
+    factReview: { version: 1, source: evidenceReviewSource(evidence), facts },
   };
 }
 
