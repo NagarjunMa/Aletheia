@@ -2,7 +2,7 @@
 
 Aletheia helps professionals draft LinkedIn connection notes, networking emails, follow-ups, and role-fit replies from context they choose. Users review and edit every draft before sending. The app combines selected profile or opportunity context with the user's resume and intent, then runs the output through sanitization, formatting, and AI-fingerprint cleanup.
 
-**Pipeline:** PR → `ci.yml` (lint + type + test + guardrails + smoke build) → merge to `main` → production Supabase migration gate → staged Vercel deployment → promotion. See [production deployment](docs/operations/production-deployment.md).
+**Pipeline:** PR → `ci.yml` (lint + type + test + guardrails + smoke build) → merge to `main` → Supabase migration check and Vercel Git build → Vercel promotes after the migration check passes. See [production deployment](docs/operations/production-deployment.md).
 **License:** MIT
 
 ---
@@ -336,7 +336,7 @@ app/api/extension/generate/
 
 ## CI/CD & Local Hooks
 
-PR-gated pipeline. GitHub Actions applies production migrations before staging and promoting the matching Vercel deployment.
+PR-gated pipeline. GitHub Actions applies production migrations; Vercel Git builds from `main` and requires the migration check before promoting.
 
 ```
 feature/* → PR to main
@@ -346,12 +346,13 @@ feature/* → PR to main
                     smoke-test: next build + curl /api/health
 
 merge to main
-              └── production-deploy.yml → Supabase migrations → staged Vercel health check → production promotion
+              ├── production-deploy.yml → Supabase migration gate ──┐
+              └── Vercel Git build ─────────────────────────────────┴→ production promotion
 ```
 
 **Branch protection on `main`:** require 1 PR approval + all 3 `ci.yml` checks green before merge.
 
-**Production release credentials:** See [the one-time setup](docs/operations/production-deployment.md#one-time-setup-before-merging-this-workflow). Keep these in the protected `production` GitHub environment.
+**Production database credentials:** See [the one-time setup](docs/operations/production-deployment.md#one-time-setup-before-merging-this-workflow). Keep the Supabase CLI credentials in the protected `production` GitHub environment; Vercel keeps the app's runtime keys.
 
 **Application environment:**
 

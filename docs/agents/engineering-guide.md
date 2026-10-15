@@ -146,16 +146,16 @@ supabase/migrations/
 Copy `.env.local.example` → `.env.local` for local dev. Never commit secrets.
 
 **Dev:** `npm run dev` — Next.js fast refresh, JSON logs to stdout.
-**Prod:** GitHub Actions deploys `main` to the single Vercel project after production Supabase migrations; see `docs/operations/production-deployment.md`.
+**Prod:** Vercel Git deploys `main` after the required GitHub Actions production Supabase migration check passes; see `docs/operations/production-deployment.md`.
 
 ---
 
 ## Deployment
 
-- **Platform:** Vercel. Single project; GitHub Actions controls production deployment while Vercel Git integration keeps preview deployments.
+- **Platform:** Vercel. Single project; Git integration builds production and preview deployments. A required GitHub Deployment Check gates production promotion on migrations.
 - **CI pipeline:**
   - `ci.yml` — PR gate: lint + type-check + unit tests + guardrails + smoke build (triggers on `pull_request` to `main`)
-  - Merge to `main` → `production-deploy.yml` validates Supabase target/history, applies pending migrations, checks a staged Vercel build, then promotes it. No separate staging database exists.
+  - Merge to `main` → `production-deploy.yml` validates Supabase history and applies pending migrations. Vercel builds the same commit and promotes it only after the `Supabase migration gate` check passes. No separate staging database exists.
 - **Pre-commit:** lint-staged formats and fixes staged files before the hook runs repository lint, type-check, unit tests, guardrails, and a production build. Extension changes additionally run the version policy, extension CI target, and ZIP packaging.
 - **Extension distribution:** Public installs go through the Chrome Web Store. `npm run build:extension` creates a local, gitignored upload artifact at `ascendia-extension/dist/aletheia-extension.zip`; it is not written to `public/` and is not served by Vercel. Version metadata at `/api/extension/version` reports app/extension versions and the configured Chrome Web Store URL.
 - **Database migrations:** `supabase/migrations/` — production applies through the GitHub Actions release workflow after its baseline has been reconciled; do not manually apply future production migrations outside that history.

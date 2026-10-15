@@ -1732,3 +1732,22 @@ build used Node 26 while CI pins Node 24. Fresh independent read-only review
 found no new material defect. Production migration history, credential checks,
 staged Vercel deployment, and promotion are still unverified without the
 protected environment setup; no live deployment or migration was run.
+
+2026-10-14 production CD integration correction: The owner confirmed that
+Vercel already deploys through its GitHub integration and does not want Vercel
+API credentials in GitHub. Replaced CLI-based Vercel staging/promotion with a
+Supabase-only GitHub Actions job named `Supabase migration gate`; restored
+Vercel Git automatic builds. Vercel production Deployment Checks must require
+that GitHub job before a new build is aliased to production. The database job
+still connects, detects and previews pending migrations, applies them, and
+verifies history and the known schema column. This removes Vercel credentials
+from GitHub but introduces one required Vercel dashboard configuration step.
+Supabase CLI still needs the project ref, scoped access token, and production
+database password; app URL/service-role key do not substitute for them. No
+production migration or deployment occurred during this correction.
+Independent review found two release risks. The workflow now compares the live
+app's public Supabase origin with the migration project before any database
+write, and queues up to 100 pending migration runs so rapid merges do not
+cancel an older pending check. The live endpoint responded successfully during
+the local review; Vercel Deployment Check configuration and protected
+credentials remain unverified.

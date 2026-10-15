@@ -1,29 +1,47 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
   parseMigrationHistory,
-  validateAppConnection,
-  validateHealth,
   validateMigrationHistory,
-  validateTarget,
+  validateProductionAppTarget,
+  validateProjectRef,
 } from "./production-deploy-checks.mjs";
 
-const projectRef = "abc12fghij345mnopqrs";
-
-test("rejects a Vercel project connected to a different Supabase project", () => {
+test("requires a valid production Supabase project reference", () => {
+  assert.doesNotThrow(() => validateProjectRef("abc12fghij345mnopqrs"));
+  assert.throws(() => validateProjectRef(""), /missing or invalid/);
   assert.throws(
-    () =>
-      validateTarget(
-        'NEXT_PUBLIC_SUPABASE_URL="https://otherprojectrefabcd.supabase.co"',
-        projectRef,
-      ),
-    /different Supabase project/,
+    () => validateProjectRef("wrong-project"),
+    /missing or invalid/,
   );
+});
+
+test("requires the live app and migration job to target the same Supabase project", () => {
+  const projectRef = "abc12fghij345mnopqrs";
   assert.doesNotThrow(() =>
-    validateTarget(
-      `NEXT_PUBLIC_SUPABASE_URL="https://${projectRef}.supabase.co"`,
+    validateProductionAppTarget(
+      JSON.stringify({
+        status: "ok",
+        supabaseOrigin: `https://${projectRef}.supabase.co`,
+      }),
       projectRef,
     ),
+  );
+  assert.throws(
+    () =>
+      validateProductionAppTarget(
+        JSON.stringify({
+          status: "ok",
+          supabaseOrigin: "https://differentproject123.supabase.co",
+        }),
+        projectRef,
+      ),
+    /does not match/,
+  );
+  assert.throws(
+    () => validateProductionAppTarget("not-json", projectRef),
+    /not valid JSON/,
   );
 });
 
@@ -62,91 +80,29 @@ test("rejects remote-only and historical gaps", () => {
   );
 });
 
-test("accepts matching history after migration and validates staged health", () => {
+test("accepts matching history after migration", () => {
   const history = parseMigrationHistory(
     "LOCAL │ REMOTE │ TIME (UTC)\n20260921012453 │ 20260921012453 │ 2026-09-21\n20261007224520 │ 20261007224520 │ 2026-10-07",
   );
   assert.deepEqual(validateMigrationHistory(history, "post"), []);
-  assert.doesNotThrow(() =>
-    validateHealth(
-      JSON.stringify({
-        status: "ok",
-        supabaseOrigin: `https://${projectRef}.supabase.co`,
-      }),
-      projectRef,
-    ),
-  );
-  assert.throws(
-    () =>
-      validateHealth(
-        JSON.stringify({ status: "ok", supabaseOrigin: null }),
-        projectRef,
-      ),
-    /different Supabase project/,
-  );
 });
 
-test("validates Vercel's production Supabase keys without reading user rows", async () => {
-  const calls = [];
-  const vercelEnv = [
-    `NEXT_PUBLIC_SUPABASE_ANON_KEY="sb_publishable_demo"`,
-    `SUPABASE_SERVICE_ROLE_KEY="sb_secret_demo"`,
-  ].join("\n");
-  await validateAppConnection(vercelEnv, projectRef, async (url, options) => {
-    calls.push({ url: String(url), key: options.headers.apikey });
-    return { ok: true, status: 200 };
-  });
-  assert.deepEqual(calls, [
-    {
-      url: `https://${projectRef}.supabase.co/auth/v1/settings`,
-      key: "sb_publishable_demo",
-    },
-    {
-      url: `https://${projectRef}.supabase.co/rest/v1/candidate_evidence?select=fact_review&limit=0`,
-      key: "sb_secret_demo",
-    },
-  ]);
-  await assert.rejects(
-    validateAppConnection(vercelEnv, projectRef, async () => ({
-      ok: false,
-      status: 401,
-    })),
-    /anon key failed validation.*401/,
+test("keeps Vercel Git deployment enabled while gating promotion on migration success", () => {
+  const workflow = readFileSync(
+    new URL("../.github/workflows/production-deploy.yml", import.meta.url),
+    "utf8",
   );
-  await assert.rejects(
-    validateAppConnection(
-      `NEXT_PUBLIC_SUPABASE_ANON_KEY="sb_publishable_demo"`,
-      projectRef,
-      async () => ({ ok: true, status: 200 }),
-    ),
-    /private Supabase key is missing/,
+  const vercelConfig = JSON.parse(
+    readFileSync(new URL("../vercel.json", import.meta.url), "utf8"),
   );
-  await assert.rejects(
-    validateAppConnection(
-      `NEXT_PUBLIC_SUPABASE_ANON_KEY="sb_secret_demo"\nSUPABASE_SERVICE_ROLE_KEY="sb_secret_demo"`,
-      projectRef,
-      async () => ({ ok: true, status: 200 }),
-    ),
-    /public Supabase key is missing or unsafe/,
+  assert.match(workflow, /branches: \[main\]/u);
+  assert.match(workflow, /name: Supabase migration gate/u);
+  assert.match(workflow, /queue: max/u);
+  assert.match(workflow, /production-target "\$SUPABASE_PROJECT_ID"/u);
+  assert.ok(
+    workflow.indexOf("supabase db push --linked --skip-vault --dry-run") <
+      workflow.indexOf("supabase db push --linked --skip-vault --yes"),
   );
-});
-
-test("rejects a legacy service-role JWT in the public key setting", async () => {
-  const jwt = (role) =>
-    `e30.${Buffer.from(JSON.stringify({ role })).toString("base64url")}.signature`;
-  await assert.rejects(
-    validateAppConnection(
-      `NEXT_PUBLIC_SUPABASE_ANON_KEY="${jwt("service_role")}"\nSUPABASE_SERVICE_ROLE_KEY="${jwt("service_role")}"`,
-      projectRef,
-      async () => ({ ok: true, status: 200 }),
-    ),
-    /public Supabase key is missing or unsafe/,
-  );
-  await assert.doesNotReject(
-    validateAppConnection(
-      `NEXT_PUBLIC_SUPABASE_ANON_KEY="${jwt("anon")}"\nSUPABASE_SERVICE_ROLE_KEY="${jwt("service_role")}"`,
-      projectRef,
-      async () => ({ ok: true, status: 200 }),
-    ),
-  );
+  assert.doesNotMatch(workflow, /VERCEL_TOKEN|vercel deploy|vercel promote/u);
+  assert.notEqual(vercelConfig.git?.deploymentEnabled?.main, false);
 });

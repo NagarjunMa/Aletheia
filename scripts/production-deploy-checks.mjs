@@ -1,21 +1,27 @@
 import { readFileSync } from "node:fs";
-import { parseEnv } from "node:util";
 import { fileURLToPath } from "node:url";
 
-function projectOrigin(projectRef) {
+export function validateProjectRef(projectRef) {
   if (!/^[a-z0-9]{20}$/u.test(projectRef)) {
     throw new Error(
       "Production Supabase project reference is missing or invalid",
     );
   }
-  return `https://${projectRef}.supabase.co`;
 }
 
-export function validateTarget(vercelEnv, projectRef) {
-  const expected = projectOrigin(projectRef);
-  const configured = parseEnv(vercelEnv).NEXT_PUBLIC_SUPABASE_URL;
-  if (!configured || new URL(configured).origin !== expected) {
-    throw new Error("Vercel production uses a different Supabase project");
+export function validateProductionAppTarget(healthResponse, projectRef) {
+  validateProjectRef(projectRef);
+  let health;
+  try {
+    health = JSON.parse(healthResponse);
+  } catch {
+    throw new Error("Production app health response is not valid JSON");
+  }
+  const expectedOrigin = `https://${projectRef}.supabase.co`;
+  if (health?.status !== "ok" || health.supabaseOrigin !== expectedOrigin) {
+    throw new Error(
+      "Production app Supabase target does not match the migration project",
+    );
   }
 }
 
@@ -84,92 +90,15 @@ export function validateMigrationHistory(rows, phase) {
   return pending;
 }
 
-export function validateHealth(healthJson, projectRef) {
-  const health = JSON.parse(healthJson);
-  if (
-    health?.status !== "ok" ||
-    health.supabaseOrigin !== projectOrigin(projectRef)
-  ) {
-    throw new Error("Deployment health uses a different Supabase project");
-  }
-}
-
-function keyRole(key) {
-  if (key.startsWith("sb_publishable_")) return "anon";
-  if (key.startsWith("sb_secret_")) return "service_role";
-  const parts = key.split(".");
-  if (parts.length !== 3) return null;
-  try {
-    return JSON.parse(Buffer.from(parts[1], "base64url").toString()).role;
-  } catch {
-    return null;
-  }
-}
-
-export async function validateAppConnection(
-  vercelEnv,
-  projectRef,
-  request = fetch,
-) {
-  const environment = parseEnv(vercelEnv);
-  const origin = projectOrigin(projectRef);
-  if (
-    !environment.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-    keyRole(environment.NEXT_PUBLIC_SUPABASE_ANON_KEY) !== "anon"
-  ) {
-    throw new Error(
-      "Vercel production public Supabase key is missing or unsafe",
-    );
-  }
-  if (
-    !environment.SUPABASE_SERVICE_ROLE_KEY ||
-    keyRole(environment.SUPABASE_SERVICE_ROLE_KEY) !== "service_role"
-  ) {
-    throw new Error(
-      "Vercel production private Supabase key is missing or invalid",
-    );
-  }
-  if (
-    environment.NEXT_PUBLIC_SUPABASE_ANON_KEY ===
-    environment.SUPABASE_SERVICE_ROLE_KEY
-  ) {
-    throw new Error("Vercel production public and private keys must differ");
-  }
-  const checks = [
-    {
-      name: "Supabase anon key",
-      path: "/auth/v1/settings",
-      key: environment.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-    },
-    {
-      name: "Supabase service role and migrated schema",
-      path: "/rest/v1/candidate_evidence?select=fact_review&limit=0",
-      key: environment.SUPABASE_SERVICE_ROLE_KEY,
-    },
-  ];
-  for (const check of checks) {
-    const headers = { apikey: check.key };
-    if (check.key.split(".").length === 3) {
-      headers.Authorization = `Bearer ${check.key}`;
-    }
-    const response = await request(new URL(check.path, origin), {
-      headers,
-      signal: AbortSignal.timeout(15_000),
-    });
-    if (!response.ok) {
-      throw new Error(
-        `${check.name} failed validation (HTTP ${response.status})`,
-      );
-    }
-  }
-}
-
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   try {
-    const [, , check, argument, projectRef] = process.argv;
-    if (check === "target") {
-      validateTarget(readFileSync(argument, "utf8"), projectRef);
-      console.log("Production deployment target verified");
+    const [, , check, argument] = process.argv;
+    if (check === "project-ref") {
+      validateProjectRef(argument);
+      console.log("Production Supabase project reference verified");
+    } else if (check === "production-target") {
+      validateProductionAppTarget(readFileSync(0, "utf8"), argument);
+      console.log("Production app and migration project targets match");
     } else if (check === "history") {
       const pending = validateMigrationHistory(
         parseMigrationHistory(readFileSync(0, "utf8")),
@@ -178,12 +107,6 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
       console.log(
         `Migration history verified; pending: ${pending.join(", ") || "none"}`,
       );
-    } else if (check === "health") {
-      validateHealth(readFileSync(0, "utf8"), argument);
-      console.log("Deployment health verified");
-    } else if (check === "app-connection") {
-      await validateAppConnection(readFileSync(argument, "utf8"), projectRef);
-      console.log("Vercel Supabase credentials and migrated schema verified");
     } else {
       throw new Error("Unknown production deployment check");
     }
