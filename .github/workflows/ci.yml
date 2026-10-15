@@ -62,6 +62,9 @@ jobs:
       - name: Run focused resume security contracts
         run: npm run test:resume-security
 
+      - name: Check production deployment guards
+        run: node --test scripts/production-deploy-checks.test.mjs
+
       - name: Upload coverage report
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

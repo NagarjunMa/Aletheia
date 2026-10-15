@@ -1705,3 +1705,30 @@ No new material correction finding. R4 remains open; overall changes_required.
 Separate native type-check after build passed. User choices requested on planning
 individual-fact preparation and a measured bounded token-cap increase if needed.
 No new cost, model judge, acceptance waiver or release approved.
+
+2026-10-13 production deployment gate (separate from ALE-53/ALE-46): added a
+GitHub Actions release workflow to check the production Supabase target and
+migration history, preview/apply pending migrations, verify parity, stage and
+health-check Vercel, then promote. Vercel automatic main deploy is disabled by
+configuration while previews remain enabled. One-time production credentials
+and historical migration reconciliation are still required; no hosted migration
+or production deployment was performed. Runbook:
+docs/operations/production-deployment.md.
+Final local evidence: deployment guard tests 7/7, actionlint, Prettier, diff
+check, type-check passed. Lint passed with one existing warning in
+lib/auth/refund-admin.ts. Fresh independent review found and confirmed two
+guard flaws (remote-only migration parsing and public service-role key); both
+were corrected and re-reviewed with no remaining material finding. Live
+Supabase connection/migration/deployment remain unverified pending environment
+secrets, project privileges, and migration-history reconciliation.
+
+2026-10-14 database CD final local audit: re-read the full dirty/untracked CD
+change against origin/main and verified the pinned Supabase CLI 2.119.0 flags
+and current Vercel stage/promote/curl configuration. Checks passed: 7/7 CD
+guard tests; 1,260/1,260 unit tests with coverage; 15/15 guardrail tests;
+actionlint; lint (one pre-existing unused-argument warning); type-check;
+Prettier; diff check; and a production Next.js build after npm ci. The local
+build used Node 26 while CI pins Node 24. Fresh independent read-only review
+found no new material defect. Production migration history, credential checks,
+staged Vercel deployment, and promotion are still unverified without the
+protected environment setup; no live deployment or migration was run.

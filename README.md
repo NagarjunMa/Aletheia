@@ -2,7 +2,7 @@
 
 Aletheia helps professionals draft LinkedIn connection notes, networking emails, follow-ups, and role-fit replies from context they choose. Users review and edit every draft before sending. The app combines selected profile or opportunity context with the user's resume and intent, then runs the output through sanitization, formatting, and AI-fingerprint cleanup.
 
-**Pipeline:** PR → `ci.yml` (lint + type + test + guardrails + smoke build) → merge to `main` → Vercel auto-deploys.
+**Pipeline:** PR → `ci.yml` (lint + type + test + guardrails + smoke build) → merge to `main` → production Supabase migration gate → staged Vercel deployment → promotion. See [production deployment](docs/operations/production-deployment.md).
 **License:** MIT
 
 ---
@@ -232,7 +232,7 @@ Each generate response includes an `evalMetadata` blob (`promptVersion`, `model`
 | `threads`               | Conversation container                                                  | Web app only                       |
 | `thread_folders`        | Organize threads                                                        | Web app only                       |
 
-**Migrations:** Files in `supabase/migrations/` follow `YYYYMMDD_NNN_description.sql`. Apply via Supabase Dashboard SQL Editor or `supabase db push`.
+**Migrations:** Files in `supabase/migrations/` are applied to production by the [release workflow](docs/operations/production-deployment.md) after its one-time migration history setup. Do not separately apply production SQL through the Dashboard.
 
 **Regenerate TypeScript types:**
 
@@ -336,7 +336,7 @@ app/api/extension/generate/
 
 ## CI/CD & Local Hooks
 
-Single-stage pipeline. PR-gated. Vercel auto-deploys `main` to production.
+PR-gated pipeline. GitHub Actions applies production migrations before staging and promoting the matching Vercel deployment.
 
 ```
 feature/* → PR to main
@@ -346,12 +346,14 @@ feature/* → PR to main
                     smoke-test: next build + curl /api/health
 
 merge to main
-              └── Vercel auto-deploys → production
+              └── production-deploy.yml → Supabase migrations → staged Vercel health check → production promotion
 ```
 
 **Branch protection on `main`:** require 1 PR approval + all 3 `ci.yml` checks green before merge.
 
-**Required GitHub Secrets:**
+**Production release credentials:** See [the one-time setup](docs/operations/production-deployment.md#one-time-setup-before-merging-this-workflow). Keep these in the protected `production` GitHub environment.
+
+**Application environment:**
 
 - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (build-time)
 - `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`, `SENTRY_DSN` (runtime — set in Vercel project env)
