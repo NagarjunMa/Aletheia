@@ -51,7 +51,9 @@ configured.
 
 3. Reconcile the existing production database with repository migration
    history **before the first automatic run**. This project historically
-   allowed Dashboard SQL Editor changes. Run `supabase migration list
+   allowed Dashboard SQL Editor changes. See the current
+   [reconciliation evidence and blockers](migration-history-reconciliation.md).
+   Run `supabase migration list
 --linked` with an appropriately privileged account. For each existing
    SQL migration, verify its schema effect in production before marking its
    version applied. Use Supabase's documented `migration repair` only for

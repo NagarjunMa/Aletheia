@@ -1751,3 +1751,23 @@ write, and queues up to 100 pending migration runs so rapid merges do not
 cancel an older pending check. The live endpoint responded successfully during
 the local review; Vercel Deployment Check configuration and protected
 credentials remain unverified.
+
+2026-10-25 production migration identity recovery (Critical): recovered the 11
+recorded production migrations into isolated scratch space. Renamed three local
+SQL files to their actual production versions (20260218, 20260522043041,
+20260603144546) without changing their contents; added the separately recorded
+20260603144626 release-RPC hardening SQL. No production history repair or SQL
+application occurred. Missing-local-version error is resolved; dry run now
+correctly stops on seven older local-only files. Do not use --include-all.
+A separate local Supabase PostgreSQL 17 instance successfully applied all 22
+corrected files from empty after one transient startup exit 125. Existing local
+ascendia database was preserved. Production schema-only/catalog inspection
+confirms partial/unrecorded older changes; full production upgrade validation
+and seven-file reconciliation remain open. Evidence and rollback:
+docs/operations/migration-history-reconciliation.md.
+Verification: 71 migration contracts, seven existing deployment guards, native
+PostgreSQL fact-review security checks, formatting/diff checks passed. All three
+renames are byte-identical; recovered hardening matches recorded production SQL.
+Fresh independent read-only review found no new material findings; reviewer
+reran migration contracts and verified local RPC permissions and pinned paths.
+Existing production upgrade and seven-file reconciliation gates remain open.
