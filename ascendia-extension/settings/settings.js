@@ -63,7 +63,7 @@ let currentSettings = {
   apiUrl: DEFAULT_API_URL,
   autoFillEnabled: true,
   showNotifications: true,
-  maxDailyUsage: 50,
+  maxDailyUsage: 30,
 };
 let profileExtractionConsent = false;
 
@@ -84,6 +84,10 @@ async function initializeSettings() {
     // Prefer sync storage, then local, then default
     apiUrl: normalizeApiUrl(apiBaseUrl || stored.apiUrl || DEFAULT_API_URL),
   };
+  currentSettings.maxDailyUsage = Math.max(
+    10,
+    Math.min(30, Number(currentSettings.maxDailyUsage) || 30),
+  );
   profileExtractionConsent = stored[PROFILE_EXTRACTION_CONSENT_KEY] === true;
 
   updateStatusIndicators();
@@ -184,7 +188,7 @@ async function loadUserSettings() {
   // Range slider
   const dailyUsageSlider = document.getElementById("maxDailyUsage");
   const dailyUsageValue = document.getElementById("dailyUsageValue");
-  dailyUsageSlider.value = currentSettings.maxDailyUsage || 50;
+  dailyUsageSlider.value = currentSettings.maxDailyUsage;
   dailyUsageValue.textContent = dailyUsageSlider.value;
 
   await removeLegacyResumeIfServerReady();
@@ -470,7 +474,7 @@ async function clearAllData() {
       apiUrl: DEFAULT_API_URL,
       autoFillEnabled: true,
       showNotifications: true,
-      maxDailyUsage: 50,
+      maxDailyUsage: 30,
     };
     profileExtractionConsent = false;
 
@@ -579,14 +583,14 @@ async function resetToDefaults() {
     document.getElementById("autoFillEnabled").checked = true;
     document.getElementById("showNotifications").checked = true;
     document.getElementById("profileExtractionConsent").checked = false;
-    document.getElementById("maxDailyUsage").value = 50;
-    document.getElementById("dailyUsageValue").textContent = "50";
+    document.getElementById("maxDailyUsage").value = 30;
+    document.getElementById("dailyUsageValue").textContent = "30";
 
     currentSettings = {
       apiUrl: DEFAULT_API_URL,
       autoFillEnabled: true,
       showNotifications: true,
-      maxDailyUsage: 50,
+      maxDailyUsage: 30,
     };
     profileExtractionConsent = false;
     await chrome.storage.local.remove(PROFILE_EXTRACTION_CONSENT_KEY);

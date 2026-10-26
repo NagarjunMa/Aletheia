@@ -257,18 +257,6 @@ export function isAuthError(errorMessage) {
   );
 }
 
-export function checkUsageLimit(dailyUsage, settings) {
-  const today = new Date().toISOString().split("T")[0];
-  const todayUsage = dailyUsage[today] || 0;
-  const maxDailyUsage = settings.maxDailyUsage || 50;
-
-  if (todayUsage >= maxDailyUsage) {
-    throw new Error(
-      `Daily usage limit (${maxDailyUsage}) exceeded. Try again tomorrow.`,
-    );
-  }
-}
-
 export function logUsageData(dailyUsage, categoryUsage, category) {
   const today = new Date().toISOString().split("T")[0];
 

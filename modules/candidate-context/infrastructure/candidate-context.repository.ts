@@ -93,7 +93,7 @@ export async function loadCandidateGroundingData(
         "legacy",
         supabase
           .from("profiles")
-          .select("resume,full_name")
+          .select("full_name")
           .eq("id", userId)
           .maybeSingle(),
         dependencies.logger ?? log,
@@ -120,12 +120,9 @@ export async function loadCandidateGroundingData(
       .filter((row) => row.user_id === userId && Boolean(row.confirmed_at))
       .map(mapCandidateEvidenceRow);
     const primaryResume = resumeResult.data?.parsed_text?.trim() ?? "";
-    const legacyResume = legacyProfileResult.data?.resume?.trim() ?? "";
     const resume = primaryResume
       ? { text: primaryResume, source: "user_resumes" as const }
-      : legacyResume
-        ? { text: legacyResume, source: "profiles" as const }
-        : { text: "", source: "none" as const };
+      : { text: "", source: "none" as const };
 
     const result = {
       identity: {

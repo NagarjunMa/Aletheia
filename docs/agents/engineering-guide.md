@@ -2,6 +2,8 @@
 
 ## Active Work
 
+Production audit blocker remediation: see `docs/operations/production-audit-blockers.md` for the current contract, checks and release gates. Generation admission is documented in `docs/operations/generation-admission.md`.
+
 ALE-53 refund operations: see `docs/operations/ale-53-implementation.md` for the active execution context and `docs/operations/refund-review.md` for operator boundaries. Queue/admin and opt-in email delivery are implemented locally; delivery defaults disabled and rollout remains pending.
 
 See `docs/progress.txt` for the current implementation and decision log.
@@ -49,7 +51,7 @@ Chrome Extension (MV3)              Next.js Web App
 - **Hybrid feedback persistence:** `POST /api/extension/feedback` synchronously inserts the `user_feedback` row (eval signal must not be lost on worker crash), then returns 200 and runs style merge fire-and-forget
 - **Single-pass parsing:** JSON → on failure, 502 with retry instruction. No regex extraction layer.
 - **Connection composition:** LinkedIn notes use a shared 300-character budget, enforced after sanitation and whitespace normalization. Never truncate a note or drop its CTA/relevance; unusable output fails with compensation.
-- **Fail-closed rate limiting:** if Supabase RPC fails, requests are denied (not allowed) — prevents unlimited API burn during outages
+- **Fail-closed admission:** quota infrastructure failures return 503 without a model call; proven daily/burst/work/in-flight limits return 429 with retry guidance. Daily refunds never restore consumed model-attempt/work budgets.
 - **Prompt injection defense:** all user inputs escaped via `escapeForXmlTag()` before injection into `<user_input>` tags
 
 **AI Pipeline (core differentiator):**
@@ -173,7 +175,7 @@ Copy `.env.local.example` → `.env.local` for local dev. Never commit secrets.
 - Use `createLogger('module')` from `lib/logger.edge.ts` in `proxy.ts` — proxy-safe logger for the network boundary
 - Use lazy factory functions for SDK clients — validate env vars exist at call time with clear error messages
 - Keep sanitizer and fingerprint detector in `lib/ai/` — don't inline AI post-processing in routes
-- Use `check_and_increment_rate_limit` RPC for extension rate limiting — don't reimplement
+- Use the shared generation-admission repository for exact daily reservation IDs, model-start budgets and leases. The obsolete user-only quota RPCs are disabled; do not restore their grants.
 - Return errors with structured JSON `{ error: string, code?: string, details?: Array }` and correct HTTP status — include field-level Zod details on 400s
 - Add security headers via proxy — don't add them ad hoc in individual routes
 - Use Supabase RLS — never bypass it with service role for user-facing operations

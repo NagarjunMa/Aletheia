@@ -23,6 +23,10 @@ import {
 } from "@/lib/billing/credits";
 import type { AuthenticatedExtensionUser } from "@/modules/outreach/domain/extension-generate.types";
 import {
+  outputWorkUnits,
+  retryAfterSeconds,
+} from "@/modules/outreach/domain/generation-admission";
+import {
   CLAUDE_MODEL,
   getAnthropicApiErrorStatus,
   isAnthropicTimeoutError,
@@ -35,6 +39,8 @@ import {
   refundCreditReservation,
   recordApplicationRefundFailure,
   releaseRateLimitReservation,
+  startGenerationAttempt,
+  finishGenerationAttempt,
 } from "@/modules/outreach/infrastructure/extension-generate.repository";
 import type { YcGroundingContext } from "../domain/yc-grounding.types";
 import {
@@ -77,7 +83,13 @@ export type GenerateYcApplicationDependencies = {
     _userId: string,
   ) => Promise<{ granted: boolean; balance: number }>;
   reserveCredits: (_userId: string) => Promise<CreditReservation>;
-  releaseRateLimit: (_userId: string, _logger?: SafeLogger) => Promise<unknown>;
+  releaseRateLimit: (
+    _userId: string,
+    _reservationId: string,
+    _logger?: SafeLogger,
+  ) => Promise<unknown>;
+  startAttempt: typeof startGenerationAttempt;
+  finishAttempt: typeof finishGenerationAttempt;
   refundCredits: (
     _credit: { userId: string; reservationId: string; amount: number },
     _reason: string,
@@ -107,6 +119,8 @@ const defaultDependencies: GenerateYcApplicationDependencies = {
   reserveCredits: (userId) =>
     reserveGenerationCredits(getSupabaseService(), userId, "yc_application"),
   releaseRateLimit: releaseRateLimitReservation,
+  startAttempt: startGenerationAttempt,
+  finishAttempt: finishGenerationAttempt,
   refundCredits: refundCreditReservation,
   recordRefundFailure: recordApplicationRefundFailure,
   createMessage: createYcApplicationDraft,
@@ -145,7 +159,7 @@ async function releaseReservations(input: {
         amount: number;
       }
     | undefined;
-  rateReserved: boolean;
+  rateReservationId: string | undefined;
   reason: string;
   logger: SafeLogger;
 }) {
@@ -157,8 +171,12 @@ async function releaseReservations(input: {
           input.logger,
         )
       : Promise.resolve(true),
-    input.rateReserved
-      ? input.dependencies.releaseRateLimit(input.caller.userId, input.logger)
+    input.rateReservationId
+      ? input.dependencies.releaseRateLimit(
+          input.caller.userId,
+          input.rateReservationId,
+          input.logger,
+        )
       : Promise.resolve(true),
   ]);
   const refunded = credit.status === "fulfilled" && credit.value === true;
@@ -198,7 +216,7 @@ async function releaseReservations(input: {
           refundReference: input.reservedCredit.reservationId,
         }
       : {}),
-    ...(input.rateReserved
+    ...(input.rateReservationId
       ? { quotaRestoration: quotaReleased ? "released" : "pending_review" }
       : {}),
   };
@@ -239,7 +257,8 @@ export async function generateYcApplication(
   const firstQuestion = questions[0];
   if (firstQuestion === undefined)
     throw new Error("Validated question required");
-  let rateReserved = false;
+  let rateReservationId: string | undefined;
+  let activeAttemptId: string | undefined;
   let reservedCredit:
     { userId: string; reservationId: string; amount: number } | undefined;
   let modelRequested = false;
@@ -308,6 +327,21 @@ export async function generateYcApplication(
       completeRateLimit("failure", { errorCode: "RATE_LIMIT_RPC_FAILED" });
       throw error;
     }
+    if (rate.unavailable) {
+      completeRateLimit("failure", {
+        errorCode: "QUOTA_SERVICE_UNAVAILABLE",
+        status: 503,
+      });
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Generation is temporarily unavailable",
+          code: "QUOTA_SERVICE_UNAVAILABLE",
+          billing: "none",
+        },
+        { status: 503, headers: input.corsHeaders },
+      );
+    }
     if (!rate.allowed) {
       completeRateLimit("failure", {
         errorCode: "DAILY_LIMIT_REACHED",
@@ -327,12 +361,24 @@ export async function generateYcApplication(
           headers: {
             ...input.corsHeaders,
             ...rateLimitHeaders(rate, dependencies),
+            "Retry-After": String(retryAfterSeconds(rate.resetTime)),
           },
         },
       );
     }
     completeRateLimit("success", { remainingRequests: rate.remainingRequests });
-    rateReserved = true;
+    if (!rate.reservationId) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Generation is temporarily unavailable",
+          code: "QUOTA_SERVICE_UNAVAILABLE",
+          billing: "none",
+        },
+        { status: 503, headers: input.corsHeaders },
+      );
+    }
+    rateReservationId = rate.reservationId;
 
     let billingMode: "credits" | "unlimited_developer" = "unlimited_developer";
     let creditCost = 0;
@@ -356,8 +402,15 @@ export async function generateYcApplication(
 
       if (!reservation.allowed || !reservation.reservationId) {
         timing?.enter("refund");
-        rateReserved = false;
-        await dependencies.releaseRateLimit(input.caller.userId, operationLog);
+        const compensation = await releaseReservations({
+          dependencies,
+          caller: input.caller,
+          reservedCredit: undefined,
+          rateReservationId,
+          reason: "insufficient_credits",
+          logger: operationLog,
+        });
+        rateReservationId = undefined;
         return NextResponse.json(
           {
             success: false,
@@ -368,6 +421,7 @@ export async function generateYcApplication(
             billingMode,
             creditCost,
             creditsRemaining,
+            ...compensation,
           },
           {
             status: 402,
@@ -394,6 +448,60 @@ export async function generateYcApplication(
     timing?.metrics({
       inputChars: prompt.systemPrompt.length + prompt.userPrompt.length,
     });
+    const admission = await dependencies.startAttempt(
+      input.caller.userId,
+      rateReservationId,
+      outputWorkUnits(
+        getApplicationOutputBudget(isBatch ? questions.length : undefined),
+      ),
+      operationLog,
+    );
+    if (!admission.allowed) {
+      timing?.enter("refund");
+      const compensation = await releaseReservations({
+        dependencies,
+        caller: input.caller,
+        reservedCredit,
+        rateReservationId,
+        reason: "admission_denied",
+        logger: operationLog,
+      });
+      rateReservationId = undefined;
+      reservedCredit = undefined;
+      if (admission.unavailable)
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Generation is temporarily unavailable",
+            code: "QUOTA_SERVICE_UNAVAILABLE",
+            ...compensation,
+          },
+          { status: 503, headers: input.corsHeaders },
+        );
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Generation limit reached",
+          code: admission.code,
+          message:
+            admission.code === "GENERATION_IN_PROGRESS"
+              ? "Another draft is in progress. Wait for it to finish before trying again."
+              : admission.code === "SHORT_WINDOW_LIMIT_REACHED"
+                ? "Too many recent generation attempts. Try again after the retry interval."
+                : "Your rolling generation work budget is used. Try again after the reset.",
+          resetTime: admission.retryTime,
+          ...compensation,
+        },
+        {
+          status: 429,
+          headers: {
+            ...input.corsHeaders,
+            "Retry-After": String(retryAfterSeconds(admission.retryTime)),
+          },
+        },
+      );
+    }
+    activeAttemptId = admission.attemptId;
     timing?.enter("model");
     const startedAt = dependencies.now();
     modelRequested = true;
@@ -569,7 +677,7 @@ export async function generateYcApplication(
       dependencies,
       caller: input.caller,
       reservedCredit,
-      rateReserved,
+      rateReservationId,
       reason,
       logger: operationLog,
     });
@@ -613,5 +721,12 @@ export async function generateYcApplication(
         headers: input.corsHeaders,
       },
     );
+  } finally {
+    if (activeAttemptId)
+      await dependencies.finishAttempt(
+        input.caller.userId,
+        activeAttemptId,
+        operationLog,
+      );
   }
 }

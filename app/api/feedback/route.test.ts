@@ -4,6 +4,10 @@ import { makeRequest } from "@/__tests__/helpers/request";
 // ─── Hoisted mocks ────────────────────────────────────────────────────────────
 const mockInsert = vi.hoisted(() => vi.fn());
 const mockFrom = vi.hoisted(() => vi.fn());
+const mockAdmission = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/feedback/admission", () => ({
+  checkFeedbackAdmission: mockAdmission,
+}));
 
 vi.mock("@supabase/supabase-js", () => ({
   createClient: vi.fn(() => ({
@@ -17,6 +21,7 @@ import { POST } from "./route";
 // ─── Setup ────────────────────────────────────────────────────────────────────
 beforeEach(() => {
   mockInsert.mockReset();
+  mockAdmission.mockResolvedValue({ allowed: true });
   // Establish chain: from('feedback').insert(data) → resolves
   mockFrom.mockReturnValue({ insert: mockInsert });
 });
@@ -31,6 +36,39 @@ const VALID_BODY = {
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 describe("POST /api/feedback", () => {
+  it("rejects oversized streamed JSON without reserving capacity or writing", async () => {
+    const response = await POST(
+      makeRequest({
+        method: "POST",
+        body: { ...VALID_BODY, message: "x".repeat(25_000) },
+      }),
+    );
+    expect(response.status).toBe(413);
+    expect(mockInsert).not.toHaveBeenCalled();
+  });
+  it("enforces a shared limit even when the honeypot is omitted", async () => {
+    mockAdmission.mockResolvedValue({
+      allowed: false,
+      unavailable: false,
+      retryTime: Date.now() + 60_000,
+    });
+    mockInsert.mockResolvedValue({ error: null });
+    const response = await POST(
+      makeRequest({ method: "POST", body: VALID_BODY }),
+    );
+    expect(response.status).toBe(429);
+    expect(response.headers.get("Retry-After")).toMatch(/^\d+$/u);
+    expect(mockInsert).not.toHaveBeenCalled();
+  });
+  it("fails closed when the shared limiter is unavailable", async () => {
+    mockAdmission.mockResolvedValue({ allowed: false, unavailable: true });
+    mockInsert.mockResolvedValue({ error: null });
+    const response = await POST(
+      makeRequest({ method: "POST", body: VALID_BODY }),
+    );
+    expect(response.status).toBe(503);
+    expect(mockInsert).not.toHaveBeenCalled();
+  });
   describe("honeypot bot detection", () => {
     it("returns silent 200 and does NOT insert when honeypot field is present", async () => {
       // This is a security feature: bots filling hidden form fields get a fake success.

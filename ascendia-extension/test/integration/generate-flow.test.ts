@@ -9,12 +9,12 @@ import {
   fetchSessionFromServer,
   doRefreshToken,
   isAuthError,
-  checkUsageLimit,
   logUsageData,
   filterAcceptedExamples,
 } from "../../background/auth-core.js";
 import {
   buildGeneratePayload,
+  isPersonalUsageReminderReached,
   parseGenerationResponse,
 } from "../../popup/popup-core.js";
 
@@ -162,14 +162,12 @@ describe("generate flow integration", () => {
     expect(isTokenValid(newAuth)).toBe(true);
   });
 
-  it("usage limit blocks generation when exceeded", async () => {
+  it("local usage triggers a reminder without blocking generation", async () => {
     const today = new Date().toISOString().split("T")[0];
-    const dailyUsage = { [today]: 50 };
-    const settings = { maxDailyUsage: 50 };
+    const dailyUsage = { [today]: 30 };
+    const settings = { maxDailyUsage: 30 };
 
-    expect(() => checkUsageLimit(dailyUsage, settings)).toThrow(
-      "Daily usage limit",
-    );
+    expect(isPersonalUsageReminderReached(dailyUsage, settings)).toBe(true);
   });
 
   it("usage logging increments and cleans old data", () => {

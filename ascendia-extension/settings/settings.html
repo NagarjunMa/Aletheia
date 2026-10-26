@@ -169,18 +169,18 @@
 
         <div class="form-group">
           <label for="maxDailyUsage">
-            <strong>Daily Usage Limit</strong>
+            <strong>Personal Daily Draft Reminder</strong>
           </label>
           <div class="range-group">
-            <input type="range" id="maxDailyUsage" min="10" max="200" value="50" class="range-input" />
+            <input type="range" id="maxDailyUsage" min="10" max="30" value="30" class="range-input" />
             <div class="range-labels">
               <span>10</span>
-              <span id="dailyUsageValue">50</span>
-              <span>200</span>
+              <span id="dailyUsageValue">30</span>
+              <span>30</span>
             </div>
           </div>
           <div class="help-text">
-            Limit daily message generations to control usage and costs
+            Local reminder only, up to 30 drafts per UTC day. It never blocks a request; the server enforces the authoritative rolling quota plus burst and work limits.
           </div>
         </div>
       </div>

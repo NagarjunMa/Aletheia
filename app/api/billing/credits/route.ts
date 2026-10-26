@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient, createServiceClient } from "@/lib/supabase/server";
+import {
+  createClient,
+  createStatelessServiceClient,
+} from "@/lib/supabase/server";
 import {
   CREDIT_PACKS,
   ensureCreditAccount,
@@ -39,7 +42,7 @@ async function handleGet(log: SafeLogger) {
       });
     }
 
-    const service = await createServiceClient();
+    const service = createStatelessServiceClient();
     await grantTrialCreditsOnce(service, user.id);
     const account = await ensureCreditAccount(service, user.id);
 

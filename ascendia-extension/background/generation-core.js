@@ -14,14 +14,37 @@ export function buildGenerationRequestData(payload, acceptedExamples) {
 
 export function serializeGenerationError(error) {
   const details = error?.apiResponse || {};
+  const now = Date.now();
+  const resetTime =
+    error?.status === 429 &&
+    Number.isSafeInteger(details.resetTime) &&
+    details.resetTime > now &&
+    details.resetTime <= now + 86_400_000
+      ? details.resetTime
+      : undefined;
+  const retryAfterSeconds =
+    Number.isSafeInteger(error?.retryAfterSeconds) &&
+    error.retryAfterSeconds > 0 &&
+    error.retryAfterSeconds <= 86_400
+      ? error.retryAfterSeconds
+      : resetTime
+        ? Math.ceil((resetTime - now) / 1000)
+        : undefined;
   return {
     success: false,
+    ...(resetTime ? { resetTime } : {}),
+    ...(error?.status === 429 && retryAfterSeconds
+      ? { retryAfterSeconds }
+      : {}),
     ...(["none", "refunded", "refund_pending"].includes(details.billing)
       ? { billing: details.billing }
       : {}),
     ...(typeof details.refundReference === "string" &&
     /^[0-9a-f-]{36}$/i.test(details.refundReference)
       ? { refundReference: details.refundReference }
+      : {}),
+    ...(details.quotaRestoration === "pending_review"
+      ? { quotaRestoration: "pending_review" }
       : {}),
     error: details.error || error?.message || "Generation failed",
     message: details.message || error?.message || "Generation failed",

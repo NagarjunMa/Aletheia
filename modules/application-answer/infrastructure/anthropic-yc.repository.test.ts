@@ -132,7 +132,7 @@ describe("createYcApplicationMessage", () => {
           name: "return_yc_application_answer",
         },
       },
-      { timeout: 30_000 },
+      { timeout: 30_000, signal: expect.any(AbortSignal) },
     );
   });
 });
@@ -157,7 +157,7 @@ describe("ALE-37 bounded batch tool", () => {
         max_tokens: ceiling,
         tool_choice: { type: "tool", name: "return_application_answers" },
       }),
-      { timeout: 30000 },
+      { timeout: 30000, signal: expect.any(AbortSignal) },
     );
   });
   it.each([0, 6, 1.5, NaN])(

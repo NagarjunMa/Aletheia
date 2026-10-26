@@ -491,7 +491,7 @@ async function initializeDefaultSettings() {
     settings: {
       autoFillEnabled: true,
       showNotifications: true,
-      maxDailyUsage: 50,
+      maxDailyUsage: 30,
     },
   };
 
@@ -630,7 +630,6 @@ async function handleGenerateRequest(payload, operationId, requesterId) {
   try {
     const url = await getEffectiveApiUrl();
     const { aletheia_auth } = await chrome.storage.local.get("aletheia_auth");
-    let usageChecked = false;
 
     const response = await generateWithAuthRecovery({
       resumeAfterInteractive: payload.category !== "yc_application",
@@ -676,10 +675,6 @@ async function handleGenerateRequest(payload, operationId, requesterId) {
           payload,
           relevantExamples,
         );
-        if (!usageChecked) {
-          await checkUsageLimit(requesterId);
-          usageChecked = true;
-        }
         const result = await makeAPIRequest(
           "/api/extension/generate",
           {
@@ -693,8 +688,11 @@ async function handleGenerateRequest(payload, operationId, requesterId) {
           url,
           operationId,
           {
+            // A repeated POST may reach the model again after an ambiguous
+            // network failure. The server charges every model start.
+            maxAttempts: 1,
             ...(payload.category === "yc_application"
-              ? { maxAttempts: 1, timeoutMs: 120000 }
+              ? { timeoutMs: 120000 }
               : {}),
             assertBeforeAttempt: async () => {
               const { aletheia_auth: activeAuth } =
@@ -733,6 +731,15 @@ async function handleGenerateRequest(payload, operationId, requesterId) {
         errorCode: response.code,
       });
       return response;
+    }
+    if (response.serverQuota && requesterId) {
+      await chrome.storage.local.set({
+        serverQuota: {
+          ...response.serverQuota,
+          ownerId: requesterId,
+          observedAt: Date.now(),
+        },
+      });
     }
     await logUsage(payload.category, requesterId, generationUsageEpoch);
     complete("success", { category: payload.category });
@@ -812,6 +819,9 @@ async function makeAPIRequest(
           `HTTP ${response.status}: ${apiMessage}${updateHint}`,
         );
         apiError.status = response.status;
+        apiError.retryAfterSeconds = Number(
+          response.headers.get("Retry-After"),
+        );
         apiError.code = errorBody?.code;
         apiError.requestId = response.headers.get("x-request-id") || undefined;
         apiError.authCause = errorBody?.cause;
@@ -821,6 +831,20 @@ async function makeAPIRequest(
       }
 
       const data = await response.json();
+      const limit = Number(response.headers.get("X-RateLimit-Limit"));
+      const remaining = Number(response.headers.get("X-RateLimit-Remaining"));
+      const resetTime = Number(response.headers.get("X-RateLimit-Reset"));
+      const serverQuota =
+        Number.isInteger(limit) &&
+        limit > 0 &&
+        limit <= 100 &&
+        Number.isInteger(remaining) &&
+        remaining >= 0 &&
+        remaining <= limit &&
+        Number.isSafeInteger(resetTime) &&
+        resetTime > Date.now()
+          ? { limit, remaining, resetTime }
+          : undefined;
       log.info("api.request.complete", {
         attempt,
         durationMs: Math.max(0, Date.now() - attemptStartedAt),
@@ -834,6 +858,7 @@ async function makeAPIRequest(
 
       return {
         ...data,
+        ...(serverQuota ? { serverQuota } : {}),
         requestId: response.headers.get("x-request-id") || undefined,
       };
     } catch (error) {
@@ -934,29 +959,6 @@ async function handleHealthCheck() {
       success: false,
       error: error.message,
     };
-  }
-}
-
-async function checkUsageLimit(ownerId) {
-  const {
-    dailyUsage,
-    usageOwnerId,
-    settings = {},
-  } = await chrome.storage.local.get([
-    "dailyUsage",
-    "usageOwnerId",
-    "settings",
-  ]);
-
-  const today = new Date().toISOString().split("T")[0];
-  const todayUsage =
-    getOwnedUsage(dailyUsage, usageOwnerId, ownerId)[today] || 0;
-  const maxDailyUsage = settings.maxDailyUsage || 50;
-
-  if (todayUsage >= maxDailyUsage) {
-    throw new Error(
-      `Daily usage limit (${maxDailyUsage}) exceeded. Try again tomorrow.`,
-    );
   }
 }
 
@@ -1066,7 +1068,6 @@ if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     handleGenerateRequest,
     makeAPIRequest,
-    checkUsageLimit,
     logUsage,
   };
 }

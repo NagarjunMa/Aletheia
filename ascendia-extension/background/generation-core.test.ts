@@ -5,6 +5,24 @@ import {
 } from "./generation-core.js";
 
 describe("generation background bridge", () => {
+  it("derives retry guidance from a bounded server reset when the header is absent", () => {
+    const resetTime = Date.now() + 60_000;
+    expect(
+      serializeGenerationError({ status: 429, apiResponse: { resetTime } }),
+    ).toMatchObject({ resetTime, retryAfterSeconds: 60 });
+  });
+  it.each([NaN, Infinity, -1, "private-value", Date.now() + 7 * 86_400_000])(
+    "omits invalid retry metadata %s",
+    (resetTime) => {
+      const result = serializeGenerationError({
+        status: 429,
+        retryAfterSeconds: Infinity,
+        apiResponse: { resetTime },
+      });
+      expect(result).not.toHaveProperty("resetTime");
+      expect(result).not.toHaveProperty("retryAfterSeconds");
+    },
+  );
   it("does not add legacy style examples to a strict YC request", () => {
     expect(
       buildGenerationRequestData(
@@ -89,6 +107,21 @@ describe("generation background bridge", () => {
       status: 500,
       code: "GENERATION_FAILED",
       requestId: "123e4567-e89b-42d3-a456-426614174000",
+    });
+  });
+
+  it("preserves pending daily-slot restoration on an admission denial", () => {
+    const error = Object.assign(new Error("Generation limit reached"), {
+      status: 429,
+      apiResponse: {
+        code: "GENERATION_IN_PROGRESS",
+        message: "Another draft is in progress.",
+        quotaRestoration: "pending_review",
+      },
+    });
+    expect(serializeGenerationError(error)).toMatchObject({
+      status: 429,
+      quotaRestoration: "pending_review",
     });
   });
 });

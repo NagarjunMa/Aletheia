@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { GENERATION_MODEL_TIMEOUT_MS } from "../domain/generation-admission";
 import {
   atomicClaimsSchema,
   atomicClaimsToolSchema,
@@ -202,7 +203,8 @@ function getAnthropic(logger: SafeLogger) {
   if (!apiKey) {
     throw new Error("ANTHROPIC_API_KEY environment variable is not set");
   }
-  const client = new Anthropic({ apiKey });
+  // One admitted attempt must correspond to at most one provider request.
+  const client = new Anthropic({ apiKey, maxRetries: 0 });
   observeAnthropicAttempts(client, logger);
   return client;
 }
@@ -225,6 +227,7 @@ export async function createOutreachDraftMessage(input: {
         ? buildLinkedinConnectionDraftTool()
         : buildEmailDraftTool("linkedin_inmail", input.emailMode);
   const toolName = tool.name;
+  const signal = AbortSignal.timeout(GENERATION_MODEL_TIMEOUT_MS);
   try {
     const client = getAnthropic(stageLogger);
     const response = await client.messages.create(
@@ -240,7 +243,7 @@ export async function createOutreachDraftMessage(input: {
           name: toolName,
         },
       },
-      { timeout: 30_000 },
+      { timeout: GENERATION_MODEL_TIMEOUT_MS, signal },
     );
     complete("success", {
       inputTokens: response.usage.input_tokens,
@@ -248,12 +251,15 @@ export async function createOutreachDraftMessage(input: {
     });
     return response;
   } catch (error) {
+    const failure = signal.aborted
+      ? new Anthropic.APIConnectionTimeoutError()
+      : error;
     complete("failure", {
-      errorCode: isAnthropicTimeoutError(error)
+      errorCode: isAnthropicTimeoutError(failure)
         ? "MODEL_TIMEOUT"
         : "MODEL_REQUEST_FAILED",
     });
-    throw error;
+    throw failure;
   }
 }
 

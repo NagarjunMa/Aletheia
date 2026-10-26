@@ -33,10 +33,37 @@ const legacyCategories = [
  * Active production request parser. Keep this legacy-only until the YC
  * generation service and billing lifecycle are implemented together.
  */
-export const generateRequestSchema = z.object({
+const legacyGenerateBaseSchema = z.object({
   ...legacyGenerateRequestFields,
   category: z.enum(legacyCategories),
 });
+const serverOwnedRequestFields = new Set([
+  "workUnits",
+  "work_units",
+  "questionCount",
+  "question_count",
+  "attemptId",
+  "reservationId",
+  "shortLimit",
+  "workLimit",
+  "dailyLimit",
+]);
+export const generateRequestSchema = legacyGenerateBaseSchema
+  .passthrough()
+  .superRefine((request, context) => {
+    for (const key of Object.keys(request)) {
+      if (serverOwnedRequestFields.has(key)) {
+        context.addIssue({
+          code: "custom",
+          path: [key],
+          message: "Server-owned field",
+        });
+      }
+    }
+  })
+  // Retain legacy extension compatibility (e.g. profileUrl) without passing
+  // unknown fields to model, quota, or billing code.
+  .transform((request) => legacyGenerateBaseSchema.parse(request));
 
 export const DEFAULT_YC_APPLICATION_QUESTION =
   "Why are you a strong candidate for this role?";
@@ -55,7 +82,11 @@ function normalizedBoundedString(minimum: number, maximum: number) {
   return z
     .string()
     .transform(normalizeYcInput)
-    .pipe(z.string().min(minimum).max(maximum));
+    .pipe(z.string().min(minimum).max(maximum))
+    .refine(
+      (value) => value.length <= maximum,
+      "Input exceeds its character limit",
+    );
 }
 
 const legacyYcApplicationRequestSchema = z
@@ -101,7 +132,7 @@ export const ycApplicationRequestSchema = z
         : legacyYcApplicationRequestSchema;
     const result = schema.safeParse(value);
     if (!result.success) {
-      for (const issue of result.error.issues) context.addIssue(issue);
+      for (const issue of result.error.issues) context.addIssue({ ...issue });
       return z.NEVER;
     }
     return result.data;

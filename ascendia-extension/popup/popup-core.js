@@ -11,6 +11,16 @@ export const YC_APPLICATION_QUESTION_MAX_CHARS = 1000;
 export const YC_APPLICATION_MIN_WORDS = 50;
 export const YC_APPLICATION_MAX_WORDS = 150;
 
+/** Personal reminder only. Never use this result to gate an API request. */
+export function isPersonalUsageReminderReached(dailyUsage, settings) {
+  const today = new Date().toISOString().split("T")[0];
+  const todayUsage = dailyUsage[today] || 0;
+  const configured = Number(settings?.maxDailyUsage);
+  const reminderThreshold =
+    Number.isInteger(configured) && configured > 0 ? configured : 30;
+  return todayUsage >= reminderThreshold;
+}
+
 function countWords(text) {
   const normalized = String(text || "").trim();
   return normalized ? normalized.split(/\s+/u).length : 0;
@@ -289,13 +299,30 @@ export function validateGenerationInput({
  * Convert API failures into a stable display model for the popup.
  */
 export function getGenerationErrorPresentation(response) {
-  const message =
+  const baseMessage =
     (response?.billing === "refund_pending"
       ? `Generation failed. Credit restoration pending manual review.${response.refundReference ? ` Reference: ${response.refundReference}` : ""}`
       : "") ||
     response?.message ||
     response?.error ||
     "Generation failed. Please try again.";
+  let message =
+    response?.quotaRestoration === "pending_review"
+      ? `${baseMessage} Daily quota restoration is pending review.`
+      : baseMessage;
+  const seconds = response?.retryAfterSeconds;
+  if (
+    response?.status === 429 &&
+    Number.isSafeInteger(seconds) &&
+    seconds > 0 &&
+    seconds <= 86_400
+  ) {
+    const divisor = seconds >= 3600 ? 3600 : seconds >= 60 ? 60 : 1;
+    const unit =
+      divisor === 3600 ? "hour" : divisor === 60 ? "minute" : "second";
+    const count = Math.ceil(seconds / divisor);
+    message += ` Retry in about ${count} ${unit}${count === 1 ? "" : "s"}.`;
+  }
 
   if (
     response?.code === "GROUNDING_PROFILE_INCOMPLETE" &&

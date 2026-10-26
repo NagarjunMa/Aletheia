@@ -170,7 +170,7 @@ describe("loadCandidateGroundingData", () => {
     ]);
   });
 
-  it("returns defaults and a legacy fallback without manufacturing candidate data", async () => {
+  it("returns defaults without resurrecting a deleted legacy resume", async () => {
     const client = makeClient({
       profile: null,
       evidence: [],
@@ -183,8 +183,8 @@ describe("loadCandidateGroundingData", () => {
     expect(result.profile.currentRole).toBe("");
     expect(result.confirmedEvidence).toEqual([]);
     expect(result.resume).toEqual({
-      text: "Legacy profile resume.",
-      source: "profiles",
+      text: "",
+      source: "none",
     });
   });
 

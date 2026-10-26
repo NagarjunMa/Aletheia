@@ -21,7 +21,9 @@ describe("application compensation outcomes", () => {
       data: null,
       error: { message: "PRIVATE_DATABASE_DETAIL" },
     });
-    expect(await releaseRateLimitReservation(credit.userId)).toBe(false);
+    expect(
+      await releaseRateLimitReservation(credit.userId, credit.reservationId),
+    ).toBe(false);
     expect(await refundCreditReservation(credit, "yc_output_invalid")).toBe(
       false,
     );

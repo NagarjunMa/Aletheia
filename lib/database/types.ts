@@ -194,6 +194,81 @@ export type Database = {
         };
         Relationships: [];
       };
+      public_feedback_limits: {
+        Row: {
+          subject_hash: string;
+          window_start: string;
+          request_count: number;
+        };
+        Insert: {
+          subject_hash: string;
+          window_start: string;
+          request_count: number;
+        };
+        Update: {
+          subject_hash?: string;
+          window_start?: string;
+          request_count?: number;
+        };
+        Relationships: [];
+      };
+      generation_daily_reservations: {
+        Row: {
+          id: string;
+          user_id: string;
+          window_start: string;
+          created_at: string;
+          used_at: string | null;
+          released_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          window_start: string;
+          created_at?: string;
+          used_at?: string | null;
+          released_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          window_start?: string;
+          created_at?: string;
+          used_at?: string | null;
+          released_at?: string | null;
+        };
+        Relationships: [];
+      };
+      generation_admission_state: {
+        Row: {
+          user_id: string;
+          short_window_start: string;
+          short_attempts: number;
+          work_window_start: string;
+          work_units: number;
+          active_attempt_id: string | null;
+          active_until: string | null;
+        };
+        Insert: {
+          user_id: string;
+          short_window_start?: string;
+          short_attempts?: number;
+          work_window_start?: string;
+          work_units?: number;
+          active_attempt_id?: string | null;
+          active_until?: string | null;
+        };
+        Update: {
+          user_id?: string;
+          short_window_start?: string;
+          short_attempts?: number;
+          work_window_start?: string;
+          work_units?: number;
+          active_attempt_id?: string | null;
+          active_until?: string | null;
+        };
+        Relationships: [];
+      };
       generated_drafts: {
         Row: {
           content: string;
@@ -724,6 +799,42 @@ export type Database = {
           remaining: number;
           reset_time: string;
         }[];
+      };
+      reserve_public_feedback_slot: {
+        Args: { p_subject_hash: string };
+        Returns: { allowed: boolean; retry_time: string }[];
+      };
+      reserve_generation_daily_slot: {
+        Args: { p_user_id: string; p_daily_limit: number };
+        Returns: {
+          allowed: boolean;
+          remaining: number;
+          reset_time: string;
+          reservation_id: string | null;
+        }[];
+      };
+      release_generation_daily_slot: {
+        Args: { p_user_id: string; p_reservation_id: string };
+        Returns: boolean;
+      };
+      start_generation_attempt: {
+        Args: {
+          p_user_id: string;
+          p_reservation_id: string;
+          p_work_units: number;
+          p_short_limit: number;
+          p_work_limit: number;
+        };
+        Returns: {
+          allowed: boolean;
+          denial_code: string | null;
+          retry_time: string | null;
+          attempt_id: string | null;
+        }[];
+      };
+      finish_generation_attempt: {
+        Args: { p_user_id: string; p_attempt_id: string };
+        Returns: boolean;
       };
       claim_resume_upload: {
         Args: { p_upload_id: string; p_user_id: string };

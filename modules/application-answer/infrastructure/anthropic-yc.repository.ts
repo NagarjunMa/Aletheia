@@ -4,6 +4,7 @@ import {
   type AtomicClaim,
 } from "@/modules/grounding/domain/atomic-claim";
 import Anthropic from "@anthropic-ai/sdk";
+import { GENERATION_MODEL_TIMEOUT_MS } from "@/modules/outreach/domain/generation-admission";
 import { observeAnthropicAttempts } from "@/lib/provider-attempt-timing";
 import { z } from "zod";
 import { createLogger, startTimedStage, type SafeLogger } from "@/lib/logger";
@@ -199,28 +200,33 @@ export async function createYcApplicationMessage(input: {
   userPrompt: string;
   questionCount?: number;
 }) {
-  return input.anthropic.messages.create(
-    {
-      model: CLAUDE_MODEL,
-      max_tokens: getApplicationOutputBudget(input.questionCount),
-      temperature: YC_GENERATION_SETTINGS.temperature,
-      system: input.systemPrompt,
-      messages: [{ role: "user", content: input.userPrompt }],
-      tools: [
-        input.questionCount === undefined
-          ? ycApplicationTool
-          : applicationBatchTool,
-      ],
-      tool_choice: {
-        type: "tool",
-        name:
+  const signal = AbortSignal.timeout(GENERATION_MODEL_TIMEOUT_MS);
+  try {
+    return await input.anthropic.messages.create(
+      {
+        model: CLAUDE_MODEL,
+        max_tokens: getApplicationOutputBudget(input.questionCount),
+        temperature: YC_GENERATION_SETTINGS.temperature,
+        system: input.systemPrompt,
+        messages: [{ role: "user", content: input.userPrompt }],
+        tools: [
           input.questionCount === undefined
-            ? YC_APPLICATION_TOOL_NAME
-            : applicationBatchTool.name,
+            ? ycApplicationTool
+            : applicationBatchTool,
+        ],
+        tool_choice: {
+          type: "tool",
+          name:
+            input.questionCount === undefined
+              ? YC_APPLICATION_TOOL_NAME
+              : applicationBatchTool.name,
+        },
       },
-    },
-    { timeout: 30_000 },
-  );
+      { timeout: GENERATION_MODEL_TIMEOUT_MS, signal },
+    );
+  } catch (error) {
+    throw signal.aborted ? new Anthropic.APIConnectionTimeoutError() : error;
+  }
 }
 
 /** Creates the SDK client lazily so builds and non-generation requests do not
@@ -242,7 +248,8 @@ export async function createYcApplicationDraft(input: {
     { model: CLAUDE_MODEL },
   );
   try {
-    const client = new Anthropic({ apiKey });
+    // Hidden SDK retries would bypass the server-owned attempt budget.
+    const client = new Anthropic({ apiKey, maxRetries: 0 });
     observeAnthropicAttempts(client, input.logger ?? log);
     const response = await createYcApplicationMessage({
       anthropic: client,

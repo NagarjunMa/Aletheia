@@ -16,6 +16,7 @@ import {
   getCategoryUiState,
   getGenerationErrorPresentation,
   isAuthError,
+  isPersonalUsageReminderReached,
   parseGenerationResponse,
   validateGenerationInput,
 } from "./popup-core.js";
@@ -1435,15 +1436,39 @@ function updateGenerateAvailability() {
 }
 
 async function updateUsageStats() {
-  const { dailyUsage, usageOwnerId } = await chrome.storage.local.get([
+  const {
+    dailyUsage,
+    usageOwnerId,
+    serverQuota,
+    settings = {},
+  } = await chrome.storage.local.get([
     "dailyUsage",
     "usageOwnerId",
+    "serverQuota",
+    "settings",
   ]);
   const today = new Date().toISOString().split("T")[0];
   const todayCount =
     getOwnedUsage(dailyUsage, usageOwnerId, currentUserId)[today] || 0;
 
   document.getElementById("usageCount").textContent = todayCount;
+  const personalReminder = document.getElementById("personalUsageReminder");
+  if (personalReminder) {
+    personalReminder.hidden = !isPersonalUsageReminderReached(
+      getOwnedUsage(dailyUsage, usageOwnerId, currentUserId),
+      settings,
+    );
+  }
+  const quotaLabel = document.getElementById("serverQuotaText");
+  if (quotaLabel) {
+    quotaLabel.textContent =
+      serverQuota?.ownerId === currentUserId &&
+      Number.isInteger(serverQuota.remaining) &&
+      serverQuota.observedAt > Date.now() - 5 * 60_000 &&
+      serverQuota.resetTime > Date.now()
+        ? `server: ${serverQuota.remaining} remaining (last seen)`
+        : "server limit: 30 requests/24h";
+  }
 }
 
 function openSettings() {

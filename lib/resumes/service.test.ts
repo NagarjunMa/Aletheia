@@ -162,6 +162,10 @@ function createFakeSupabase(options?: {
       then: (resolve: any, reject: any) => {
         let result: unknown;
         if (builder.mode === "delete") {
+          if (!state.deleteError)
+            state.rows = state.rows.filter(
+              (row) => row.id !== builder.filters.id,
+            );
           result = { data: null, error: state.deleteError };
         } else if (builder.mode === "update") {
           result = { data: null, error: state.updateError };
@@ -231,7 +235,7 @@ describe("resume service", () => {
     });
   });
 
-  it("falls back to legacy profile resume and then none", async () => {
+  it("never resurrects legacy profile text when no primary resume remains", async () => {
     const noPrimary = { ...baseRow, is_primary: false };
     const withProfile = createFakeSupabase({
       rows: [noPrimary],
@@ -239,7 +243,7 @@ describe("resume service", () => {
     });
     await expect(
       getPrimaryResumeText(withProfile.client as any, "user-1"),
-    ).resolves.toEqual({ text: "Legacy profile resume", source: "profiles" });
+    ).resolves.toEqual({ text: "", source: "none" });
 
     const withoutProfile = createFakeSupabase({
       rows: [noPrimary],
@@ -247,6 +251,18 @@ describe("resume service", () => {
     });
     await expect(
       getPrimaryResumeText(withoutProfile.client as any, "user-1"),
+    ).resolves.toEqual({ text: "", source: "none" });
+  });
+
+  it("does not reuse the imported legacy copy after the visible resume is deleted", async () => {
+    const { client, state } = createFakeSupabase({
+      rows: [{ ...baseRow, storage_path: null }],
+      profileResume: baseRow.parsed_text,
+    });
+    await deleteUserResume(client as any, "user-1", "resume-1");
+    expect(state.rows).toEqual([]);
+    await expect(
+      getPrimaryResumeText(client as any, "user-1"),
     ).resolves.toEqual({ text: "", source: "none" });
   });
 
