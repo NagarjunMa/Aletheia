@@ -18,7 +18,8 @@ concurrency:
 jobs:
   production-like-integration:
     name: Isolated direct-upload integration
-    runs-on: ubuntu-latest
+    # Match the Ubuntu release supported by the locked Playwright version.
+    runs-on: ubuntu-24.04
     environment: resume-production-gate
     timeout-minutes: 20
     steps:
