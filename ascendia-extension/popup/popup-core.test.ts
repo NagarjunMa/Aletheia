@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  isPersonalUsageReminderReached,
   DEFAULT_YC_APPLICATION_QUESTION,
   buildApplicationAuthDraft,
   readApplicationAuthDraft,
@@ -11,6 +12,24 @@ import {
   isAuthError,
   validateGenerationInput,
 } from "./popup-core.js";
+
+describe("personal usage reminder", () => {
+  it("reflects a configured threshold without blocking the server request", () => {
+    const today = new Date().toISOString().split("T")[0];
+    expect(
+      isPersonalUsageReminderReached({ [today]: 30 }, { maxDailyUsage: 50 }),
+    ).toBe(false);
+    expect(
+      isPersonalUsageReminderReached({ [today]: 50 }, { maxDailyUsage: 50 }),
+    ).toBe(true);
+  });
+
+  it("defaults to a reminder at 30 UTC-day drafts", () => {
+    const today = new Date().toISOString().split("T")[0];
+    expect(isPersonalUsageReminderReached({ [today]: 29 }, {})).toBe(false);
+    expect(isPersonalUsageReminderReached({ [today]: 30 }, {})).toBe(true);
+  });
+});
 
 // ─── parseGenerationResponse ───
 
@@ -517,6 +536,16 @@ describe("YC category UI and validation", () => {
 });
 
 describe("getGenerationErrorPresentation", () => {
+  it("explains pending daily-slot restoration without hiding the limit", () => {
+    expect(
+      getGenerationErrorPresentation({
+        success: false,
+        code: "GENERATION_IN_PROGRESS",
+        message: "Another draft is in progress.",
+        quotaRestoration: "pending_review",
+      }).message,
+    ).toContain("Daily quota restoration is pending review");
+  });
   it("turns incomplete grounding into a dashboard action", () => {
     expect(
       getGenerationErrorPresentation({

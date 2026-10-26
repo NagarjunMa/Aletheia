@@ -97,18 +97,6 @@ export async function getPrimaryResumeText(
       return { text: primary.parsed_text, source: "user_resumes" };
     }
 
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("resume")
-      .eq("id", userId)
-      .maybeSingle();
-
-    if (profileError) throw profileError;
-    if (profile?.resume?.trim()) {
-      complete("success", { source: "profiles", hasText: true });
-      return { text: profile.resume, source: "profiles" };
-    }
-
     complete("success", { source: "none", hasText: false });
     return { text: "", source: "none" };
   } catch (error) {

@@ -10,6 +10,7 @@ import { YcApplicationOutputSanitizationError } from "./sanitize-yc-application-
 import { createGenerationTiming } from "@/lib/generation-timing";
 import { createLogger } from "@/lib/logger";
 import { buildYcGroundingContext } from "./build-yc-grounding-context";
+import { startGenerationAttempt } from "@/modules/outreach/infrastructure/extension-generate.repository";
 import { candidateProfileInputSchema } from "@/lib/candidate-profile/schema";
 
 it("rejects unusable bounded evidence before any quota, credit or model request", async () => {
@@ -87,7 +88,11 @@ describe("ALE-38 application timings", () => {
         expect.any(String),
         logger,
       );
-      expect(deps.releaseRateLimit).toHaveBeenCalledWith(caller.userId, logger);
+      expect(deps.releaseRateLimit).toHaveBeenCalledWith(
+        caller.userId,
+        expect.any(String),
+        logger,
+      );
       expect(JSON.stringify(timing.finish(response.status))).not.toContain(
         "PRIVATE",
       );
@@ -249,6 +254,7 @@ function dependencies(
       allowed: true,
       remainingRequests: 29,
       resetTime: 2_000_000_000_000,
+      reservationId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     }),
     getDailyLimit: vi.fn().mockReturnValue(30),
     billingEnabled: true,
@@ -263,6 +269,11 @@ function dependencies(
       cost: 4,
     }),
     releaseRateLimit: vi.fn().mockResolvedValue(true),
+    startAttempt: vi.fn().mockResolvedValue({
+      allowed: true,
+      attemptId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    }),
+    finishAttempt: vi.fn().mockResolvedValue(true),
     refundCredits: vi.fn().mockResolvedValue(true),
     recordRefundFailure: vi.fn().mockResolvedValue(true),
     createMessage: vi.fn().mockResolvedValue({
@@ -291,6 +302,101 @@ function dependencies(
     ...overrides,
   };
 }
+
+describe("ALE-56 server-owned YC admission", () => {
+  it("charges an exact five-question batch eight work units before any model call", async () => {
+    const deps = dependencies({
+      startAttempt: vi.fn().mockResolvedValue({
+        allowed: false,
+        unavailable: false,
+        code: "WORK_BUDGET_REACHED",
+        retryTime: Date.now() + 60_000,
+      }),
+    });
+    const response = await generateYcApplication(
+      {
+        caller,
+        request: {
+          category: "yc_application",
+          jd: request.jd,
+          questions: Array.from(
+            { length: 5 },
+            (_, index) => `Why does experience ${index + 1} fit this role?`,
+          ),
+        },
+        corsHeaders: {},
+        applicationBaseUrl: "https://aletheia.live",
+      },
+      deps,
+    );
+    expect(response.status).toBe(429);
+    expect(response.headers.get("Retry-After")).toMatch(/^\d+$/u);
+    expect(deps.startAttempt).toHaveBeenCalledWith(
+      caller.userId,
+      expect.any(String),
+      8,
+      expect.any(Object),
+    );
+    expect(deps.createMessage).not.toHaveBeenCalled();
+    expect(deps.releaseRateLimit).toHaveBeenCalledTimes(1);
+    expect(deps.refundCredits).toHaveBeenCalledTimes(1);
+  });
+
+  it("compensates a delayed real-SDK admission without calling the YC model", async () => {
+    let elapsed = 0;
+    const clock = vi
+      .spyOn(performance, "now")
+      .mockImplementation(() => elapsed);
+    vi.stubGlobal("fetch", async () => {
+      elapsed = 181_000;
+      return Response.json([
+        { allowed: true, attempt_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" },
+      ]);
+    });
+    try {
+      const deps = dependencies({ startAttempt: startGenerationAttempt });
+      const response = await generateYcApplication(
+        {
+          caller,
+          request,
+          corsHeaders: {},
+          applicationBaseUrl: "https://aletheia.live",
+        },
+        deps,
+      );
+      expect(response.status).toBe(503);
+      expect(response.headers.get("Retry-After")).toBeNull();
+      expect(deps.createMessage).not.toHaveBeenCalled();
+      expect(deps.releaseRateLimit).toHaveBeenCalledTimes(1);
+      expect(deps.refundCredits).toHaveBeenCalledTimes(1);
+    } finally {
+      clock.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("fails closed with 503 when attempt storage is unavailable", async () => {
+    const deps = dependencies({
+      startAttempt: vi
+        .fn()
+        .mockResolvedValue({ allowed: false, unavailable: true }),
+    });
+    const response = await generateYcApplication(
+      {
+        caller,
+        request,
+        corsHeaders: {},
+        applicationBaseUrl: "https://aletheia.live",
+      },
+      deps,
+    );
+    expect(response.status).toBe(503);
+    expect(response.headers.get("Retry-After")).toBeNull();
+    expect(deps.createMessage).not.toHaveBeenCalled();
+    expect(deps.releaseRateLimit).toHaveBeenCalledTimes(1);
+    expect(deps.refundCredits).toHaveBeenCalledTimes(1);
+  });
+});
 
 const request = {
   category: "yc_application" as const,
@@ -441,6 +547,7 @@ describe("generateYcApplication", () => {
     );
     expect(deps.releaseRateLimit).toHaveBeenCalledWith(
       caller.userId,
+      expect.any(String),
       expect.objectContaining({ info: expect.any(Function) }),
     );
   });
@@ -473,6 +580,7 @@ describe("generateYcApplication", () => {
     );
     expect(deps.releaseRateLimit).toHaveBeenCalledWith(
       caller.userId,
+      expect.any(String),
       expect.objectContaining({ info: expect.any(Function) }),
     );
   });
@@ -509,6 +617,7 @@ describe("generateYcApplication", () => {
     );
     expect(deps.releaseRateLimit).toHaveBeenCalledWith(
       caller.userId,
+      expect.any(String),
       expect.objectContaining({ info: expect.any(Function) }),
     );
   });
@@ -565,9 +674,37 @@ describe("generateYcApplication", () => {
     });
     expect(deps.releaseRateLimit).toHaveBeenCalledWith(
       caller.userId,
+      expect.any(String),
       expect.objectContaining({ info: expect.any(Function) }),
     );
     expect(deps.refundCredits).not.toHaveBeenCalled();
+    expect(deps.createMessage).not.toHaveBeenCalled();
+  });
+
+  it("reports a pending daily slot when insufficient-credit release fails", async () => {
+    const deps = dependencies({
+      reserveCredits: vi.fn().mockResolvedValue({
+        allowed: false,
+        reservationId: null,
+        balanceAfter: 2,
+        cost: 4,
+      }),
+      releaseRateLimit: vi.fn().mockResolvedValue(false),
+    });
+    const response = await generateYcApplication(
+      {
+        caller,
+        request,
+        corsHeaders: {},
+        applicationBaseUrl: "https://www.aletheia.live",
+      },
+      deps,
+    );
+    expect(response.status).toBe(402);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "INSUFFICIENT_CREDITS",
+      quotaRestoration: "pending_review",
+    });
     expect(deps.createMessage).not.toHaveBeenCalled();
   });
 
@@ -623,6 +760,7 @@ describe("generateYcApplication", () => {
     );
     expect(deps.releaseRateLimit).toHaveBeenCalledWith(
       caller.userId,
+      expect.any(String),
       expect.objectContaining({ info: expect.any(Function) }),
     );
   });

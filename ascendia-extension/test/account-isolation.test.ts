@@ -370,7 +370,6 @@ describe("extension account isolation", () => {
       filterOwnedAccepted,
       isMatchingAccountToken,
       buildGenerationRequestData,
-      checkUsageLimit: vi.fn(),
       makeAPIRequest,
       logUsage: vi.fn(),
       getSafeErrorCode: () => "AUTH_ACCOUNT_CHANGED",
@@ -598,33 +597,12 @@ describe("extension account isolation", () => {
     expect(exported.dailyUsage).toEqual({});
   });
 
-  it("does not block a new account on the prior account's local usage limit", async () => {
-    const checkLimit = section(
-      workerSource,
-      "async function checkUsageLimit(ownerId)",
-      "\nasync function logUsage(",
-    );
+  it("keeps personal reminder counts scoped to the active account", async () => {
     const today = new Date().toISOString().split("T")[0];
-    const sandbox = {
-      chrome: {
-        storage: {
-          local: {
-            get: async () => ({
-              usageOwnerId: "user-a",
-              dailyUsage: { [today]: 50 },
-              settings: { maxDailyUsage: 50 },
-            }),
-          },
-        },
-      },
-      getOwnedUsage,
-      Date,
-    };
-    await expect(
-      runInNewContext(`(${checkLimit})("user-b")`, sandbox),
-    ).resolves.toBeUndefined();
-    await expect(
-      runInNewContext(`(${checkLimit})("user-a")`, sandbox),
-    ).rejects.toThrow(/Daily usage limit/);
+    expect(getOwnedUsage({ [today]: 50 }, "user-a", "user-b")).toEqual({});
+    expect(getOwnedUsage({ [today]: 50 }, "user-a", "user-a")).toEqual({
+      [today]: 50,
+    });
+    expect(workerSource).not.toContain("checkUsageLimit(requesterId)");
   });
 });

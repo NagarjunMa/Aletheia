@@ -11,8 +11,16 @@ export const messageFocusSchema = z
   .string()
   // Bound work before normalization; whitespace cannot hide oversized input.
   .max(MESSAGE_FOCUS_MAX_LENGTH)
+  .refine(
+    (value) => value.length <= MESSAGE_FOCUS_MAX_LENGTH,
+    "Message focus is too long",
+  )
   .transform((value) => value.normalize("NFKC").replace(/\r\n?/gu, "\n").trim())
   // NFKC may expand a short input, e.g. ligatures become multiple characters.
   .pipe(z.string().max(MESSAGE_FOCUS_MAX_LENGTH))
+  .refine(
+    (value) => value.length <= MESSAGE_FOCUS_MAX_LENGTH,
+    "Message focus is too long",
+  )
   .transform((value) => value || undefined)
   .optional();

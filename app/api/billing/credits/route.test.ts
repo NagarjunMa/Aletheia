@@ -15,7 +15,7 @@ vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(async () => ({
     auth: { getUser: mockGetUser },
   })),
-  createServiceClient: vi.fn(async () => ({
+  createStatelessServiceClient: vi.fn(() => ({
     from: mockFrom,
   })),
 }));

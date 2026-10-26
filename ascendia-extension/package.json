@@ -1,6 +1,6 @@
 {
   "name": "aletheia-extension",
-  "version": "1.0.19",
+  "version": "1.0.20",
   "description": "Draft professional introductions and application answers from context you choose. Review and edit every result before use.",
   "private": true,
   "scripts": {
@@ -29,7 +29,7 @@
     "globals": "^17.8.0",
     "thinking-orbs": "0.3.2",
     "typescript": "^5.3.3",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.12"
   },
   "keywords": [
     "chrome-extension",

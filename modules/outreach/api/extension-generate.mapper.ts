@@ -31,7 +31,7 @@ export function createRateLimitHeaders(rateLimit: {
 }
 
 export function toZodErrorDetails(error: z.ZodError) {
-  return error.errors.map((entry) => ({
+  return error.issues.map((entry) => ({
     field: entry.path.join("."),
     message: entry.message,
   }));

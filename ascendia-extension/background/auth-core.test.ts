@@ -12,7 +12,6 @@ import {
   doRefreshToken,
   buildAuthStatus,
   isAuthError,
-  checkUsageLimit,
   logUsageData,
   filterAcceptedExamples,
   getAletheiaRequestHeaders,
@@ -501,30 +500,6 @@ describe("isAuthError", () => {
   it("returns false for non-auth errors", () => {
     expect(isAuthError("Network error")).toBe(false);
     expect(isAuthError("Rate limit exceeded")).toBe(false);
-  });
-});
-
-// ─── checkUsageLimit ───
-
-describe("checkUsageLimit", () => {
-  it("does not throw when under limit", () => {
-    const today = new Date().toISOString().split("T")[0];
-    expect(() =>
-      checkUsageLimit({ [today]: 5 }, { maxDailyUsage: 50 }),
-    ).not.toThrow();
-  });
-
-  it("throws when at limit", () => {
-    const today = new Date().toISOString().split("T")[0];
-    expect(() =>
-      checkUsageLimit({ [today]: 50 }, { maxDailyUsage: 50 }),
-    ).toThrow("Daily usage limit");
-  });
-
-  it("defaults to 50 when maxDailyUsage not set", () => {
-    const today = new Date().toISOString().split("T")[0];
-    expect(() => checkUsageLimit({ [today]: 49 }, {})).not.toThrow();
-    expect(() => checkUsageLimit({ [today]: 50 }, {})).toThrow();
   });
 });
 

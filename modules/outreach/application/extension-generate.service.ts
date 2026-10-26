@@ -79,6 +79,10 @@ import type {
 import type { OutreachGroundingContext } from "@/modules/outreach/domain/outreach-grounding.types";
 import { MESSAGE_FOCUS_SUPPORTED } from "../domain/message-focus";
 import {
+  outputWorkUnits,
+  retryAfterSeconds,
+} from "@/modules/outreach/domain/generation-admission";
+import {
   CLAUDE_MODEL,
   OUTREACH_GENERATION_SETTINGS,
   createOutreachDraftMessage,
@@ -99,7 +103,10 @@ import {
   getSupabaseService,
   getUserStyleProfile,
   refundCreditReservation,
+  recordApplicationRefundFailure,
   releaseRateLimitReservation,
+  startGenerationAttempt,
+  finishGenerationAttempt,
 } from "@/modules/outreach/infrastructure/extension-generate.repository";
 import { generateYcApplication } from "@/modules/application-answer/application/generate-yc-application.service";
 import { prepareOutreachGroundingContext } from "./prepare-outreach-grounding-context";
@@ -154,6 +161,65 @@ function validateFinalEmailWordCount(input: {
   return actualWordCount;
 }
 
+async function releaseOutreachReservations(input: {
+  credit: ReservedCredit | undefined;
+  slot: { userId: string; id: string } | undefined;
+  reason: string;
+  log: SafeLogger;
+}) {
+  const [creditResult, quotaResult] = await Promise.allSettled([
+    input.credit
+      ? refundCreditReservation(input.credit, input.reason, input.log)
+      : Promise.resolve(true),
+    input.slot
+      ? releaseRateLimitReservation(input.slot.userId, input.slot.id, input.log)
+      : Promise.resolve(true),
+  ]);
+  const creditRefunded =
+    creditResult.status === "fulfilled" && creditResult.value === true;
+  const quotaReleased =
+    quotaResult.status === "fulfilled" && quotaResult.value === true;
+  if (input.credit && !creditRefunded) {
+    try {
+      await recordApplicationRefundFailure(
+        input.credit,
+        input.reason,
+        input.log,
+      );
+    } catch {
+      input.log.error(
+        {
+          errorCode: "REFUND_RECONCILIATION_RECORD_FAILED",
+          reservationId: input.credit.reservationId,
+        },
+        "Refund remains pending",
+      );
+    }
+  }
+  if (input.slot && !quotaReleased)
+    input.log.error(
+      {
+        errorCode: "RATE_LIMIT_RELEASE_FAILED",
+        userId: input.slot.userId,
+        reservationId: input.slot.id,
+      },
+      "Daily slot release needs review; do not retry blindly",
+    );
+  return {
+    billing: !input.credit
+      ? "none"
+      : creditRefunded
+        ? "refunded"
+        : "refund_pending",
+    ...(input.credit && !creditRefunded
+      ? { refundReference: input.credit.reservationId }
+      : {}),
+    ...(input.slot
+      ? { quotaRestoration: quotaReleased ? "released" : "pending_review" }
+      : {}),
+  };
+}
+
 export async function POST(request: NextRequest) {
   return withRequestLifecycle("generate-route", request, async (log) => {
     const timing = createGenerationTiming();
@@ -199,7 +265,8 @@ async function handlePost(
   // Tracks whether the rate-limit slot was reserved for this user; set
   // after a successful checkRateLimit. Used by the catch block to refund
   // the slot on any failure between reservation and successful response.
-  let reservedUserId: string | undefined;
+  let reservedSlot: { userId: string; id: string } | undefined;
+  let activeAttempt: { userId: string; id: string } | undefined;
   let reservedCredit: ReservedCredit | undefined;
   let creditCost: number | undefined;
   let creditsRemaining: number | null | undefined;
@@ -355,6 +422,19 @@ async function handlePost(
       },
     );
     const rateCheck = await checkGenerationRateLimit(authResult.userId, log);
+    if (rateCheck.unavailable) {
+      completeRateLimit("failure", {
+        errorCode: "QUOTA_SERVICE_UNAVAILABLE",
+        status: 503,
+      });
+      return NextResponse.json(
+        {
+          error: "Generation is temporarily unavailable",
+          code: "QUOTA_SERVICE_UNAVAILABLE",
+        },
+        { status: 503, headers: corsHeaders },
+      );
+    }
     if (!rateCheck.allowed) {
       completeRateLimit("failure", {
         errorCode: "DAILY_LIMIT_REACHED",
@@ -363,8 +443,8 @@ async function handlePost(
       return NextResponse.json(
         {
           error: "Daily limit reached",
-          message:
-            "You have exceeded the 30 requests per day limit. Please try again tomorrow.",
+          code: "DAILY_LIMIT_REACHED",
+          message: `You have reached the ${getDailyLimit()}-request rolling daily limit.`,
           resetTime: rateCheck.resetTime,
         },
         {
@@ -374,6 +454,7 @@ async function handlePost(
             "X-RateLimit-Limit": String(getDailyLimit()),
             "X-RateLimit-Remaining": "0",
             "X-RateLimit-Reset": String(rateCheck.resetTime),
+            "Retry-After": String(retryAfterSeconds(rateCheck.resetTime)),
           },
         },
       );
@@ -382,11 +463,10 @@ async function handlePost(
       remainingRequests: rateCheck.remainingRequests,
     });
     // Mark the slot reserved so a downstream failure can refund it.
-    reservedUserId = authResult.userId;
+    reservedSlot = { userId: authResult.userId, id: rateCheck.reservationId! };
 
     const {
       profileMarkdown,
-      resume,
       jd,
       conversationContext,
       category,
@@ -430,8 +510,13 @@ async function handlePost(
 
         if (!reservation.allowed || !reservation.reservationId) {
           timing.enter("refund");
-          await releaseRateLimitReservation(authResult.userId, log);
-          reservedUserId = undefined;
+          const compensation = await releaseOutreachReservations({
+            credit: undefined,
+            slot: reservedSlot,
+            reason: "insufficient_credits",
+            log,
+          });
+          reservedSlot = undefined;
           return NextResponse.json(
             {
               success: false,
@@ -442,6 +527,7 @@ async function handlePost(
               billingMode: "credits",
               creditCost,
               creditsRemaining,
+              ...compensation,
             },
             {
               status: 402,
@@ -465,8 +551,8 @@ async function handlePost(
     }
 
     timing.enter("contextHydration");
-    // Server-owned resume context is now the source of truth. The request-body
-    // resume is retained only as a legacy fallback for older extension builds.
+    // Only saved resume records authorize resume context. A cached legacy body
+    // must not bring deleted information back into a provider request.
     let resumeForGeneration = "";
     let resumeSource: ResumeSource = "none";
     let jdFromBody = jd || "";
@@ -477,11 +563,6 @@ async function handlePost(
       );
       resumeForGeneration = primaryResume.text;
       resumeSource = primaryResume.source;
-
-      if (!resumeForGeneration.trim() && resume?.trim()) {
-        resumeForGeneration = resume;
-        resumeSource = "legacy_payload";
-      }
     } catch {
       log.warn(
         {
@@ -490,10 +571,6 @@ async function handlePost(
         },
         "Failed to hydrate primary resume",
       );
-      if (resume?.trim()) {
-        resumeForGeneration = resume;
-        resumeSource = "legacy_payload";
-      }
     }
 
     if (!jdFromBody.trim()) {
@@ -601,6 +678,54 @@ async function handlePost(
     }
     const userPrompt = `${buildPrompt(promptInput)}\n\n${buildAtomicProvenancePrompt(preparedGrounding.atomicSources ?? [])}`;
     timing.metrics({ inputChars: systemPrompt.length + userPrompt.length });
+    const admission = await startGenerationAttempt(
+      authResult.userId,
+      reservedSlot.id,
+      outputWorkUnits(OUTREACH_GENERATION_SETTINGS.maxOutputUnits),
+      log,
+    );
+    if (!admission.allowed) {
+      timing.enter("refund");
+      const compensation = await releaseOutreachReservations({
+        credit: reservedCredit,
+        slot: reservedSlot,
+        reason: "admission_denied",
+        log,
+      });
+      reservedCredit = undefined;
+      reservedSlot = undefined;
+      if (admission.unavailable)
+        return NextResponse.json(
+          {
+            error: "Generation is temporarily unavailable",
+            code: "QUOTA_SERVICE_UNAVAILABLE",
+            ...compensation,
+          },
+          { status: 503, headers: corsHeaders },
+        );
+      return NextResponse.json(
+        {
+          error: "Generation limit reached",
+          code: admission.code,
+          message:
+            admission.code === "GENERATION_IN_PROGRESS"
+              ? "Another draft is in progress. Wait for it to finish before trying again."
+              : admission.code === "SHORT_WINDOW_LIMIT_REACHED"
+                ? "Too many recent generation attempts. Try again after the retry interval."
+                : "Your rolling generation work budget is used. Try again after the reset.",
+          resetTime: admission.retryTime,
+          ...compensation,
+        },
+        {
+          status: 429,
+          headers: {
+            ...corsHeaders,
+            "Retry-After": String(retryAfterSeconds(admission.retryTime)),
+          },
+        },
+      );
+    }
+    activeAttempt = { userId: authResult.userId, id: admission.attemptId };
     timing.enter("model");
     const startTime = Date.now();
     const response = await createOutreachDraftMessage({
@@ -711,7 +836,7 @@ async function handlePost(
           resultChars: body.length,
           claimCount: draft.proof_points.length,
         });
-        reservedUserId = undefined;
+        reservedSlot = undefined;
         reservedCredit = undefined;
         return NextResponse.json(
           {
@@ -760,16 +885,19 @@ async function handlePost(
           },
           "Failed to validate cold email composition",
         );
-        if (reservedCredit) {
-          await refundCreditReservation(reservedCredit, "parse_failed", log);
-          reservedCredit = undefined;
-        }
-        await releaseRateLimitReservation(authResult.userId, log);
-        reservedUserId = undefined;
+        const compensation = await releaseOutreachReservations({
+          credit: reservedCredit,
+          slot: reservedSlot,
+          reason: "parse_failed",
+          log,
+        });
+        reservedCredit = undefined;
+        reservedSlot = undefined;
         return NextResponse.json(
           {
             error: "Generation format error, please retry",
             code: "PARSE_FAILED",
+            ...compensation,
           },
           { status: 502, headers: { ...corsHeaders, ...rateLimitHeaders } },
         );
@@ -849,7 +977,7 @@ async function handlePost(
 
         timing.metrics({ resultChars: finalBody.length });
         // Mark slot consumed — successful response, no refund needed.
-        reservedUserId = undefined;
+        reservedSlot = undefined;
         reservedCredit = undefined;
         return NextResponse.json(
           {
@@ -905,16 +1033,19 @@ async function handlePost(
         // Refund the rate-limit slot: user paid for a call that produced
         // no usable output. Quota was already incremented before Claude
         // ran; without this the user loses 1/30 on every upstream error.
-        if (reservedCredit) {
-          await refundCreditReservation(reservedCredit, "parse_failed", log);
-          reservedCredit = undefined;
-        }
-        await releaseRateLimitReservation(authResult.userId, log);
-        reservedUserId = undefined;
+        const compensation = await releaseOutreachReservations({
+          credit: reservedCredit,
+          slot: reservedSlot,
+          reason: "parse_failed",
+          log,
+        });
+        reservedCredit = undefined;
+        reservedSlot = undefined;
         return NextResponse.json(
           {
             error: "Generation format error, please retry",
             code: "PARSE_FAILED",
+            ...compensation,
           },
           { status: 502, headers: { ...corsHeaders, ...rateLimitHeaders } },
         );
@@ -994,7 +1125,7 @@ async function handlePost(
         resultChars: body.length,
         claimCount: draft.candidate_relevance ? 1 : 0,
       });
-      reservedUserId = undefined;
+      reservedSlot = undefined;
       reservedCredit = undefined;
       return NextResponse.json(
         {
@@ -1038,16 +1169,19 @@ async function handlePost(
         },
         "Failed to validate LinkedIn connection composition",
       );
-      if (reservedCredit) {
-        await refundCreditReservation(reservedCredit, "parse_failed", log);
-        reservedCredit = undefined;
-      }
-      await releaseRateLimitReservation(authResult.userId, log);
-      reservedUserId = undefined;
+      const compensation = await releaseOutreachReservations({
+        credit: reservedCredit,
+        slot: reservedSlot,
+        reason: "parse_failed",
+        log,
+      });
+      reservedCredit = undefined;
+      reservedSlot = undefined;
       return NextResponse.json(
         {
           error: "Generation format error, please retry",
           code: "PARSE_FAILED",
+          ...compensation,
         },
         { status: 502, headers: { ...corsHeaders, ...rateLimitHeaders } },
       );
@@ -1059,28 +1193,21 @@ async function handlePost(
     else if (getAnthropicApiErrorStatus(error) !== null)
       timing.failure("MODEL_REQUEST_FAILED");
     // Capture failure time in the stage that failed before timing compensation.
-    if (reservedCredit || reservedUserId) timing.enter("refund");
+    if (reservedCredit || reservedSlot) timing.enter("refund");
     log.error(
       { errorCode: "EXTENSION_GENERATION_FAILED" },
       "Extension generation error",
     );
 
-    if (reservedCredit) {
-      await refundCreditReservation(
-        reservedCredit,
-        error instanceof Error ? error.name : "unknown_error",
-        log,
-      );
-      reservedCredit = undefined;
-    }
-
-    // If a rate-limit slot was reserved but we never returned a successful
-    // response, refund it. Otherwise an Anthropic 5xx or Zod validation
-    // failure silently burns 1/30 daily quota.
-    if (reservedUserId) {
-      await releaseRateLimitReservation(reservedUserId, log);
-      reservedUserId = undefined;
-    }
+    // Keep failed compensation visible and reconcilable across all error paths.
+    const compensation = await releaseOutreachReservations({
+      credit: reservedCredit,
+      slot: reservedSlot,
+      reason: error instanceof Error ? error.name : "unknown_error",
+      log,
+    });
+    reservedCredit = undefined;
+    reservedSlot = undefined;
 
     if (error instanceof z.ZodError) {
       return NextResponse.json(
@@ -1088,6 +1215,7 @@ async function handlePost(
           success: false,
           error: "Invalid request",
           details: toZodErrorDetails(error),
+          ...compensation,
         },
         {
           status: 400,
@@ -1102,6 +1230,7 @@ async function handlePost(
         {
           success: false,
           error: "AI generation timed out. Please try again.",
+          ...compensation,
         },
         {
           status: 504,
@@ -1118,6 +1247,7 @@ async function handlePost(
           {
             success: false,
             error: "AI service authentication failed. Please contact support.",
+            ...compensation,
           },
           {
             status: 502,
@@ -1130,10 +1260,12 @@ async function handlePost(
         return NextResponse.json(
           {
             success: false,
-            error: "Rate limit exceeded, please try again later",
+            error: "AI service is temporarily busy. Please try again later.",
+            code: "MODEL_UPSTREAM_RATE_LIMIT",
+            ...compensation,
           },
           {
-            status: 429,
+            status: 503,
             headers: corsHeaders,
           },
         );
@@ -1144,12 +1276,21 @@ async function handlePost(
       {
         success: false,
         error: "Failed to generate content",
+        ...compensation,
       },
       {
         status: 500,
         headers: corsHeaders,
       },
     );
+  } finally {
+    if (activeAttempt) {
+      await finishGenerationAttempt(
+        activeAttempt.userId,
+        activeAttempt.id,
+        log,
+      );
+    }
   }
 }
 

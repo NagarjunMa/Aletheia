@@ -98,7 +98,7 @@ export function getCorsHeaders(
     "Access-Control-Allow-Headers":
       "Content-Type, Authorization, X-Extension-Source, X-Aletheia-API-Version, X-Aletheia-Extension-Version, X-Aletheia-Operation-Id, X-Request-Id",
     "Access-Control-Expose-Headers":
-      "X-Aletheia-API-Version, X-Aletheia-Minimum-Extension-Version, X-Aletheia-Operation-Id, X-Request-Id",
+      "X-Aletheia-API-Version, X-Aletheia-Minimum-Extension-Version, X-Aletheia-Operation-Id, X-Request-Id, X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset, Retry-After",
     "Access-Control-Allow-Credentials":
       options.allowCredentials && treatAsAllowed && acao ? "true" : "",
     Vary: "Origin",

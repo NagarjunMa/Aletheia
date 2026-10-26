@@ -10,7 +10,7 @@ export interface ConnectionValidationDetail {
 
 const MAX_DETAILS = 8;
 
-function safeField(path: (string | number)[]): string {
+function safeField(path: PropertyKey[]): string {
   if (
     path.length === 1 &&
     (path[0] === "target_observation" || path[0] === "cta")
@@ -46,18 +46,14 @@ export function connectionValidationDiagnostics(
     if (issue.code === "invalid_union") {
       // Zod wraps relevance-object failures in a nullable union. Expand only a
       // bounded prefix so text, array and item failures remain distinguishable.
-      pending.unshift(
-        ...issue.unionErrors
-          .flatMap((branch) => branch.issues)
-          .slice(0, MAX_DETAILS),
-      );
+      pending.unshift(...issue.errors.flat().slice(0, MAX_DETAILS));
     }
     if (issue.code === "too_big" || issue.code === "too_small") {
       let value: unknown = input;
       for (const part of issue.path) {
         value =
           value && typeof value === "object"
-            ? (value as Record<string | number, unknown>)[part]
+            ? (value as Record<PropertyKey, unknown>)[part]
             : undefined;
       }
       const actual =

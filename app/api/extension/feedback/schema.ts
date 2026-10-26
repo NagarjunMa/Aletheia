@@ -121,7 +121,7 @@ export const feedbackSchema = z.unknown().transform((value, context) => {
       : legacyFeedbackSchema;
   const result = schema.safeParse(value);
   if (!result.success) {
-    for (const issue of result.error.issues) context.addIssue(issue);
+    for (const issue of result.error.issues) context.addIssue({ ...issue });
     return z.NEVER;
   }
   return result.data;

@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { describe, expect, it, vi } from "vitest";
 import { isValidOperationId } from "../lib/logger-core.js";
+import { serializeGenerationError } from "./generation-core.js";
+import { getGenerationErrorPresentation } from "../popup/popup-core.js";
 const source = readFileSync(
   new URL("./service-worker.js", import.meta.url),
   "utf8",
@@ -11,6 +13,88 @@ const fn = source.slice(
   source.indexOf("\nasync function handleHealthCheck("),
 );
 describe("HTTP attempt diagnostics", () => {
+  it.each(["WORK_BUDGET_REACHED", "SHORT_WINDOW_LIMIT_REACHED"])(
+    "preserves retry guidance across HTTP, worker serialization and popup for %s",
+    async (code) => {
+      const resetTime = Date.now() + 600_000;
+      const fetch = vi.fn(async () => ({
+        ok: false,
+        status: 429,
+        headers: new Headers({ "Retry-After": "600" }),
+        json: async () => ({
+          code,
+          message: "Generation limit reached.",
+          resetTime,
+        }),
+      }));
+      const error = await runInNewContext(
+        `(${fn})("/api/extension/generate", {}, null, "operation", {maxAttempts: 1})`,
+        {
+          isValidOperationId,
+          CONFIG: {
+            DEFAULT_API_URL: "https://example.test",
+            MAX_RETRIES: 3,
+            TIMEOUT: 30000,
+          },
+          Date,
+          log: { info: vi.fn(), warn: vi.fn() },
+          AbortController,
+          setTimeout,
+          clearTimeout,
+          getAletheiaRequestHeaders: (value: unknown) => value,
+          getSafeErrorCode: () => code,
+          fetch,
+        },
+      ).catch((failure: unknown) => failure);
+      const response = serializeGenerationError(error);
+      expect(response).toMatchObject({
+        status: 429,
+        code,
+        resetTime,
+        retryAfterSeconds: 600,
+      });
+      expect(getGenerationErrorPresentation(response).message).toContain(
+        "10 minutes",
+      );
+      expect(fetch).toHaveBeenCalledTimes(1);
+    },
+  );
+  it("returns only validated server quota headers to the popup", async () => {
+    const resetTime = Date.now() + 60_000;
+    const sandbox = {
+      isValidOperationId,
+      CONFIG: {
+        DEFAULT_API_URL: "https://example.test",
+        MAX_RETRIES: 3,
+        TIMEOUT: 30_000,
+      },
+      Date,
+      log: { info: vi.fn(), warn: vi.fn() },
+      AbortController,
+      setTimeout,
+      clearTimeout,
+      getAletheiaRequestHeaders: (value: unknown) => value,
+      getSafeErrorCode: () => "API_REQUEST_FAILED",
+      fetch: async () => ({
+        ok: true,
+        status: 200,
+        headers: {
+          get: (name: string) =>
+            new Map([
+              ["X-RateLimit-Limit", "30"],
+              ["X-RateLimit-Remaining", "27"],
+              ["X-RateLimit-Reset", String(resetTime)],
+            ]).get(name) ?? null,
+        },
+        json: async () => ({ success: true }),
+      }),
+    };
+    const result = await runInNewContext(
+      `(${fn})("/api/extension/generate", {}, null, "operation", {maxAttempts: 1})`,
+      sandbox,
+    );
+    expect(result.serverQuota).toEqual({ limit: 30, remaining: 27, resetTime });
+  });
   it.each([true, false])(
     "records each attempt with valid correlation only (%s)",
     async (validId) => {

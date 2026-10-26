@@ -272,7 +272,10 @@ vi.mock("@supabase/supabase-js", () => ({
   createClient: vi.fn(() => ({
     auth: { getUser: mockAuthGetUser },
     from: mockFrom,
-    rpc: mockRpc,
+    rpc: (...args: unknown[]) => {
+      const response = Promise.resolve(mockRpc(...args));
+      return Object.assign(response, { abortSignal: () => response });
+    },
   })),
 }));
 
@@ -353,9 +356,32 @@ beforeEach(() => {
     error: null,
   });
   // Happy path rate limit
-  mockRpc.mockResolvedValue({
-    data: [{ allowed: true, remaining: 29, reset_time: Date.now() + 86400000 }],
-    error: null,
+  mockRpc.mockImplementation(async (name: string) => {
+    if (name === "reserve_generation_daily_slot")
+      return {
+        data: [
+          {
+            allowed: true,
+            remaining: 29,
+            reset_time: Date.now() + 86400000,
+            reservation_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          },
+        ],
+        error: null,
+      };
+    if (name === "start_generation_attempt")
+      return {
+        data: [
+          { allowed: true, attempt_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" },
+        ],
+        error: null,
+      };
+    if (
+      name === "finish_generation_attempt" ||
+      name === "release_generation_daily_slot"
+    )
+      return { data: true, error: null };
+    return { data: null, error: null };
   });
   // Default no preferences
   mockMaybeSingle.mockResolvedValue({ data: null, error: null });
@@ -632,6 +658,25 @@ describe("generateRequestSchema", () => {
     expect(result).not.toHaveProperty("profileUrl");
   });
 
+  it("ignores unrelated legacy extras but rejects server-owned admission fields", () => {
+    const legacy = generateRequestSchema.parse({
+      ...validPayload,
+      oldClientField: "ignored",
+    });
+    expect(legacy).not.toHaveProperty("oldClientField");
+    for (const field of [
+      "workUnits",
+      "questionCount",
+      "reservationId",
+      "dailyLimit",
+    ]) {
+      expect(
+        generateRequestSchema.safeParse({ ...validPayload, [field]: 0 })
+          .success,
+      ).toBe(false);
+    }
+  });
+
   it("fails when category is invalid", () => {
     const result = generateRequestSchema.safeParse({
       ...validPayload,
@@ -762,7 +807,7 @@ describe("ALE-46 private atomic provenance", () => {
         expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
         expect(
           mockRpc.mock.calls.filter(
-            ([name]) => name === "release_rate_limit_reservation",
+            ([name]) => name === "release_generation_daily_slot",
           ),
         ).toHaveLength(1);
       } finally {
@@ -907,6 +952,123 @@ describe("POST /api/extension/generate", () => {
     expect(res.status).toBe(429);
     const body = await res.json();
     expect(body.error).toBe("Daily limit reached");
+    expect(body.code).toBe("DAILY_LIMIT_REACHED");
+    expect(Number(res.headers.get("Retry-After"))).toBeGreaterThan(0);
+  });
+
+  it("returns 503 without invoking the model when quota storage is unavailable", async () => {
+    mockRpc.mockResolvedValueOnce({
+      data: null,
+      error: { message: "PRIVATE database failure" },
+    });
+
+    const res = await POST(
+      makeRequest({
+        method: "POST",
+        headers: { authorization: "Bearer test" },
+        body: validPayload,
+      }),
+    );
+
+    expect(res.status).toBe(503);
+    await expect(res.json()).resolves.toMatchObject({
+      code: "QUOTA_SERVICE_UNAVAILABLE",
+    });
+    expect(res.headers.get("Retry-After")).toBeNull();
+    expect(mockAnthropicCreate).not.toHaveBeenCalled();
+  });
+
+  it("returns 429 with an actual retry delay when a generation is already running", async () => {
+    mockRpc.mockImplementation(async (name: string) => {
+      if (name === "reserve_generation_daily_slot")
+        return {
+          data: [
+            {
+              allowed: true,
+              remaining: 29,
+              reset_time: Date.now() + 86_400_000,
+              reservation_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            },
+          ],
+          error: null,
+        };
+      if (name === "start_generation_attempt")
+        return {
+          data: [
+            {
+              allowed: false,
+              denial_code: "GENERATION_IN_PROGRESS",
+              retry_time: new Date(Date.now() + 120_000).toISOString(),
+            },
+          ],
+          error: null,
+        };
+      if (name === "release_generation_daily_slot")
+        return { data: true, error: null };
+      return { data: null, error: null };
+    });
+    const response = await POST(
+      makeRequest({
+        method: "POST",
+        headers: { authorization: "Bearer test" },
+        body: validPayload,
+      }),
+    );
+    expect(response.status).toBe(429);
+    expect(response.headers.get("Retry-After")).toMatch(/^1\d\d$/u);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "GENERATION_IN_PROGRESS",
+    });
+    expect(mockAnthropicCreate).not.toHaveBeenCalled();
+    expect(mockRpc.mock.calls.map(([name]) => name)).toContain(
+      "release_generation_daily_slot",
+    );
+  });
+
+  it("fails closed when the attempt RPC fails after daily reservation", async () => {
+    mockRpc.mockImplementation(async (name: string) => {
+      if (name === "reserve_generation_daily_slot")
+        return {
+          data: [
+            {
+              allowed: true,
+              remaining: 29,
+              reset_time: Date.now() + 86_400_000,
+              reservation_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            },
+          ],
+          error: null,
+        };
+      if (name === "start_generation_attempt")
+        return { data: null, error: { message: "PRIVATE" } };
+      if (name === "release_generation_daily_slot")
+        return { data: true, error: null };
+      return { data: null, error: null };
+    });
+    const response = await POST(
+      makeRequest({
+        method: "POST",
+        headers: { authorization: "Bearer test" },
+        body: validPayload,
+      }),
+    );
+    expect(response.status).toBe(503);
+    expect(response.headers.get("Retry-After")).toBeNull();
+    expect(mockAnthropicCreate).not.toHaveBeenCalled();
+  });
+
+  it("rejects a forged client work-unit value before any quota or model call", async () => {
+    const res = await POST(
+      makeRequest({
+        method: "POST",
+        headers: { authorization: "Bearer test" },
+        body: { ...validPayload, workUnits: 0 },
+      }),
+    );
+
+    expect(res.status).toBe(400);
+    expect(mockRpc).not.toHaveBeenCalled();
+    expect(mockAnthropicCreate).not.toHaveBeenCalled();
   });
 
   it("returns candidate-context 503 before rate-limit or model work", async () => {
@@ -1116,7 +1278,7 @@ describe("POST /api/extension/generate", () => {
     expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
     expect(
       mockRpc.mock.calls.filter(
-        ([name]) => name === "release_rate_limit_reservation",
+        ([name]) => name === "release_generation_daily_slot",
       ),
     ).toHaveLength(0);
   });
@@ -1199,7 +1361,7 @@ describe("POST /api/extension/generate", () => {
       expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
       expect(
         mockRpc.mock.calls.filter(
-          ([name]) => name === "release_rate_limit_reservation",
+          ([name]) => name === "release_generation_daily_slot",
         ),
       ).toHaveLength(0);
     },
@@ -1508,7 +1670,7 @@ describe("POST /api/extension/generate", () => {
     );
   });
 
-  it("returns 429 when Anthropic throws APIError status 429", async () => {
+  it("returns service-unavailable rather than a user-quota 429 when Anthropic throttles", async () => {
     mockAnthropicCreate.mockRejectedValueOnce(
       new (await import("@anthropic-ai/sdk")).default.APIError(
         429,
@@ -1525,9 +1687,9 @@ describe("POST /api/extension/generate", () => {
         body: validPayload,
       }),
     );
-    expect(res.status).toBe(429);
+    expect(res.status).toBe(503);
     const body = await res.json();
-    expect(body.error).toBe("Rate limit exceeded, please try again later");
+    expect(body.code).toBe("MODEL_UPSTREAM_RATE_LIMIT");
   });
 
   // T4 — linkedin_inmail happy path
@@ -1863,23 +2025,18 @@ I build distributed systems. Previously at BigCo.`;
     });
   });
 
-  describe("server resume hydration + legacy fallback", () => {
+  describe("server resume hydration without retired context", () => {
     const STORED_RESUME =
       "Nagarjun — Senior Engineer at Acme. Built distributed systems at BigCo. Loves Python.";
     const STORED_JD =
       "Looking for AI/ML platform roles at growth-stage startups.";
 
-    it("hydrates resume from legacy profiles when no primary resume exists", async () => {
+    it("ignores retired legacy resume text when no primary resume exists", async () => {
       // 1st maybeSingle call = user_preferences (no style)
       mockMaybeSingle.mockResolvedValueOnce({ data: null, error: null });
       // 2nd call = user_resumes primary (none)
       mockMaybeSingle.mockResolvedValueOnce({ data: null, error: null });
-      // 3rd call = profiles legacy resume
-      mockMaybeSingle.mockResolvedValueOnce({
-        data: { resume: STORED_RESUME },
-        error: null,
-      });
-      // 4th call = profiles target JD
+      // 3rd call = profiles target JD (retired resume is never queried)
       mockMaybeSingle.mockResolvedValueOnce({
         data: { target_job_description: STORED_JD },
         error: null,
@@ -1942,7 +2099,7 @@ I build distributed systems. Previously at BigCo.`;
       expect(userPrompt).toContain("BODY_JD_WINS");
     });
 
-    it("uses legacy request payload only when server has no resume", async () => {
+    it("does not resurrect a cached request resume when the server has none", async () => {
       mockMaybeSingle.mockResolvedValueOnce({ data: null, error: null });
       mockMaybeSingle.mockResolvedValueOnce({ data: null, error: null });
       mockMaybeSingle.mockResolvedValueOnce({
@@ -1975,13 +2132,9 @@ I build distributed systems. Previously at BigCo.`;
       expect(userPrompt).not.toContain("Senior Engineer at Acme");
     });
 
-    it("hydrates only the missing field (body resume + DB jd)", async () => {
+    it("hydrates the missing job description without restoring a cached resume", async () => {
       mockMaybeSingle.mockResolvedValueOnce({ data: null, error: null });
       mockMaybeSingle.mockResolvedValueOnce({ data: null, error: null });
-      mockMaybeSingle.mockResolvedValueOnce({
-        data: { resume: null },
-        error: null,
-      });
       mockMaybeSingle.mockResolvedValueOnce({
         data: { target_job_description: STORED_JD },
         error: null,
@@ -2086,7 +2239,7 @@ I build distributed systems. Previously at BigCo.`;
       // After the failure, mockRpc should have been called with the
       // release RPC name. First call was check_and_increment.
       const calls = mockRpc.mock.calls.map((c) => c[0]);
-      expect(calls).toContain("release_rate_limit_reservation");
+      expect(calls).toContain("release_generation_daily_slot");
     });
 
     it("refunds rate-limit slot on Anthropic 5xx", async () => {
@@ -2104,7 +2257,7 @@ I build distributed systems. Previously at BigCo.`;
       );
       expect(res.status).toBe(500);
       const calls = mockRpc.mock.calls.map((c) => c[0]);
-      expect(calls).toContain("release_rate_limit_reservation");
+      expect(calls).toContain("release_generation_daily_slot");
     });
 
     it("refunds rate-limit slot on Claude timeout", async () => {
@@ -2122,7 +2275,7 @@ I build distributed systems. Previously at BigCo.`;
       );
       expect(res.status).toBe(504);
       const calls = mockRpc.mock.calls.map((c) => c[0]);
-      expect(calls).toContain("release_rate_limit_reservation");
+      expect(calls).toContain("release_generation_daily_slot");
     });
 
     it("does NOT refund on successful generation", async () => {
@@ -2135,7 +2288,7 @@ I build distributed systems. Previously at BigCo.`;
       );
       expect(res.status).toBe(200);
       const calls = mockRpc.mock.calls.map((c) => c[0]);
-      expect(calls).not.toContain("release_rate_limit_reservation");
+      expect(calls).not.toContain("release_generation_daily_slot");
     });
 
     it("does NOT refund when 429 path is hit (no slot was consumed)", async () => {
@@ -2155,7 +2308,7 @@ I build distributed systems. Previously at BigCo.`;
       );
       expect(res.status).toBe(429);
       const calls = mockRpc.mock.calls.map((c) => c[0]);
-      expect(calls).not.toContain("release_rate_limit_reservation");
+      expect(calls).not.toContain("release_generation_daily_slot");
     });
   });
 });
@@ -2250,7 +2403,7 @@ describe("ALE-53 server failure capture", () => {
           kind === "provider429"
         ) {
           expect(response.status).toBe(
-            kind === "provider429" ? 429 : kind === "timeout" ? 504 : 502,
+            kind === "provider429" ? 503 : kind === "timeout" ? 504 : 502,
           );
           expect(captureFailureMock).toHaveBeenCalledTimes(1);
           expect(captureFailureMock).toHaveBeenCalledWith(
@@ -2289,6 +2442,33 @@ it("ALE-53 captures original debit when provider throttling and auto-refund both
       error: null,
     });
     mockRpc.mockImplementation(async (name) => {
+      if (name === "reserve_generation_daily_slot")
+        return {
+          data: [
+            {
+              allowed: true,
+              remaining: 29,
+              reset_time: Date.now() + 86400000,
+              reservation_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            },
+          ],
+          error: null,
+        };
+      if (name === "start_generation_attempt")
+        return {
+          data: [
+            {
+              allowed: true,
+              attempt_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            },
+          ],
+          error: null,
+        };
+      if (
+        name === "finish_generation_attempt" ||
+        name === "release_generation_daily_slot"
+      )
+        return { data: true, error: null };
       if (name === "grant_trial_credits_once")
         return { data: [{ granted: false, balance: 40 }], error: null };
       if (name === "reserve_generation_credits")
@@ -2316,7 +2496,7 @@ it("ALE-53 captures original debit when provider throttling and auto-refund both
         body: validPayload,
       }),
     );
-    expect(response.status).toBe(429);
+    expect(response.status).toBe(503);
     expect(captureFailureMock).toHaveBeenCalledWith(
       expect.objectContaining({
         userId: user,
@@ -2331,5 +2511,73 @@ it("ALE-53 captures original debit when provider throttling and auto-refund both
   } finally {
     billingForCapture.enabled = false;
     vi.unstubAllEnvs();
+  }
+});
+
+it("reports pending compensation when admission denies and both refunds fail", async () => {
+  billingForCapture.enabled = true;
+  const user = "22222222-2222-4222-8222-222222222222";
+  const debit = "33333333-3333-4333-8333-333333333333";
+  try {
+    mockAuthGetUser.mockResolvedValue({
+      data: { user: { id: user, email: "customer@example.com" } },
+      error: null,
+    });
+    mockRpc.mockImplementation(async (name) => {
+      if (name === "reserve_generation_daily_slot")
+        return {
+          data: [
+            {
+              allowed: true,
+              remaining: 29,
+              reset_time: Date.now() + 86400000,
+              reservation_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            },
+          ],
+          error: null,
+        };
+      if (name === "start_generation_attempt")
+        return {
+          data: [
+            {
+              allowed: false,
+              denial_code: "GENERATION_IN_PROGRESS",
+              retry_time: Date.now() + 60000,
+            },
+          ],
+          error: null,
+        };
+      if (name === "grant_trial_credits_once")
+        return { data: [{ granted: false, balance: 40 }], error: null };
+      if (name === "reserve_generation_credits")
+        return {
+          data: [{ allowed: true, reservation_id: debit, balance_after: 38 }],
+          error: null,
+        };
+      if (
+        name === "refund_generation_credits" ||
+        name === "release_generation_daily_slot"
+      )
+        return { data: null, error: { message: "DATABASE_PRIVATE" } };
+      return { data: null, error: null };
+    });
+    const response = await POST(
+      makeRequest({
+        method: "POST",
+        headers: { Authorization: "Bearer test-token" },
+        body: validPayload,
+      }),
+    );
+    expect(response.status).toBe(429);
+    expect(response.headers.get("Retry-After")).toMatch(/^\d+$/u);
+    expect(await response.json()).toMatchObject({
+      code: "GENERATION_IN_PROGRESS",
+      billing: "refund_pending",
+      refundReference: debit,
+      quotaRestoration: "pending_review",
+    });
+    expect(mockAnthropicCreate).not.toHaveBeenCalled();
+  } finally {
+    billingForCapture.enabled = false;
   }
 });

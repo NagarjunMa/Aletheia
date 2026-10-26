@@ -17,7 +17,10 @@ vi.mock("@/lib/supabase/server", () => ({
     auth: { getUser: mockAuthGetUser },
   })),
   createBearerServiceClient: vi.fn(() => ({
-    rpc: mockRpc,
+    rpc: (...args: unknown[]) => {
+      const response = Promise.resolve(mockRpc(...args));
+      return Object.assign(response, { abortSignal: () => response });
+    },
     from: mockFrom,
   })),
 }));
@@ -204,13 +207,14 @@ beforeEach(() => {
     },
   });
   mockRpc.mockImplementation(async (name: string) => {
-    if (name === "check_and_increment_rate_limit") {
+    if (name === "reserve_generation_daily_slot") {
       return {
         data: [
           {
             allowed: true,
             remaining: 29,
             reset_time: new Date(Date.now() + 86_400_000).toISOString(),
+            reservation_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
           },
         ],
         error: null,
@@ -234,8 +238,19 @@ beforeEach(() => {
     if (name === "refund_generation_credits") {
       return { data: [{ refunded: true, balance: 40 }], error: null };
     }
-    if (name === "release_rate_limit_reservation") {
-      return { data: [{ released: true }], error: null };
+    if (name === "start_generation_attempt") {
+      return {
+        data: [
+          { allowed: true, attempt_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" },
+        ],
+        error: null,
+      };
+    }
+    if (
+      name === "release_generation_daily_slot" ||
+      name === "finish_generation_attempt"
+    ) {
+      return { data: true, error: null };
     }
     return { data: [], error: null };
   });
@@ -294,7 +309,7 @@ describe("POST /api/extension/generate with credit billing enabled", () => {
       expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
       for (const name of [
         "refund_generation_credits",
-        "release_rate_limit_reservation",
+        "release_generation_daily_slot",
       ]) {
         expect(mockRpc.mock.calls.filter(([rpc]) => rpc === name)).toHaveLength(
           failed ? 1 : 0,
@@ -317,6 +332,46 @@ describe("POST /api/extension/generate with credit billing enabled", () => {
     expect(res.status).toBe(503);
     expect(mockRpc).not.toHaveBeenCalled();
     expect(mockAnthropicCreate).not.toHaveBeenCalled();
+  });
+
+  it("refunds credits and the exact daily slot when admission arrives too late", async () => {
+    let elapsed = 0;
+    const clock = vi
+      .spyOn(performance, "now")
+      .mockImplementation(() => elapsed);
+    const originalRpc = mockRpc.getMockImplementation()!;
+    mockRpc.mockImplementation(async (...args) => {
+      const result = await originalRpc(...args);
+      if (args[0] === "start_generation_attempt") elapsed = 181_000;
+      return result;
+    });
+    try {
+      const { POST } = await importRouteWithBillingEnabled();
+      const response = await POST(
+        makeRequest({
+          method: "POST",
+          headers: { authorization: "Bearer test" },
+          body: validPayload,
+        }),
+      );
+      expect(response.status).toBe(503);
+      expect(response.headers.get("Retry-After")).toBeNull();
+      expect(mockAnthropicCreate).not.toHaveBeenCalled();
+      expect(
+        mockRpc.mock.calls.filter(
+          ([name]) => name === "refund_generation_credits",
+        ),
+      ).toHaveLength(1);
+      const releases = mockRpc.mock.calls.filter(
+        ([name]) => name === "release_generation_daily_slot",
+      );
+      expect(releases).toHaveLength(1);
+      expect(releases[0]?.[1]).toMatchObject({
+        p_reservation_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      });
+    } finally {
+      clock.mockRestore();
+    }
   });
 
   it("reserves credits and returns billing metadata on success", async () => {
@@ -380,7 +435,7 @@ describe("POST /api/extension/generate with credit billing enabled", () => {
       creditsRemaining: null,
       unlimitedCredits: true,
     });
-    expect(rpcCalls).toContain("check_and_increment_rate_limit");
+    expect(rpcCalls).toContain("reserve_generation_daily_slot");
     expect(rpcCalls).not.toContain("grant_trial_credits_once");
     expect(rpcCalls).not.toContain("reserve_generation_credits");
     expect(rpcCalls).not.toContain("refund_generation_credits");
@@ -388,13 +443,14 @@ describe("POST /api/extension/generate with credit billing enabled", () => {
 
   it("returns 402 and releases the daily slot when credits are insufficient", async () => {
     mockRpc.mockImplementation(async (name: string) => {
-      if (name === "check_and_increment_rate_limit") {
+      if (name === "reserve_generation_daily_slot") {
         return {
           data: [
             {
               allowed: true,
               remaining: 29,
               reset_time: new Date(Date.now() + 86_400_000).toISOString(),
+              reservation_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
             },
           ],
           error: null,
@@ -409,8 +465,8 @@ describe("POST /api/extension/generate with credit billing enabled", () => {
           error: null,
         };
       }
-      if (name === "release_rate_limit_reservation") {
-        return { data: [{ released: true }], error: null };
+      if (name === "release_generation_daily_slot") {
+        return { data: true, error: null };
       }
       return { data: [], error: null };
     });
@@ -433,8 +489,120 @@ describe("POST /api/extension/generate with credit billing enabled", () => {
     });
     expect(mockAnthropicCreate).not.toHaveBeenCalled();
     expect(mockRpc.mock.calls.map((call) => call[0])).toContain(
-      "release_rate_limit_reservation",
+      "release_generation_daily_slot",
     );
+  });
+
+  it("reports a pending daily slot when the insufficient-credit release fails", async () => {
+    const originalRpc = mockRpc.getMockImplementation();
+    mockRpc.mockImplementation(async (name: string, args: unknown) => {
+      if (name === "reserve_generation_credits")
+        return {
+          data: [{ allowed: false, reservation_id: null, balance_after: 1 }],
+          error: null,
+        };
+      if (name === "release_generation_daily_slot")
+        return { data: null, error: { message: "PRIVATE" } };
+      return originalRpc?.(name, args);
+    });
+    const { POST } = await importRouteWithBillingEnabled();
+    const response = await POST(
+      makeRequest({
+        method: "POST",
+        headers: { authorization: "Bearer test" },
+        body: validPayload,
+      }),
+    );
+    expect(response.status).toBe(402);
+    expect(await response.json()).toMatchObject({
+      code: "INSUFFICIENT_CREDITS",
+      quotaRestoration: "pending_review",
+    });
+    expect(mockAnthropicCreate).not.toHaveBeenCalled();
+  });
+
+  it("reports both pending refunds when unusable output cannot be compensated", async () => {
+    const originalRpc = mockRpc.getMockImplementation();
+    mockRpc.mockImplementation(async (name: string, args: unknown) => {
+      if (
+        name === "refund_generation_credits" ||
+        name === "release_generation_daily_slot"
+      )
+        return { data: null, error: { message: "PRIVATE" } };
+      if (name === "reserve_generation_credits")
+        return {
+          data: [
+            {
+              allowed: true,
+              reservation_id: "33333333-3333-4333-8333-333333333333",
+              balance_after: 38,
+            },
+          ],
+          error: null,
+        };
+      return originalRpc?.(name, args);
+    });
+    mockAnthropicCreate.mockResolvedValueOnce({
+      content: [{ type: "text", text: "not a valid tool result" }],
+      usage: { input_tokens: 100, output_tokens: 40 },
+    });
+    const { POST } = await importRouteWithBillingEnabled();
+    const response = await POST(
+      makeRequest({
+        method: "POST",
+        headers: { authorization: "Bearer test" },
+        body: validPayload,
+      }),
+    );
+    expect(response.status).toBe(502);
+    expect(await response.json()).toMatchObject({
+      code: "PARSE_FAILED",
+      billing: "refund_pending",
+      refundReference: "33333333-3333-4333-8333-333333333333",
+      quotaRestoration: "pending_review",
+    });
+  });
+
+  it("keeps a provider failure and failed compensation visible without leaking its error", async () => {
+    const originalRpc = mockRpc.getMockImplementation();
+    mockRpc.mockImplementation(async (name: string, args: unknown) => {
+      if (
+        name === "refund_generation_credits" ||
+        name === "release_generation_daily_slot"
+      )
+        return { data: null, error: { message: "PRIVATE" } };
+      if (name === "reserve_generation_credits")
+        return {
+          data: [
+            {
+              allowed: true,
+              reservation_id: "44444444-4444-4444-8444-444444444444",
+              balance_after: 38,
+            },
+          ],
+          error: null,
+        };
+      return originalRpc?.(name, args);
+    });
+    mockAnthropicCreate.mockRejectedValueOnce(
+      new Error("PRIVATE provider body"),
+    );
+    const { POST } = await importRouteWithBillingEnabled();
+    const response = await POST(
+      makeRequest({
+        method: "POST",
+        headers: { authorization: "Bearer test" },
+        body: validPayload,
+      }),
+    );
+    expect(response.status).toBe(500);
+    const body = await response.json();
+    expect(body).toMatchObject({
+      billing: "refund_pending",
+      refundReference: "44444444-4444-4444-8444-444444444444",
+      quotaRestoration: "pending_review",
+    });
+    expect(JSON.stringify(body)).not.toContain("PRIVATE");
   });
 
   it("refunds reserved credits when email tool output validation fails", async () => {
@@ -465,7 +633,7 @@ describe("POST /api/extension/generate with credit billing enabled", () => {
       p_metadata: { reason: "parse_failed" },
     });
     expect(mockRpc.mock.calls.map((call) => call[0])).toContain(
-      "release_rate_limit_reservation",
+      "release_generation_daily_slot",
     );
   });
 
@@ -499,7 +667,7 @@ describe("POST /api/extension/generate with credit billing enabled", () => {
         }),
       );
       expect(mockRpc.mock.calls.map((call) => call[0])).toContain(
-        "release_rate_limit_reservation",
+        "release_generation_daily_slot",
       );
     },
   );
@@ -533,7 +701,7 @@ describe("POST /api/extension/generate with credit billing enabled", () => {
       p_metadata: { reason: "parse_failed" },
     });
     expect(mockRpc.mock.calls.map((call) => call[0])).toContain(
-      "release_rate_limit_reservation",
+      "release_generation_daily_slot",
     );
   });
 });

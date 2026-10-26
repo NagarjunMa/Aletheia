@@ -16,7 +16,22 @@ export type RateLimitResult = {
   allowed: boolean;
   remainingRequests: number;
   resetTime: number;
+  unavailable?: boolean;
+  reservationId?: string;
 };
+
+export type AttemptAdmissionResult =
+  | { allowed: true; attemptId: string }
+  | { allowed: false; unavailable: true }
+  | {
+      allowed: false;
+      unavailable: false;
+      code:
+        | "GENERATION_IN_PROGRESS"
+        | "SHORT_WINDOW_LIMIT_REACHED"
+        | "WORK_BUDGET_REACHED";
+      retryTime: number;
+    };
 
 export type ReservedCredit = {
   userId: string;
