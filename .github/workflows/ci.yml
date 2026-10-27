@@ -24,6 +24,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Validate engineering policy installation
+        run: npm run policy:check
+
       - name: Audit web dependencies
         run: npm run security:audit
 

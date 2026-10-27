@@ -390,3 +390,89 @@ Failure modes: 400 (Zod with `details[]`), 401 (auth), 429 (rate limit — local
 4. Test sanitizer and fingerprint detector with adversarial inputs
 5. Cover rate limit logic for both under-limit and over-limit cases
 6. Write tests before marking any feature complete — test files are part of the definition of done
+
+## Mandatory Engineering Loop
+
+<!-- engineering-policy:contract -->
+
+### Change contract
+
+For each non-trivial task, read applicable instructions and the complete active
+issue; define observable acceptance criteria, non-goals and affected callers.
+Use the installed production-engineering-loop skill and the entry point's Linear
+implementation/audit templates. Preserve unrelated work. Planning and read-only
+review do not authorize implementation, deployment or production mutations.
+
+<!-- engineering-policy:risk -->
+
+### Risk tier
+
+Choose the highest applicable tier: Trivial (nonbehavioral text), Standard (local
+behavior), Significant (shared rules/integrations/concurrency), Critical
+(authentication, authorization, billing, privileged SQL or production data).
+Explain the actual boundary and consequences, not just a file count. Critical
+changes need additional independent/human review and applicable sandbox evidence.
+
+<!-- engineering-policy:implementation -->
+
+### Implementation
+
+Use TDD for meaningful behavior: observe a failing regression before the fix,
+then pass it and affected native checks. Explain a justified non-executable
+exception for prose-only changes. Reuse existing ownership and canonical business
+rules; prefer the smallest complete correction over duplicate policy or new
+infrastructure. Never weaken valid security, validation or test requirements.
+
+<!-- engineering-policy:review -->
+
+### Review
+
+Inspect the actual full diff and execution boundaries for correctness,
+architecture, security/privacy/data integrity, reliability, performance/memory/
+cost, compatibility, regression and rollout/rollback. Obtain a fresh independent
+review where the skill requires it; report missing review as pending. Do not
+claim that automated review certifies correctness or provides deployment consent.
+
+<!-- engineering-policy:evidence -->
+
+### Verification evidence
+
+Use the repository-native commands and relevant negative cases; tie results to
+the tested source. Record Passed, Failed, Blocked and Not run honestly, with
+reasons for missing checks. Record model/provider/hosted tests separately from
+mocks and local fixtures. Do not include credentials, user data or raw prompts.
+Maintain feature evidence and docs/progress.txt; substantial records can be
+linked in the PR rather than copied into it.
+
+<!-- engineering-policy:stop -->
+
+### Completion and release
+
+Fix material in-scope findings and rerun affected checks. Mark an issue complete
+only when its criteria and applicable gates pass with no unresolved material
+finding. For phased work, complete only the audited phase. Preserve unverified
+release gates and obtain any missing authorization before external mutations.
+Stop when the contract passes; do not turn optional polish into a blocking loop.
+
+<!-- engineering-policy:aletheia -->
+
+### Repository policy checks
+
+`npm run policy:check` validates the instruction/template installation and its
+format/lint; the local pre-commit hook and normal CI run it. The separate
+**Engineering Policy** workflow checks installation plus PR risk/evidence using
+Node 24 without installing dependencies. It reruns on description edits without
+rerunning the application's expensive CI suite solely for that edit.
+
+A PR description must include `Risk: <tier> — <reason>` and a Verification or
+Validation section with at least one `Passed:`, `Failed:`, `Blocked:` or
+`Not run:` line naming the check/result or explaining the missing check. Hidden
+comments and fenced/indented examples do not count. Complete the PR template or
+use equivalent concise Markdown; document honest blockers rather than inventing
+passes. Detailed security, cost and rollout evidence can live in a linked record.
+
+The validator checks structure and presence, not truth, review quality or whether
+a command ran. Repository policy text/workflows can themselves change in a PR
+and require normal review. Existing CI gates remain authoritative. Making this
+status mandatory in GitHub branch protection is a separate repository setting;
+this change does not enable branch protection or authorize a merge/deployment.
