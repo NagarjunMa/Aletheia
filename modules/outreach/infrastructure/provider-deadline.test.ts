@@ -52,6 +52,14 @@ it.each(["outreach", "yc"])(
             systemPrompt: "synthetic",
             userPrompt: "synthetic",
             category: "linkedin_connection",
+            atomicSources: [
+              {
+                id: "target.profile.0",
+                scope: "target",
+                kind: "target_observation",
+                content: "Synthetic complete fact.",
+              },
+            ],
             emailMode: "initial_outreach",
           })
         : createYcApplicationDraft({

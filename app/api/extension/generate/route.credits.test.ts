@@ -32,7 +32,29 @@ vi.mock("@/lib/resumes/service", () => ({
 vi.mock(
   "@/modules/outreach/application/prepare-outreach-grounding-context",
   () => ({
-    prepareOutreachGroundingContext: mockPrepareOutreachGroundingContext,
+    prepareOutreachGroundingContext: async (...args: unknown[]) => {
+      const context = await mockPrepareOutreachGroundingContext(...args);
+      // Existing isolated route fixtures predate atomic target preparation.
+      // Supply a complete target unit unless a test provides its own ledger.
+      return {
+        ...context,
+        atomicSources: [
+          ...(context.atomicSources ?? []),
+          ...((context.atomicSources ?? []).some(
+            (source: { scope: string }) => source.scope === "target",
+          )
+            ? []
+            : [
+                {
+                  id: "target.profile.0",
+                  scope: "target",
+                  kind: "target_observation",
+                  content: "Works on evaluation tooling.",
+                },
+              ]),
+        ],
+      };
+    },
   }),
 );
 

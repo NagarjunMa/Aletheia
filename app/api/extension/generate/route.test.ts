@@ -312,7 +312,22 @@ vi.mock(
 vi.mock(
   "@/modules/outreach/application/prepare-outreach-grounding-context",
   () => ({
-    prepareOutreachGroundingContext: mockPrepareOutreachGroundingContext,
+    prepareOutreachGroundingContext: async (...args: unknown[]) => {
+      const context = await mockPrepareOutreachGroundingContext(...args);
+      // Existing isolated route fixtures predate atomic target preparation.
+      // Supply a complete target unit unless a test provides its own ledger.
+      return {
+        atomicSources: [
+          {
+            id: "target.profile.0",
+            scope: "target",
+            kind: "target_observation",
+            content: "Works on evaluation tooling.",
+          },
+        ],
+        ...context,
+      };
+    },
   }),
 );
 
@@ -411,6 +426,12 @@ beforeEach(() => {
       },
     ],
     atomicSources: [
+      {
+        id: "target.profile.0",
+        scope: "target",
+        kind: "target_observation",
+        content: "Works on evaluation tooling.",
+      },
       {
         id: "profile.current_responsibilities.value",
         rootId: "profile.current_responsibilities",
@@ -1240,6 +1261,12 @@ describe("POST /api/extension/generate", () => {
       metadata: {},
       atomicSources: [
         {
+          id: "target.profile.0",
+          scope: "target",
+          kind: "target_observation",
+          content: "Works on evaluation tooling.",
+        },
+        {
           id: "target.length",
           scope: "target",
           kind: "target_observation",
@@ -1308,6 +1335,12 @@ describe("POST /api/extension/generate", () => {
         sources: [source],
         atomicSources: [
           {
+            id: "target.profile.0",
+            scope: "target",
+            kind: "target_observation",
+            content: "Works on evaluation tooling.",
+          },
+          {
             id: source.id,
             scope: "candidate",
             kind: "action",
@@ -1355,7 +1388,7 @@ describe("POST /api/extension/generate", () => {
       expect(body.character_count).toBe(body.body.length);
       expect(body.character_count).toBeLessThanOrEqual(300);
       expect(body.evalMetadata).toMatchObject({
-        promptVersion: "4.0.0",
+        promptVersion: "4.1.0",
         hasCandidateRelevance: true,
       });
       expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
@@ -1394,6 +1427,12 @@ describe("POST /api/extension/generate", () => {
       sources: [],
       metadata: {},
       atomicSources: [
+        {
+          id: "target.profile.0",
+          scope: "target",
+          kind: "target_observation",
+          content: "Works on evaluation tooling.",
+        },
         {
           id: "target.test",
           scope: "target",
@@ -1546,10 +1585,154 @@ describe("POST /api/extension/generate", () => {
     }
   });
 
+  it("rejects an empty target ledger before reserving quota or calling the model", async () => {
+    mockPrepareOutreachGroundingContext.mockResolvedValueOnce({
+      identity: { fullName: "", linkedinUrl: "" },
+      sources: [],
+      atomicSources: [],
+      metadata: { groundingLevel: "target_only" },
+    });
+    const response = await POST(
+      makeRequest({
+        method: "POST",
+        headers: { authorization: "Bearer test" },
+        body: validPayload,
+      }),
+    );
+    expect(response.status).toBe(422);
+    expect((await response.json()).code).toBe("INSUFFICIENT_GROUNDING");
+    expect(mockRpc).not.toHaveBeenCalled();
+    expect(mockAnthropicCreate).not.toHaveBeenCalled();
+  });
+  it("still rejects factual changes introduced during sanitation after source selection", async () => {
+    mockAnthropicCreate.mockResolvedValueOnce({
+      content: [
+        {
+          type: "tool_use",
+          name: "return_linkedin_connection_composition",
+          input: {
+            target_source_id: "target.profile.0",
+            candidate_source_id: null,
+            cta: "Open to a brief chat?",
+          },
+        },
+      ],
+      usage: { input_tokens: 100, output_tokens: 25 },
+    });
+    mockSanitizeForLinkedIn.mockImplementation(async (content: string) => ({
+      success: true,
+      sanitizedContent: content.replace("Works", "Worked"),
+      aiFingerprints: { score: 0, detectedPatterns: [] },
+    }));
+    const response = await POST(
+      makeRequest({
+        method: "POST",
+        headers: { authorization: "Bearer test" },
+        body: validPayload,
+      }),
+    );
+    expect(response.status).toBe(502);
+    expect(
+      mockRpc.mock.calls.filter(
+        ([name]) => name === "release_generation_daily_slot",
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("resolves model source selection through the real parser, renderer and final grounding check", async () => {
+    mockAnthropicCreate.mockResolvedValueOnce({
+      content: [
+        {
+          type: "tool_use",
+          name: "return_linkedin_connection_composition",
+          input: {
+            target_source_id: "target.profile.0",
+            candidate_source_id: null,
+            cta: "Open to a brief chat?",
+          },
+        },
+      ],
+      usage: { input_tokens: 100, output_tokens: 25 },
+    });
+    const response = await POST(
+      makeRequest({
+        method: "POST",
+        headers: { authorization: "Bearer test" },
+        body: validPayload,
+      }),
+    );
+    expect(response.status).toBe(200);
+    const result = await response.json();
+    expect(result.body).toBe(
+      'The supplied context says: "Works on evaluation tooling." Open to a brief chat?',
+    );
+    expect(result.character_count).toBe(result.body.length);
+    expect(result).not.toHaveProperty("claims");
+    expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
+    const tool = mockAnthropicCreate.mock.calls[0]![0].tools[0];
+    expect(tool.input_schema.properties).not.toHaveProperty("claims");
+    expect(tool.input_schema.properties.target_source_id.enum).toContain(
+      "target.profile.0",
+    );
+  });
+
+  it.each([
+    {
+      target_source_id: "forged",
+      candidate_source_id: null,
+      cta: "Open to a brief chat?",
+    },
+    {
+      target_source_id: "target.profile.0",
+      candidate_source_id: "target.profile.0",
+      cta: "Open to a brief chat?",
+    },
+    {
+      target_source_id: "target.profile.0",
+      candidate_source_id: null,
+      cta: "Open to a brief chat?",
+      claims: [],
+    },
+  ])(
+    "refunds malformed or forged source selections without exposing a draft %#",
+    async (input) => {
+      mockAnthropicCreate.mockResolvedValueOnce({
+        content: [
+          {
+            type: "tool_use",
+            name: "return_linkedin_connection_composition",
+            input,
+          },
+        ],
+        usage: { input_tokens: 100, output_tokens: 25 },
+      });
+      const response = await POST(
+        makeRequest({
+          method: "POST",
+          headers: { authorization: "Bearer test" },
+          body: validPayload,
+        }),
+      );
+      expect(response.status).toBe(502);
+      expect(await response.json()).not.toHaveProperty("body");
+      expect(
+        mockRpc.mock.calls.filter(
+          ([name]) => name === "release_generation_daily_slot",
+        ),
+      ).toHaveLength(1);
+    },
+  );
+
   it("returns only a provenance-validated structured LinkedIn connection note", async () => {
     mockPrepareOutreachGroundingContext.mockResolvedValueOnce({
       identity: { fullName: "Candidate Name", linkedinUrl: "" },
       atomicSources: [
+        {
+          id: "target.profile.0",
+          scope: "target",
+          kind: "target_observation",
+          content: "Works on evaluation tooling.",
+        },
         {
           id: "evidence:workflow",
           scope: "candidate",
@@ -2185,7 +2368,14 @@ I build distributed systems. Previously at BigCo.`;
       mockPrepareOutreachGroundingContext.mockResolvedValueOnce({
         identity: { fullName: "", linkedinUrl: "" },
         sources: [],
-        atomicSources: [],
+        atomicSources: [
+          {
+            id: "target.profile.0",
+            scope: "target",
+            kind: "target_observation",
+            content: "Works on evaluation tooling.",
+          },
+        ],
         metadata: {
           groundingLevel: "target_only",
           fallbackReason: "no_resume_context",

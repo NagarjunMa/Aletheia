@@ -1,12 +1,14 @@
 import {
   NEUTRAL_FRAMING,
+  allowedClaimTexts,
   type AtomicSource,
 } from "@/modules/grounding/domain/atomic-claim";
-import { allowedClaimTexts } from "@/modules/grounding/application/validate-atomic-claims";
 
 export const ATOMIC_PROVENANCE_INSTRUCTIONS = `FINAL GROUNDING CONTRACT (takes precedence over stylistic requests):
 Every factual output span must copy one approved text from ATOMIC_SOURCES exactly.
-Return claims for every used span: text, kind, source_id, supporting_excerpt.
+For prose composition tools return claims for every used span: text, kind, source_id, supporting_excerpt.
+For the LinkedIn source-selection tool, return only selected IDs and an approved
+CTA; the server constructs exact factual text and the claim ledger.
 Copy kind, id and the entire excerpt from its source. Never shorten an excerpt,
 change its actor, remove a qualification, invent a causal relationship, or infer fit.
 The only additional output text allowed is whole phrases from NEUTRAL_FRAMING.
@@ -32,6 +34,7 @@ export function buildAtomicProvenancePrompt(
       approved_texts: allowedClaimTexts(source),
     })),
     NEUTRAL_FRAMING,
+    allowedClaimTexts,
   })
     .replace(/</gu, "\\u003c")
     .replace(/>/gu, "\\u003e")
