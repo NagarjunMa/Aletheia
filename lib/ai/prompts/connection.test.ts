@@ -1,3 +1,4 @@
+import { buildLinkedinSelectionTool } from "@/modules/outreach/domain/linkedin-grounded-selection";
 import { describe, it, expect } from "vitest";
 import { linkedinConnectionDraftSchema } from "@/modules/outreach/domain/outreach-draft.types";
 import { renderLinkedinConnection } from "@/modules/outreach/application/render-linkedin-connection";
@@ -89,7 +90,7 @@ describe("LinkedIn connection grounding prompt", () => {
     expect(grounded).toContain("CANDIDATE_GROUNDING");
     expect(grounded).toContain('id="evidence:workflow"');
     expect(grounded).not.toContain(baseInput.resume);
-    expect(LINKEDIN_CONNECTION_PROMPT).toContain("candidate_relevance");
+    expect(LINKEDIN_CONNECTION_PROMPT).toContain("candidate_source_id");
 
     const targetOnly = buildPrompt({ ...baseInput, candidateSources: [] });
     expect(targetOnly).toContain("No verified candidate facts are available");
@@ -423,7 +424,7 @@ describe("COLD_EMAIL_PROMPT subject line policy", () => {
   ];
 
   it("tracks the prompt behavior change with a new version", () => {
-    expect(PROMPT_VERSION).toBe("4.0.0");
+    expect(PROMPT_VERSION).toBe("4.1.0");
   });
 
   it("documents scenario-specific email modes", () => {
@@ -478,39 +479,27 @@ describe("COLD_EMAIL_PROMPT subject line policy", () => {
     );
   });
 
-  it("documents LinkedIn connection note polish rules", () => {
+  it("uses source selection rather than contradictory free-form composition instructions", () => {
     expect(LINKEDIN_CONNECTION_PROMPT).toContain(
-      "render to 300 characters or fewer",
+      "target_source_id, candidate_source_id, cta",
     );
-    expect(LINKEDIN_CONNECTION_PROMPT).toContain("candidate_relevance");
-    expect(LINKEDIN_CONNECTION_PROMPT).toContain("Use complete grammar");
+    expect(LINKEDIN_CONNECTION_PROMPT).toContain("within 300");
     expect(LINKEDIN_CONNECTION_PROMPT).toContain(
-      "I'd like to explore whether there's a fit on your team.",
+      "never shorten or paraphrase a fact",
     );
-    expect(LINKEDIN_CONNECTION_PROMPT).toContain(
-      "whether you're open to discussing referrals.",
-    );
-    expect(LINKEDIN_CONNECTION_PROMPT).toContain(
-      "whether referrals are something you're open to discussing.",
-    );
-    expect(LINKEDIN_CONNECTION_PROMPT).toContain("SHARED BUDGET:");
-    expect(LINKEDIN_CONNECTION_PROMPT).toContain(
-      "Each raw text section is bounded at 300 characters",
-    );
-    expect(LINKEDIN_CONNECTION_PROMPT).toContain(
-      "These rules override examples and writing preferences",
-    );
-    expect(LINKEDIN_CONNECTION_PROMPT).not.toContain("character_count:");
+    expect(LINKEDIN_CONNECTION_PROMPT).not.toContain("CTA EXAMPLES");
   });
 
-  it("renders every literal prompt CTA example within the shared budget", () => {
-    const examples = (
-      LINKEDIN_CONNECTION_PROMPT.split("CTA EXAMPLES")[1] ?? ""
-    ).split("CTA STYLE:")[0];
-    const ctas = [...(examples ?? "").matchAll(/- "([^"]+)"/gu)].map(
-      (match) => match[1] ?? "",
-    );
-    expect(ctas).toHaveLength(5);
+  it("renders every approved tool CTA within the shared budget", () => {
+    const ctas = buildLinkedinSelectionTool([
+      {
+        id: "target.profile.0",
+        scope: "target",
+        kind: "target_observation",
+        content: "Works on review tooling.",
+      },
+    ]).input_schema.properties.cta.enum;
+    expect(ctas.length).toBeGreaterThan(0);
     const source = {
       id: "evidence:workflow",
       label: "Workflow",

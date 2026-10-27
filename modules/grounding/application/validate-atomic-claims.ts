@@ -1,5 +1,7 @@
 import {
   atomicClaimsSchema,
+  normalizeClaimText,
+  allowedClaimTexts,
   MAX_SUPPORTING_EXCERPT,
   NEUTRAL_FRAMING,
   type AtomicSource,
@@ -21,31 +23,7 @@ export class AtomicClaimValidationError extends Error {
   }
 }
 
-/** No case/punctuation folding; negation, actor and numeric notation survive. */
-export function normalizeClaimText(value: string): string {
-  return value.normalize("NFKC").replace(/\s+/gu, " ").trim();
-}
-
-/** Finite source-owned rewrites, shared by prompt examples and validation. */
-export function allowedClaimTexts(source: AtomicSource): string[] {
-  const excerpt = normalizeClaimText(source.content);
-  const quoted =
-    source.scope === "target"
-      ? `The supplied context says: "${excerpt}"`
-      : `My background includes: "${excerpt}"`;
-  const forms = [quoted];
-  // Already explicit first-person candidate assertions need no actor inference.
-  if (source.scope === "candidate" && /^I\s/u.test(excerpt))
-    forms.push(excerpt);
-  if (
-    source.scope === "candidate" &&
-    source.kind === "role" &&
-    source.rewrite === "current_role"
-  ) {
-    forms.push(`My current role is ${excerpt}.`);
-  }
-  return forms;
-}
+export { normalizeClaimText, allowedClaimTexts } from "../domain/atomic-claim";
 
 export function validateAtomicOutput(input: {
   claims: unknown;

@@ -1,3 +1,4 @@
+import { LinkedinGroundingUnavailableError } from "../domain/linkedin-grounded-selection";
 import {
   createFailureContext,
   recordFailedGeneration,
@@ -387,6 +388,15 @@ async function handlePost(
       return candidateContextUnavailableResponse(corsHeaders);
     }
 
+    if (
+      validatedData.category === "linkedin_connection" &&
+      !preparedGrounding.atomicSources?.some(
+        (source) => source.scope === "target",
+      )
+    ) {
+      throw new LinkedinGroundingUnavailableError();
+    }
+
     timing.metrics({
       sourceChars: preparedGrounding.sources.reduce(
         (sum, source) => sum + source.content.length,
@@ -733,6 +743,7 @@ async function handlePost(
       userPrompt,
       category,
       emailMode,
+      atomicSources: preparedGrounding.atomicSources ?? [],
       logger: log,
     });
 
@@ -1058,7 +1069,10 @@ async function handlePost(
     try {
       let draft;
       try {
-        draft = getLinkedinConnectionDraftToolInput(response);
+        draft = getLinkedinConnectionDraftToolInput(response, {
+          atomicSources: preparedGrounding.atomicSources ?? [],
+          candidateSources: preparedGrounding.sources,
+        });
       } catch (error) {
         throw new LinkedinConnectionValidationError(
           "CONNECTION_TOOL_OUTPUT_INVALID",
@@ -1224,6 +1238,17 @@ async function handlePost(
       );
     }
 
+    if (error instanceof LinkedinGroundingUnavailableError) {
+      return NextResponse.json(
+        {
+          error:
+            "No complete target fact is available. Choose a shorter, specific profile context.",
+          code: "INSUFFICIENT_GROUNDING",
+          ...compensation,
+        },
+        { status: 422, headers: corsHeaders },
+      );
+    }
     if (isAnthropicTimeoutError(error)) {
       log.error("Claude API call timed out after 30s");
       return NextResponse.json(

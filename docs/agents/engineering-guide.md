@@ -2,6 +2,8 @@
 
 ## Active Work
 
+LinkedIn CLAIM_REWRITE repair: see `docs/operations/linkedin-claim-rewrite.md`. The model selects source IDs; the server composes exact approved text and still validates final grounding after sanitation.
+
 Production audit blocker remediation: see `docs/operations/production-audit-blockers.md` for the current contract, checks and release gates. Generation admission is documented in `docs/operations/generation-admission.md`.
 
 ALE-53 refund operations: see `docs/operations/ale-53-implementation.md` for the active execution context and `docs/operations/refund-review.md` for operator boundaries. Queue/admin and opt-in email delivery are implemented locally; delivery defaults disabled and rollout remains pending.

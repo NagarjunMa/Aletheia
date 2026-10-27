@@ -1,4 +1,10 @@
 import Anthropic from "@anthropic-ai/sdk";
+import type { AtomicSource } from "@/modules/grounding/domain/atomic-claim";
+import type { CandidateGroundingSource } from "@/modules/candidate-context/domain/candidate-context.types";
+import {
+  buildLinkedinSelectionTool,
+  resolveLinkedinSelection,
+} from "../domain/linkedin-grounded-selection";
 import { GENERATION_MODEL_TIMEOUT_MS } from "../domain/generation-admission";
 import {
   atomicClaimsSchema,
@@ -214,6 +220,7 @@ export async function createOutreachDraftMessage(input: {
   userPrompt: string;
   category: "linkedin_connection" | "cold_email" | "linkedin_inmail";
   emailMode: EmailMode;
+  atomicSources?: readonly AtomicSource[];
   logger?: SafeLogger;
 }) {
   const stageLogger = input.logger ?? log;
@@ -224,7 +231,7 @@ export async function createOutreachDraftMessage(input: {
     input.category === "cold_email"
       ? buildColdEmailDraftTool(input.emailMode)
       : input.category === "linkedin_connection"
-        ? buildLinkedinConnectionDraftTool()
+        ? buildLinkedinSelectionTool(input.atomicSources ?? [])
         : buildEmailDraftTool("linkedin_inmail", input.emailMode);
   const toolName = tool.name;
   const signal = AbortSignal.timeout(GENERATION_MODEL_TIMEOUT_MS);
@@ -293,6 +300,10 @@ function findLinkedinConnectionTool(response: Anthropic.Messages.Message) {
 
 export function getLinkedinConnectionDraftToolInput(
   response: Anthropic.Messages.Message,
+  grounding?: {
+    atomicSources: readonly AtomicSource[];
+    candidateSources: CandidateGroundingSource[];
+  },
 ): LinkedinConnectionDraft {
   const toolBlock = findLinkedinConnectionTool(response);
   if (!toolBlock || toolBlock.type !== "tool_use") {
@@ -300,6 +311,15 @@ export function getLinkedinConnectionDraftToolInput(
       "Claude did not return the required LinkedIn connection composition tool",
     );
   }
+  if ("target_source_id" in (toolBlock.input as Record<string, unknown>)) {
+    if (!grounding) throw new Error("Missing request grounding");
+    return resolveLinkedinSelection(
+      toolBlock.input,
+      grounding.atomicSources,
+      grounding.candidateSources,
+    );
+  }
+  // Legacy free-text responses still pass the unchanged final atomic validator.
   // Older model responses may still include this obsolete declaration. Only
   // this one legacy key is ignored; all other unknown keys remain invalid.
   const { character_count: _legacyCount, ...composition } =
