@@ -4,6 +4,9 @@
 echo "🧹 Pre-commit: formatting and auto-fixing staged files..."
 npx lint-staged || { echo "❌ Formatting failed."; exit 1; }
 
+echo "🔁 Pre-commit: validating engineering policy..."
+npm run policy:check || { echo "❌ Engineering policy validation failed."; exit 1; }
+
 echo "🔍 Pre-commit: running lint..."
 make lint || { echo "❌ Lint failed. Fix errors before committing."; exit 1; }
 

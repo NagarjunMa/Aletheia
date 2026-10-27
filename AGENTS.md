@@ -2,6 +2,10 @@
 
 Read and follow [`docs/agents/engineering-guide.md`](docs/agents/engineering-guide.md) before making changes in this repository.
 
+The guide’s **Mandatory Engineering Loop** applies to non-trivial implementation,
+configuration, schema, extension and security work. Preserve the Linear workflow
+templates below and record the applicable verification evidence.
+
 ## Linear issue engineering workflow
 
 Treat the templates below as persistent instructions. The user does not need to
