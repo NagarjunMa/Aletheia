@@ -1,5 +1,11 @@
 # Production audit blockers
 
+> Operational update, October 27: the three audit migrations were applied to
+> production on October 26. The local pre-deployment evidence below is historical.
+> See [the deployment record](production-migration-deployment-2026-10-26.md) for
+> current history/grants and the separate LinkedIn validation outcome; see
+> [reconciliation](migration-history-reconciliation.md) for unresolved identity drift.
+
 ## Execution context
 
 - Scope: user-authorized correction of audit findings M1–M6; not a new feature or permission to deploy.
