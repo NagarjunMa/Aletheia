@@ -2,6 +2,8 @@
 
 ## Active Work
 
+Production migration records: see `docs/operations/migration-history-reconciliation.md` and `docs/operations/production-migration-deployment-2026-10-26.md` for applied versions, historical identity drift and the documentation-only restoration scope.
+
 LinkedIn CLAIM_REWRITE repair: see `docs/operations/linkedin-claim-rewrite.md`. The model selects source IDs; the server composes exact approved text and still validates final grounding after sanitation.
 
 Production audit blocker remediation: see `docs/operations/production-audit-blockers.md` for the current contract, checks and release gates. Generation admission is documented in `docs/operations/generation-admission.md`.
