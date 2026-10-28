@@ -1,5 +1,84 @@
 # ALE-46 — Atomic claim provenance
 
+## Current audit corrections — 2026-10-27
+
+Branch `fix/ale-46-grounding-boundaries`, base remote main `07ea627`. Re-read
+ALE-46 and its October 27 audit. Critical risk: changes to the shared private
+provenance/exclusion boundary and admission before paid generation. Scope is
+only ALE46-CURRENT-R1/R2; do not close ALE-46, deploy or expand architecture work.
+
+R1: reuse one case/NFKC/punctuation-aware, whole-topic exclusion comparison in
+source preparation and final atomic validation. Keep exact claim/source support
+normalization separate; do not relax it. Retain the final validator's legacy
+conservative substring denials as well as the shared whole-topic comparison.
+Filter excluded target facts before
+model admission, with final validation retained as defense in depth. Keep YC's
+existing additional conservative exclusion check unchanged.
+
+R2: the LinkedIn tool may offer only target facts whose complete approved wording
+and at least one approved CTA fit the existing 300-character limit. Use this same
+eligibility rule before quota/credit/model admission; return the existing 422
+INSUFFICIENT_GROUNDING when none fits. Do not truncate facts/CTA or increase caps.
+Optional candidate/CTA combinations still require the unchanged final renderer
+and validator; eligibility proves at least one feasible target-only choice, not
+that every model-selected combination will fit.
+
+Verified locations: grounding domain/validator, atomic-source builder and both
+outreach/YC context builders (R1); LinkedIn selection tool, generate service
+preflight, selection and route tests (R2). No schema, dependencies, public response
+fields or extension assets change. TDD: reproduce capitalization/punctuation
+exclusions, neutral final-field exclusions, target filtering, impossible-only
+target 422 with zero quota/model calls, mixed source pools and exact 300/301
+boundaries before fixes. Then run affected tests, native gates and fresh review.
+
+Historical missing-column/CI/R4 notes below are superseded by later migration,
+hosted PR #104/#108 and fact-review evidence. Remaining real-model channel
+quality/token-fit, hosted authenticated two-user lifecycle and applicable
+schema/type compatibility evidence are not resolved by these fixes. Rollback:
+revert this backend correction and redeploy, preserving additive review data;
+that restores the identified exclusion/feasibility defects. No rollout authorized.
+
+### Correction implementation and checks
+
+R1 uses `modules/grounding/domain/excluded-claims.ts` in both context builders,
+atomic target preparation and final validation. Matching keeps the existing
+whole-topic semantics of source preparation (case, NFKC and punctuation/space
+separators); final validation additionally retains all legacy conservative
+substring denials. YC's existing compact exclusion check also remains. Exact
+support, approved wording, scope, coverage, private ledgers and exclusions after
+sanitation are unchanged or strengthened; no existing denial was removed.
+
+R2 filters tool target IDs by complete approved text plus the shortest canonical
+CTA and one space, using the existing 300-character constant. Preflight invokes
+this same tool builder before style reads, quota/credit reservations or model
+work; the provider uses it again on the same prepared request context. Unknown
+IDs and overlength candidate/CTA combinations still fail closed at final checks.
+
+Seven functional regressions failed before implementation. The first table-driven
+route test accidentally passed a source object rather than an array; corrected
+the fixture, then verified that retaining the presence-only service gate while
+using the new provider tool still caused four reservation/admission/compensation
+RPCs before returning 422. Moving the same eligibility check before admission
+returns 422 with zero quota/model calls.
+A prior credit-refund fixture had only an impossible source and now correctly
+returned 422 instead of its old expected 502. Added a feasible alternate target
+to preserve that test's paid-output-failure/refund purpose, and a separate
+billing-enabled regression proves impossible-only inputs cause no RPC/model work.
+No compensation assertion was removed or weakened.
+
+Passed locally on Node24: 581 focused tests; full coverage suite 1,330 tests /
+105 files with configured thresholds; 15 guardrails; type-check; root lint (one
+unchanged unused-status warning); web dependency audit (zero advisories); scoped
+Prettier and diff whitespace. Final coverage rerun follows retaining conservative
+substring denials. The dummy-environment production build also passed; the
+independent review receipt will be recorded outside the frozen source. No migration, dependency, frontend or extension artifact change.
+
+Not run for this increment: paid provider calls, production writes, hosted
+workflow dispatch, new hosted two-user fact-review lifecycle, clean schema/type
+generation and browser/extension rebuilds (their source inputs are unchanged).
+The full ALE-46 quality/environment gates remain open; this is a bounded backend
+correction, not parent completion or production certification. Critical risk.
+
 ## CI security follow-up — 2026-10-08
 
 On published commit `96e5d33`, reproduced the newly reported Next.js advisory

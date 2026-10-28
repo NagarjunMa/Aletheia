@@ -67,6 +67,52 @@ describe("atomic final-output provenance", () => {
   });
   it("rejects excluded statements", () =>
     expect(() => run({ excludedClaims: ["supported the rollout"] })).toThrow());
+  it.each([
+    "people management",
+    "people-management",
+    "Ｐｅｏｐｌｅ　ｍａｎａｇｅｍｅｎｔ",
+  ])(
+    "rejects excluded target topics regardless of case/separators: %s",
+    (topic) => {
+      const target = {
+        id: "target.profile.0",
+        scope: "target" as const,
+        kind: "target_observation" as const,
+        content: `Our team values ${topic}.`,
+      };
+      const text = `The supplied context says: "${target.content.normalize("NFKC")}"`;
+      expect(() =>
+        run({
+          sources: [target],
+          claims: [
+            {
+              text,
+              kind: target.kind,
+              source_id: target.id,
+              supporting_excerpt: target.content,
+            },
+          ],
+          excludedClaims: ["People management"],
+          fields: [{ text, scope: "target" }],
+        }),
+      ).toThrowError(expect.objectContaining({ code: "CLAIM_EXCLUDED" }));
+    },
+  );
+  it("checks exclusions in final neutral wording without a ledger", () => {
+    expect(() =>
+      run({
+        claims: [],
+        sources: [],
+        excludedClaims: ["BRIEF—INTRODUCTION"],
+        fields: [{ text: "A brief introduction", scope: "either" }],
+      }),
+    ).toThrowError(expect.objectContaining({ code: "CLAIM_EXCLUDED" }));
+  });
+  it("retains existing conservative substring exclusions", () => {
+    expect(() => run({ excludedClaims: ["roll"] })).toThrowError(
+      expect.objectContaining({ code: "CLAIM_EXCLUDED" }),
+    );
+  });
   it("rejects target evidence used as a candidate assertion", () => {
     expect(() =>
       run({

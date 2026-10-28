@@ -1,3 +1,7 @@
+import {
+  normalizeForExclusion,
+  containsExcludedClaim,
+} from "@/modules/grounding/domain/excluded-claims";
 import { escapeForXmlTag } from "@/lib/ai/prompts/linkedin-connection";
 import {
   buildAtomicCandidateSources,
@@ -76,14 +80,6 @@ function normalizeForMatching(value: string): string {
     .trim();
 }
 
-function normalizeForExclusion(value: string): string {
-  return normalizeText(value)
-    .toLocaleLowerCase("en-US")
-    .replace(/[^\p{L}\p{N}]+/gu, " ")
-    .replace(/\s+/gu, " ")
-    .trim();
-}
-
 function tokenize(value: string): Set<string> {
   return new Set(
     normalizeForMatching(value)
@@ -103,19 +99,6 @@ function normalizeExcludedClaims(values: string[]): string[] {
     result.push(normalized);
   }
   return result;
-}
-
-function containsExcludedClaim(
-  value: string,
-  excludedClaims: string[],
-): boolean {
-  const searchable = ` ${normalizeForExclusion(value)} `;
-  return excludedClaims.some((claim) => {
-    const normalizedClaim = normalizeForExclusion(claim);
-    return (
-      normalizedClaim.length > 0 && searchable.includes(` ${normalizedClaim} `)
-    );
-  });
 }
 
 function overlapScore(value: string, targetTokens: Set<string>): number {
@@ -420,7 +403,10 @@ export function buildYcGroundingContext(input: {
   );
   const atomicSources = [
     ...buildAtomicCandidateSources(input.candidate, sources),
-    ...buildAtomicTargetSources({ jobDescription: normalizedJobDescription }),
+    ...buildAtomicTargetSources(
+      { jobDescription: normalizedJobDescription },
+      excludedClaims,
+    ),
   ];
   const usableRoots = new Set(
     atomicSources

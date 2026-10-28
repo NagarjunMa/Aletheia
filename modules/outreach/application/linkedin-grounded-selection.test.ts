@@ -109,6 +109,30 @@ describe("server-owned LinkedIn factual composition", () => {
   });
   it("rejects an empty target pool before a provider call", () =>
     expect(() => buildLinkedinSelectionTool([])).toThrow());
+  it("does not offer an impossible target when a shorter complete one exists", () => {
+    const tool = buildLinkedinSelectionTool([
+      { ...target, id: "too-long", content: "x".repeat(272) },
+      target,
+    ]);
+    expect(tool.input_schema.properties.target_source_id.enum).toEqual([
+      target.id,
+    ]);
+  });
+  it("admits a complete 300-character target-only note, rejecting a 301-character minimum", () => {
+    const boundary = { ...target, content: "x".repeat(251) };
+    expect(() => buildLinkedinSelectionTool([boundary])).not.toThrow();
+    const draft = resolveLinkedinSelection(
+      { ...selection, candidate_source_id: null, cta: "Open to connecting?" },
+      [boundary],
+      [],
+    );
+    expect(renderLinkedinConnection({ draft, sources: [] }).body).toHaveLength(
+      300,
+    );
+    expect(() =>
+      buildLinkedinSelectionTool([{ ...boundary, content: "x".repeat(252) }]),
+    ).toThrow();
+  });
   it("offers only request-owned IDs and existing approved CTA phrases", () => {
     const tool = buildLinkedinSelectionTool(sources);
     expect(tool.input_schema.properties.target_source_id.enum).toEqual([

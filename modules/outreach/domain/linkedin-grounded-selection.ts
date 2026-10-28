@@ -5,7 +5,10 @@ import {
   allowedClaimTexts,
   type AtomicSource,
 } from "@/modules/grounding/domain/atomic-claim";
-import { linkedinConnectionDraftSchema } from "./outreach-draft.types";
+import {
+  linkedinConnectionDraftSchema,
+  LINKEDIN_CONNECTION_MAX_CHARACTERS,
+} from "./outreach-draft.types";
 
 export class LinkedinGroundingUnavailableError extends Error {
   constructor() {
@@ -15,6 +18,7 @@ export class LinkedinGroundingUnavailableError extends Error {
 }
 
 const CTAS = NEUTRAL_FRAMING.filter((text) => text.endsWith("?"));
+const MIN_CTA_CHARACTERS = Math.min(...CTAS.map((text) => text.length));
 const selectionSchema = z
   .object({
     target_source_id: z.string().min(1).max(200),
@@ -25,7 +29,14 @@ const selectionSchema = z
 
 /** The model selects sources; factual wording and ledger ownership stay server-side. */
 export function buildLinkedinSelectionTool(sources: readonly AtomicSource[]) {
-  const targets = sources.filter((s) => s.scope === "target").map((s) => s.id);
+  const targets = sources
+    .filter(
+      (source) =>
+        source.scope === "target" &&
+        allowedClaimTexts(source).at(-1)!.length + 1 + MIN_CTA_CHARACTERS <=
+          LINKEDIN_CONNECTION_MAX_CHARACTERS,
+    )
+    .map((source) => source.id);
   const candidates = sources
     .filter((s) => s.scope === "candidate")
     .map((s) => s.id);

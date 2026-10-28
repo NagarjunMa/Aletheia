@@ -1,3 +1,7 @@
+import {
+  normalizeForExclusion,
+  containsExcludedClaim,
+} from "@/modules/grounding/domain/excluded-claims";
 import { deriveSafeCandidateSummary } from "@/lib/ai/candidate-summary";
 import {
   buildAtomicCandidateSources,
@@ -70,14 +74,6 @@ function normalizeForMatching(value: string): string {
     .trim();
 }
 
-function normalizeForExclusion(value: string): string {
-  return normalizeText(value)
-    .toLocaleLowerCase("en-US")
-    .replace(/[^\p{L}\p{N}]+/gu, " ")
-    .replace(/\s+/gu, " ")
-    .trim();
-}
-
 function tokenize(value: string): Set<string> {
   return new Set(
     normalizeForMatching(value)
@@ -100,11 +96,6 @@ function truncateAtBoundary(value: string, maximum: number): string {
 
 function excludedClaims(values: string[]): string[] {
   return [...new Set(values.map(normalizeForExclusion).filter(Boolean))];
-}
-
-function containsExcludedClaim(value: string, claims: string[]): boolean {
-  const searchable = ` ${normalizeForExclusion(value)} `;
-  return claims.some((claim) => searchable.includes(` ${claim} `));
 }
 
 function overlapScore(value: string, targetTokens: Set<string>): number {
@@ -337,6 +328,7 @@ export function buildOutreachGroundingContext(input: {
               jobDescription: target.jobDescription,
               conversation: target.conversationContext,
             },
+        input.candidate.profile.excludedClaims,
       ),
     ],
     excludedClaims: input.candidate.profile.excludedClaims,
