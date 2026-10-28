@@ -9,6 +9,7 @@ import {
 } from "@/modules/grounding/application/build-atomic-sources";
 import { escapeForXmlTag } from "@/lib/ai/prompts/linkedin-connection";
 import { scanForInjection } from "@/lib/ai/prompts/injection-heuristic";
+import { linkedinTargetFits } from "../domain/linkedin-grounded-selection";
 import type { CandidateEvidenceRecord } from "@/lib/candidate-profile/service";
 import type {
   CandidateGroundingData,
@@ -248,7 +249,8 @@ export function buildOutreachGroundingContext(input: {
     conversationContext: normalizeText(input.target.conversationContext),
   };
   const claims = excludedClaims(input.candidate.profile.excludedClaims);
-  const injectionSafeMode = scanForInjection(target.profileMarkdown).triggered;
+  const injectionScan = scanForInjection(target.profileMarkdown);
+  const injectionSafeMode = injectionScan.triggered;
   let drafts: DraftSource[];
 
   if (injectionSafeMode) {
@@ -315,22 +317,28 @@ export function buildOutreachGroundingContext(input: {
           ? "no_profile_context"
           : "no_resume_context";
 
+  const targets = buildAtomicTargetSources(
+    injectionSafeMode
+      ? {}
+      : {
+          profile: target.profileMarkdown,
+          jobDescription: target.jobDescription,
+          conversation: target.conversationContext,
+        },
+    input.candidate.profile.excludedClaims,
+    target.category === "linkedin_connection" ? linkedinTargetFits : undefined,
+  );
   return {
     identity: input.candidate.identity,
     sources,
     atomicSources: [
       ...buildAtomicCandidateSources(input.candidate, sources),
-      ...buildAtomicTargetSources(
-        injectionSafeMode
-          ? {}
-          : {
-              profile: target.profileMarkdown,
-              jobDescription: target.jobDescription,
-              conversation: target.conversationContext,
-            },
-        input.candidate.profile.excludedClaims,
-      ),
+      ...targets.sources,
     ],
+    targetDiagnostics: {
+      ...targets.diagnostics,
+      injectionReasons: injectionScan.reasons,
+    },
     excludedClaims: input.candidate.profile.excludedClaims,
     metadata: {
       groundingLevel,

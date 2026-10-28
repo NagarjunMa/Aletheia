@@ -89,6 +89,16 @@ export type OutreachGroundingContext = {
   /** Server-only evidence; absence fails closed at final validation. */
   atomicSources?: AtomicSource[];
   excludedClaims?: string[];
+  /** Internal counters only; not part of public eval metadata. */
+  targetDiagnostics?: {
+    examined: number;
+    excluded: number;
+    overlength: number;
+    budgetRejected: number;
+    pageControls?: number;
+    accepted: number;
+    injectionReasons: string[];
+  };
   metadata: OutreachGroundingMetadata;
 };
 

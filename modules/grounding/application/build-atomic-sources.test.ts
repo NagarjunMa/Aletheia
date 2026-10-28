@@ -28,6 +28,53 @@ const selected: CandidateGroundingSource = {
   content: original,
 };
 describe("complete source units", () => {
+  it("rejects adjacent control lines while preserving mixed factual paragraphs intact", () => {
+    const mixed = "About\nI build evaluation tools.\nFollow";
+    const result = buildAtomicTargetSources({
+      profile: `Connect\nFollow\nMessage\nMore\n\n${mixed}`,
+    });
+    expect(result.sources.map((source) => source.content)).toEqual([
+      "About I build evaluation tools. Follow",
+    ]);
+    expect(result.diagnostics.pageControls).toBe(1);
+  });
+  it("does not promote standalone LinkedIn controls to target facts", () => {
+    const result = buildAtomicTargetSources({
+      profile:
+        "Connect\n\nFollow\n\nMessage\n\nAbout\n\nI build evaluation tools.",
+    });
+    expect(result.sources.map((source) => source.content)).toEqual([
+      "I build evaluation tools.",
+    ]);
+  });
+  it("preserves negation and qualifications inside complete passages", () => {
+    const text = "I research agents. I do not build them for production.";
+    const result = buildAtomicTargetSources({ profile: text });
+    expect(result.sources.map((source) => source.content)).toEqual([text]);
+  });
+  it("reports bounded-source rejection counts without retaining text in diagnostics", () => {
+    const result = buildAtomicTargetSources(
+      {
+        profile: [
+          "Connect",
+          "PRIVATE_CANARY forbidden",
+          "x".repeat(601),
+          ...Array(17).fill("I build tools."),
+        ].join("\n\n"),
+      },
+      ["forbidden"],
+    );
+    expect(result.sources).toHaveLength(16);
+    expect(result.diagnostics).toEqual({
+      examined: 20,
+      excluded: 1,
+      overlength: 1,
+      pageControls: 1,
+      budgetRejected: 1,
+      accepted: 16,
+    });
+    expect(JSON.stringify(result.diagnostics)).not.toContain("PRIVATE_CANARY");
+  });
   it("never detaches an evidence action from its qualifying record", () => {
     const record = {
       id: "simulation",
@@ -151,8 +198,8 @@ describe("complete source units", () => {
       profile: "I build tools.\n\nI mentor developers.",
       jobDescription: "Build reliable services.",
     };
-    const sources = buildAtomicTargetSources(input);
-    expect(sources).toEqual(buildAtomicTargetSources(input));
+    const { sources } = buildAtomicTargetSources(input);
+    expect(sources).toEqual(buildAtomicTargetSources(input).sources);
     expect(sources.map((source) => source.id)).toEqual([
       "target.profile.0",
       "target.profile.1",
@@ -164,7 +211,7 @@ describe("complete source units", () => {
     expect(
       buildAtomicTargetSources({
         profile: `${"a".repeat(601)} not applicable.`,
-      }),
+      }).sources,
     ).toEqual([]);
   });
 });
