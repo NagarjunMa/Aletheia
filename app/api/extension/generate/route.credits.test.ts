@@ -290,6 +290,13 @@ describe("POST /api/extension/generate with credit billing enabled", () => {
         sources: [],
         metadata: {},
         atomicSources: [
+          // Keep admission feasible while exercising malformed model output/refunds.
+          {
+            id: "target.fallback",
+            scope: "target",
+            kind: "target_observation",
+            content: "Works on evaluation tooling.",
+          },
           {
             id: "target.length",
             scope: "target",
@@ -339,6 +346,33 @@ describe("POST /api/extension/generate with credit billing enabled", () => {
       }
     },
   );
+  it("rejects an impossible-only target pool without reserving quota or credits", async () => {
+    mockPrepareOutreachGroundingContext.mockResolvedValueOnce({
+      identity: { fullName: "", linkedinUrl: "" },
+      sources: [],
+      metadata: {},
+      atomicSources: [
+        {
+          id: "target.long",
+          scope: "target",
+          kind: "target_observation",
+          content: "x".repeat(272),
+        },
+      ],
+    });
+    const { POST } = await importRouteWithBillingEnabled();
+    const response = await POST(
+      makeRequest({
+        method: "POST",
+        headers: { authorization: "Bearer test" },
+        body: validPayload,
+      }),
+    );
+    expect(response.status).toBe(422);
+    expect((await response.json()).code).toBe("INSUFFICIENT_GROUNDING");
+    expect(mockRpc).not.toHaveBeenCalled();
+    expect(mockAnthropicCreate).not.toHaveBeenCalled();
+  });
   it("does not reserve quota or credits when candidate context is unavailable", async () => {
     mockPrepareOutreachGroundingContext.mockRejectedValueOnce(
       new OutreachGroundingUnavailableError(),

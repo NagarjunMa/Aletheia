@@ -1585,25 +1585,40 @@ describe("POST /api/extension/generate", () => {
     }
   });
 
-  it("rejects an empty target ledger before reserving quota or calling the model", async () => {
-    mockPrepareOutreachGroundingContext.mockResolvedValueOnce({
-      identity: { fullName: "", linkedinUrl: "" },
-      sources: [],
-      atomicSources: [],
-      metadata: { groundingLevel: "target_only" },
-    });
-    const response = await POST(
-      makeRequest({
-        method: "POST",
-        headers: { authorization: "Bearer test" },
-        body: validPayload,
-      }),
-    );
-    expect(response.status).toBe(422);
-    expect((await response.json()).code).toBe("INSUFFICIENT_GROUNDING");
-    expect(mockRpc).not.toHaveBeenCalled();
-    expect(mockAnthropicCreate).not.toHaveBeenCalled();
-  });
+  it.each([
+    { atomicSources: [] },
+    {
+      atomicSources: [
+        {
+          id: "target.profile.0",
+          scope: "target",
+          kind: "target_observation",
+          content: "x".repeat(272),
+        },
+      ],
+    },
+  ])(
+    "rejects unavailable or impossible target pools before reserving quota or calling the model %#",
+    async ({ atomicSources }) => {
+      mockPrepareOutreachGroundingContext.mockResolvedValueOnce({
+        identity: { fullName: "", linkedinUrl: "" },
+        sources: [],
+        atomicSources,
+        metadata: { groundingLevel: "target_only" },
+      });
+      const response = await POST(
+        makeRequest({
+          method: "POST",
+          headers: { authorization: "Bearer test" },
+          body: validPayload,
+        }),
+      );
+      expect(response.status).toBe(422);
+      expect((await response.json()).code).toBe("INSUFFICIENT_GROUNDING");
+      expect(mockRpc).not.toHaveBeenCalled();
+      expect(mockAnthropicCreate).not.toHaveBeenCalled();
+    },
+  );
   it("still rejects factual changes introduced during sanitation after source selection", async () => {
     mockAnthropicCreate.mockResolvedValueOnce({
       content: [

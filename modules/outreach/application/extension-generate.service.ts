@@ -1,4 +1,7 @@
-import { LinkedinGroundingUnavailableError } from "../domain/linkedin-grounded-selection";
+import {
+  buildLinkedinSelectionTool,
+  LinkedinGroundingUnavailableError,
+} from "../domain/linkedin-grounded-selection";
 import {
   createFailureContext,
   recordFailedGeneration,
@@ -388,14 +391,8 @@ async function handlePost(
       return candidateContextUnavailableResponse(corsHeaders);
     }
 
-    if (
-      validatedData.category === "linkedin_connection" &&
-      !preparedGrounding.atomicSources?.some(
-        (source) => source.scope === "target",
-      )
-    ) {
-      throw new LinkedinGroundingUnavailableError();
-    }
+    if (validatedData.category === "linkedin_connection")
+      buildLinkedinSelectionTool(preparedGrounding.atomicSources ?? []);
 
     timing.metrics({
       sourceChars: preparedGrounding.sources.reduce(

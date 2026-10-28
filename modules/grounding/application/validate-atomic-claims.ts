@@ -7,6 +7,7 @@ import {
   type AtomicSource,
   type ClaimScope,
 } from "../domain/atomic-claim";
+import { containsExcludedClaim } from "../domain/excluded-claims";
 
 export class AtomicClaimValidationError extends Error {
   public readonly code:
@@ -45,6 +46,10 @@ export function validateAtomicOutput(input: {
   if (sources.size !== input.sources.length)
     throw new AtomicClaimValidationError("CLAIM_SOURCE");
   const excluded = input.excludedClaims.map(normalizeClaimText).filter(Boolean);
+  // Add normalized topic matching without relaxing existing substring denials.
+  const isExcluded = (text: string) =>
+    containsExcludedClaim(text, input.excludedClaims) ||
+    excluded.some((value) => text.includes(value));
   const verified = claims.map((claim) => {
     const source = sources.get(claim.source_id);
     if (!source || source.kind !== claim.kind)
@@ -59,9 +64,7 @@ export function validateAtomicOutput(input: {
     const text = normalizeClaimText(claim.text);
     if (!allowedClaimTexts(source).includes(text))
       throw new AtomicClaimValidationError("CLAIM_REWRITE");
-    if (
-      excluded.some((value) => text.includes(value) || excerpt.includes(value))
-    ) {
+    if (isExcluded(text) || isExcluded(excerpt)) {
       throw new AtomicClaimValidationError("CLAIM_EXCLUDED");
     }
     return { text, scope: source.scope };
@@ -69,7 +72,7 @@ export function validateAtomicOutput(input: {
   const used = new Set<number>();
   for (const field of input.fields) {
     const text = normalizeClaimText(field.text);
-    if (excluded.some((value) => text.includes(value)))
+    if (isExcluded(text))
       throw new AtomicClaimValidationError("CLAIM_EXCLUDED");
     const candidates = [
       ...verified.flatMap((claim, index) =>

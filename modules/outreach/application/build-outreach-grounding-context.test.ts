@@ -68,6 +68,27 @@ function build(
 }
 
 describe("buildOutreachGroundingContext", () => {
+  it("removes excluded target topics before offering atomic facts", () => {
+    const result = build(
+      "linkedin_connection",
+      candidate({
+        profile: candidateProfileInputSchema.parse({
+          excludedClaims: ["People management"],
+        }),
+      }),
+      "Our team values people-management.\n\nWe build evaluation tools.",
+    );
+    expect(
+      result.atomicSources
+        ?.filter((source) => source.scope === "target")
+        .map((source) => source.content),
+    ).not.toContain("Our team values people-management.");
+    expect(
+      result.atomicSources?.some(
+        (source) => source.content === "We build evaluation tools.",
+      ),
+    ).toBe(true);
+  });
   it("prefers confirmed AI evidence for AI targets and obeys per-channel evidence limits", () => {
     const connection = build("linkedin_connection");
     const inmail = build("linkedin_inmail");

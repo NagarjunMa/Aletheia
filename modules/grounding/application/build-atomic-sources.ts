@@ -10,6 +10,7 @@ import {
   type ClaimKind,
 } from "../domain/atomic-claim";
 import { normalizeClaimText } from "./validate-atomic-claims";
+import { containsExcludedClaim } from "../domain/excluded-claims";
 
 const MAX_SOURCES = 48;
 const MAX_TOTAL_CHARS = 8_000;
@@ -63,11 +64,14 @@ export function buildAtomicCandidateSources(
 }
 
 /** Stable request-local IDs. Target facts never enter the candidate namespace. */
-export function buildAtomicTargetSources(input: {
-  profile?: string;
-  jobDescription?: string;
-  conversation?: string;
-}): AtomicSource[] {
+export function buildAtomicTargetSources(
+  input: {
+    profile?: string;
+    jobDescription?: string;
+    conversation?: string;
+  },
+  excludedClaims: readonly string[] = [],
+): AtomicSource[] {
   const result: AtomicSource[] = [];
   let remaining = 4_000;
   for (const [name, raw] of Object.entries(input)) {
@@ -79,6 +83,7 @@ export function buildAtomicTargetSources(input: {
         const content = normalizeClaimText(escapeForXmlTag(paragraph));
         if (
           !content ||
+          containsExcludedClaim(content, excludedClaims) ||
           content.length > MAX_SUPPORTING_EXCERPT ||
           content.length > remaining ||
           result.length >= 16

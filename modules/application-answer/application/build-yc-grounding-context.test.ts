@@ -70,6 +70,25 @@ const target = {
 };
 
 describe("buildYcGroundingContext readiness", () => {
+  it("filters excluded target topics with the same matching used for candidate evidence", () => {
+    const result = buildYcGroundingContext({
+      ...target,
+      jobDescription:
+        "Our team values people-management.\n\nWe build evaluation tools.",
+      candidate: groundingData({
+        profile: candidateProfileInputSchema.parse({
+          currentRole: "Engineer",
+          excludedClaims: ["People management"],
+        }),
+      }),
+    });
+    expect(
+      result.atomicSources
+        ?.filter((source) => source.scope === "target")
+        .map((source) => source.content),
+    ).toEqual(["We build evaluation tools."]);
+    expect(result.readiness.ready).toBe(true);
+  });
   it("does not approve sources that have no admissible bounded evidence", () => {
     const result = buildYcGroundingContext({
       question: "Describe your experience?",
