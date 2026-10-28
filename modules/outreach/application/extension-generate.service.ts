@@ -1,6 +1,7 @@
 import {
   buildLinkedinSelectionTool,
   LinkedinGroundingUnavailableError,
+  linkedinTargetFits,
 } from "../domain/linkedin-grounded-selection";
 import {
   createFailureContext,
@@ -391,8 +392,24 @@ async function handlePost(
       return candidateContextUnavailableResponse(corsHeaders);
     }
 
-    if (validatedData.category === "linkedin_connection")
-      buildLinkedinSelectionTool(preparedGrounding.atomicSources ?? []);
+    if (validatedData.category === "linkedin_connection") {
+      const eligibleTargetCount = (
+        preparedGrounding.atomicSources ?? []
+      ).filter(linkedinTargetFits).length;
+      log.info(
+        {
+          event: "outreach.target_eligibility",
+          outcome: eligibleTargetCount ? "success" : "failure",
+          eligibleTargetCount,
+          ...preparedGrounding.targetDiagnostics,
+        },
+        "LinkedIn target eligibility checked",
+      );
+      buildLinkedinSelectionTool(
+        preparedGrounding.atomicSources ?? [],
+        preparedGrounding.targetDiagnostics,
+      );
+    }
 
     timing.metrics({
       sourceChars: preparedGrounding.sources.reduce(
@@ -1198,7 +1215,10 @@ async function handlePost(
       );
     }
   } catch (error) {
-    if (error instanceof z.ZodError) timing.failure("INPUT_VALIDATION_FAILED");
+    if (error instanceof LinkedinGroundingUnavailableError)
+      timing.failure("INSUFFICIENT_GROUNDING");
+    else if (error instanceof z.ZodError)
+      timing.failure("INPUT_VALIDATION_FAILED");
     else if (isAnthropicTimeoutError(error)) timing.failure("MODEL_TIMEOUT");
     else if (isAnthropicAbortError(error)) timing.failure("MODEL_ABORTED");
     else if (getAnthropicApiErrorStatus(error) !== null)
@@ -1206,7 +1226,15 @@ async function handlePost(
     // Capture failure time in the stage that failed before timing compensation.
     if (reservedCredit || reservedSlot) timing.enter("refund");
     log.error(
-      { errorCode: "EXTENSION_GENERATION_FAILED" },
+      {
+        errorCode:
+          error instanceof LinkedinGroundingUnavailableError
+            ? "INSUFFICIENT_GROUNDING"
+            : "EXTENSION_GENERATION_FAILED",
+        ...(error instanceof LinkedinGroundingUnavailableError
+          ? { reasonCodes: error.reasonCodes }
+          : {}),
+      },
       "Extension generation error",
     );
 
@@ -1238,9 +1266,9 @@ async function handlePost(
     if (error instanceof LinkedinGroundingUnavailableError) {
       return NextResponse.json(
         {
-          error:
-            "No complete target fact is available. Choose a shorter, specific profile context.",
+          error: error.publicMessage,
           code: "INSUFFICIENT_GROUNDING",
+          reasonCodes: error.reasonCodes,
           ...compensation,
         },
         { status: 422, headers: corsHeaders },

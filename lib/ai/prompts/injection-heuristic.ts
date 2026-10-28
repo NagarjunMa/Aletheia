@@ -25,9 +25,8 @@ export interface InjectionScanResult {
   reasons: string[];
 }
 
-// Phrases that have no legitimate reason to appear in a LinkedIn profile
-// and are canonical jailbreak vocabulary. Case-insensitive substring match
-// (not word boundary — adversaries pad with punctuation).
+// Match instruction attempts, not a person's name or a security research topic.
+// This remains a heuristic; source-scoped selection and final validation also apply.
 const PHRASE_PATTERNS: Array<{ name: string; pattern: RegExp }> = [
   {
     name: "ignore_prior_instructions",
@@ -65,11 +64,13 @@ const PHRASE_PATTERNS: Array<{ name: string; pattern: RegExp }> = [
   },
   {
     name: "do_anything_now",
-    pattern: /\b(DAN|do anything now)\b/i,
+    pattern:
+      /\b(?:do anything now|(?:act\s+as|become|you\s+are|enable|activate|switch\s+to)\s+(?:now\s+)?DAN)\b/i,
   },
   {
     name: "jailbreak_keyword",
-    pattern: /\b(jailbreak|prompt[\s-]?injection|prompt[\s-]?leak)\b/i,
+    pattern:
+      /\b(?:enable|activate|execute|apply|enter|perform|use)\s+(?:(?:this|the|a)\s+)?(?:jailbreak|prompt[\s-]?injection|prompt[\s-]?leak)\b/i,
   },
 ];
 

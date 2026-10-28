@@ -406,7 +406,7 @@ export function buildYcGroundingContext(input: {
     ...buildAtomicTargetSources(
       { jobDescription: normalizedJobDescription },
       excludedClaims,
-    ),
+    ).sources,
   ];
   const usableRoots = new Set(
     atomicSources

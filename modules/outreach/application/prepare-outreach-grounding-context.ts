@@ -18,10 +18,6 @@ type PrepareOutreachGroundingDependencies = {
   recordGrounding?: (_metadata: OutreachGroundingContext["metadata"]) => void;
 };
 
-function recordGrounding(metadata: OutreachGroundingContext["metadata"]): void {
-  log.info(metadata, "Outreach grounding context prepared");
-}
-
 /**
  * Authenticated, pre-billing boundary for candidate grounding. It exposes no
  * repository details, candidate text, IDs, or credentials in telemetry/errors.
@@ -54,7 +50,13 @@ export async function prepareOutreachGroundingContext(
       candidate,
       target: input.target,
     });
-    (dependencies.recordGrounding ?? recordGrounding)(context.metadata);
+    if (dependencies.recordGrounding)
+      dependencies.recordGrounding(context.metadata);
+    else
+      (input.logger ?? log).info(
+        { event: "outreach.grounding.prepared", ...context.metadata },
+        "Outreach grounding context prepared",
+      );
     return context;
   } catch {
     throw new OutreachGroundingUnavailableError();

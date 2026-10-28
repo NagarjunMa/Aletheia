@@ -24,6 +24,28 @@ const candidate: CandidateGroundingData = {
 };
 
 describe("prepareOutreachGroundingContext", () => {
+  it("writes safe preparation metadata through the supplied request logger", async () => {
+    const info = vi.fn();
+    const logger = {
+      info,
+      warn: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
+      child: vi.fn(),
+    };
+    await prepareOutreachGroundingContext(
+      { caller, target, logger },
+      { loadCandidateData: async () => candidate },
+    );
+    expect(info).toHaveBeenCalledWith(
+      expect.objectContaining({ event: "outreach.grounding.prepared" }),
+      expect.any(String),
+    );
+    expect(JSON.stringify(info.mock.calls)).not.toContain(caller.accessToken);
+    expect(JSON.stringify(info.mock.calls)).not.toContain(
+      target.profileMarkdown,
+    );
+  });
   it("uses the same load/build timing stages as application answers", async () => {
     let time = 0;
     const timing = createGenerationTiming(() => time);

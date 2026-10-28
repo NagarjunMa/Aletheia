@@ -71,8 +71,17 @@ export function buildAtomicTargetSources(
     conversation?: string;
   },
   excludedClaims: readonly string[] = [],
-): AtomicSource[] {
+  fitsOutput: (_source: AtomicSource) => boolean = () => true,
+) {
   const result: AtomicSource[] = [];
+  const diagnostics = {
+    examined: 0,
+    excluded: 0,
+    overlength: 0,
+    budgetRejected: 0,
+    pageControls: 0,
+    accepted: 0,
+  };
   let remaining = 4_000;
   for (const [name, raw] of Object.entries(input)) {
     if (!raw) continue;
@@ -81,22 +90,45 @@ export function buildAtomicTargetSources(
       .split(/\n\s*\n/u)
       .forEach((paragraph, index) => {
         const content = normalizeClaimText(escapeForXmlTag(paragraph));
+        if (!content) return;
+        diagnostics.examined += 1;
+        // Reject control-only blocks; never remove lines from a mixed fact.
         if (
-          !content ||
-          containsExcludedClaim(content, excludedClaims) ||
-          content.length > MAX_SUPPORTING_EXCERPT ||
-          content.length > remaining ||
-          result.length >= 16
-        )
+          name === "profile" &&
+          paragraph
+            .split("\n")
+            .filter((line) => line.trim())
+            .every((line) =>
+              /^(?:#{1,6}\s*)?(?:connect|follow|message|more|show (?:all|more|less)|about|experience|education|skills|activity|recommendations|contact info)$/iu.test(
+                line.trim(),
+              ),
+            )
+        ) {
+          diagnostics.pageControls += 1;
           return;
-        result.push({
+        }
+        if (containsExcludedClaim(content, excludedClaims)) {
+          diagnostics.excluded += 1;
+          return;
+        }
+        const source: AtomicSource = {
           id: `target.${name}.${index}`,
           scope: "target",
           kind: "target_observation",
           content,
-        });
+        };
+        if (content.length > MAX_SUPPORTING_EXCERPT || !fitsOutput(source)) {
+          diagnostics.overlength += 1;
+          return;
+        }
+        if (content.length > remaining || result.length >= 16) {
+          diagnostics.budgetRejected += 1;
+          return;
+        }
+        result.push(source);
+        diagnostics.accepted += 1;
         remaining -= content.length;
       });
   }
-  return result;
+  return { sources: result, diagnostics };
 }
