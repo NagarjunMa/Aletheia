@@ -15,6 +15,7 @@ import { z } from "zod";
 import { createLogger, startTimedStage, type SafeLogger } from "@/lib/logger";
 import {
   resolveOutputConstraint,
+  EMAIL_SUBJECT_MAX_CHARACTERS,
   type OutputConstraint,
 } from "@/lib/ai/output-constraints";
 import type { EmailMode } from "@/lib/ai/email-formatter";
@@ -61,7 +62,7 @@ export function buildEmailDraftTool(
           description:
             "The final subject line. Must follow the approved subject templates from the system instructions.",
           minLength: 1,
-          maxLength: 160,
+          maxLength: EMAIL_SUBJECT_MAX_CHARACTERS,
         },
         body: {
           type: "string",
@@ -100,7 +101,11 @@ export function buildColdEmailDraftTool(emailMode: EmailMode) {
       type: "object",
       additionalProperties: false,
       properties: {
-        subject_line: { type: "string", minLength: 1, maxLength: 160 },
+        subject_line: {
+          type: "string",
+          minLength: 1,
+          maxLength: EMAIL_SUBJECT_MAX_CHARACTERS,
+        },
         claims: atomicClaimsToolSchema,
         greeting: { type: "string", minLength: 1, maxLength: 80 },
         target_opening: { type: "string", minLength: 1, maxLength: 500 },
@@ -197,7 +202,7 @@ export const linkedinConnectionDraftTool = buildLinkedinConnectionDraftTool();
 
 const emailDraftToolInputSchema = z
   .object({
-    subject_line: z.string().trim().min(1).max(160),
+    subject_line: z.string().trim().min(1).max(EMAIL_SUBJECT_MAX_CHARACTERS),
     body: z.string().trim().min(1).max(5000),
     word_count: z.number().int().min(1).max(250),
     claims: atomicClaimsSchema,

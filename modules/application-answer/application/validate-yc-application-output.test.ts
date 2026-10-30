@@ -1,10 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { AtomicClaimValidationError } from "@/modules/grounding/application/validate-atomic-claims";
 import type { YcGroundingContext } from "../domain/yc-grounding.types";
-import {
-  validateYcApplicationOutput,
-  YcApplicationOutputValidationError,
-} from "./validate-yc-application-output";
+import { validateYcApplicationOutput } from "./validate-yc-application-output";
 
 const evidenceId = "evidence:11111111-1111-4111-8111-111111111111";
 
@@ -104,14 +101,42 @@ describe("validateYcApplicationOutput", () => {
     },
   );
 
-  it.each([49, 151])("rejects a %s-word answer", (wordCount) => {
-    expect(() =>
-      validateYcApplicationOutput({
-        output: output(bodyWithWords(wordCount)),
-        context: context(),
-      }),
-    ).toThrow(YcApplicationOutputValidationError);
-  });
+  it.each([49, 151])(
+    "rejects a grounded %s-word answer at the final limit gate",
+    (wordCount) => {
+      const fact = "I built tools.";
+      const body = `${Array(Math.floor(wordCount / 3))
+        .fill(fact)
+        .join(" ")} Thanks,`;
+      expect(body.split(/\s+/u)).toHaveLength(wordCount);
+      expect(() =>
+        validateYcApplicationOutput({
+          output: {
+            body,
+            claims: [
+              {
+                text: fact,
+                sourceIds: [evidenceId],
+                source_id: evidenceId,
+                kind: "action",
+                supporting_excerpt: fact,
+              },
+            ],
+          },
+          context: context({
+            atomicSources: [
+              {
+                id: evidenceId,
+                scope: "candidate",
+                kind: "action",
+                content: fact,
+              },
+            ],
+          }),
+        }),
+      ).toThrow(expect.objectContaining({ code: "OUTPUT_LIMIT" }));
+    },
+  );
 
   it("rejects unknown, missing, and non-verbatim claim references", () => {
     expect(() =>

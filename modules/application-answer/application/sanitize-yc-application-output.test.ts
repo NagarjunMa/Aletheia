@@ -2,10 +2,7 @@ import { describe, expect, it } from "vitest";
 import goldenCases from "@/lib/ai/evals/yc-application-golden-cases.json";
 import type { YcGroundingContext } from "../domain/yc-grounding.types";
 import type { YcApplicationToolOutput } from "../infrastructure/anthropic-yc.repository";
-import {
-  sanitizeYcApplicationOutput,
-  YcApplicationOutputSanitizationError,
-} from "./sanitize-yc-application-output";
+import { sanitizeYcApplicationOutput } from "./sanitize-yc-application-output";
 import { validateYcApplicationOutput } from "./validate-yc-application-output";
 
 const evidenceId = "evidence:11111111-1111-4111-8111-111111111111";
@@ -60,14 +57,13 @@ function output(overrides: Partial<YcApplicationToolOutput> = {}) {
 }
 
 describe("sanitizeYcApplicationOutput", () => {
-  it("preserves immutable claims and rejects altered factual output", async () => {
+  it("preserves source-backed wording and detects style without rewriting", async () => {
     expect(() =>
       validateYcApplicationOutput({ context, output: output() }),
     ).not.toThrow();
     const result = await sanitizeYcApplicationOutput(output());
 
-    expect(result.output.body).not.toContain(" -- ");
-    expect(result.output.body).not.toContain("With that in mind");
+    expect(result.output.body).toBe(body);
     expect(result.output.claims[0]?.text).toBe(groundedClaim);
     expect(result.metadata.fingerprintPatterns).toEqual(
       expect.arrayContaining(["spaced_double_hyphen", "ai_transition_mind"]),
@@ -77,26 +73,19 @@ describe("sanitizeYcApplicationOutput", () => {
     );
     expect(() =>
       validateYcApplicationOutput({ context, output: result.output }),
+    ).not.toThrow();
+  });
+
+  it("preserves short text for the final grounding and length checks", async () => {
+    const input = output({ body: "I'll keep this brief." });
+    const result = await sanitizeYcApplicationOutput(input);
+    expect(result.output.body).toBe(input.body);
+    expect(() =>
+      validateYcApplicationOutput({ context, output: result.output }),
     ).toThrow(expect.objectContaining({ code: "CLAIM_COVERAGE" }));
   });
 
-  it("fails closed when sanitation removes a claim", async () => {
-    await expect(
-      sanitizeYcApplicationOutput(
-        output({
-          body: "I'll keep this brief.",
-          claims: [
-            {
-              text: "I'll keep this brief.",
-              sourceIds: [evidenceId],
-            },
-          ],
-        }),
-      ),
-    ).rejects.toBeInstanceOf(YcApplicationOutputSanitizationError);
-  });
-
-  it("fails closed when fingerprint rewriting expands an answer beyond its tool limit", async () => {
+  it("fails closed when Unicode equivalence expands an answer beyond its tool limit", async () => {
     const claim = "I built reliable TypeScript services.";
     const prefix = `${claim} I collaborated… with customers. `;
     const rawBody = `${prefix}${"x".repeat(3_000 - prefix.length)}`;
@@ -109,7 +98,9 @@ describe("sanitizeYcApplicationOutput", () => {
           claims: [{ text: claim, sourceIds: [evidenceId] }],
         }),
       ),
-    ).rejects.toThrow("Generated answer exceeded the sanitization limit");
+    ).rejects.toThrow(
+      "Generated answer exceeded or failed the sanitization limit",
+    );
   });
 
   it("does not alter command flags, version strings, or hyphenated technical terms", async () => {
@@ -148,9 +139,7 @@ describe("sanitizeYcApplicationOutput", () => {
     expect(result.metadata.fingerprintPatterns).toEqual(
       expect.arrayContaining(fixture.sanitizationRegression.expectedPatterns),
     );
-    for (const forbidden of fixture.sanitizationRegression.expectedAbsent) {
-      expect(result.output.body).not.toContain(forbidden);
-    }
+    expect(result.output.body).toBe(fixture.sanitizationRegression.body);
     for (const preserved of fixture.sanitizationRegression.expectedPresent) {
       expect(result.output.body).toContain(preserved);
     }

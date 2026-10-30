@@ -1,3 +1,4 @@
+import { prepareGroundedText } from "@/modules/grounding/application/finalize-grounded-output";
 import type { CandidateGroundingSource } from "@/modules/candidate-context/domain/candidate-context.types";
 import type { ConnectionValidationDetail } from "../domain/linkedin-connection-diagnostics";
 import {
@@ -61,7 +62,7 @@ const STOP_WORDS = new Set([
 ]);
 
 function normalize(value: string): string {
-  return value.replace(/\s+/gu, " ").trim();
+  return prepareGroundedText(value);
 }
 
 function tokens(value: string): string[] {

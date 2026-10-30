@@ -6,7 +6,10 @@ import {
   generateYcApplication,
   type GenerateYcApplicationDependencies,
 } from "./generate-yc-application.service";
-import { YcApplicationOutputSanitizationError } from "./sanitize-yc-application-output";
+import {
+  sanitizeYcApplicationOutput,
+  YcApplicationOutputSanitizationError,
+} from "./sanitize-yc-application-output";
 import { createGenerationTiming } from "@/lib/generation-timing";
 import { createLogger } from "@/lib/logger";
 import { buildYcGroundingContext } from "./build-yc-grounding-context";
@@ -1043,4 +1046,101 @@ describe("ALE-53 debit capture callbacks", () => {
     expect(onCreditReservationPending.mock.calls).toEqual([[true]]);
     expect(deps.refundCredits).not.toHaveBeenCalled();
   });
+});
+
+describe("ALE-47 actual YC finalization", () => {
+  it.each([
+    [false, false],
+    [true, false],
+    [false, true],
+    [true, true],
+  ])(
+    "keeps facts or refunds final overlength output (batch: %s, oversized: %s)",
+    async (isBatch, oversized) => {
+      const fact = `${answer} I used robust AI-first Node.js v20.2 workflows — with --dry-run.`;
+      const body = oversized ? Array(3).fill(fact).join(" ") : fact;
+      const id = "evidence:11111111-1111-4111-8111-111111111111";
+      const claim = {
+        text: fact,
+        kind: "action" as const,
+        source_id: id,
+        supporting_excerpt: fact,
+        sourceIds: [id],
+      };
+      const ctx = grounding();
+      ctx.sources[0]!.content = fact;
+      ctx.atomicSources![0]!.content = fact;
+      const questions = [
+        "Describe your work?",
+        "Describe your production experience?",
+      ];
+      const deps = dependencies({
+        prepareGrounding: vi.fn().mockResolvedValue(ctx),
+        parseMessage: vi.fn().mockReturnValue({ body, claims: [claim] }),
+        sanitizeOutput: sanitizeYcApplicationOutput,
+        createMessage: vi.fn().mockResolvedValue({
+          stop_reason: "tool_use",
+          content: [
+            {
+              type: "tool_use",
+              name: "return_application_answers",
+              input: {
+                answers: questions.map((_, index) => ({
+                  questionId: `q${index + 1}`,
+                  body,
+                  word_count: 65,
+                  claims: [
+                    {
+                      text: fact,
+                      kind: "action",
+                      source_id: id,
+                      supporting_excerpt: fact,
+                    },
+                  ],
+                })),
+              },
+            },
+          ],
+          usage: { input_tokens: 120, output_tokens: 800 },
+        }),
+      });
+      const response = await generateYcApplication(
+        {
+          caller,
+          request: isBatch
+            ? { category: "yc_application", jd: request.jd, questions }
+            : request,
+          corsHeaders: {},
+          applicationBaseUrl: "https://aletheia.live",
+        },
+        deps,
+      );
+      if (oversized) {
+        expect(response.status).toBe(502);
+        expect((await response.json()).code).toBe("YC_OUTPUT_INVALID");
+        expect(deps.createMessage).toHaveBeenCalledTimes(1);
+        expect(deps.refundCredits).toHaveBeenCalledTimes(1);
+        expect(deps.releaseRateLimit).toHaveBeenCalledWith(
+          caller.userId,
+          "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          expect.anything(),
+        );
+        return;
+      }
+      expect(response.status).toBe(200);
+      const result = await response.json();
+      if (isBatch) {
+        expect(
+          result.answers.map((entry: { body: string }) => entry.body),
+        ).toEqual([fact, fact]);
+        expect(result.body).toContain(`**${questions[0]}**\n${fact}`);
+      } else expect(result.body).toBe(fact);
+      expect(JSON.stringify(result)).not.toMatch(
+        /supporting_excerpt|sourceIds|evidence:111/,
+      );
+      expect(deps.createMessage).toHaveBeenCalledTimes(1);
+      expect(deps.reserveCredits).toHaveBeenCalledTimes(1);
+      expect(deps.refundCredits).not.toHaveBeenCalled();
+    },
+  );
 });

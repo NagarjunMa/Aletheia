@@ -1,5 +1,8 @@
 import { z } from "zod";
-import { LINKEDIN_CONNECTION_MAX_CHARACTERS } from "@/lib/ai/output-constraints";
+import {
+  EMAIL_SUBJECT_MAX_CHARACTERS,
+  LINKEDIN_CONNECTION_MAX_CHARACTERS,
+} from "@/lib/ai/output-constraints";
 import {
   atomicClaimsSchema,
   type AtomicClaim,
@@ -23,7 +26,7 @@ export const coldEmailProofPointSchema = z
  */
 export const coldEmailDraftSchema = z
   .object({
-    subject_line: boundedSection(160),
+    subject_line: boundedSection(EMAIL_SUBJECT_MAX_CHARACTERS),
     greeting: boundedSection(80),
     target_opening: boundedSection(500),
     candidate_positioning: boundedSection(500),

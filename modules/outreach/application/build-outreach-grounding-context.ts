@@ -1,3 +1,4 @@
+import { normalizeClaimText } from "@/modules/grounding/domain/atomic-claim";
 import type { EvidenceSelectionDiagnostics } from "@/modules/candidate-context/domain/candidate-context.types";
 import {
   normalizeForExclusion,
@@ -36,14 +37,7 @@ const MIN_SOURCE_CHARS = 80;
 type DraftSource = CandidateGroundingSource & { rawContent: string };
 
 function normalizeText(value: string): string {
-  return value
-    .normalize("NFKC")
-    .replace(/\r\n?/gu, "\n")
-    .split("\n")
-    .map((line) => line.replace(/[\t\f\v ]+/gu, " ").trim())
-    .join("\n")
-    .replace(/\n{3,}/gu, "\n\n")
-    .trim();
+  return normalizeClaimText(value);
 }
 
 function normalizeForMatching(value: string): string {

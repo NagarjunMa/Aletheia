@@ -19,7 +19,7 @@ describe("YC application output sanitation guardrails", () => {
     ).rejects.toBeInstanceOf(YcApplicationOutputSanitizationError);
   });
 
-  it("redacts the public body and rejects changed evidence rather than rewriting its ledger", async () => {
+  it("rejects sensitive output without modifying its evidence", async () => {
     const claim = "I handled an incident involving SSN 123-45-6789.";
     const claims = [
       {
@@ -45,15 +45,14 @@ describe("YC application output sanitation guardrails", () => {
         fields: [{ text, scope: "candidate" }],
       });
     expect(() => validate(claim)).not.toThrow();
-    const result = await sanitizeYcApplicationOutput({
+    const original = {
       body: claim,
       claims: claims.map((entry) => ({ ...entry, sourceIds: [evidenceId] })),
-    });
-
-    expect(result.output.body).not.toContain("123-45-6789");
-    expect(result.output.claims[0]?.text).toBe(claim);
-    expect(() => validate(result.output.body)).toThrow(
-      expect.objectContaining({ code: "CLAIM_COVERAGE" }),
+    };
+    const before = structuredClone(original);
+    await expect(sanitizeYcApplicationOutput(original)).rejects.toBeInstanceOf(
+      YcApplicationOutputSanitizationError,
     );
+    expect(original).toEqual(before);
   });
 });

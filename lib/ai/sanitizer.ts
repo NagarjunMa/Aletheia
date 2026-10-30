@@ -105,7 +105,7 @@ const PROFANITY_PATTERNS = [
 const HARMFUL_PATTERNS = [
   /\b\d{3}-\d{2}-\d{4}\b/g, // SSN
   /\b\d{16}\b/g, // Credit card
-  /<script[^>]*>.*?<\/script>/gi,
+  /<\/?script\b[^>]*>/gi,
   /javascript:/gi,
   /vbscript:/gi,
   /onload|onerror|onclick/gi,
@@ -166,7 +166,7 @@ export async function sanitizeAIOutput(
     }
 
     const blockedMatches = BLOCKED_CONTENT_PATTERNS.some((pattern) =>
-      pattern.test(sanitizedContent),
+      Boolean(sanitizedContent.match(pattern)),
     );
 
     if (blockedMatches) {
@@ -342,4 +342,56 @@ export async function sanitizeForEmail(
     platform: "email",
     humanize: true,
   });
+}
+
+/** Fixed safe codes only; generated text must never become an error message. */
+export class GroundedTextSanitizationError extends Error {
+  readonly code: "OUTPUT_ENCODING" | "OUTPUT_BLOCKED" | "OUTPUT_UNSAFE";
+  constructor(code: GroundedTextSanitizationError["code"]) {
+    super("Generated output failed safety validation");
+    this.code = code;
+    this.name = "GroundedTextSanitizationError";
+  }
+}
+
+/** Inspect text-only grounded output without editing facts, technical syntax or CTA. */
+export function inspectGroundedText(
+  content: string,
+  platform: "linkedin" | "email" | "general",
+): { fingerprintPatterns: string[] } {
+  const reject = (code: GroundedTextSanitizationError["code"]): never => {
+    log.warn(
+      { event: "grounded_output.rejected", errorCode: code, platform },
+      "Grounded output rejected",
+    );
+    throw new GroundedTextSanitizationError(code);
+  };
+  if (stripSurrogates(content) !== content) reject("OUTPUT_ENCODING");
+  // String.match resets global-regex state, keeping repeated attempts fail-closed.
+  if (
+    BLOCKED_CONTENT_PATTERNS.some((pattern) => Boolean(content.match(pattern)))
+  )
+    reject("OUTPUT_BLOCKED");
+  if (
+    HARMFUL_PATTERNS.some((pattern) => Boolean(content.match(pattern))) ||
+    PROFANITY_PATTERNS.some((pattern) => Boolean(content.match(pattern))) ||
+    (platform !== "email" && Boolean(content.match(EMAIL_PATTERN)))
+  )
+    reject("OUTPUT_UNSAFE");
+  const fingerprintPatterns = detectAIFingerprints(
+    content,
+    platform,
+  ).detectedPatterns;
+  if (fingerprintPatterns.length) {
+    log.info(
+      {
+        event: "grounded_output.fingerprints",
+        platform,
+        patternCount: fingerprintPatterns.length,
+        patterns: fingerprintPatterns,
+      },
+      "Grounded style patterns detected without rewriting",
+    );
+  }
+  return { fingerprintPatterns };
 }

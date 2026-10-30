@@ -99,9 +99,9 @@ export const NEUTRAL_FRAMING = [
   "A quick look at my background:",
 ] as const;
 
-/** No case/punctuation folding; negation, actor and numeric notation survive. */
+/** Inner whitespace can be part of a literal value; only encoding and outer trim are equivalent. */
 export function normalizeClaimText(value: string): string {
-  return value.normalize("NFKC").replace(/\s+/gu, " ").trim();
+  return value.normalize("NFKC").replace(/\r\n?/gu, "\n").trim();
 }
 
 // Only named fields may move out of a headline suffix; free text can qualify
@@ -138,16 +138,19 @@ export function allowedClaimTexts(source: AtomicSource): string[] {
     forms.push(`My current role is ${excerpt}.`);
   }
   if (source.scope === "target" && source.kind === "target_observation") {
+    // Only the closed named-field grammar may treat line wrapping as formatting.
+    // Unknown/quoted literal context still uses the complete exact excerpt.
+    const structuredExcerpt = excerpt.replace(/\s+/gu, " ");
     if (source.rewrite === "linkedin_profile_interest") {
       // A complete headline can change grammar without claiming the specialty
       // belongs to the role. Ambiguous/qualified narratives keep the full quote.
       const headline =
         /^(Engineering Manager|Software Engineer|Applied AI Engineer|Research Engineer|Research Scientist|Product Manager|Data Scientist|Director of Engineering|Head of Engineering) at ([\p{L}\p{N}][\p{L}\p{N} &+/-]{0,79}) \| ([\p{L}\p{N}][\p{L}\p{N} &+/-]{0,79})$/u.exec(
-          excerpt,
+          structuredExcerpt,
         );
       const qualified =
         /\b(?:not|no|never|former|formerly|previously|ex|aspiring|seeking|hiring|until|only|unless|except|without|simulation)\b/iu.test(
-          excerpt,
+          structuredExcerpt,
         );
       return [
         headline &&
@@ -164,7 +167,7 @@ export function allowedClaimTexts(source: AtomicSource): string[] {
       // Qualifications, negation and additional sentences retain the whole quote.
       const hiring =
         /^(The [\p{L}\p{N}&+/-]+(?: [\p{L}\p{N}&+/-]+){0,9} team at [\p{L}\p{N}&+/-]+(?: [\p{L}\p{N}&+/-]+){0,5}) is hiring ((?:[A-Z][\p{L}\p{N}+#/-]* ){0,6}(?:Engineers|Developers|Designers|Researchers))[.!]?$/u.exec(
-          excerpt,
+          structuredExcerpt,
         );
       return [
         hiring

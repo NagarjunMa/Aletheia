@@ -113,6 +113,36 @@ describe("atomic final-output provenance", () => {
       expect.objectContaining({ code: "CLAIM_EXCLUDED" }),
     );
   });
+  it.each([
+    ["I supported  the rollout; I did not lead it.", "supported the roll"],
+    ["I supported the rollout; I did not lead it.", "supported  the roll"],
+    ["I supported\tthe rollout; I did not lead it.", "supported the roll"],
+    ["I supported\nthe rollout; I did not lead it.", "supported the roll"],
+    ["I supported  the rollout; I did not lead it.", "supported\tthe roll"],
+  ])(
+    "retains conservative substring exclusions with different whitespace %#",
+    (body, excluded) => {
+      expect(() =>
+        run({
+          sources: [{ ...source, content: body }],
+          claims: [{ ...claim, text: body, supporting_excerpt: body }],
+          fields: [{ text: body, scope: "candidate" }],
+          excludedClaims: [excluded],
+        }),
+      ).toThrow(expect.objectContaining({ code: "CLAIM_EXCLUDED" }));
+    },
+  );
+  it("keeps exact literal whitespace when an exclusion does not match", () => {
+    const body = "I supported  the rollout; I did not lead it.";
+    expect(() =>
+      run({
+        sources: [{ ...source, content: body }],
+        claims: [{ ...claim, text: body, supporting_excerpt: body }],
+        fields: [{ text: body, scope: "candidate" }],
+        excludedClaims: ["supported the release"],
+      }),
+    ).not.toThrow();
+  });
   it("rejects target evidence used as a candidate assertion", () => {
     expect(() =>
       run({
@@ -122,17 +152,27 @@ describe("atomic final-output provenance", () => {
   });
   it("rejects candidate claims without candidate sources", () =>
     expect(() => run({ sources: [] })).toThrow());
-  it("permits documented Unicode/whitespace equivalence", () => {
+  it("permits Unicode, CRLF and outer-trim equivalence without flattening facts", () => {
+    const body = "I supported\n the rollout; I did not lead it.";
+    const original = "Ｉ supported\r\n the rollout; I did not lead it.";
     expect(() =>
       run({
-        sources: [
-          {
-            ...source,
-            content: "Ｉ supported\r\n the rollout; I did not lead it.",
-          },
+        sources: [{ ...source, content: original }],
+        claims: [
+          { ...claim, text: `  ${body}  `, supporting_excerpt: original },
         ],
+        fields: [{ text: `\n${body}\n`, scope: "candidate" }],
       }),
     ).not.toThrow();
+  });
+  it("rejects flattening whitespace within a confirmed fact", () => {
+    const original = "I supported\n the rollout; I did not lead it.";
+    expect(() =>
+      run({
+        sources: [{ ...source, content: original }],
+        claims: [{ ...claim, supporting_excerpt: original }],
+      }),
+    ).toThrow(expect.objectContaining({ code: "CLAIM_REWRITE" }));
   });
   it("permits a neutral target-only invitation", () => {
     expect(() =>

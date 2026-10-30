@@ -1,3 +1,4 @@
+import { normalizeClaimText } from "@/modules/grounding/domain/atomic-claim";
 import { createEvidenceRanker } from "@/modules/candidate-context/application/rank-evidence";
 import {
   normalizeForExclusion,
@@ -28,14 +29,7 @@ type DraftSource = YcGroundingSource & {
 };
 
 function normalizeText(value: string): string {
-  return value
-    .normalize("NFKC")
-    .replace(/\r\n?/gu, "\n")
-    .split("\n")
-    .map((line) => line.replace(/[\t\f\v ]+/gu, " ").trim())
-    .join("\n")
-    .replace(/\n{3,}/gu, "\n\n")
-    .trim();
+  return normalizeClaimText(value);
 }
 
 function normalizeForMatching(value: string): string {

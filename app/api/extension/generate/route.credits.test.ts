@@ -83,7 +83,8 @@ vi.mock("@anthropic-ai/sdk", () => {
   return { default: AnthropicMock };
 });
 
-vi.mock("@/lib/ai/sanitizer", () => ({
+vi.mock("@/lib/ai/sanitizer", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/ai/sanitizer")>()),
   sanitizeForLinkedIn: vi.fn().mockImplementation(async (content) => ({
     success: true,
     sanitizedContent: content,
@@ -725,6 +726,67 @@ describe("POST /api/extension/generate with credit billing enabled", () => {
       expect(mockRpc.mock.calls.map((call) => call[0])).toContain(
         "release_generation_daily_slot",
       );
+    },
+  );
+
+  it.each(["cold_email", "linkedin_inmail"] as const)(
+    "refunds the exact credit and daily reservations for grounded overlength %s output",
+    async (category) => {
+      const neutral = Array(18).fill("I'd welcome a conversation.").join(" ");
+      const input =
+        category === "cold_email"
+          ? {
+              subject_line: "A brief introduction",
+              greeting: "there",
+              target_opening: neutral,
+              candidate_positioning: neutral,
+              proof_points: [],
+              value_statement: neutral,
+              cta: "Would you be open to a brief chat?",
+              claims: [],
+            }
+          : {
+              subject_line: "A brief introduction",
+              body: `${neutral} ${neutral}`,
+              word_count: 144,
+              claims: [],
+            };
+      mockAnthropicCreate.mockResolvedValueOnce({
+        content: [
+          {
+            type: "tool_use",
+            name:
+              category === "cold_email"
+                ? "return_cold_email_composition"
+                : "return_email_draft",
+            input,
+          },
+        ],
+        usage: { input_tokens: 100, output_tokens: 180 },
+      });
+      const { POST } = await importRouteWithBillingEnabled();
+      const response = await POST(
+        makeRequest({
+          method: "POST",
+          headers: { authorization: "Bearer test" },
+          body: { ...validPayload, category },
+        }),
+      );
+      expect(response.status).toBe(502);
+      expect((await response.json()).code).toBe("PARSE_FAILED");
+      expect(mockRpc).toHaveBeenCalledWith(
+        "refund_generation_credits",
+        expect.objectContaining({
+          p_reservation_id: "reservation-1",
+          p_metadata: { reason: "parse_failed" },
+        }),
+      );
+      expect(
+        mockRpc.mock.calls.filter(
+          ([name]) => name === "release_generation_daily_slot",
+        ),
+      ).toHaveLength(1);
+      expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
     },
   );
 

@@ -41,9 +41,7 @@ describe("complete source units", () => {
     const result = buildAtomicTargetSources({
       profile: `Connect\nFollow\nMessage\nMore\n\n${mixed}`,
     });
-    expect(result.sources.map((source) => source.content)).toEqual([
-      "About I build evaluation tools. Follow",
-    ]);
+    expect(result.sources.map((source) => source.content)).toEqual([mixed]);
     expect(result.diagnostics.pageControls).toBe(1);
   });
   it("does not promote standalone LinkedIn controls to target facts", () => {
