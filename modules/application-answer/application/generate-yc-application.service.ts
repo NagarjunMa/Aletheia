@@ -1,3 +1,5 @@
+import { GroundedOutputLimitError } from "@/modules/grounding/application/finalize-grounded-output";
+import { GroundedTextSanitizationError } from "@/lib/ai/sanitizer";
 import { AtomicClaimValidationError } from "@/modules/grounding/application/validate-atomic-claims";
 import { randomUUID } from "node:crypto";
 import type { GenerationTiming } from "@/lib/generation-timing";
@@ -651,6 +653,8 @@ export async function generateYcApplication(
   } catch (error) {
     const outputInvalid =
       error instanceof AtomicClaimValidationError ||
+      error instanceof GroundedTextSanitizationError ||
+      error instanceof GroundedOutputLimitError ||
       error instanceof YcApplicationOutputValidationError ||
       error instanceof YcApplicationOutputSanitizationError ||
       error instanceof YcApplicationStructuredOutputError ||

@@ -1,4 +1,9 @@
 import {
+  finalizeGroundedOutput,
+  GroundedOutputLimitError,
+  prepareGroundedText,
+} from "@/modules/grounding/application/finalize-grounded-output";
+import {
   buildLinkedinSelectionTool,
   LinkedinGroundingUnavailableError,
   linkedinTargetFits,
@@ -13,31 +18,22 @@ import {
   ATOMIC_PROVENANCE_INSTRUCTIONS,
   buildAtomicProvenancePrompt,
 } from "@/lib/ai/prompts/atomic-provenance";
-import {
-  AtomicClaimValidationError,
-  validateAtomicOutput,
-} from "@/modules/grounding/application/validate-atomic-claims";
+import { AtomicClaimValidationError } from "@/modules/grounding/application/validate-atomic-claims";
 import { validateOutreachProvenance } from "./validate-outreach-provenance";
 import { NextRequest, NextResponse } from "next/server";
 import {
   getSystemPrompt,
   buildPrompt,
-  sanitize,
   PROMPT_VERSION,
   type GenerateInput,
 } from "@/lib/ai/prompts/linkedin-connection";
 import type { StylePatterns } from "@/lib/ai/style-analyzer";
 import {
-  sanitizeForLinkedIn,
+  GroundedTextSanitizationError,
   stripSurrogates,
-  stripModelPreambleAndSuffix,
 } from "@/lib/ai/sanitizer";
 import { scanForInjection } from "@/lib/ai/prompts/injection-heuristic";
 import { deriveSafeCandidateSummary } from "@/lib/ai/candidate-summary";
-import {
-  formatGeneratedEmailBody,
-  type EmailMode,
-} from "@/lib/ai/email-formatter";
 import {
   countOutputUnits,
   resolveOutputConstraint,
@@ -65,10 +61,6 @@ import {
   generateRequestSchema,
   ycApplicationRequestSchema,
 } from "@/app/api/extension/generate/schema";
-import {
-  countWords,
-  truncateToWordLimit,
-} from "@/app/api/extension/generate/utils";
 import {
   candidateContextUnavailableResponse,
   messageFocusUnavailableResponse,
@@ -124,47 +116,6 @@ import {
 import { validateOutreachDraft } from "./validate-outreach-draft";
 
 let hasHandledGeneration = false;
-
-class EmailOutputConstraintError extends Error {
-  readonly actualWordCount: number;
-  readonly minimumWordCount: number;
-  readonly maximumWordCount: number;
-
-  constructor(
-    actualWordCount: number,
-    minimumWordCount: number,
-    maximumWordCount: number,
-  ) {
-    super("Generated email did not satisfy its output constraint");
-    this.name = "EmailOutputConstraintError";
-    this.actualWordCount = actualWordCount;
-    this.minimumWordCount = minimumWordCount;
-    this.maximumWordCount = maximumWordCount;
-  }
-}
-
-function validateFinalEmailWordCount(input: {
-  body: string;
-  category: "cold_email" | "linkedin_inmail";
-  emailMode: EmailMode;
-}): number {
-  const constraint = resolveOutputConstraint({
-    category: input.category,
-    emailMode: input.emailMode,
-  });
-  const actualWordCount = countOutputUnits(input.body, constraint.unit);
-  if (
-    actualWordCount < constraint.minimum ||
-    actualWordCount > constraint.maximum
-  ) {
-    throw new EmailOutputConstraintError(
-      actualWordCount,
-      constraint.minimum,
-      constraint.maximum,
-    );
-  }
-  return actualWordCount;
-}
 
 async function releaseOutreachReservations(input: {
   credit: ReservedCredit | undefined;
@@ -837,25 +788,17 @@ async function handlePost(
           identity: preparedGrounding.identity,
           mode: emailMode,
         });
-        const subject = sanitize(stripModelPreambleAndSuffix(rendered.subject));
-        const body = stripModelPreambleAndSuffix(rendered.body)
-          .split(/\n{2,}/u)
-          .map((paragraph) => sanitize(paragraph))
-          .filter(Boolean)
-          .join("\n\n");
-        const wordCount = validateFinalEmailWordCount({
-          body,
-          category,
-          emailMode,
-        });
-
+        const { subject, body } = rendered;
         validateOutreachProvenance({
           body,
           subject,
+          bodyConstraint: resolveOutputConstraint({ category, emailMode }),
+          requiredEnding: prepareGroundedText(draft.cta),
           claims: draft.claims,
           context: preparedGrounding,
           renderedSignature: true,
         });
+        const wordCount = countOutputUnits(body, "words");
 
         timing.metrics({
           resultChars: body.length,
@@ -896,15 +839,23 @@ async function handlePost(
             errorCode:
               error instanceof AtomicClaimValidationError
                 ? error.code
-                : error instanceof EmailOutputConstraintError
+                : error instanceof GroundedOutputLimitError
                   ? "EMAIL_OUTPUT_CONSTRAINT_FAILED"
                   : "COLD_EMAIL_VALIDATION_FAILED",
             category,
-            ...(error instanceof EmailOutputConstraintError
+            ...(error instanceof GroundedOutputLimitError
               ? {
-                  actualWordCount: error.actualWordCount,
-                  minimumWordCount: error.minimumWordCount,
-                  maximumWordCount: error.maximumWordCount,
+                  ...(error.constraint.unit === "words"
+                    ? {
+                        actualWordCount: error.actualCount,
+                        minimumWordCount: error.constraint.minimum,
+                        maximumWordCount: error.constraint.maximum,
+                      }
+                    : {
+                        actualCharacterCount: error.actualCount,
+                        minimumCharacterCount: error.constraint.minimum,
+                        maximumCharacterCount: error.constraint.maximum,
+                      }),
                 }
               : {}),
           },
@@ -933,72 +884,18 @@ async function handlePost(
     if (category === "linkedin_inmail") {
       try {
         const parsed = getEmailDraftToolInput(response);
-        const basicSubjectSanitization = sanitize(
-          stripModelPreambleAndSuffix(parsed.subject_line),
-        );
-        const basicBodySanitization = sanitize(
-          stripModelPreambleAndSuffix(parsed.body),
-        );
-
-        const enhancedSubjectSanitization = await sanitizeForLinkedIn(
-          basicSubjectSanitization,
-        );
-        const enhancedBodySanitization = await sanitizeForLinkedIn(
-          basicBodySanitization,
-        );
-
-        const sanitizedSubject = enhancedSubjectSanitization.success
-          ? enhancedSubjectSanitization.sanitizedContent
-          : basicSubjectSanitization;
-        const sanitizedBody = enhancedBodySanitization.success
-          ? enhancedBodySanitization.sanitizedContent
-          : basicBodySanitization;
-
-        const subjectPatterns =
-          enhancedSubjectSanitization.aiFingerprints?.detectedPatterns ?? [];
-        const bodyPatterns =
-          enhancedBodySanitization.aiFingerprints?.detectedPatterns ?? [];
-
-        if (subjectPatterns.length || bodyPatterns.length) {
-          log.info(
-            {
-              subjectPatterns,
-              bodyPatterns,
-              category: validatedData.category,
-            },
-            "AI fingerprints stripped in Chrome extension generation",
-          );
-        }
-
-        let finalBody = formatGeneratedEmailBody(sanitizedBody, {
-          category,
-          mode: emailMode,
-        });
-        let wordCount = countWords(finalBody);
-        const { maximum: maxWords } = resolveOutputConstraint({
-          category,
-          emailMode,
-        });
-        if (wordCount > maxWords) {
-          log.warn(
-            { category, wordCount, maxWords },
-            "Category exceeds word limit",
-          );
-          finalBody = truncateToWordLimit(finalBody, maxWords);
-          wordCount = countWords(finalBody);
-        }
-        wordCount = validateFinalEmailWordCount({
-          body: finalBody,
-          category,
-          emailMode,
-        });
+        const sanitizedSubject = prepareGroundedText(parsed.subject_line);
+        const finalBody = prepareGroundedText(parsed.body);
 
         validateOutreachProvenance({
           body: finalBody,
           subject: sanitizedSubject,
+          bodyConstraint: resolveOutputConstraint({ category, emailMode }),
           claims: parsed.claims,
           context: preparedGrounding,
+          platform: "linkedin",
         });
+        const wordCount = countOutputUnits(finalBody, "words");
 
         timing.metrics({ resultChars: finalBody.length });
         // Mark slot consumed — successful response, no refund needed.
@@ -1034,17 +931,25 @@ async function handlePost(
         log.warn(
           {
             errorCode:
-              error instanceof EmailOutputConstraintError
+              error instanceof GroundedOutputLimitError
                 ? "EMAIL_OUTPUT_CONSTRAINT_FAILED"
                 : error instanceof AtomicClaimValidationError
                   ? error.code
                   : "EMAIL_DRAFT_VALIDATION_FAILED",
             category,
-            ...(error instanceof EmailOutputConstraintError
+            ...(error instanceof GroundedOutputLimitError
               ? {
-                  actualWordCount: error.actualWordCount,
-                  minimumWordCount: error.minimumWordCount,
-                  maximumWordCount: error.maximumWordCount,
+                  ...(error.constraint.unit === "words"
+                    ? {
+                        actualWordCount: error.actualCount,
+                        minimumWordCount: error.constraint.minimum,
+                        maximumWordCount: error.constraint.maximum,
+                      }
+                    : {
+                        actualCharacterCount: error.actualCount,
+                        minimumCharacterCount: error.constraint.minimum,
+                        maximumCharacterCount: error.constraint.maximum,
+                      }),
                 }
               : {}),
           },
@@ -1094,29 +999,25 @@ async function handlePost(
         );
       }
 
-      const sanitizeComponent = async (
+      const prepareComponent = (
         content: string,
         failureCode: LinkedinConnectionValidationCode,
       ) => {
-        const basic = sanitize(stripModelPreambleAndSuffix(content));
-        const result = await sanitizeForLinkedIn(basic);
-        if (!result.success || !result.sanitizedContent.trim()) {
-          throw new LinkedinConnectionValidationError(failureCode);
-        }
-        return result.sanitizedContent.trim();
+        const prepared = prepareGroundedText(content);
+        if (!prepared) throw new LinkedinConnectionValidationError(failureCode);
+        return prepared;
       };
-
-      const targetObservation = await sanitizeComponent(
+      const targetObservation = prepareComponent(
         draft.target_observation,
         "CONNECTION_EMPTY_SECTION",
       );
       const candidateRelevance = draft.candidate_relevance
-        ? await sanitizeComponent(
+        ? prepareComponent(
             draft.candidate_relevance.text,
             "CONNECTION_EMPTY_SECTION",
           )
         : null;
-      const sanitizedCta = await sanitizeComponent(
+      const sanitizedCta = prepareComponent(
         draft.cta,
         "CONNECTION_CTA_INVALIDATED",
       );
@@ -1136,11 +1037,17 @@ async function handlePost(
       });
       const body = rendered.body;
 
-      validateAtomicOutput({
+      finalizeGroundedOutput({
+        body,
+        bodyConstraint: resolveOutputConstraint({
+          category: "linkedin_connection",
+        }),
+        requiredEnding: sanitizedCta,
+        platform: "linkedin",
         claims: draft.claims,
         sources: preparedGrounding.atomicSources ?? [],
         excludedClaims: preparedGrounding.excludedClaims ?? [],
-        fields: [
+        scopedFields: [
           { text: targetObservation, scope: "target" },
           ...(candidateRelevance
             ? [{ text: candidateRelevance, scope: "candidate" as const }]
@@ -1186,7 +1093,10 @@ async function handlePost(
           ? error.code
           : error instanceof AtomicClaimValidationError
             ? error.code
-            : "CONNECTION_TOOL_OUTPUT_INVALID";
+            : error instanceof GroundedTextSanitizationError ||
+                error instanceof GroundedOutputLimitError
+              ? error.code
+              : "CONNECTION_TOOL_OUTPUT_INVALID";
       log.warn(
         {
           errorCode,

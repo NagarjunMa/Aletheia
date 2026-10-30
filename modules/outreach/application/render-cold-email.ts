@@ -1,13 +1,11 @@
-import {
-  countWords,
-  truncateToWordLimit,
-} from "@/app/api/extension/generate/utils";
+import { countWords } from "@/app/api/extension/generate/utils";
+import { prepareGroundedText } from "@/modules/grounding/application/finalize-grounded-output";
 import type { CandidateIdentity } from "@/modules/candidate-context/domain/candidate-context.types";
-import { getEmailWordLimit, type EmailMode } from "@/lib/ai/email-formatter";
+import { type EmailMode } from "@/lib/ai/email-formatter";
 import type { ColdEmailDraft } from "../domain/outreach-draft.types";
 
 function normalizeSection(value: string): string {
-  return value.replace(/\s+/gu, " ").trim();
+  return prepareGroundedText(value);
 }
 
 /** Composes the outbound body; no regex repair or model-owned identity. */
@@ -38,21 +36,7 @@ export function renderColdEmail(input: {
         .filter(Boolean)
         .join("\n")
     : "";
-  const limit = getEmailWordLimit("cold_email", input.mode).max;
-  const withSignature = [...blocks, signature].filter(Boolean).join("\n\n");
-  const stableWordCount = countWords(
-    [...blocks.slice(0, -1), signature].filter(Boolean).join(" "),
-  );
-  const finalSection = truncateToWordLimit(
-    blocks.at(-1) ?? "",
-    Math.max(1, limit - stableWordCount),
-  );
-  const body =
-    countWords(withSignature) <= limit
-      ? withSignature
-      : [...blocks.slice(0, -1), finalSection, signature]
-          .filter(Boolean)
-          .join("\n\n");
+  const body = [...blocks, signature].filter(Boolean).join("\n\n");
   return {
     subject: normalizeSection(input.draft.subject_line),
     body,

@@ -1,8 +1,8 @@
-import { validateAtomicOutput } from "@/modules/grounding/application/validate-atomic-claims";
 import {
-  YC_APPLICATION_MAX_WORDS,
-  YC_APPLICATION_MIN_WORDS,
-} from "@/app/api/extension/generate/schema";
+  finalizeGroundedOutput,
+  prepareGroundedText,
+} from "@/modules/grounding/application/finalize-grounded-output";
+import { resolveOutputConstraint } from "@/lib/ai/output-constraints";
 import type { YcApplicationToolOutput } from "../infrastructure/anthropic-yc.repository";
 import type { YcGroundingContext } from "../domain/yc-grounding.types";
 
@@ -21,12 +21,7 @@ export class YcApplicationOutputValidationError extends Error {
 }
 
 function normalizeText(value: string): string {
-  return value
-    .normalize("NFKC")
-    .replace(/\r\n?/gu, "\n")
-    .replace(/[\t\f\v ]+/gu, " ")
-    .replace(/ *\n */gu, "\n")
-    .trim();
+  return prepareGroundedText(value);
 }
 
 function normalizeForComparison(value: string): string {
@@ -53,15 +48,6 @@ export function validateYcApplicationOutput(input: {
 
   const body = normalizeText(input.output.body);
   const wordCount = countWords(body);
-  if (
-    body.length > 3000 ||
-    wordCount < YC_APPLICATION_MIN_WORDS ||
-    wordCount > YC_APPLICATION_MAX_WORDS
-  ) {
-    throw new YcApplicationOutputValidationError(
-      `Answer must contain ${YC_APPLICATION_MIN_WORDS} to ${YC_APPLICATION_MAX_WORDS} words`,
-    );
-  }
 
   if (FORBIDDEN_FRAMING.some((pattern) => pattern.test(body))) {
     throw new YcApplicationOutputValidationError(
@@ -85,12 +71,20 @@ export function validateYcApplicationOutput(input: {
     );
   }
 
-  validateAtomicOutput({
+  finalizeGroundedOutput({
+    body,
+    bodyConstraint: resolveOutputConstraint({ category: "yc_application" }),
+    platform: "general",
     claims: input.output.claims.map(({ sourceIds: _ids, ...claim }) => claim),
     sources: input.context.atomicSources ?? [],
     excludedClaims: input.context.excludedClaims,
-    fields: [{ text: body, scope: "either" }],
   });
+
+  if (body.length > 3000) {
+    throw new YcApplicationOutputValidationError(
+      "Answer exceeds the character limit",
+    );
+  }
 
   return {
     body,

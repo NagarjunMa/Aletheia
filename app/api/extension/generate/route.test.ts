@@ -1,3 +1,4 @@
+import * as connectionRenderer from "@/modules/outreach/application/render-linkedin-connection";
 const billingForCapture = vi.hoisted(() => ({ enabled: false }));
 vi.mock("@/lib/billing/credits", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/billing/credits")>()),
@@ -649,7 +650,8 @@ vi.mock("@/lib/cors", async (importOriginal) => {
   };
 });
 
-vi.mock("@/lib/ai/sanitizer", () => ({
+vi.mock("@/lib/ai/sanitizer", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/ai/sanitizer")>()),
   sanitizeForLinkedIn: mockSanitizeForLinkedIn,
   stripSurrogates: vi.fn((str) => str),
   stripModelPreambleAndSuffix: vi.fn((str) => str),
@@ -1499,6 +1501,81 @@ describe("POST /api/extension/generate", () => {
     expect(body.evalMetadata.emailMode).toBe("initial_outreach");
   });
 
+  it.each(["cold_email", "linkedin_inmail"] as const)(
+    "keeps supported technical wording and paragraph structure through the actual %s service",
+    async (category) => {
+      const fact =
+        'I built robust AI-first Node.js v20.2 services using --name="two  spaces".';
+      const id = "evidence:technical";
+      const claim = {
+        text: fact,
+        kind: "action",
+        source_id: id,
+        supporting_excerpt: fact,
+      };
+      mockPrepareOutreachGroundingContext.mockResolvedValueOnce({
+        identity: { fullName: "Synthetic", linkedinUrl: "" },
+        sources: [
+          { id, type: "evidence", label: "Work", content: fact, priority: 1 },
+        ],
+        atomicSources: [
+          { id, scope: "candidate", kind: "action", content: fact },
+        ],
+        metadata: {},
+      });
+      const repeat = (n: number) => Array(n).fill(fact).join(" ");
+      const inmailBody = `${repeat(4)}\n\n${repeat(4)}`;
+      const block =
+        category === "cold_email"
+          ? coldEmailCompositionBlock({
+              claims: [claim],
+              target_opening: repeat(3),
+              candidate_positioning: repeat(4),
+              proof_points: [{ text: fact, source_ids: [id] }],
+              value_statement: repeat(3),
+            })
+          : {
+              ...emailDraftToolBlock({
+                subject_line: "A brief introduction",
+                body: inmailBody,
+                word_count: 96,
+              }),
+              input: {
+                subject_line: "A brief introduction",
+                body: inmailBody,
+                word_count: 96,
+                claims: [claim],
+              },
+            };
+      mockAnthropicCreate.mockResolvedValueOnce({
+        content: [block],
+        usage: { input_tokens: 10, output_tokens: 20 },
+      });
+      const response = await POST(
+        makeRequest({
+          method: "POST",
+          headers: { Authorization: "Bearer test" },
+          body: { ...validPayload, category },
+        }),
+      );
+      expect(response.status).toBe(200);
+      const result = await response.json();
+      expect(result.body).toContain(fact);
+      expect(result.body).toContain("\n\n");
+      if (category === "linkedin_inmail") expect(result.body).toBe(inmailBody);
+      else
+        expect(result.body).toContain(
+          `A quick look at my background:\n${fact}`,
+        );
+      expect(result.character_count).toBe(result.body.length);
+      expect(result.word_count).toBe(result.body.trim().split(/\s+/u).length);
+      expect(JSON.stringify(result)).not.toMatch(
+        /supporting_excerpt|evidence:technical/,
+      );
+      expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it("rejects overlength LinkedIn connection output instead of truncating it", async () => {
     mockAnthropicCreate.mockResolvedValueOnce({
       content: [
@@ -1520,26 +1597,29 @@ describe("POST /api/extension/generate", () => {
     expect(body.code).toBe("PARSE_FAILED");
   });
 
-  it("rejects a connection note when component sanitation expands it past 300 characters", async () => {
-    mockSanitizeForLinkedIn.mockImplementation(async (content: string) => ({
-      success: true,
-      sanitizedContent: content.startsWith("I'd welcome")
-        ? "x".repeat(290)
-        : content,
-      isAIGenerated: false,
-    }));
-
-    const res = await POST(
-      makeRequest({
-        method: "POST",
-        headers: { authorization: "Bearer test" },
-        body: validPayload,
-      }),
-    );
-
-    expect(res.status).toBe(502);
-    await expect(res.json()).resolves.toMatchObject({ code: "PARSE_FAILED" });
-    expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
+  it("rejects an over-limit final body even if earlier components passed", async () => {
+    const original = connectionRenderer.renderLinkedinConnection;
+    const spy = vi
+      .spyOn(connectionRenderer, "renderLinkedinConnection")
+      .mockImplementationOnce((input) => {
+        const result = original(input);
+        const body = `${result.body} ${"Hi there, ".repeat(40).trim()}`;
+        return { ...result, body, characterCount: body.length };
+      });
+    try {
+      const res = await POST(
+        makeRequest({
+          method: "POST",
+          headers: { authorization: "Bearer test" },
+          body: validPayload,
+        }),
+      );
+      expect(res.status).toBe(502);
+      await expect(res.json()).resolves.toMatchObject({ code: "PARSE_FAILED" });
+      expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("accepts a valid LinkedIn note despite a stale model-declared count", async () => {
@@ -1731,7 +1811,7 @@ describe("POST /api/extension/generate", () => {
     expect(body.character_count).toBe(body.body.length);
   });
 
-  it("rejects unsupported punctuation rewrites after sanitation", async () => {
+  it("preserves source-backed punctuation without fingerprint rewriting", async () => {
     mockPrepareOutreachGroundingContext.mockResolvedValueOnce({
       identity: { fullName: "", linkedinUrl: "" },
       sources: [],
@@ -1782,14 +1862,12 @@ describe("POST /api/extension/generate", () => {
       }),
     );
 
-    expect(res.status).toBe(502);
-    await expect(res.json()).resolves.toMatchObject({
-      code: "PARSE_FAILED",
-    });
+    expect(res.status).toBe(200);
+    expect((await res.json()).body).toContain("Engineering — reliability.");
     expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
   });
 
-  it("logs a privacy-safe CTA validation code when component sanitation fails", async () => {
+  it("logs a privacy-safe code when final CTA text is unsafe", async () => {
     const warn = vi.fn();
     const logger = {
       info: vi.fn(),
@@ -1801,17 +1879,14 @@ describe("POST /api/extension/generate", () => {
     const spy = vi
       .spyOn(loggerModule, "createRequestLogger")
       .mockReturnValue(logger);
-    mockSanitizeForLinkedIn
-      .mockResolvedValueOnce({
-        success: true,
-        sanitizedContent: "I'd welcome a conversation.",
-        isAIGenerated: false,
-      })
-      .mockResolvedValueOnce({
-        success: false,
-        sanitizedContent: "",
-        isAIGenerated: false,
-      });
+    mockAnthropicCreate.mockResolvedValueOnce({
+      content: [
+        connectionCompositionBlock({
+          cta: "Open to a brief chat? 123-45-6789",
+        }),
+      ],
+      usage: { input_tokens: 10, output_tokens: 20 },
+    });
 
     try {
       const res = await POST(
@@ -1825,7 +1900,7 @@ describe("POST /api/extension/generate", () => {
       expect(res.status).toBe(502);
       const validationLog = warn.mock.calls.find(
         ([fields]) =>
-          fields?.errorCode === "CONNECTION_CTA_INVALIDATED" &&
+          fields?.errorCode === "OUTPUT_UNSAFE" &&
           fields?.category === "linkedin_connection",
       );
       expect(validationLog).toBeDefined();
@@ -1929,7 +2004,7 @@ describe("POST /api/extension/generate", () => {
       expect(mockAnthropicCreate).not.toHaveBeenCalled();
     },
   );
-  it("still rejects factual changes introduced during sanitation after source selection", async () => {
+  it("rejects factual changes in the final rendered body after source selection", async () => {
     mockAnthropicCreate.mockResolvedValueOnce({
       content: [
         {
@@ -1944,11 +2019,13 @@ describe("POST /api/extension/generate", () => {
       ],
       usage: { input_tokens: 100, output_tokens: 25 },
     });
-    mockSanitizeForLinkedIn.mockImplementation(async (content: string) => ({
-      success: true,
-      sanitizedContent: content.replace("Works", "Worked"),
-      aiFingerprints: { score: 0, detectedPatterns: [] },
-    }));
+    const original = connectionRenderer.renderLinkedinConnection;
+    const rendererSpy = vi
+      .spyOn(connectionRenderer, "renderLinkedinConnection")
+      .mockImplementationOnce((input) => {
+        const result = original(input);
+        return { ...result, body: result.body.replace("Works", "Worked") };
+      });
     const response = await POST(
       makeRequest({
         method: "POST",
@@ -1956,6 +2033,7 @@ describe("POST /api/extension/generate", () => {
         body: validPayload,
       }),
     );
+    rendererSpy.mockRestore();
     expect(response.status).toBe(502);
     expect(
       mockRpc.mock.calls.filter(
@@ -2118,18 +2196,9 @@ describe("POST /api/extension/generate", () => {
     expect(body.body).toMatch(/Open to a brief chat\?$/);
     expect(body.evalMetadata.hasCandidateRelevance).toBe(true);
     expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
-    expect(mockSanitizeForLinkedIn).toHaveBeenNthCalledWith(
-      1,
-      "I'd welcome a conversation.",
-    );
-    expect(mockSanitizeForLinkedIn).toHaveBeenNthCalledWith(
-      2,
-      "I built an LLM-assisted review workflow for engineers.",
-    );
-    expect(mockSanitizeForLinkedIn).toHaveBeenNthCalledWith(
-      3,
-      "Open to a brief chat?",
-    );
+    expect(mockSanitizeForLinkedIn).not.toHaveBeenCalled();
+    expect(body.claims).toBeUndefined();
+    expect(body.sources).toBeUndefined();
     const callArgs = mockAnthropicCreate.mock.calls[0]?.[0];
     expect(callArgs.tool_choice).toEqual({
       type: "tool",

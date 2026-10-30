@@ -12,6 +12,7 @@ export interface OutputConstraint {
 }
 
 export const LINKEDIN_CONNECTION_MAX_CHARACTERS = 300;
+export const EMAIL_SUBJECT_MAX_CHARACTERS = 160;
 export const APPLICATION_ANSWER_MIN_WORDS = 50;
 export const APPLICATION_ANSWER_MAX_WORDS = 150;
 

@@ -45,11 +45,17 @@ export function validateAtomicOutput(input: {
   const sources = new Map(input.sources.map((source) => [source.id, source]));
   if (sources.size !== input.sources.length)
     throw new AtomicClaimValidationError("CLAIM_SOURCE");
-  const excluded = input.excludedClaims.map(normalizeClaimText).filter(Boolean);
-  // Add normalized topic matching without relaxing existing substring denials.
-  const isExcluded = (text: string) =>
-    containsExcludedClaim(text, input.excludedClaims) ||
-    excluded.some((value) => text.includes(value));
+  // Deny-only matching retains legacy whitespace folding; factual support stays exact.
+  const excluded = input.excludedClaims
+    .map((value) => normalizeClaimText(value).replace(/\s+/gu, " "))
+    .filter(Boolean);
+  const isExcluded = (text: string) => {
+    const exclusionText = text.replace(/\s+/gu, " ");
+    return (
+      containsExcludedClaim(text, input.excludedClaims) ||
+      excluded.some((value) => exclusionText.includes(value))
+    );
+  };
   const verified = claims.map((claim) => {
     const source = sources.get(claim.source_id);
     if (!source || source.kind !== claim.kind)
@@ -90,7 +96,8 @@ export function validateAtomicOutput(input: {
       const match = candidates.find(
         (candidate) =>
           remaining === candidate.text ||
-          remaining.startsWith(`${candidate.text} `),
+          (remaining.startsWith(candidate.text) &&
+            /\s/u.test(remaining[candidate.text.length] ?? "")),
       );
       if (!match) throw new AtomicClaimValidationError("CLAIM_COVERAGE");
       if (match.index >= 0) used.add(match.index);

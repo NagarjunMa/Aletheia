@@ -2,7 +2,9 @@
 
 ## Active Work
 
-LinkedIn introductory composition: see `docs/operations/linkedin-relevance-composition-plan.md` for current scope and `docs/operations/linkedin-introductory-messages.md` for the earlier repair. A/B1 eligibility is implemented locally; relevance ranking and wider composition remain pending. Preserve per-fact review, complete source support and final validation; verify useful introductory wording as well as HTTP success.
+ALE-47 final-output finalization: see `docs/operations/ale-47-grounded-finalization.md`. Grounded channels preserve source-backed text, inspect style without rewriting, and validate the exact final output before canonical limits. ALE-54 relevance ranking is merged into main; ALE-47 is integrated on that baseline. The reviewed-fact whitespace correction preserves literal values through source preparation and validation. Exclusion checks keep separate deny-only whitespace folding; current correction review remains pending.
+
+LinkedIn introductory composition: see `docs/operations/linkedin-relevance-composition-plan.md` for current scope and `docs/operations/linkedin-introductory-messages.md` for the earlier repair. A/B1 eligibility and ALE-54 relevance ranking are merged; wider composition remains pending. Preserve per-fact review, complete source support and final validation; verify useful introductory wording as well as HTTP success.
 
 ALE-54 deterministic evidence relevance: see `docs/operations/ale-54-evidence-relevance.md` for the shared request-local selector, question/JD priority, weak-match policy, synthetic evaluation and combined ALE-46 regression evidence.
 
@@ -21,7 +23,7 @@ Update that file whenever a phase completes or progress is made.
 
 ## Project Overview
 
-Aletheia helps professionals draft LinkedIn connection notes, networking emails, follow-ups, and role-fit replies from context they choose. Users review and edit every draft before sending. The app combines selected profile or opportunity context with the user's resume/intent and runs the output through a multi-stage sanitization + AI fingerprint removal pipeline.
+Aletheia helps professionals draft LinkedIn connection notes, networking emails, follow-ups, and role-fit replies from context they choose. Users review and edit every draft before sending. The app combines selected profile or opportunity context with the user's resume/intent and validates the exact final draft against its source-backed claim ledger and channel limits.
 
 **Two surfaces:**
 
@@ -64,11 +66,11 @@ Chrome Extension (MV3)              Next.js Web App
 
 **AI Pipeline (core differentiator):**
 
-1. Build prompt from category templates (`/lib/ai/prompts/`) — grounded, banned-phrase enforced
-2. Claude generates (temp 0.8, max 600 tokens, 30s timeout)
-3. Sanitization — unicode strip, blocked patterns, HTML tag strip, profanity, email redaction
-4. AI fingerprint stripping — 21 patterns rewritten (em-dash, buzzwords, formality formulas)
-5. Style learning — approved messages feed back into prompt as `acceptedExamples` + `styleProfile`
+1. Build escaped prompts from category templates and caller-owned, reviewed sources.
+2. Claude returns bounded structured composition with an immutable claim ledger; existing category token/time budgets apply.
+3. Prepare NFKC, line endings and outer whitespace; preserve inner spaces, technical tokens and paragraphs.
+4. Render deterministically, inspect safety and style, validate the exact final body/subject against atomic sources, then enforce canonical channel limits. Grounded style detection never rewrites facts; invalid output fails with fair compensation and no repair call.
+5. Style learning uses approved examples in future prompts; it does not override source provenance.
 
 ---
 
