@@ -1,7 +1,9 @@
+import type { EvidenceSelectionDiagnostics } from "@/modules/candidate-context/domain/candidate-context.types";
 import {
   normalizeForExclusion,
   containsExcludedClaim,
 } from "@/modules/grounding/domain/excluded-claims";
+import { createEvidenceRanker } from "@/modules/candidate-context/application/rank-evidence";
 import { deriveSafeCandidateSummary } from "@/lib/ai/candidate-summary";
 import {
   buildAtomicCandidateSources,
@@ -31,38 +33,6 @@ import {
 } from "../domain/outreach-grounding.types";
 
 const MIN_SOURCE_CHARS = 80;
-const AI_TARGET_PATTERN =
-  /\b(?:ai|artificial intelligence|llm|rag|agentic|agents?|machine learning|developer productivity|devtools?|sdlc|orchestration)\b/iu;
-const STOP_WORDS = new Set([
-  "a",
-  "an",
-  "and",
-  "are",
-  "as",
-  "at",
-  "be",
-  "by",
-  "for",
-  "from",
-  "in",
-  "is",
-  "it",
-  "of",
-  "on",
-  "or",
-  "our",
-  "that",
-  "the",
-  "their",
-  "this",
-  "to",
-  "we",
-  "who",
-  "with",
-  "you",
-  "your",
-]);
-
 type DraftSource = CandidateGroundingSource & { rawContent: string };
 
 function normalizeText(value: string): string {
@@ -84,14 +54,6 @@ function normalizeForMatching(value: string): string {
     .trim();
 }
 
-function tokenize(value: string): Set<string> {
-  return new Set(
-    normalizeForMatching(value)
-      .split(" ")
-      .filter((token) => token.length > 1 && !STOP_WORDS.has(token)),
-  );
-}
-
 function truncateAtBoundary(value: string, maximum: number): string {
   if (value.length <= maximum) return value;
   const candidate = value.slice(0, maximum);
@@ -106,12 +68,6 @@ function truncateAtBoundary(value: string, maximum: number): string {
 
 function excludedClaims(values: string[]): string[] {
   return [...new Set(values.map(normalizeForExclusion).filter(Boolean))];
-}
-
-function overlapScore(value: string, targetTokens: Set<string>): number {
-  let score = 0;
-  for (const token of tokenize(value)) if (targetTokens.has(token)) score += 1;
-  return score;
 }
 
 function renderEvidence(entry: CandidateEvidenceRecord): string {
@@ -156,32 +112,6 @@ function reviewedLinkedinEvidence(
     remaining -= size;
   }
   return parts.join("\n");
-}
-
-function rankedEvidence(
-  evidence: CandidateEvidenceRecord[],
-  target: string,
-): CandidateEvidenceRecord[] {
-  const targetTokens = tokenize(target);
-  const targetIsAi = AI_TARGET_PATTERN.test(target);
-  return [...evidence].sort((left, right) => {
-    const score = (entry: CandidateEvidenceRecord) =>
-      overlapScore(`${entry.title} ${entry.skills.join(" ")}`, targetTokens) *
-        4 +
-      overlapScore(
-        `${entry.outcome} ${entry.metrics.join(" ")}`,
-        targetTokens,
-      ) *
-        3 +
-      overlapScore(entry.actions, targetTokens) * 2 +
-      overlapScore(entry.context, targetTokens) +
-      (targetIsAi && entry.kind === "ai_usage" ? 100 : 0);
-    return (
-      score(right) - score(left) ||
-      left.sortOrder - right.sortOrder ||
-      left.id.localeCompare(right.id)
-    );
-  });
 }
 
 function profileDrafts(candidate: CandidateGroundingData): DraftSource[] {
@@ -304,18 +234,27 @@ export function buildOutreachGroundingContext(input: {
       : undefined,
   );
   let drafts: DraftSource[];
+  let selectionDiagnostics: EvidenceSelectionDiagnostics | undefined;
 
   if (injectionSafeMode) {
     drafts = safeSummaryDraft(input.candidate);
   } else {
-    const evidence = rankedEvidence(
+    const rankEvidence = createEvidenceRanker(
       input.candidate.confirmedEvidence.filter(
         (entry) =>
           entry.confirmed &&
           !containsExcludedClaim(renderEvidence(entry), claims),
       ),
-      `${target.profileMarkdown} ${target.jobDescription} ${target.conversationContext}`,
-    )
+    );
+    const selection = rankEvidence({
+      primary:
+        target.jobDescription ||
+        target.conversationContext ||
+        target.profileMarkdown,
+      secondary: `${target.profileMarkdown} ${target.conversationContext}`,
+    });
+    selectionDiagnostics = selection.diagnostics;
+    const evidence = selection.evidence
       .map((entry) => ({
         id: `evidence:${entry.id}`,
         label: entry.title,
@@ -376,6 +315,7 @@ export function buildOutreachGroundingContext(input: {
 
   return {
     identity: input.candidate.identity,
+    ...(selectionDiagnostics ? { selectionDiagnostics } : {}),
     sources,
     atomicSources: [
       ...buildAtomicCandidateSources(input.candidate, sources).filter(

@@ -4,6 +4,8 @@
 
 LinkedIn introductory composition: see `docs/operations/linkedin-relevance-composition-plan.md` for current scope and `docs/operations/linkedin-introductory-messages.md` for the earlier repair. A/B1 eligibility is implemented locally; relevance ranking and wider composition remain pending. Preserve per-fact review, complete source support and final validation; verify useful introductory wording as well as HTTP success.
 
+ALE-54 deterministic evidence relevance: see `docs/operations/ale-54-evidence-relevance.md` for the shared request-local selector, question/JD priority, weak-match policy, synthetic evaluation and combined ALE-46 regression evidence.
+
 Production migration records: see `docs/operations/migration-history-reconciliation.md` and `docs/operations/production-migration-deployment-2026-10-26.md` for applied versions, historical identity drift and the documentation-only restoration scope.
 
 LinkedIn CLAIM_REWRITE repair: see `docs/operations/linkedin-claim-rewrite.md`. The model selects source IDs; the server composes exact approved text and still validates final grounding after sanitation.

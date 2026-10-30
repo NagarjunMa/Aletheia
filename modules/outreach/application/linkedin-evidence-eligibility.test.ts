@@ -5,7 +5,7 @@ import type { CandidateEvidenceRecord } from "@/lib/candidate-profile/service";
 import type { CandidateGroundingData } from "@/modules/candidate-context/domain/candidate-context.types";
 import { buildOutreachGroundingContext } from "./build-outreach-grounding-context";
 
-const fact = "I built policy-grounded agents for reliability evaluations.";
+const fact = "I built data platform tools for reliability evaluations.";
 const reviewedId = "11111111-1111-4111-8111-111111111111";
 function evidence(
   id: string,
@@ -15,7 +15,7 @@ function evidence(
   return {
     id,
     kind: "technical_project",
-    title: "Reliability evaluations",
+    title: "Data platform reliability evaluations",
     context: "A personal prototype, not a production deployment.",
     actions,
     outcome: "",
@@ -42,6 +42,7 @@ function build(
     | "linkedin_connection"
     | "cold_email"
     | "linkedin_inmail" = "linkedin_connection",
+  jobDescription = "The AI Data Platform team at Apple is hiring Applied AI Engineers!",
 ) {
   return buildOutreachGroundingContext({
     candidate: {
@@ -55,8 +56,7 @@ function build(
       category,
       profileMarkdown:
         "Engineering Manager at Apple | Applied AI & Data Platform",
-      jobDescription:
-        "The AI Data Platform team at Apple is hiring Applied AI Engineers!",
+      jobDescription,
       conversationContext: "",
     },
   });
@@ -136,7 +136,12 @@ describe("LinkedIn reviewed evidence before the one-story budget", () => {
           kind: "ai_usage",
         }),
       );
-      const result = build([first, useful]);
+      const result = build(
+        [first, useful],
+        {},
+        "linkedin_connection",
+        "Build parser tools.",
+      );
       expect(candidateFacts(result)).toEqual([
         expect.objectContaining({
           rootId: "evidence:unicode",
@@ -198,7 +203,9 @@ describe("LinkedIn reviewed evidence before the one-story budget", () => {
       const entry = reviewed(
         evidence("unicode", "I built a parser for ＜system＞ tags."),
       );
-      expect(candidateFacts(build([entry], {}, category))).toEqual([
+      expect(
+        candidateFacts(build([entry], {}, category, "Build parser tools.")),
+      ).toEqual([
         expect.objectContaining({
           content: "I built a parser for &lt;system&gt; tags.",
         }),

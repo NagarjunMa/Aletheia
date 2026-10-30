@@ -38,7 +38,14 @@ describe("prepareOutreachGroundingContext", () => {
       { loadCandidateData: async () => candidate },
     );
     expect(info).toHaveBeenCalledWith(
-      expect.objectContaining({ event: "outreach.grounding.prepared" }),
+      expect.objectContaining({
+        event: "outreach.grounding.prepared",
+        selection: {
+          outcome: "no_evidence",
+          consideredCount: 0,
+          matchedCount: 0,
+        },
+      }),
       expect.any(String),
     );
     expect(JSON.stringify(info.mock.calls)).not.toContain(caller.accessToken);

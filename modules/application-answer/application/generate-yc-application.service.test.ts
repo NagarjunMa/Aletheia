@@ -204,6 +204,13 @@ const answer =
 
 function grounding(ready = true): YcGroundingContext {
   return {
+    selectionDiagnostics: [
+      {
+        outcome: ready ? "matched" : "no_match",
+        consideredCount: 1,
+        matchedCount: ready ? 1 : 0,
+      },
+    ],
     question: "Why are you a strong candidate for this role?",
     jobDescription:
       "Join a small YC startup team to build and operate reliable TypeScript products for customers.",
@@ -447,6 +454,52 @@ describe("generateYcApplication", () => {
     expect(deps.createMessage).not.toHaveBeenCalled();
   });
 
+  it("rejects a real zero-match context before quota, credit and provider work", async () => {
+    const jd = "Quantum chemistry research studying molecular spectroscopy.";
+    const context = buildYcGroundingContext({
+      question: request.question,
+      jobDescription: jd,
+      candidate: {
+        identity: { fullName: "Synthetic", linkedinUrl: "" },
+        profile: candidateProfileInputSchema.parse({ currentRole: "Engineer" }),
+        resume: { text: "", source: "none" },
+        confirmedEvidence: [
+          {
+            id: "policy",
+            kind: "technical_project",
+            title: "Policy project",
+            context: "",
+            actions: "I built policy documentation tools.",
+            outcome: "",
+            metrics: [],
+            skills: [],
+            links: [],
+            confirmed: true,
+            sortOrder: 0,
+          },
+        ],
+      },
+    });
+    expect(context.selectionDiagnostics?.[0]?.outcome).toBe("no_match");
+    const deps = dependencies({
+      prepareGrounding: vi.fn().mockResolvedValue(context),
+    });
+    const response = await generateYcApplication(
+      {
+        caller,
+        request: { ...request, jd },
+        corsHeaders: {},
+        applicationBaseUrl: "https://aletheia.live",
+      },
+      deps,
+    );
+    expect(response.status).toBe(422);
+    expect(deps.checkRateLimit).not.toHaveBeenCalled();
+    expect(deps.reserveCredits).not.toHaveBeenCalled();
+    expect(deps.startAttempt).not.toHaveBeenCalled();
+    expect(deps.createMessage).not.toHaveBeenCalled();
+  });
+
   it("reserves four credits only after grounding and returns validated provenance metadata", async () => {
     const deps = dependencies();
 
@@ -462,6 +515,8 @@ describe("generateYcApplication", () => {
 
     expect(response.status).toBe(200);
     const body = await response.json();
+    expect(JSON.stringify(body)).not.toContain("selectionDiagnostics");
+    expect(JSON.stringify(body)).not.toContain("consideredCount");
     expect(body).toMatchObject({
       success: true,
       category: "yc_application",

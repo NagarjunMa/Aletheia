@@ -1,6 +1,7 @@
 import type {
   CandidateIdentity,
   CandidateGroundingSource,
+  EvidenceSelectionDiagnostics,
   CandidateSourceKind,
 } from "@/modules/candidate-context/domain/candidate-context.types";
 import type { AtomicSource } from "@/modules/grounding/domain/atomic-claim";
@@ -83,6 +84,8 @@ export type OutreachGroundingMetadata = {
 };
 
 export type OutreachGroundingContext = {
+  /** Private selection status; never included in public eval metadata. */
+  selectionDiagnostics?: EvidenceSelectionDiagnostics;
   /** Server-only; never return this field in the public generation response. */
   identity: CandidateIdentity;
   sources: CandidateGroundingSource[];

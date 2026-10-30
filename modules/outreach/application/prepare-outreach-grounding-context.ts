@@ -54,7 +54,11 @@ export async function prepareOutreachGroundingContext(
       dependencies.recordGrounding(context.metadata);
     else
       (input.logger ?? log).info(
-        { event: "outreach.grounding.prepared", ...context.metadata },
+        {
+          event: "outreach.grounding.prepared",
+          ...context.metadata,
+          selection: context.selectionDiagnostics,
+        },
         "Outreach grounding context prepared",
       );
     return context;

@@ -1,3 +1,4 @@
+import { createEvidenceRanker } from "@/modules/candidate-context/application/rank-evidence";
 import {
   normalizeForExclusion,
   containsExcludedClaim,
@@ -22,43 +23,8 @@ const MAX_PROFILE_SOURCE_CHARS = 1_500;
 const MAX_RESUME_SOURCE_CHARS = 6_000;
 const MIN_TRUNCATED_SOURCE_CHARS = 80;
 
-const STOP_WORDS = new Set([
-  "a",
-  "an",
-  "and",
-  "are",
-  "as",
-  "at",
-  "be",
-  "by",
-  "for",
-  "from",
-  "in",
-  "is",
-  "it",
-  "of",
-  "on",
-  "or",
-  "our",
-  "that",
-  "the",
-  "their",
-  "this",
-  "to",
-  "we",
-  "who",
-  "with",
-  "you",
-  "your",
-]);
-
 type DraftSource = YcGroundingSource & {
   rawContent: string;
-};
-
-type RankedEvidence = {
-  evidence: CandidateEvidenceRecord;
-  score: number;
 };
 
 function normalizeText(value: string): string {
@@ -80,14 +46,6 @@ function normalizeForMatching(value: string): string {
     .trim();
 }
 
-function tokenize(value: string): Set<string> {
-  return new Set(
-    normalizeForMatching(value)
-      .split(" ")
-      .filter((token) => token.length > 1 && !STOP_WORDS.has(token)),
-  );
-}
-
 function normalizeExcludedClaims(values: string[]): string[] {
   const seen = new Set<string>();
   const result: string[] = [];
@@ -99,60 +57,6 @@ function normalizeExcludedClaims(values: string[]): string[] {
     result.push(normalized);
   }
   return result;
-}
-
-function overlapScore(value: string, targetTokens: Set<string>): number {
-  let score = 0;
-  for (const token of tokenize(value)) {
-    if (targetTokens.has(token)) score += 1;
-  }
-  return score;
-}
-
-function evidenceScore(
-  evidence: CandidateEvidenceRecord,
-  targetTokens: Set<string>,
-): number {
-  return (
-    overlapScore(
-      `${evidence.title} ${evidence.skills.join(" ")}`,
-      targetTokens,
-    ) *
-      4 +
-    overlapScore(
-      `${evidence.outcome} ${evidence.metrics.join(" ")}`,
-      targetTokens,
-    ) *
-      3 +
-    overlapScore(evidence.actions, targetTokens) * 2 +
-    overlapScore(evidence.context, targetTokens)
-  );
-}
-
-function rankEvidence(
-  evidence: CandidateEvidenceRecord[],
-  question: string,
-  jobDescription: string,
-): CandidateEvidenceRecord[] {
-  const targetTokens = tokenize(`${question} ${jobDescription}`);
-  const ranked: RankedEvidence[] = evidence.map((entry) => ({
-    evidence: entry,
-    score: evidenceScore(entry, targetTokens),
-  }));
-
-  ranked.sort(
-    (left, right) =>
-      right.score - left.score ||
-      left.evidence.sortOrder - right.evidence.sortOrder ||
-      left.evidence.id.localeCompare(right.evidence.id),
-  );
-
-  if (ranked.every((entry) => entry.score === 0)) {
-    return ranked.slice(0, 2).map((entry) => entry.evidence);
-  }
-  return ranked
-    .slice(0, YC_GROUNDING_MAX_EVIDENCE)
-    .map((entry) => entry.evidence);
 }
 
 function truncateAtBoundary(value: string, maximum: number): string {
@@ -341,13 +245,15 @@ export function buildYcGroundingContext(input: {
         excludedClaims,
       ),
   );
-  const rankedByQuestion = (input.questions ?? [normalizedQuestion]).map(
-    (question) =>
-      rankEvidence(
-        allowedEvidence,
-        normalizeText(question),
-        normalizedJobDescription,
-      ),
+  const rankEvidence = createEvidenceRanker(allowedEvidence);
+  const selections = (input.questions ?? [normalizedQuestion]).map((question) =>
+    rankEvidence({
+      primary: normalizeText(question),
+      secondary: normalizedJobDescription,
+    }),
+  );
+  const rankedByQuestion = selections.map((selection) =>
+    selection.evidence.slice(0, YC_GROUNDING_MAX_EVIDENCE),
   );
   // Round-robin selection reserves an opportunity for each question's best source
   // without multiplying the existing six-source / 16k-character prompt budget.
@@ -444,6 +350,7 @@ export function buildYcGroundingContext(input: {
     : "none";
 
   return {
+    selectionDiagnostics: selections.map((selection) => selection.diagnostics),
     question: escapeForXmlTag(normalizedQuestion),
     ...(input.questions
       ? {

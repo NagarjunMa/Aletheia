@@ -1,5 +1,6 @@
 import type {
   CandidateGroundingSource,
+  EvidenceSelectionDiagnostics,
   CandidateResumeSource,
 } from "@/modules/candidate-context/domain/candidate-context.types";
 import type { AtomicSource } from "@/modules/grounding/domain/atomic-claim";
@@ -19,6 +20,8 @@ export type YcGroundingReadiness = {
 };
 
 export type YcGroundingContext = {
+  /** Private per-question outcomes, separate from public metadata. */
+  selectionDiagnostics?: EvidenceSelectionDiagnostics[];
   question: string;
   questions?: Array<{
     questionId: string;
