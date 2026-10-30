@@ -52,13 +52,40 @@ export class LinkedinGroundingUnavailableError extends Error {
 }
 
 const CTAS = NEUTRAL_FRAMING.filter((text) => text.endsWith("?"));
+const GREETING = "Hi there,";
 const MIN_CTA_CHARACTERS = Math.min(...CTAS.map((text) => text.length));
 
 export function linkedinTargetFits(source: AtomicSource): boolean {
   return (
     source.scope === "target" &&
-    allowedClaimTexts(source).at(-1)!.length + 1 + MIN_CTA_CHARACTERS <=
+    GREETING.length +
+      1 +
+      allowedClaimTexts(source).at(-1)!.length +
+      1 +
+      MIN_CTA_CHARACTERS <=
       LINKEDIN_CONNECTION_MAX_CHARACTERS
+  );
+}
+
+/** A reviewed fact must fit intact with at least one offered target and CTA. */
+export function linkedinCandidateFits(
+  candidate: AtomicSource,
+  targets: readonly AtomicSource[],
+): boolean {
+  return (
+    candidate.scope === "candidate" &&
+    targets.some(
+      (target) =>
+        linkedinTargetFits(target) &&
+        GREETING.length +
+          1 +
+          allowedClaimTexts(target).at(-1)!.length +
+          1 +
+          allowedClaimTexts(candidate).at(-1)!.length +
+          1 +
+          MIN_CTA_CHARACTERS <=
+          LINKEDIN_CONNECTION_MAX_CHARACTERS,
+    )
   );
 }
 const selectionSchema = z
@@ -74,7 +101,14 @@ export function buildLinkedinSelectionTool(
   sources: readonly AtomicSource[],
   diagnostics?: OutreachGroundingContext["targetDiagnostics"],
 ) {
-  const targets = sources.filter(linkedinTargetFits).map((source) => source.id);
+  const targets = sources
+    .filter(linkedinTargetFits)
+    .sort(
+      (a, b) =>
+        Number(b.rewrite === "linkedin_job_interest") -
+        Number(a.rewrite === "linkedin_job_interest"),
+    )
+    .map((source) => source.id);
   const candidates = sources
     .filter((s) => s.scope === "candidate")
     .map((s) => s.id);
@@ -82,7 +116,7 @@ export function buildLinkedinSelectionTool(
   return {
     name: "return_linkedin_connection_composition",
     description:
-      "Select one target source, optionally one candidate source, and an approved CTA. The server copies complete approved wording, constructs claims and enforces 300 characters. Never write or paraphrase facts. Prefer short sources; use null candidate when no complete pair fits.",
+      "Select one target source, optionally one candidate source, and an approved CTA. The server copies complete approved wording, constructs claims and enforces 300 characters. Never write or paraphrase facts. Prefer relevant job-description sources when supplied. Include a relevant reviewed candidate fact when it fits. Budget the Hi there, greeting too; use null only when no relevant complete pair fits.",
     input_schema: {
       type: "object",
       additionalProperties: false,
@@ -132,7 +166,7 @@ export function resolveLinkedinSelection(
   const targetClaim = claim(target);
   const candidateClaim = candidate ? claim(candidate) : null;
   const draft = linkedinConnectionDraftSchema.parse({
-    target_observation: targetClaim.text,
+    target_observation: `${GREETING} ${targetClaim.text}`,
     candidate_relevance: candidateClaim
       ? { text: candidateClaim.text, source_ids: [root] }
       : null,

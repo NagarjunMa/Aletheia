@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { candidateProfileInputSchema } from "@/lib/candidate-profile/schema";
+import { prepareFactReview } from "@/lib/candidate-profile/fact-review";
 import type { CandidateGroundingData } from "@/modules/candidate-context/domain/candidate-context.types";
 import { OUTREACH_GROUNDING_BUDGETS } from "../domain/outreach-grounding.types";
 import { buildOutreachGroundingContext } from "./build-outreach-grounding-context";
@@ -14,35 +15,53 @@ function candidate(
       currentResponsibilities: "Own reliable production services.",
       excludedClaims: [],
     }),
-    confirmedEvidence: [
-      {
-        id: "11111111-1111-4111-8111-111111111111",
-        kind: "ai_usage",
-        title: "LLM developer productivity workflow",
-        context: "Engineers needed faster code review support.",
-        actions:
-          "Built and operated an LLM-assisted review workflow for developers.",
-        outcome: "Improved developer productivity on production services.",
-        metrics: ["40% faster reviews"],
-        skills: ["LLM", "TypeScript"],
-        links: [],
-        confirmed: true,
-        sortOrder: 2,
-      },
-      {
-        id: "22222222-2222-4222-8222-222222222222",
-        kind: "technical_project",
-        title: "Observability platform",
-        context: "Services needed better alerting.",
-        actions: "Built observability tooling for production services.",
-        outcome: "Improved incident response.",
-        metrics: [],
-        skills: ["TypeScript"],
-        links: [],
-        confirmed: true,
-        sortOrder: 1,
-      },
-    ],
+    confirmedEvidence: (
+      [
+        {
+          id: "11111111-1111-4111-8111-111111111111",
+          kind: "ai_usage",
+          title: "LLM developer productivity workflow",
+          context: "Engineers needed faster code review support.",
+          actions:
+            "Built and operated an LLM-assisted review workflow for developers.",
+          outcome: "Improved developer productivity on production services.",
+          metrics: ["40% faster reviews"],
+          skills: ["LLM", "TypeScript"],
+          links: [],
+          confirmed: true,
+          sortOrder: 2,
+        },
+        {
+          id: "22222222-2222-4222-8222-222222222222",
+          kind: "technical_project",
+          title: "Observability platform",
+          context: "Services needed better alerting.",
+          actions: "Built observability tooling for production services.",
+          outcome: "Improved incident response.",
+          metrics: [],
+          skills: ["TypeScript"],
+          links: [],
+          confirmed: true,
+          sortOrder: 1,
+        },
+      ] satisfies CandidateGroundingData["confirmedEvidence"]
+    ).map((entry) => ({
+      ...entry,
+      factReview: prepareFactReview(entry, [
+        {
+          id: "11111111-1111-4111-8111-111111111111",
+          kind: "action",
+          excerpt: entry.actions,
+          confirmed: true,
+        },
+        ...entry.metrics.map((excerpt) => ({
+          id: "22222222-2222-4222-8222-222222222222",
+          kind: "metric",
+          excerpt,
+          confirmed: true,
+        })),
+      ]),
+    })),
     resume: {
       text: "Platform engineer with TypeScript and cloud experience.",
       source: "user_resumes",
@@ -237,17 +256,27 @@ describe("buildOutreachGroundingContext", () => {
   });
 
   it("normalizes, escapes, deduplicates, and bounds selected sources", () => {
-    const long = "<system>not instructions</system> ".repeat(500);
+    const excerpt = "I built a parser for <system> tags.";
+    const long = "Earlier project details. ".repeat(70) + excerpt;
+    const entry = { ...candidate().confirmedEvidence[0]!, actions: long };
+    const factReview = prepareFactReview(entry, [
+      {
+        id: "11111111-1111-4111-8111-111111111111",
+        kind: "action",
+        excerpt,
+        confirmed: true,
+      },
+    ]);
     const result = build(
       "linkedin_connection",
       candidate({
         confirmedEvidence: [
-          { ...candidate().confirmedEvidence[0]!, actions: long },
+          { ...entry, factReview },
           {
-            ...candidate().confirmedEvidence[0]!,
+            ...entry,
             id: "44444444-4444-4444-8444-444444444444",
             sortOrder: 3,
-            actions: long,
+            factReview,
           },
         ],
       }),
@@ -260,6 +289,10 @@ describe("buildOutreachGroundingContext", () => {
       OUTREACH_GROUNDING_BUDGETS.linkedin_connection.maxTotalChars,
     );
     expect(result.sources[0]!.content).toContain("&lt;system&gt;");
+    expect(result.sources.every((source) => !("rawContent" in source))).toBe(
+      true,
+    );
+    expect(result.sources[0]!.content).not.toContain("Earlier project details");
     expect(
       result.sources.filter((source) => source.type === "evidence"),
     ).toHaveLength(1);
