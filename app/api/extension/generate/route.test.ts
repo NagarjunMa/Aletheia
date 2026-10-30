@@ -76,11 +76,11 @@ describe("LinkedIn real target preparation through the HTTP boundary", () => {
     "returns an introduction with reviewed evidence through the actual pipeline (JD: %s, unusable first record: %s)",
     async (withJd, unusableFirst) => {
       const experience =
-        "I built policy-grounded agents for reliability evaluations.";
+        "I built data platform tools for reliability evaluations.";
       const record = {
         id: "synthetic",
         kind: "technical_project" as const,
-        title: "Agent evaluations",
+        title: "Data platform evaluations",
         context: "Personal project",
         actions: experience,
         outcome: "",
@@ -167,6 +167,8 @@ describe("LinkedIn real target preparation through the HTTP boundary", () => {
       expect(body.body).toContain(short);
       expect(body.character_count).toBe(body.body.length);
       expect(body.character_count).toBeLessThanOrEqual(300);
+      expect(JSON.stringify(body)).not.toContain("selectionDiagnostics");
+      expect(JSON.stringify(body)).not.toContain("consideredCount");
       expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
       expect(JSON.stringify(body)).not.toMatch(
         /targetDiagnostics|injectionReasons|supporting_excerpt|target\.profile/,

@@ -50,3 +50,9 @@ export type CandidateGroundingSource = {
   /** Lower numbers are more authoritative. */
   priority: CandidateSourcePriority;
 };
+
+export type EvidenceSelectionDiagnostics = {
+  outcome: "matched" | "weak_match" | "no_match" | "no_evidence";
+  consideredCount: number;
+  matchedCount: number;
+};

@@ -10,6 +10,7 @@ import { buildYcGroundingContext } from "./build-yc-grounding-context";
 const log = createLogger("yc-grounding-context");
 
 type GroundingTelemetry = {
+  selection: YcGroundingContext["selectionDiagnostics"];
   sourceCounts: {
     evidence: number;
     profile: number;
@@ -74,6 +75,7 @@ export async function prepareYcGroundingContext(
     throw error;
   }
   const telemetry: GroundingTelemetry = {
+    selection: context.selectionDiagnostics,
     sourceCounts: {
       evidence: context.sources.filter((source) => source.type === "evidence")
         .length,

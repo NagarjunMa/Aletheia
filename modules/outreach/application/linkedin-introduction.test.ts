@@ -17,12 +17,11 @@ import { prepareFactReview } from "@/lib/candidate-profile/fact-review";
 const profile = "Engineering Manager at Apple | Applied AI & Data Platform";
 const hiring =
   "The AI Data Platform team at Apple is hiring Applied AI Engineers!";
-const experience =
-  "I built policy-grounded agents for reliability evaluations.";
+const experience = "I built data platform tools for reliability evaluations.";
 const record = {
   id: "project",
   kind: "technical_project" as const,
-  title: "Agent evaluations",
+  title: "Data platform evaluations",
   context: "Personal project",
   actions: experience,
   outcome: "",

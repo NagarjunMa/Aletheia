@@ -93,6 +93,7 @@ describe("prepareYcGroundingContext", () => {
     expect(result.readiness.ready).toBe(true);
     expect(recordGrounding).toHaveBeenCalledWith({
       sourceCounts: { evidence: 1, profile: 2, resume: 1 },
+      selection: [{ outcome: "matched", consideredCount: 1, matchedCount: 1 }],
       readiness: {
         ready: true,
         missingFieldCount: 0,
@@ -138,6 +139,9 @@ describe("prepareYcGroundingContext", () => {
     );
     expect(recordGrounding).toHaveBeenCalledWith({
       sourceCounts: { evidence: 0, profile: 0, resume: 0 },
+      selection: [
+        { outcome: "no_evidence", consideredCount: 0, matchedCount: 0 },
+      ],
       readiness: {
         ready: false,
         missingFieldCount: 2,

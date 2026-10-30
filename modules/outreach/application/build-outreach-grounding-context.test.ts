@@ -162,9 +162,11 @@ describe("buildOutreachGroundingContext", () => {
     ).toBe(true);
   });
   it("prefers confirmed AI evidence for AI targets and obeys per-channel evidence limits", () => {
-    const connection = build("linkedin_connection");
-    const inmail = build("linkedin_inmail");
-    const coldEmail = build("cold_email");
+    const data = candidate();
+    data.confirmedEvidence[1]!.skills.push("LLM");
+    const connection = build("linkedin_connection", data);
+    const inmail = build("linkedin_inmail", data);
+    const coldEmail = build("cold_email", data);
     expect(
       connection.sources.filter((source) => source.type === "evidence"),
     ).toHaveLength(1);

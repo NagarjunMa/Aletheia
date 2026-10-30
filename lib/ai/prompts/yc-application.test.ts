@@ -67,7 +67,7 @@ describe("YC application prompt", () => {
     const context = buildYcGroundingContext({
       question: "Why this role?",
       questions: ["Why this role?"],
-      jobDescription: "Build tools.",
+      jobDescription: "Build policy tools.",
       candidate: {
         identity: { fullName: "", linkedinUrl: "" },
         profile: candidateProfileInputSchema.parse({ currentRole: "Engineer" }),
@@ -88,6 +88,8 @@ describe("YC application prompt", () => {
       },
     });
     const prompt = buildYcApplicationPrompt(context);
+    expect(prompt.userPrompt).not.toContain("selectionDiagnostics");
+    expect(prompt.userPrompt).not.toContain("consideredCount");
     const listed = prompt.userPrompt
       .match(/source_ids="([^"]*)"/u)?.[1]
       ?.split(" ");
