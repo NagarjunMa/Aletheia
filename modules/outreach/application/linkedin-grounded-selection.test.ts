@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   resolveLinkedinSelection,
   buildLinkedinSelectionTool,
+  linkedinCandidateFits,
 } from "../domain/linkedin-grounded-selection";
 import { validateAtomicOutput } from "@/modules/grounding/application/validate-atomic-claims";
 import { renderLinkedinConnection } from "./render-linkedin-connection";
@@ -37,6 +38,27 @@ const selection = {
 };
 
 describe("server-owned LinkedIn factual composition", () => {
+  it("admits a complete candidate/target pair at 300 characters but not 301", () => {
+    const prefix = `Hi there, The supplied context says: "${target.content}"`;
+    const cta = "Open to connecting?";
+    const content = `I ${"x".repeat(300 - prefix.length - cta.length - 5)}.`;
+    const boundary = { ...candidate, content };
+    const boundaryRoots = [{ ...roots[0]!, content }];
+    const draft = resolveLinkedinSelection(
+      { ...selection, cta },
+      [target, boundary],
+      boundaryRoots,
+    );
+    expect(
+      renderLinkedinConnection({ draft, sources: boundaryRoots }).body,
+    ).toHaveLength(300);
+    expect(linkedinCandidateFits(boundary, [target])).toBe(true);
+    expect(
+      linkedinCandidateFits({ ...boundary, content: content + "x" }, [target]),
+    ).toBe(false);
+    expect(linkedinCandidateFits(boundary, [])).toBe(false);
+    expect(linkedinCandidateFits(target, [candidate])).toBe(false);
+  });
   it("reproduces CLAIM_REWRITE for unsupported wording instead of relaxing the validator", () => {
     expect(() =>
       validateAtomicOutput({
@@ -119,7 +141,7 @@ describe("server-owned LinkedIn factual composition", () => {
     ]);
   });
   it("admits a complete 300-character target-only note, rejecting a 301-character minimum", () => {
-    const boundary = { ...target, content: "x".repeat(251) };
+    const boundary = { ...target, content: "x".repeat(241) };
     expect(() => buildLinkedinSelectionTool([boundary])).not.toThrow();
     const draft = resolveLinkedinSelection(
       { ...selection, candidate_source_id: null, cta: "Open to connecting?" },
@@ -130,7 +152,7 @@ describe("server-owned LinkedIn factual composition", () => {
       300,
     );
     expect(() =>
-      buildLinkedinSelectionTool([{ ...boundary, content: "x".repeat(252) }]),
+      buildLinkedinSelectionTool([{ ...boundary, content: "x".repeat(242) }]),
     ).toThrow();
   });
   it("offers only request-owned IDs and existing approved CTA phrases", () => {

@@ -28,6 +28,14 @@ const selected: CandidateGroundingSource = {
   content: original,
 };
 describe("complete source units", () => {
+  it("escapes role markup created by Unicode normalization in complete target facts", () => {
+    const result = buildAtomicTargetSources({
+      profile: "I built a parser for ＜system＞ tags.",
+    });
+    expect(result.sources[0]!.content).toBe(
+      "I built a parser for &lt;system&gt; tags.",
+    );
+  });
   it("rejects adjacent control lines while preserving mixed factual paragraphs intact", () => {
     const mixed = "About\nI build evaluation tools.\nFollow";
     const result = buildAtomicTargetSources({

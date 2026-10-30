@@ -424,7 +424,7 @@ describe("COLD_EMAIL_PROMPT subject line policy", () => {
   ];
 
   it("tracks the prompt behavior change with a new version", () => {
-    expect(PROMPT_VERSION).toBe("4.1.0");
+    expect(PROMPT_VERSION).toBe("4.2.0");
   });
 
   it("documents scenario-specific email modes", () => {

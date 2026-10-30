@@ -54,8 +54,9 @@ export type AtomicSource = {
   scope: ClaimScope;
   kind: ClaimKind;
   content: string;
-  /** Only structured current-role fields permit this rewrite. */
-  rewrite?: "current_role";
+  /** Server-assigned wording policy; never accepted from model input. */
+  rewrite?:
+    "current_role" | "linkedin_profile_interest" | "linkedin_job_interest";
 };
 
 export const atomicClaimsToolSchema = {
@@ -103,6 +104,21 @@ export function normalizeClaimText(value: string): string {
   return value.normalize("NFKC").replace(/\s+/gu, " ").trim();
 }
 
+// Only named fields may move out of a headline suffix; free text can qualify
+// the role (for example, "Retired since 2020") and must remain in place.
+const LINKEDIN_SPECIALTIES = new Set([
+  "Applied AI",
+  "Artificial Intelligence",
+  "Machine Learning",
+  "Data Platform",
+  "Data Science",
+  "Software Engineering",
+  "Infrastructure",
+  "Reliability",
+  "Developer Tools",
+  "AI Evaluation",
+]);
+
 /** Finite source-owned rewrites, shared by prompt examples and validation. */
 export function allowedClaimTexts(source: AtomicSource): string[] {
   const excerpt = normalizeClaimText(source.content);
@@ -120,6 +136,42 @@ export function allowedClaimTexts(source: AtomicSource): string[] {
     source.rewrite === "current_role"
   ) {
     forms.push(`My current role is ${excerpt}.`);
+  }
+  if (source.scope === "target" && source.kind === "target_observation") {
+    if (source.rewrite === "linkedin_profile_interest") {
+      // A complete headline can change grammar without claiming the specialty
+      // belongs to the role. Ambiguous/qualified narratives keep the full quote.
+      const headline =
+        /^(Engineering Manager|Software Engineer|Applied AI Engineer|Research Engineer|Research Scientist|Product Manager|Data Scientist|Director of Engineering|Head of Engineering) at ([\p{L}\p{N}][\p{L}\p{N} &+/-]{0,79}) \| ([\p{L}\p{N}][\p{L}\p{N} &+/-]{0,79})$/u.exec(
+          excerpt,
+        );
+      const qualified =
+        /\b(?:not|no|never|former|formerly|previously|ex|aspiring|seeking|hiring|until|only|unless|except|without|simulation)\b/iu.test(
+          excerpt,
+        );
+      return [
+        headline &&
+        !qualified &&
+        headline[3]!
+          .split(" & ")
+          .every((part) => LINKEDIN_SPECIALTIES.has(part))
+          ? `I'm interested in ${headline[3]} and your ${headline[1]} role at ${headline[2]}.`
+          : `I'd like to connect about your profile: "${excerpt}"`,
+      ];
+    }
+    if (source.rewrite === "linkedin_job_interest") {
+      // Only this complete positive hiring grammar permits rearranging the roles.
+      // Qualifications, negation and additional sentences retain the whole quote.
+      const hiring =
+        /^(The [\p{L}\p{N}&+/-]+(?: [\p{L}\p{N}&+/-]+){0,9} team at [\p{L}\p{N}&+/-]+(?: [\p{L}\p{N}&+/-]+){0,5}) is hiring ((?:[A-Z][\p{L}\p{N}+#/-]* ){0,6}(?:Engineers|Developers|Designers|Researchers))[.!]?$/u.exec(
+          excerpt,
+        );
+      return [
+        hiring
+          ? `I'm interested in the openings for ${hiring[2]} with ${hiring[1]!.replace(/^The /u, "the ")}.`
+          : `I'd like to connect about this context: "${excerpt}"`,
+      ];
+    }
   }
   return forms;
 }

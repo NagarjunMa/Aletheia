@@ -23,6 +23,8 @@ import { getCorsHeaders } from "@/lib/cors";
 import { EMAIL_MODES } from "@/lib/ai/email-formatter";
 import { OutreachGroundingUnavailableError } from "@/modules/outreach/domain/outreach-grounding.types";
 import * as loggerModule from "@/lib/logger";
+import { prepareFactReview } from "@/lib/candidate-profile/fact-review";
+import type { CandidateGroundingData } from "@/modules/candidate-context/domain/candidate-context.types";
 import { candidateProfileInputSchema } from "@/lib/candidate-profile/schema";
 
 describe("LinkedIn real target preparation through the HTTP boundary", () => {
@@ -30,7 +32,10 @@ describe("LinkedIn real target preparation through the HTTP boundary", () => {
   const long = Array(7)
     .fill("Alex builds evaluation tools for policy-grounded agents.")
     .join(" ");
-  async function useRealPreparation(excludedClaims: string[] = []) {
+  async function useRealPreparation(
+    excludedClaims: string[] = [],
+    evidence: CandidateGroundingData["confirmedEvidence"] = [],
+  ) {
     const actual = await vi.importActual<
       typeof import("@/modules/outreach/application/prepare-outreach-grounding-context")
     >("@/modules/outreach/application/prepare-outreach-grounding-context");
@@ -39,7 +44,7 @@ describe("LinkedIn real target preparation through the HTTP boundary", () => {
         loadCandidateData: async () => ({
           identity: { fullName: "Synthetic", linkedinUrl: "" },
           profile: candidateProfileInputSchema.parse({ excludedClaims }),
-          confirmedEvidence: [],
+          confirmedEvidence: evidence,
           resume: { text: "", source: "none" },
         }),
       }),
@@ -52,7 +57,9 @@ describe("LinkedIn real target preparation through the HTTP boundary", () => {
           input: {
             target_source_id:
               input.tools[0].input_schema.properties.target_source_id.enum[0],
-            candidate_source_id: null,
+            candidate_source_id:
+              input.tools[0].input_schema.properties.candidate_source_id
+                .anyOf?.[0]?.enum[0] ?? null,
             cta: "Open to connecting?",
           },
         },
@@ -60,6 +67,86 @@ describe("LinkedIn real target preparation through the HTTP boundary", () => {
       usage: { input_tokens: 10, output_tokens: 20 },
     }));
   }
+  it.each([
+    [true, false],
+    [false, false],
+    [true, true],
+    [false, true],
+  ])(
+    "returns an introduction with reviewed evidence through the actual pipeline (JD: %s, unusable first record: %s)",
+    async (withJd, unusableFirst) => {
+      const experience =
+        "I built policy-grounded agents for reliability evaluations.";
+      const record = {
+        id: "synthetic",
+        kind: "technical_project" as const,
+        title: "Agent evaluations",
+        context: "Personal project",
+        actions: experience,
+        outcome: "",
+        metrics: [],
+        skills: [],
+        links: [],
+        confirmed: true,
+        sortOrder: 0,
+      };
+      await useRealPreparation(
+        [],
+        [
+          ...(unusableFirst
+            ? [
+                {
+                  ...record,
+                  id: "unreviewed",
+                  kind: "ai_usage" as const,
+                  title: "Applied AI Data Platform",
+                  actions: "I built a generic AI assistant.",
+                },
+              ]
+            : []),
+          {
+            ...record,
+            factReview: prepareFactReview(record, [
+              {
+                id: "11111111-1111-4111-8111-111111111111",
+                kind: "action",
+                excerpt: experience,
+                confirmed: true,
+              },
+            ]),
+          },
+        ],
+      );
+      const response = await POST(
+        makeRequest({
+          method: "POST",
+          headers: { Authorization: "Bearer test" },
+          body: {
+            category: "linkedin_connection",
+            profileMarkdown:
+              "Engineering Manager at Apple | Applied AI & Data Platform",
+            jd: withJd
+              ? "The AI Data Platform team at Apple is hiring Applied AI Engineers!"
+              : "",
+          },
+        }),
+      );
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body.body).toBe(
+        withJd
+          ? `Hi there, I'm interested in the openings for Applied AI Engineers with the AI Data Platform team at Apple. ${experience} Open to connecting?`
+          : `Hi there, I'm interested in Applied AI & Data Platform and your Engineering Manager role at Apple. ${experience} Open to connecting?`,
+      );
+      expect(body.character_count).toBe(body.body.length);
+      expect(body.character_count).toBeLessThanOrEqual(300);
+      expect(body.evalMetadata.hasCandidateRelevance).toBe(true);
+      expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify(body)).not.toMatch(
+        /atomicSources|supporting_excerpt|target\.jobDescription|evidence:synthetic|factReview/,
+      );
+    },
+  );
   it.each([undefined, "", " \n\t "])(
     "supports profile-only generation with optional JD %j",
     async (jd) => {
@@ -86,7 +173,7 @@ describe("LinkedIn real target preparation through the HTTP boundary", () => {
       );
     },
   );
-  it.each(["", "We build reliable evaluation tools."])(
+  it.each(["", "Nous développons des outils d’évaluation. 👩‍💻"])(
     "preserves Unicode through preparation and final grounding with JD %j",
     async (jd) => {
       await useRealPreparation();
@@ -100,7 +187,7 @@ describe("LinkedIn real target preparation through the HTTP boundary", () => {
       );
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.body).toContain(profileMarkdown);
+      expect(body.body).toContain(jd || profileMarkdown);
       expect(body.character_count).toBe(body.body.length);
       expect(body.character_count).toBeLessThanOrEqual(300);
       expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
@@ -1609,7 +1696,7 @@ describe("POST /api/extension/generate", () => {
       expect(body.character_count).toBe(body.body.length);
       expect(body.character_count).toBeLessThanOrEqual(300);
       expect(body.evalMetadata).toMatchObject({
-        promptVersion: "4.1.0",
+        promptVersion: "4.2.0",
         hasCandidateRelevance: true,
       });
       expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
@@ -1900,7 +1987,7 @@ describe("POST /api/extension/generate", () => {
     expect(response.status).toBe(200);
     const result = await response.json();
     expect(result.body).toBe(
-      'The supplied context says: "Works on evaluation tooling." Open to a brief chat?',
+      'Hi there, The supplied context says: "Works on evaluation tooling." Open to a brief chat?',
     );
     expect(result.character_count).toBe(result.body.length);
     expect(result).not.toHaveProperty("claims");

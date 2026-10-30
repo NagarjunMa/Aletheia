@@ -15,6 +15,11 @@ import { containsExcludedClaim } from "../domain/excluded-claims";
 const MAX_SOURCES = 48;
 const MAX_TOTAL_CHARS = 8_000;
 
+/** NFKC can create role markup; escape after it, consistently across projections. */
+export function normalizeAtomicSourceText(value: string): string {
+  return normalizeClaimText(escapeForXmlTag(normalizeClaimText(value)));
+}
+
 /** Only owner-reviewed individual assertions can become candidate claims. */
 export function buildAtomicCandidateSources(
   candidate: CandidateGroundingData,
@@ -29,7 +34,7 @@ export function buildAtomicCandidateSources(
     raw: string,
     rewrite?: "current_role",
   ) => {
-    const content = normalizeClaimText(escapeForXmlTag(raw));
+    const content = normalizeAtomicSourceText(raw);
     if (
       !content ||
       content.length > MAX_SUPPORTING_EXCERPT ||
@@ -72,6 +77,7 @@ export function buildAtomicTargetSources(
   },
   excludedClaims: readonly string[] = [],
   fitsOutput: (_source: AtomicSource) => boolean = () => true,
+  channel?: "linkedin_connection",
 ) {
   const result: AtomicSource[] = [];
   const diagnostics = {
@@ -83,13 +89,21 @@ export function buildAtomicTargetSources(
     accepted: 0,
   };
   let remaining = 4_000;
-  for (const [name, raw] of Object.entries(input)) {
+  // Reserve the bounded target pool for the user's explicit job context first.
+  const entries = Object.entries(input);
+  if (channel === "linkedin_connection") {
+    entries.sort(
+      ([a], [b]) =>
+        Number(b === "jobDescription") - Number(a === "jobDescription"),
+    );
+  }
+  for (const [name, raw] of entries) {
     if (!raw) continue;
     raw
       .replace(/\r\n?/gu, "\n")
       .split(/\n\s*\n/u)
       .forEach((paragraph, index) => {
-        const content = normalizeClaimText(escapeForXmlTag(paragraph));
+        const content = normalizeAtomicSourceText(paragraph);
         if (!content) return;
         diagnostics.examined += 1;
         // Reject control-only blocks; never remove lines from a mixed fact.
@@ -116,6 +130,12 @@ export function buildAtomicTargetSources(
           scope: "target",
           kind: "target_observation",
           content,
+          ...(channel === "linkedin_connection" && name === "profile"
+            ? { rewrite: "linkedin_profile_interest" as const }
+            : {}),
+          ...(channel === "linkedin_connection" && name === "jobDescription"
+            ? { rewrite: "linkedin_job_interest" as const }
+            : {}),
         };
         if (content.length > MAX_SUPPORTING_EXCERPT || !fitsOutput(source)) {
           diagnostics.overlength += 1;

@@ -6,10 +6,19 @@ import { deriveSafeCandidateSummary } from "@/lib/ai/candidate-summary";
 import {
   buildAtomicCandidateSources,
   buildAtomicTargetSources,
+  normalizeAtomicSourceText,
 } from "@/modules/grounding/application/build-atomic-sources";
 import { escapeForXmlTag } from "@/lib/ai/prompts/linkedin-connection";
 import { scanForInjection } from "@/lib/ai/prompts/injection-heuristic";
-import { linkedinTargetFits } from "../domain/linkedin-grounded-selection";
+import { readFactReview } from "@/lib/candidate-profile/fact-review";
+import {
+  MAX_SUPPORTING_EXCERPT,
+  type AtomicSource,
+} from "@/modules/grounding/domain/atomic-claim";
+import {
+  linkedinCandidateFits,
+  linkedinTargetFits,
+} from "../domain/linkedin-grounded-selection";
 import type { CandidateEvidenceRecord } from "@/lib/candidate-profile/service";
 import type {
   CandidateGroundingData,
@@ -122,6 +131,33 @@ function renderEvidence(entry: CandidateEvidenceRecord): string {
     .join("\n");
 }
 
+function reviewedLinkedinEvidence(
+  entry: CandidateEvidenceRecord,
+  targets: readonly AtomicSource[],
+): string {
+  const parts: string[] = [];
+  let remaining = OUTREACH_GROUNDING_BUDGETS.linkedin_connection.maxSourceChars;
+  for (const fact of readFactReview(entry, entry.factReview)) {
+    const content = normalizeAtomicSourceText(fact.excerpt);
+    const source: AtomicSource = {
+      id: `evidence:${entry.id}.fact.${fact.id}`,
+      scope: "candidate",
+      kind: fact.kind,
+      content,
+    };
+    const size = content.length + (parts.length ? 1 : 0);
+    if (
+      content.length > MAX_SUPPORTING_EXCERPT ||
+      size > remaining ||
+      !linkedinCandidateFits(source, targets)
+    )
+      continue;
+    parts.push(content);
+    remaining -= size;
+  }
+  return parts.join("\n");
+}
+
 function rankedEvidence(
   evidence: CandidateEvidenceRecord[],
   target: string,
@@ -222,7 +258,9 @@ function applyBudget(
     if (!content || !signature || seen.has(signature)) continue;
     seen.add(signature);
     result.push({
-      ...draft,
+      id: draft.id,
+      type: draft.type,
+      priority: draft.priority,
       label: escapeForXmlTag(normalizeText(draft.label)),
       content,
     });
@@ -251,6 +289,20 @@ export function buildOutreachGroundingContext(input: {
   const claims = excludedClaims(input.candidate.profile.excludedClaims);
   const injectionScan = scanForInjection(target.profileMarkdown);
   const injectionSafeMode = injectionScan.triggered;
+  const targets = buildAtomicTargetSources(
+    injectionSafeMode
+      ? {}
+      : {
+          profile: target.profileMarkdown,
+          jobDescription: target.jobDescription,
+          conversation: target.conversationContext,
+        },
+    input.candidate.profile.excludedClaims,
+    target.category === "linkedin_connection" ? linkedinTargetFits : undefined,
+    target.category === "linkedin_connection"
+      ? "linkedin_connection"
+      : undefined,
+  );
   let drafts: DraftSource[];
 
   if (injectionSafeMode) {
@@ -263,14 +315,19 @@ export function buildOutreachGroundingContext(input: {
           !containsExcludedClaim(renderEvidence(entry), claims),
       ),
       `${target.profileMarkdown} ${target.jobDescription} ${target.conversationContext}`,
-    ).map((entry) => ({
-      id: `evidence:${entry.id}`,
-      label: entry.title,
-      content: renderEvidence(entry),
-      rawContent: renderEvidence(entry),
-      type: "evidence" as const,
-      priority: 1 as const,
-    }));
+    )
+      .map((entry) => ({
+        id: `evidence:${entry.id}`,
+        label: entry.title,
+        content:
+          target.category === "linkedin_connection"
+            ? reviewedLinkedinEvidence(entry, targets.sources)
+            : renderEvidence(entry),
+        rawContent: renderEvidence(entry),
+        type: "evidence" as const,
+        priority: 1 as const,
+      }))
+      .filter((source) => Boolean(source.content));
     const resume = normalizeText(input.candidate.resume.text);
     drafts = [
       ...evidence,
@@ -317,22 +374,15 @@ export function buildOutreachGroundingContext(input: {
           ? "no_profile_context"
           : "no_resume_context";
 
-  const targets = buildAtomicTargetSources(
-    injectionSafeMode
-      ? {}
-      : {
-          profile: target.profileMarkdown,
-          jobDescription: target.jobDescription,
-          conversation: target.conversationContext,
-        },
-    input.candidate.profile.excludedClaims,
-    target.category === "linkedin_connection" ? linkedinTargetFits : undefined,
-  );
   return {
     identity: input.candidate.identity,
     sources,
     atomicSources: [
-      ...buildAtomicCandidateSources(input.candidate, sources),
+      ...buildAtomicCandidateSources(input.candidate, sources).filter(
+        (source) =>
+          target.category !== "linkedin_connection" ||
+          linkedinCandidateFits(source, targets.sources),
+      ),
       ...targets.sources,
     ],
     targetDiagnostics: {
