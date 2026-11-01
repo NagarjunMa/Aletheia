@@ -78,6 +78,7 @@ export function buildAtomicTargetSources(
   excludedClaims: readonly string[] = [],
   fitsOutput: (_source: AtomicSource) => boolean = () => true,
   channel?: "linkedin_connection",
+  prioritize?: (_sources: readonly AtomicSource[]) => readonly AtomicSource[],
 ) {
   const result: AtomicSource[] = [];
   const diagnostics = {
@@ -141,14 +142,18 @@ export function buildAtomicTargetSources(
           diagnostics.overlength += 1;
           return;
         }
-        if (content.length > remaining || result.length >= 16) {
-          diagnostics.budgetRejected += 1;
-          return;
-        }
         result.push(source);
-        diagnostics.accepted += 1;
-        remaining -= content.length;
       });
   }
-  return { sources: result, diagnostics };
+  const selected: AtomicSource[] = [];
+  for (const source of prioritize ? prioritize(result) : result) {
+    if (source.content.length > remaining || selected.length >= 16) {
+      diagnostics.budgetRejected += 1;
+      continue;
+    }
+    selected.push(source);
+    diagnostics.accepted += 1;
+    remaining -= source.content.length;
+  }
+  return { sources: selected, diagnostics };
 }

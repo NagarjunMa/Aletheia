@@ -23,6 +23,61 @@ const run = (overrides: Record<string, unknown> = {}) =>
   });
 
 describe("atomic final-output provenance", () => {
+  it.each([
+    "I'm building policy evaluation tools.",
+    "I’m building policy evaluation tools.",
+    "I've built policy evaluation tools.",
+    "I’ve built policy evaluation tools.",
+    "I'd built a policy evaluation prototype; I did not deploy it.",
+    "I’d built a policy evaluation prototype; I did not deploy it.",
+    "I'll build a policy evaluation prototype; I have not started it.",
+    "I’ll build a policy evaluation prototype; I have not started it.",
+  ])("accepts an exact complete first-person contraction: %s", (text) => {
+    expect(() =>
+      run({
+        sources: [{ ...source, content: text }],
+        claims: [{ ...claim, text, supporting_excerpt: text }],
+        fields: [{ text, scope: "candidate" }],
+      }),
+    ).not.toThrow();
+  });
+  it.each([
+    "Im building tools.",
+    "I'mogen built tools.",
+    "I'vebuilt tools.",
+    "I'dle tools.",
+    "I'lluminate tools.",
+    "I'm",
+    "I’ve",
+  ])(
+    "does not mistake a name, missing boundary or bare prefix for first person: %s",
+    (text) => {
+      expect(() =>
+        run({
+          sources: [{ ...source, content: text }],
+          claims: [{ ...claim, text, supporting_excerpt: text }],
+          fields: [{ text, scope: "candidate" }],
+        }),
+      ).toThrow();
+    },
+  );
+  it("keeps contraction qualifications and apostrophe spelling immutable", () => {
+    const text =
+      "I’d built policy evaluation tools in a prototype; I did not deploy it.";
+    for (const changed of [
+      "I’d built policy evaluation tools.",
+      text.replace("I’d", "I'd"),
+      text.replace("I’d", "I had"),
+    ]) {
+      expect(() =>
+        run({
+          sources: [{ ...source, content: text }],
+          claims: [{ ...claim, text: changed, supporting_excerpt: text }],
+          fields: [{ text: changed, scope: "candidate" }],
+        }),
+      ).toThrow();
+    }
+  });
   it("accepts a complete supported claim", () =>
     expect(() => run()).not.toThrow());
   it.each([

@@ -1,7 +1,13 @@
-import { buildLinkedinSelectionTool } from "@/modules/outreach/domain/linkedin-grounded-selection";
+import {
+  resolveLinkedinSelection,
+  buildLinkedinSelectionTool,
+} from "@/modules/outreach/domain/linkedin-grounded-selection";
 import { describe, it, expect } from "vitest";
-import { linkedinConnectionDraftSchema } from "@/modules/outreach/domain/outreach-draft.types";
 import { renderLinkedinConnection } from "@/modules/outreach/application/render-linkedin-connection";
+import {
+  ATOMIC_PROVENANCE_INSTRUCTIONS,
+  getAtomicProvenanceInstructions,
+} from "./atomic-provenance";
 import {
   PROMPT_VERSION,
   sanitize,
@@ -90,7 +96,7 @@ describe("LinkedIn connection grounding prompt", () => {
     expect(grounded).toContain("CANDIDATE_GROUNDING");
     expect(grounded).toContain('id="evidence:workflow"');
     expect(grounded).not.toContain(baseInput.resume);
-    expect(LINKEDIN_CONNECTION_PROMPT).toContain("candidate_source_id");
+    expect(LINKEDIN_CONNECTION_PROMPT).toContain("option_id");
 
     const targetOnly = buildPrompt({ ...baseInput, candidateSources: [] });
     expect(targetOnly).toContain("No verified candidate facts are available");
@@ -424,7 +430,7 @@ describe("COLD_EMAIL_PROMPT subject line policy", () => {
   ];
 
   it("tracks the prompt behavior change with a new version", () => {
-    expect(PROMPT_VERSION).toBe("4.2.0");
+    expect(PROMPT_VERSION).toBe("5.0.0");
   });
 
   it("documents scenario-specific email modes", () => {
@@ -479,53 +485,46 @@ describe("COLD_EMAIL_PROMPT subject line policy", () => {
     );
   });
 
-  it("uses source selection rather than contradictory free-form composition instructions", () => {
-    expect(LINKEDIN_CONNECTION_PROMPT).toContain(
-      "target_source_id, candidate_source_id, cta",
-    );
+  it("uses complete option selection rather than free-form composition instructions", () => {
+    expect(LINKEDIN_CONNECTION_PROMPT).toContain("option_id");
     expect(LINKEDIN_CONNECTION_PROMPT).toContain("within 300");
     expect(LINKEDIN_CONNECTION_PROMPT).toContain(
-      "never shorten or paraphrase a fact",
+      "Never shorten or paraphrase a fact",
     );
     expect(LINKEDIN_CONNECTION_PROMPT).not.toContain("CTA EXAMPLES");
   });
 
-  it("renders every approved tool CTA within the shared budget", () => {
-    const ctas = buildLinkedinSelectionTool([
-      {
-        id: "target.profile.0",
-        scope: "target",
-        kind: "target_observation",
-        content: "Works on review tooling.",
-      },
-    ]).input_schema.properties.cta.enum;
-    expect(ctas.length).toBeGreaterThan(0);
-    const source = {
-      id: "evidence:workflow",
-      label: "Workflow",
-      type: "evidence" as const,
-      priority: 1 as const,
-      content: "Built a documentation review workflow.",
+  it("keeps prose-ledger instructions unchanged for email/YC and distinct from option selection", () => {
+    for (const category of ["cold_email", "linkedin_inmail", "yc_application"])
+      expect(getAtomicProvenanceInstructions(category)).toBe(
+        ATOMIC_PROVENANCE_INSTRUCTIONS,
+      );
+    expect(getAtomicProvenanceInstructions("linkedin_connection")).toContain(
+      "Return only option_id",
+    );
+    expect(
+      getAtomicProvenanceInstructions("linkedin_connection"),
+    ).not.toContain("Copy kind, id");
+  });
+
+  it("renders every offered option with a complete invitation and courtesy within the budget", () => {
+    const target = {
+      id: "target.profile.0",
+      scope: "target" as const,
+      kind: "target_observation" as const,
+      content: "Engineering Manager at Example | AI Evaluation",
+      rewrite: "linkedin_profile_interest" as const,
     };
-    for (const example of ctas) {
-      for (const company of [
-        "Acme",
-        "Documentation and Policy Systems International",
-      ]) {
-        const cta = example.replace("[Company]", company);
-        const draft = linkedinConnectionDraftSchema.parse({
-          claims: [],
-          target_observation: "Your documentation work stood out.",
-          candidate_relevance: {
-            text: "I built a documentation review workflow.",
-            source_ids: [source.id],
-          },
-          cta,
-        });
-        const rendered = renderLinkedinConnection({ draft, sources: [source] });
-        expect(rendered.characterCount).toBeLessThanOrEqual(300);
-        expect(rendered.body.endsWith(cta)).toBe(true);
-      }
+    const options = buildLinkedinSelectionTool([target]).input_schema.properties
+      .option_id.enum;
+    expect(options.length).toBeGreaterThan(0);
+    for (const option_id of options) {
+      const draft = resolveLinkedinSelection({ option_id }, [target], []);
+      const rendered = renderLinkedinConnection({ draft, sources: [] });
+      expect(rendered.characterCount).toBeLessThanOrEqual(300);
+      expect(rendered.body).toMatch(
+        /(?:Open to connecting|Open to a brief chat)\? Thank you\.$/,
+      );
     }
   });
 

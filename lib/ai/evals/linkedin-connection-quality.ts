@@ -32,9 +32,11 @@ function checkRule(text: string, rule: LinkedInConnectionQualityRule) {
 
   switch (rule) {
     case "has_greeting":
-      return /^Hi\s+[A-Z][A-Za-z'-]{1,40},\s/.test(normalized)
+      return /^(?:Hi\s+[A-Z][A-Za-z'-]{1,40},|Hi there,|Hello,)\s/.test(
+        normalized,
+      )
         ? pass(rule)
-        : fail(rule, "Expected a first-name greeting.");
+        : fail(rule, "Expected a supported name or neutral greeting.");
 
     case "under_300_chars":
       return normalized.length <= 300
@@ -55,7 +57,7 @@ function checkRule(text: string, rule: LinkedInConnectionQualityRule) {
         : fail(rule, "Expected a concrete target-specific context hook.");
 
     case "has_polished_ask":
-      return /\b(?:I'd like to explore whether|open to a brief chat|glad to share more context|if helpful|whether (?:you're|you’re) open to discussing referrals)\b/i.test(
+      return /\b(?:I'd like to explore whether|open to connecting|may I ask you a question|would you be open to discussing the role|open to a brief chat|glad to share more context|if helpful|whether (?:you're|you’re) open to discussing referrals)\b/i.test(
         normalized,
       ) &&
         !/\bwhether\s+referrals\s+are\s+something\s+(?:you're|you’re)\s+open\s+to\s+discussing\b/i.test(
@@ -65,7 +67,7 @@ function checkRule(text: string, rule: LinkedInConnectionQualityRule) {
         : fail(rule, "Expected a polished, low-friction ask.");
 
     case "has_final_cta":
-      return /(?:whether there(?:'s|’s| is) a fit on your team|open to a brief chat|glad to share more context if helpful|whether (?:you're|you’re) open to discussing referrals)[?.]$/i.test(
+      return /(?:whether there(?:'s|’s| is) a fit on your team|open to connecting|may I ask you a question|would you be open to discussing the role|open to a brief chat|glad to share more context if helpful|whether (?:you're|you’re) open to discussing referrals)[?.](?: Thank you\.)?$/i.test(
         normalized,
       )
         ? pass(rule)

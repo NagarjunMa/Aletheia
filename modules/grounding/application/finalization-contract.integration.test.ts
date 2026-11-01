@@ -56,15 +56,17 @@ describe("ALE-47 observable finalization contract", () => {
     const text = 'I built a CLI using --name="two  spaces".';
     const result = renderLinkedinConnection({
       draft: {
-        target_observation: "Hi there,",
-        candidate_relevance: { text, source_ids: [id] },
+        target_observation: "I'd welcome a conversation.",
+        candidate_relevance: { text: `Hi there, ${text}`, source_ids: [id] },
         cta: "Open to connecting?",
       },
       sources: [
         { id, type: "evidence", label: "CLI", content: text, priority: 1 },
       ],
     });
-    expect(result.body).toBe(`Hi there, ${text} Open to connecting?`);
+    expect(result.body).toBe(
+      `Hi there, ${text} I'd welcome a conversation. Open to connecting?`,
+    );
   });
   it("keeps the whole email CTA and signature for the final limit gate to accept or reject", () => {
     const cta =

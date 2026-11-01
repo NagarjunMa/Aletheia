@@ -1,4 +1,7 @@
-import { normalizeClaimText } from "@/modules/grounding/domain/atomic-claim";
+import {
+  normalizeClaimText,
+  isFirstPersonAssertion,
+} from "@/modules/grounding/domain/atomic-claim";
 import type { EvidenceSelectionDiagnostics } from "@/modules/candidate-context/domain/candidate-context.types";
 import {
   normalizeForExclusion,
@@ -20,6 +23,7 @@ import {
 } from "@/modules/grounding/domain/atomic-claim";
 import {
   linkedinCandidateFits,
+  createLinkedinTargetMatcher,
   linkedinTargetFits,
 } from "../domain/linkedin-grounded-selection";
 import type { CandidateEvidenceRecord } from "@/lib/candidate-profile/service";
@@ -213,6 +217,28 @@ export function buildOutreachGroundingContext(input: {
   const claims = excludedClaims(input.candidate.profile.excludedClaims);
   const injectionScan = scanForInjection(target.profileMarkdown);
   const injectionSafeMode = injectionScan.triggered;
+  const selection = injectionSafeMode
+    ? undefined
+    : createEvidenceRanker(
+        input.candidate.confirmedEvidence.filter(
+          (entry) =>
+            entry.confirmed &&
+            !containsExcludedClaim(renderEvidence(entry), claims),
+        ),
+        target.category === "linkedin_connection"
+          ? (entry) =>
+              readFactReview(entry, entry.factReview)
+                .map((fact) => fact.excerpt)
+                .join("\n")
+          : undefined,
+      )({
+        primary:
+          target.jobDescription ||
+          target.conversationContext ||
+          target.profileMarkdown,
+        secondary: `${target.profileMarkdown} ${target.conversationContext}`,
+      });
+  let preferredEvidenceId: string | undefined;
   const targets = buildAtomicTargetSources(
     injectionSafeMode
       ? {}
@@ -226,6 +252,46 @@ export function buildOutreachGroundingContext(input: {
     target.category === "linkedin_connection"
       ? "linkedin_connection"
       : undefined,
+    target.category === "linkedin_connection"
+      ? (pool) => {
+          const matchTargets = createLinkedinTargetMatcher(pool);
+          let fallback:
+            { entryId: string; targets: AtomicSource[] } | undefined;
+          for (const entry of selection?.evidence ?? []) {
+            const matched = new Map<string, AtomicSource>();
+            for (const fact of readFactReview(entry, entry.factReview)) {
+              const content = normalizeAtomicSourceText(fact.excerpt);
+              if (!isFirstPersonAssertion(content)) continue;
+              for (const source of matchTargets({
+                id: fact.id,
+                scope: "candidate",
+                kind: fact.kind,
+                content,
+              }))
+                matched.set(source.id, source);
+            }
+            const ordered = [...matched.values()].sort(
+              (a, b) =>
+                Number(b.rewrite === "linkedin_job_interest") -
+                Number(a.rewrite === "linkedin_job_interest"),
+            );
+            if (!ordered.length) continue;
+            const result = { entryId: entry.id, targets: ordered };
+            if (ordered[0]!.rewrite === "linkedin_job_interest") {
+              fallback = result;
+              break;
+            }
+            fallback ??= result;
+          }
+          if (!fallback) return pool;
+          preferredEvidenceId = fallback.entryId;
+          const selected = new Set(fallback.targets.map((source) => source.id));
+          return [
+            ...fallback.targets,
+            ...pool.filter((source) => !selected.has(source.id)),
+          ];
+        }
+      : undefined,
   );
   let drafts: DraftSource[];
   let selectionDiagnostics: EvidenceSelectionDiagnostics | undefined;
@@ -233,22 +299,13 @@ export function buildOutreachGroundingContext(input: {
   if (injectionSafeMode) {
     drafts = safeSummaryDraft(input.candidate);
   } else {
-    const rankEvidence = createEvidenceRanker(
-      input.candidate.confirmedEvidence.filter(
-        (entry) =>
-          entry.confirmed &&
-          !containsExcludedClaim(renderEvidence(entry), claims),
-      ),
-    );
-    const selection = rankEvidence({
-      primary:
-        target.jobDescription ||
-        target.conversationContext ||
-        target.profileMarkdown,
-      secondary: `${target.profileMarkdown} ${target.conversationContext}`,
-    });
-    selectionDiagnostics = selection.diagnostics;
-    const evidence = selection.evidence
+    selectionDiagnostics = selection!.diagnostics;
+    const evidence = [...selection!.evidence]
+      .sort(
+        (a, b) =>
+          Number(b.id === preferredEvidenceId) -
+          Number(a.id === preferredEvidenceId),
+      )
       .map((entry) => ({
         id: `evidence:${entry.id}`,
         label: entry.title,

@@ -2,9 +2,9 @@
 
 ## Active Work
 
-ALE-47 final-output finalization: see `docs/operations/ale-47-grounded-finalization.md`. Grounded channels preserve source-backed text, inspect style without rewriting, and validate the exact final output before canonical limits. ALE-54 relevance ranking is merged into main; ALE-47 is integrated on that baseline. The reviewed-fact whitespace correction preserves literal values through source preparation and validation. Exclusion checks keep separate deny-only whitespace folding; current correction review remains pending.
+ALE-47 final-output finalization is merged: see `docs/operations/ale-47-grounded-finalization.md`. Grounded channels preserve source-backed text, inspect style without rewriting, and validate the exact final output before canonical limits. Reviewed-fact whitespace and deny-only exclusion folding corrections passed independent review before publication. Hosted/provider rollout evidence remains separate from local verification.
 
-LinkedIn introductory composition: see `docs/operations/linkedin-relevance-composition-plan.md` for current scope and `docs/operations/linkedin-introductory-messages.md` for the earlier repair. A/B1 eligibility and ALE-54 relevance ranking are merged; wider composition remains pending. Preserve per-fact review, complete source support and final validation; verify useful introductory wording as well as HTTP success.
+LinkedIn introductory composition: see `docs/operations/linkedin-relevance-composition-plan.md` for the active ALE-46 complete-option increment and `docs/operations/linkedin-introductory-messages.md` for history. A/B1, ALE-54 relevance and ALE-47 finalization are merged. The current backend prepares complete supported sender-first introductions and the model selects one opaque current-option ID. Preserve per-fact review, complete source support and final validation; independently verify the new code and live usefulness before parent completion.
 
 ALE-54 deterministic evidence relevance: see `docs/operations/ale-54-evidence-relevance.md` for the shared request-local selector, question/JD priority, weak-match policy, synthetic evaluation and combined ALE-46 regression evidence.
 
@@ -60,7 +60,7 @@ Chrome Extension (MV3)              Next.js Web App
 - **Lazy factory functions:** `getAnthropic()`, `getSupabaseService()` — no module-level instantiation
 - **Hybrid feedback persistence:** `POST /api/extension/feedback` synchronously inserts the `user_feedback` row (eval signal must not be lost on worker crash), then returns 200 and runs style merge fire-and-forget
 - **Single-pass parsing:** JSON → on failure, 502 with retry instruction. No regex extraction layer.
-- **Connection composition:** LinkedIn notes use a shared 300-character budget, enforced after sanitation and whitespace normalization. Never truncate a note or drop its CTA/relevance; unusable output fails with compensation.
+- **Connection composition:** server-built complete options bind candidate/target facts, greeting, invitation and courtesy within the existing 300-character budget. The model selects one option; independent source combinations and omitted introductions cannot bypass this contract. Never truncate a note or drop qualifications; final provenance and limits remain authoritative. Universal 200-character composer compatibility is a separate unresolved boundary.
 - **Fail-closed admission:** quota infrastructure failures return 503 without a model call; proven daily/burst/work/in-flight limits return 429 with retry guidance. Daily refunds never restore consumed model-attempt/work budgets.
 - **Prompt injection defense:** all user inputs escaped via `escapeForXmlTag()` before injection into `<user_input>` tags
 

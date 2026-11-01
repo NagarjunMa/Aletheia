@@ -96,12 +96,18 @@ export const NEUTRAL_FRAMING = [
   "Hello,",
   "Best,",
   "Thanks,",
+  "Thank you.",
   "A quick look at my background:",
 ] as const;
 
 /** Inner whitespace can be part of a literal value; only encoding and outer trim are equivalent. */
 export function normalizeClaimText(value: string): string {
   return value.normalize("NFKC").replace(/\r\n?/gu, "\n").trim();
+}
+
+/** Recognize an explicit actor without expanding contractions or changing the source. */
+export function isFirstPersonAssertion(value: string): boolean {
+  return /^I(?:\s|['’](?:m|ve|d|ll)\s)/u.test(normalizeClaimText(value));
 }
 
 // Only named fields may move out of a headline suffix; free text can qualify
@@ -128,7 +134,7 @@ export function allowedClaimTexts(source: AtomicSource): string[] {
       : `My background includes: "${excerpt}"`;
   const forms = [quoted];
   // Already explicit first-person candidate assertions need no actor inference.
-  if (source.scope === "candidate" && /^I\s/u.test(excerpt))
+  if (source.scope === "candidate" && isFirstPersonAssertion(excerpt))
     forms.push(excerpt);
   if (
     source.scope === "candidate" &&

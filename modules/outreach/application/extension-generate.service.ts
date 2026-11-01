@@ -15,7 +15,7 @@ import {
 } from "@/modules/refund-review/application/capture-generation-failure";
 import { recordMeasurement } from "@/lib/provider-attempt-timing";
 import {
-  ATOMIC_PROVENANCE_INSTRUCTIONS,
+  getAtomicProvenanceInstructions,
   buildAtomicProvenancePrompt,
 } from "@/lib/ai/prompts/atomic-provenance";
 import { AtomicClaimValidationError } from "@/modules/grounding/application/validate-atomic-claims";
@@ -347,19 +347,25 @@ async function handlePost(
       const eligibleTargetCount = (
         preparedGrounding.atomicSources ?? []
       ).filter(linkedinTargetFits).length;
-      log.info(
-        {
-          event: "outreach.target_eligibility",
-          outcome: eligibleTargetCount ? "success" : "failure",
-          eligibleTargetCount,
-          ...preparedGrounding.targetDiagnostics,
-        },
-        "LinkedIn target eligibility checked",
-      );
-      buildLinkedinSelectionTool(
-        preparedGrounding.atomicSources ?? [],
-        preparedGrounding.targetDiagnostics,
-      );
+      let eligibleOptionCount = 0;
+      try {
+        eligibleOptionCount = buildLinkedinSelectionTool(
+          preparedGrounding.atomicSources ?? [],
+          preparedGrounding.targetDiagnostics,
+          validatedData.intent ?? "networking",
+        ).input_schema.properties.option_id.enum.length;
+      } finally {
+        log.info(
+          {
+            event: "outreach.target_eligibility",
+            outcome: eligibleOptionCount ? "success" : "failure",
+            eligibleTargetCount,
+            eligibleOptionCount,
+            ...preparedGrounding.targetDiagnostics,
+          },
+          "LinkedIn composition eligibility checked",
+        );
+      }
     }
 
     timing.metrics({
@@ -634,7 +640,7 @@ async function handlePost(
       "Prepared generation context",
     );
 
-    const systemPrompt = `${getSystemPrompt(category)}\n\n${ATOMIC_PROVENANCE_INSTRUCTIONS}`;
+    const systemPrompt = `${getSystemPrompt(category)}\n\n${getAtomicProvenanceInstructions(category)}`;
     const promptInput: GenerateInput = {
       profileMarkdown: cleanMarkdown,
       resume: resumeForPrompt,
@@ -709,6 +715,7 @@ async function handlePost(
       category,
       emailMode,
       atomicSources: preparedGrounding.atomicSources ?? [],
+      intent: validatedData.intent ?? "networking",
       logger: log,
     });
 
@@ -991,6 +998,7 @@ async function handlePost(
         draft = getLinkedinConnectionDraftToolInput(response, {
           atomicSources: preparedGrounding.atomicSources ?? [],
           candidateSources: preparedGrounding.sources,
+          intent: validatedData.intent ?? "networking",
         });
       } catch (error) {
         throw new LinkedinConnectionValidationError(

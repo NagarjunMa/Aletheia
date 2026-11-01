@@ -4,6 +4,8 @@ import { prepareFactReview } from "@/lib/candidate-profile/fact-review";
 import { resolveOutputConstraint } from "@/lib/ai/output-constraints";
 import { buildOutreachGroundingContext } from "@/modules/outreach/application/build-outreach-grounding-context";
 import { buildYcGroundingContext } from "@/modules/application-answer/application/build-yc-grounding-context";
+import { firstLinkedinOption } from "@/__tests__/helpers/linkedin-option";
+import { allowedClaimTexts } from "@/modules/grounding/domain/atomic-claim";
 import { resolveLinkedinSelection } from "@/modules/outreach/domain/linkedin-grounded-selection";
 import { renderLinkedinConnection } from "@/modules/outreach/application/render-linkedin-connection";
 import { renderColdEmail } from "@/modules/outreach/application/render-cold-email";
@@ -42,8 +44,8 @@ function candidate(fact: string) {
   };
 }
 const target = {
-  profileMarkdown: "I build CLI platform tools.",
-  jobDescription: "CLI platform",
+  profileMarkdown: "Engineering Manager at Example | Developer Tools",
+  jobDescription: "The CLI team at Example is hiring Engineers!",
   conversationContext: "",
 };
 function claim(source: { id: string; content: string }) {
@@ -69,16 +71,10 @@ describe("ALE47-R3-1 real reviewed fact to final output", () => {
       target: { ...target, category: "linkedin_connection" },
     });
     const source = context.atomicSources!.find((s) => s.scope === "candidate")!;
-    const targetSource = context.atomicSources!.find(
-      (s) => s.scope === "target",
-    )!;
+
     expect(source).toBeDefined();
     const draft = resolveLinkedinSelection(
-      {
-        target_source_id: targetSource.id,
-        candidate_source_id: source.id,
-        cta: "Open to connecting?",
-      },
+      firstLinkedinOption(context.atomicSources!),
       context.atomicSources!,
       context.sources,
     );
@@ -211,15 +207,9 @@ describe("ALE47-R3-1 real reviewed fact to final output", () => {
           category: "linkedin_connection",
         },
       });
-      const targetSource = context.atomicSources!.find(
-        (s) => s.scope === "target",
-      )!;
+
       const draft = resolveLinkedinSelection(
-        {
-          target_source_id: targetSource.id,
-          candidate_source_id: null,
-          cta: "Open to connecting?",
-        },
+        firstLinkedinOption(context.atomicSources!),
         context.atomicSources!,
         context.sources,
       );
@@ -261,15 +251,20 @@ describe("ALE47-R3-1 real reviewed fact to final output", () => {
         source.id.startsWith(`target.${field}.`),
       )!;
       expect(selected.content).toBe(literal);
-      const draft = resolveLinkedinSelection(
-        {
-          target_source_id: selected.id,
-          candidate_source_id: null,
-          cta: "Open to connecting?",
-        },
-        context.atomicSources!,
-        context.sources,
-      );
+      const text = allowedClaimTexts(selected).at(-1)!;
+      const draft = {
+        target_observation: `Hi there, ${text}`,
+        candidate_relevance: null,
+        cta: "Open to connecting?",
+        claims: [
+          {
+            text,
+            kind: selected.kind,
+            source_id: selected.id,
+            supporting_excerpt: selected.content,
+          },
+        ],
+      };
       const rendered = renderLinkedinConnection({
         draft,
         sources: context.sources,
