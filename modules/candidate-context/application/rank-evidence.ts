@@ -93,16 +93,54 @@ function match(
   return { score, domainScore, supported };
 }
 
+/** The same topic policy ranks whole target units against a reviewed assertion. */
+export function createEvidenceTargetRanker(
+  targets: readonly string[],
+): (_contribution: string) => number[] {
+  const preparedTargets = targets.map(tokens);
+  const byTerm = new Map<string, number[]>();
+  preparedTargets.forEach((target, index) => {
+    for (const term of target) {
+      const indices = byTerm.get(term) ?? [];
+      indices.push(index);
+      byTerm.set(term, indices);
+    }
+  });
+  const empty = new Set<string>();
+  return (contribution) => {
+    const prepared = tokens(contribution);
+    const candidates = new Set(
+      [...prepared].flatMap((term) => byTerm.get(term) ?? []),
+    );
+    return [...candidates]
+      .map((index) => ({
+        index,
+        ...match(preparedTargets[index]!, prepared, empty, empty),
+      }))
+      .filter((item) => item.supported)
+      .sort(
+        (a, b) =>
+          b.domainScore - a.domainScore ||
+          b.score - a.score ||
+          a.index - b.index,
+      )
+      .map((item) => item.index);
+  };
+}
+
 /** Per-request matching data only; ownership, exclusions and fact support remain caller-owned. */
 export function createEvidenceRanker(
   evidence: readonly CandidateEvidenceRecord[],
+  contributionText?: (_entry: CandidateEvidenceRecord) => string,
 ) {
   const eligible = evidence
     .filter((entry) => entry.confirmed)
     .map((entry) => ({
       entry,
       contribution: tokens(
-        [entry.actions, entry.outcome, ...entry.metrics].join(" "),
+        contributionText
+          ? contributionText(entry)
+          : [entry.actions, entry.outcome, ...entry.metrics].join(" "),
       ),
       labels: tokens([entry.title, ...entry.skills].join(" ")),
       context: tokens(entry.context),

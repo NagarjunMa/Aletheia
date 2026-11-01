@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { firstLinkedinOption } from "@/__tests__/helpers/linkedin-option";
 import {
   resolveLinkedinSelection,
   buildLinkedinSelectionTool,
@@ -7,19 +8,19 @@ import {
 import { validateAtomicOutput } from "@/modules/grounding/application/validate-atomic-claims";
 import { renderLinkedinConnection } from "./render-linkedin-connection";
 import type { AtomicSource } from "@/modules/grounding/domain/atomic-claim";
-
 const target: AtomicSource = {
   id: "target.profile.0",
   scope: "target",
   kind: "target_observation",
-  content: "Builds evaluation tooling for policy-grounded AI agents.",
+  content: "Engineering Manager at Example | AI Evaluation",
+  rewrite: "linkedin_profile_interest",
 };
 const candidate: AtomicSource = {
   id: "evidence:one.fact.action",
   rootId: "evidence:one",
   scope: "candidate",
   kind: "action",
-  content: "I built a policy-grounded evaluation agent.",
+  content: "I built an AI evaluation agent.",
 };
 const sources = [target, candidate];
 const roots = [
@@ -31,34 +32,7 @@ const roots = [
     content: candidate.content,
   },
 ];
-const selection = {
-  target_source_id: target.id,
-  candidate_source_id: candidate.id,
-  cta: "Open to a brief chat?",
-};
-
 describe("server-owned LinkedIn factual composition", () => {
-  it("admits a complete candidate/target pair at 300 characters but not 301", () => {
-    const prefix = `Hi there, The supplied context says: "${target.content}"`;
-    const cta = "Open to connecting?";
-    const content = `I ${"x".repeat(300 - prefix.length - cta.length - 5)}.`;
-    const boundary = { ...candidate, content };
-    const boundaryRoots = [{ ...roots[0]!, content }];
-    const draft = resolveLinkedinSelection(
-      { ...selection, cta },
-      [target, boundary],
-      boundaryRoots,
-    );
-    expect(
-      renderLinkedinConnection({ draft, sources: boundaryRoots }).body,
-    ).toHaveLength(300);
-    expect(linkedinCandidateFits(boundary, [target])).toBe(true);
-    expect(
-      linkedinCandidateFits({ ...boundary, content: content + "x" }, [target]),
-    ).toBe(false);
-    expect(linkedinCandidateFits(boundary, [])).toBe(false);
-    expect(linkedinCandidateFits(target, [candidate])).toBe(false);
-  });
   it("reproduces CLAIM_REWRITE for unsupported wording instead of relaxing the validator", () => {
     expect(() =>
       validateAtomicOutput({
@@ -79,91 +53,117 @@ describe("server-owned LinkedIn factual composition", () => {
     ).toThrowError(expect.objectContaining({ code: "CLAIM_REWRITE" }));
   });
 
-  it("resolves IDs into exact supported text and ledger accepted by unchanged validators", () => {
-    const draft = resolveLinkedinSelection(selection, sources, roots);
-    const rendered = renderLinkedinConnection({ draft, sources: roots });
-    expect(rendered.body).toContain(candidate.content);
-    expect(rendered.body.length).toBeLessThanOrEqual(300);
-    expect(() =>
-      validateAtomicOutput({
-        claims: draft.claims,
-        sources,
-        excludedClaims: [],
-        fields: [
-          { text: draft.target_observation, scope: "target" },
-          { text: draft.candidate_relevance!.text, scope: "candidate" },
-          { text: draft.cta, scope: "either" },
-        ],
-      }),
-    ).not.toThrow();
+  it("resolves every offered option into a supported complete message", () => {
+    for (const option_id of buildLinkedinSelectionTool(sources).input_schema
+      .properties.option_id.enum) {
+      const draft = resolveLinkedinSelection({ option_id }, sources, roots);
+      const rendered = renderLinkedinConnection({ draft, sources: roots });
+      expect(rendered.body).toContain(candidate.content);
+      expect(rendered.body.length).toBeLessThanOrEqual(300);
+      expect(() =>
+        validateAtomicOutput({
+          claims: draft.claims,
+          sources,
+          excludedClaims: [],
+          fields: [
+            { text: rendered.body, scope: "either" },
+            { text: draft.target_observation, scope: "target" },
+            { text: draft.candidate_relevance!.text, scope: "candidate" },
+            { text: draft.cta, scope: "either" },
+          ],
+        }),
+      ).not.toThrow();
+    }
   });
-  it("supports target-only selection without inventing candidate relevance", () => {
+  it("supports target-only options only when no reviewed relevant fact is available", () => {
     const draft = resolveLinkedinSelection(
-      { ...selection, candidate_source_id: null },
+      firstLinkedinOption([target]),
       [target],
       [],
     );
     expect(draft.candidate_relevance).toBeNull();
     expect(draft.claims).toHaveLength(1);
   });
+  it("rejects stale options after a source or intent changes", () => {
+    const choice = firstLinkedinOption(sources);
+    expect(() =>
+      resolveLinkedinSelection(
+        choice,
+        [
+          target,
+          { ...candidate, content: candidate.content + " I tested it." },
+        ],
+        roots,
+      ),
+    ).toThrow();
+    expect(() =>
+      resolveLinkedinSelection(choice, sources, roots, "mentorship"),
+    ).toThrow();
+  });
   it.each([
-    { ...selection, target_source_id: "unknown" },
-    { ...selection, target_source_id: candidate.id },
-    { ...selection, candidate_source_id: target.id },
-    { ...selection, cta: "Your company increased revenue by 40%." },
-    { ...selection, claims: [] },
-    { ...selection, target_observation: "Unsupported free text" },
-  ])("rejects untrusted selections %#", (input) =>
+    { option_id: "unknown" },
+    { option_id: "a".repeat(81) },
+    { option_id: null },
+    { option_id: "unknown", claims: [] },
+  ])("rejects forged or oversized selections %#", (input) =>
     expect(() => resolveLinkedinSelection(input, sources, roots)).toThrow(),
   );
-  it("rejects missing candidate roots and oversized complete compositions", () => {
-    expect(() => resolveLinkedinSelection(selection, sources, [])).toThrow();
+  it("rejects missing candidate roots", () =>
     expect(() =>
-      renderLinkedinConnection({
-        draft: resolveLinkedinSelection(
-          selection,
-          [{ ...target, content: "x".repeat(240) }, candidate],
-          roots,
-        ),
-        sources: roots,
-      }),
-    ).toThrow();
-  });
-  it("rejects an empty target pool before a provider call", () =>
-    expect(() => buildLinkedinSelectionTool([])).toThrow());
-  it("does not offer an impossible target when a shorter complete one exists", () => {
-    const tool = buildLinkedinSelectionTool([
-      { ...target, id: "too-long", content: "x".repeat(272) },
-      target,
-    ]);
-    expect(tool.input_schema.properties.target_source_id.enum).toEqual([
-      target.id,
-    ]);
-  });
-  it("admits a complete 300-character target-only note, rejecting a 301-character minimum", () => {
-    const boundary = { ...target, content: "x".repeat(241) };
-    expect(() => buildLinkedinSelectionTool([boundary])).not.toThrow();
+      resolveLinkedinSelection(firstLinkedinOption(sources), sources, []),
+    ).toThrow());
+  it("retains an intact 300-character composition, never offering 301", () => {
+    const base = resolveLinkedinSelection(
+      firstLinkedinOption(sources),
+      sources,
+      roots,
+    );
+    const size = renderLinkedinConnection({ draft: base, sources: roots }).body
+      .length;
+    const content = candidate.content + "x".repeat(300 - size);
+    const boundary = { ...candidate, content };
+    const updatedRoots = [{ ...roots[0]!, content }];
     const draft = resolveLinkedinSelection(
-      { ...selection, candidate_source_id: null, cta: "Open to connecting?" },
-      [boundary],
-      [],
+      firstLinkedinOption([target, boundary]),
+      [target, boundary],
+      updatedRoots,
     );
-    expect(renderLinkedinConnection({ draft, sources: [] }).body).toHaveLength(
-      300,
-    );
-    expect(() =>
-      buildLinkedinSelectionTool([{ ...boundary, content: "x".repeat(242) }]),
-    ).toThrow();
-  });
-  it("offers only request-owned IDs and existing approved CTA phrases", () => {
-    const tool = buildLinkedinSelectionTool(sources);
-    expect(tool.input_schema.properties.target_source_id.enum).toEqual([
-      target.id,
-    ]);
     expect(
-      tool.input_schema.properties.candidate_source_id.anyOf?.[0]?.enum,
-    ).toEqual([candidate.id]);
+      renderLinkedinConnection({ draft, sources: updatedRoots }).body,
+    ).toHaveLength(300);
+    expect(linkedinCandidateFits(boundary, [target])).toBe(true);
+    expect(
+      linkedinCandidateFits({ ...boundary, content: content + "x" }, [target]),
+    ).toBe(false);
+    const over = [target, { ...boundary, content: content + "x" }];
+    expect(
+      resolveLinkedinSelection(firstLinkedinOption(over), over, updatedRoots)
+        .candidate_relevance,
+    ).toBeNull();
+  });
+  it("rejects no target or quotation-only targets before the provider call", () => {
+    expect(() => buildLinkedinSelectionTool([])).toThrow();
+    expect(() =>
+      buildLinkedinSelectionTool([
+        {
+          ...target,
+          content: "Engineering Manager at Example | Retired since 2020",
+        },
+      ]),
+    ).toThrow(
+      expect.objectContaining({
+        reasonCodes: expect.arrayContaining(["TARGET_WORDING_UNSUPPORTED"]),
+      }),
+    );
+  });
+  it("offers only bounded opaque IDs and escaped option previews", () => {
+    const tool = buildLinkedinSelectionTool(sources);
+    expect(Object.keys(tool.input_schema.properties)).toEqual(["option_id"]);
+    expect(
+      tool.input_schema.properties.option_id.enum.length,
+    ).toBeLessThanOrEqual(8);
     expect(tool.input_schema.additionalProperties).toBe(false);
-    expect(tool.input_schema.properties).not.toHaveProperty("claims");
+    expect(tool.description).not.toContain(candidate.id);
+    expect(tool.description).toContain("<user_input>");
   });
 });

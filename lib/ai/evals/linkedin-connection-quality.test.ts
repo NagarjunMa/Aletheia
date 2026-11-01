@@ -9,6 +9,20 @@ import {
 const cases = goldenCases as GoldenLinkedInConnectionCase[];
 
 describe("LinkedIn connection quality evals", () => {
+  it("accepts a neutral greeting and a whole courtesy after an intact invitation", () => {
+    expect(
+      evaluateLinkedInConnectionQuality(
+        "Hi there, I built evaluation tooling. Your role interests me. Open to connecting? Thank you.",
+        ["has_greeting", "has_polished_ask", "has_final_cta"],
+      ).passed,
+    ).toBe(true);
+    expect(
+      evaluateLinkedInConnectionQuality(
+        "Hi there, I built evaluation tooling. Open to a brief Thank you.",
+        ["has_final_cta"],
+      ).passed,
+    ).toBe(false);
+  });
   it.each(cases)("passes preferred output for $id", (goldenCase) => {
     const result = evaluateLinkedInConnectionQuality(
       goldenCase.preferred,

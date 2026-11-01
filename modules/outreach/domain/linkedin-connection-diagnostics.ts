@@ -13,7 +13,9 @@ const MAX_DETAILS = 8;
 function safeField(path: PropertyKey[]): string {
   if (
     path.length === 1 &&
-    (path[0] === "target_observation" || path[0] === "cta")
+    (path[0] === "target_observation" ||
+      path[0] === "cta" ||
+      path[0] === "option_id")
   )
     return path[0];
   if (path[0] === "candidate_relevance") {

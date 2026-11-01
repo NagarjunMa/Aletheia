@@ -1,3 +1,4 @@
+import { firstLinkedinOption } from "@/__tests__/helpers/linkedin-option";
 import { describe, expect, it } from "vitest";
 import { EMAIL_MODES } from "@/lib/ai/email-formatter";
 import { resolveOutputConstraint } from "@/lib/ai/output-constraints";
@@ -53,6 +54,48 @@ describe("cold email Anthropic tool", () => {
 });
 
 describe("LinkedIn connection Anthropic tool", () => {
+  it("accepts only a current option at the live parser boundary, ignoring a legacy declared count", () => {
+    const sources = [
+      {
+        id: "target.synthetic",
+        scope: "target" as const,
+        kind: "target_observation" as const,
+        content: "The Policy team at Example is hiring Engineers!",
+        rewrite: "linkedin_job_interest" as const,
+      },
+    ];
+    const grounding = { atomicSources: sources, candidateSources: [] };
+    const response = (input: unknown) =>
+      ({
+        content: [
+          {
+            type: "tool_use",
+            name: "return_linkedin_connection_composition",
+            input,
+          },
+        ],
+      }) as never;
+    const choice = firstLinkedinOption(sources);
+    expect(
+      getLinkedinConnectionDraftToolInput(
+        response({ ...choice, character_count: 1 }),
+        grounding,
+      ).target_observation,
+    ).toContain("Policy team at Example");
+    for (const input of [
+      { option_id: "stale" },
+      { ...choice, body: "PRIVATE_CANARY" },
+      {
+        target_source_id: sources[0]!.id,
+        candidate_source_id: null,
+        cta: "Open to connecting?",
+      },
+    ]) {
+      expect(() =>
+        getLinkedinConnectionDraftToolInput(response(input), grounding),
+      ).toThrow();
+    }
+  });
   const connection = {
     claims: [],
     target_observation: "Your developer tooling work stood out.",

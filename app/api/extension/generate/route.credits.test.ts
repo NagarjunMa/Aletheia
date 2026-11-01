@@ -1,3 +1,4 @@
+import { linkedinOptionResponse } from "@/__tests__/helpers/linkedin-option";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { makeRequest } from "@/__tests__/helpers/request";
 import { OutreachGroundingUnavailableError } from "@/modules/outreach/domain/outreach-grounding.types";
@@ -49,7 +50,8 @@ vi.mock(
                   id: "target.profile.0",
                   scope: "target",
                   kind: "target_observation",
-                  content: "Works on evaluation tooling.",
+                  content: "Engineering Manager at Example | AI Evaluation",
+                  rewrite: "linkedin_profile_interest",
                 },
               ]),
         ],
@@ -213,10 +215,9 @@ beforeEach(() => {
     text: "Backend engineer with AWS, Terraform, Python, and AI systems experience.",
     source: "user_resumes",
   });
-  mockAnthropicCreate.mockResolvedValue({
-    content: [connectionCompositionBlock()],
-    usage: { input_tokens: 100, output_tokens: 40 },
-  });
+  mockAnthropicCreate.mockImplementation(async (input) =>
+    linkedinOptionResponse(input),
+  );
   mockPrepareOutreachGroundingContext.mockResolvedValue({
     identity: { fullName: "Candidate Name", linkedinUrl: "" },
     sources: [],
@@ -281,7 +282,7 @@ beforeEach(() => {
 
 describe("POST /api/extension/generate with credit billing enabled", () => {
   it.each([97, 280, 301])(
-    "preserves once-only credit/quota compensation for observation length %i",
+    "refunds once for forbidden legacy free-text output of length %i",
     async (length) => {
       const block = connectionCompositionBlock();
       const excerpt = "x".repeat(length - 29);
@@ -296,7 +297,8 @@ describe("POST /api/extension/generate with credit billing enabled", () => {
             id: "target.fallback",
             scope: "target",
             kind: "target_observation",
-            content: "Works on evaluation tooling.",
+            content: "Engineering Manager at Example | AI Evaluation",
+            rewrite: "linkedin_profile_interest",
           },
           {
             id: "target.length",
@@ -334,7 +336,7 @@ describe("POST /api/extension/generate with credit billing enabled", () => {
           body: validPayload,
         }),
       );
-      const failed = length !== 97;
+      const failed = true;
       expect(res.status).toBe(failed ? 502 : 200);
       expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
       for (const name of [

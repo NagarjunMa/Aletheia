@@ -1,5 +1,4 @@
-import { sanitizeForLinkedIn } from "@/lib/ai/sanitizer";
-import { sanitize } from "@/lib/ai/prompts/linkedin-connection";
+import { firstLinkedinOption } from "@/__tests__/helpers/linkedin-option";
 import { describe, expect, it } from "vitest";
 import { buildOutreachGroundingContext } from "./build-outreach-grounding-context";
 import {
@@ -66,16 +65,8 @@ function context(jd: string, reviewed = true) {
 function compose(jd: string, reviewed = true) {
   const grounding = context(jd, reviewed);
   const sources = grounding.atomicSources!;
-  const targetIds =
-    buildLinkedinSelectionTool(sources).input_schema.properties.target_source_id
-      .enum;
   const draft = resolveLinkedinSelection(
-    {
-      target_source_id: targetIds[0],
-      candidate_source_id:
-        sources.find((s) => s.scope === "candidate")?.id ?? null,
-      cta: "Open to connecting?",
-    },
+    firstLinkedinOption(sources),
     sources,
     grounding.sources,
   );
@@ -95,7 +86,7 @@ describe("LinkedIn introductory product contract", () => {
   it("combines job interest and reviewed experience in a complete introduction", () => {
     const { rendered } = compose(hiring);
     expect(rendered.body).toBe(
-      `Hi there, I'm interested in the openings for Applied AI Engineers with the AI Data Platform team at Apple. ${experience} Open to connecting?`,
+      `Hi there, ${experience} I'm interested in the openings for Applied AI Engineers with the AI Data Platform team at Apple. Open to connecting? Thank you.`,
     );
     expect(rendered.characterCount).toBeLessThanOrEqual(300);
     expect(rendered.body).not.toContain("The supplied context says");
@@ -114,7 +105,7 @@ describe("LinkedIn introductory product contract", () => {
   it("uses a natural complete headline introduction rather than a profile citation", () => {
     const { rendered } = compose("");
     expect(rendered.body).toBe(
-      `Hi there, I'm interested in Applied AI & Data Platform and your Engineering Manager role at Apple. ${experience} Open to connecting?`,
+      `Hi there, ${experience} I'm interested in Applied AI & Data Platform and your Engineering Manager role at Apple. Open to connecting? Thank you.`,
     );
   });
   it("does not invent qualifications from a resume or an unreviewed record", () => {
@@ -127,11 +118,17 @@ describe("LinkedIn introductory product contract", () => {
     "The AI Data Platform team at Apple is not hiring Applied AI Engineers!",
     `${hiring} Only candidates with three years of experience qualify.`,
     "The AI Data Platform team at Apple is hiring Applied AI Engineers only for a training simulation.",
-  ])("preserves the entire qualified passage: %s", (jd) => {
-    const { draft } = compose(jd, false);
-    expect(draft.target_observation).toContain(jd);
-    expect(draft.target_observation).not.toContain("openings with");
-  });
+  ])(
+    "keeps qualified JD intact but uses a supported profile introduction: %s",
+    (jd) => {
+      const { draft, sources } = compose(jd, false);
+      expect(sources.some((source) => source.content === jd)).toBe(true);
+      expect(draft.target_observation).toContain(
+        "Engineering Manager role at Apple",
+      );
+      expect(draft.target_observation).not.toContain("openings for");
+    },
+  );
 });
 
 describe("introductory wording safety boundary", () => {
@@ -171,32 +168,11 @@ describe("introductory wording safety boundary", () => {
       expect(allowedClaimTexts(source)).toEqual([
         `I'd like to connect about your profile: "${text}"`,
       ]);
-      const draft = resolveLinkedinSelection(
-        {
-          target_source_id: source.id,
-          candidate_source_id: null,
-          cta: "Open to connecting?",
-        },
-        [source],
-        [],
-      );
-      const sanitized = await sanitizeForLinkedIn(
-        sanitize(draft.target_observation),
-      );
-      expect(sanitized.success).toBe(true);
-      const rendered = renderLinkedinConnection({
-        draft: { ...draft, target_observation: sanitized.sanitizedContent },
-        sources: [],
-      });
-      expect(rendered.body).toContain(`"${text}"`);
-      expect(() =>
-        validateAtomicOutput({
-          claims: draft.claims,
-          sources: [source],
-          excludedClaims: [],
-          fields: [{ text: rendered.body, scope: "target" }],
+      expect(() => buildLinkedinSelectionTool([source])).toThrow(
+        expect.objectContaining({
+          reasonCodes: expect.arrayContaining(["TARGET_WORDING_UNSUPPORTED"]),
         }),
-      ).not.toThrow();
+      );
     },
   );
   it("keeps the original approved forms for other channels", () => {

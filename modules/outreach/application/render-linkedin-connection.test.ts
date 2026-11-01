@@ -29,7 +29,7 @@ const draft = {
 describe("renderLinkedinConnection", () => {
   it("renders a complete, source-validated note without post-render truncation", () => {
     const expectedBody =
-      "Your developer tooling work stood out. I built an LLM-assisted review workflow for engineers. Open to a brief chat?";
+      "I built an LLM-assisted review workflow for engineers. Your developer tooling work stood out. Open to a brief chat?";
     const result = renderLinkedinConnection({
       draft,
       sources: [source],

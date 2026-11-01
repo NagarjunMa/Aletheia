@@ -157,7 +157,7 @@ describe("LinkedIn reviewed evidence before the one-story budget", () => {
   it("does not offer an unfit reviewed substring from an otherwise fitting root", () => {
     const observation =
       "Hi there, I'm interested in Applied AI & Data Platform and your Engineering Manager role at Apple.";
-    const cta = "Open to connecting?";
+    const cta = "Open to connecting? Thank you.";
     const whole = `I ${"x".repeat(300 - observation.length - cta.length - 5)}.`;
     const entry = evidence("overlapping", whole);
     const withReviews = {

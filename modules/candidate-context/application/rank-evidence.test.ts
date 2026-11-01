@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { CandidateEvidenceRecord } from "@/lib/candidate-profile/service";
-import { createEvidenceRanker } from "./rank-evidence";
+import {
+  createEvidenceRanker,
+  createEvidenceTargetRanker,
+} from "./rank-evidence";
 
 function story(
   id: string,
@@ -31,6 +34,25 @@ const ids = (
   );
 
 describe("createEvidenceRanker", () => {
+  it("uses the same topic weights, aliases and stable ordering for target units", () => {
+    const rank = createEvidenceTargetRanker([
+      "policy",
+      "policy documentation",
+      "policymaking",
+      "AI agents",
+    ]);
+    expect(rank("I wrote documentation for policy review.")).toEqual([1, 0]);
+    expect(
+      createEvidenceTargetRanker(["evaluation", "evals evals evals"])(
+        "I built evals.",
+      ),
+    ).toEqual([0, 1]);
+    expect(
+      createEvidenceTargetRanker(["AI agents"])("I helped an estate agent."),
+    ).toEqual([]);
+    expect(rank("I built gardening tools.")).toEqual([]);
+    expect(rank("I wrote documentation for policy review.")).toEqual([1, 0]);
+  });
   it("counts each term once and prefers supported contributions over labels/context", () => {
     const entries = [
       story("labels", { title: "policy ".repeat(100) }),

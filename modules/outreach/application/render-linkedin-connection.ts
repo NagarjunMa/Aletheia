@@ -115,7 +115,7 @@ export function renderLinkedinConnection(input: {
   if (!observation || !cta || (input.draft.candidate_relevance && !relevance)) {
     throw new LinkedinConnectionValidationError("CONNECTION_EMPTY_SECTION");
   }
-  const body = [observation, relevance, cta].filter(Boolean).join(" ");
+  const body = [relevance, observation, cta].filter(Boolean).join(" ");
   if (body.length > LINKEDIN_CONNECTION_MAX_CHARACTERS) {
     throw new LinkedinConnectionValidationError("CONNECTION_OVER_LIMIT", {
       actualCharacterCount: body.length,
