@@ -314,3 +314,55 @@ Scoped lesson: this repository has two independent npm lockfiles. When an
 advisory affects a shared transitive dependency, inspect both trees and run both
 audit targets; a clean root audit alone does not establish extension compliance.
 The patched-version regression now rejects a vulnerable copy in either tree.
+
+## Extension minimatch follow-up — 2026-11-01
+
+Compact follow-up on `feat/ale-46-linkedin-admissible-composition`, after commit
+`ce394b9`; preserve its application changes. Risk **Significant**: a development
+tool transitive major upgrade can silently alter lint file discovery. The CI
+failure reproduces ten moderate entries tracing to minimatch <11.0.1. Root and
+extension have different audit thresholds; retain both unchanged. Current
+ESLint/typescript-eslint releases still request minimatch 10, so an ordinary
+in-range refresh cannot remove this advisory. Do not use audit force/downgrades.
+
+Contract: replace only the extension lint consumers' vulnerable matcher with a
+pinned patched upstream release; retain direct tooling versions, runtime source,
+manifest version, root lock and audit policy. Characterize the real extension
+ESLint config's TS/TSX discovery, ignored directories, rule enforcement and
+syntax rejection; add a failing locked-version floor before changing the tree.
+Then clean-install on Node24, run complete `make extension-ci`, extension version
+policy, focused regression lint and fresh independent review. No application or
+provider test/deployment is authorized or required for this tooling-only delta.
+Inspect exports/consumers because minimatch11 changes internals: ESLint uses
+Minimatch.match/partial matching, config-array uses Minimatch.match, and the
+parser's project-service path uses the named minimatch function. No custom shim.
+
+Acceptance: moderate audit passes without hiding dependencies; clean install is
+reproducible; real lint selection/diagnostics and all extension tests/build pass;
+no packaged/runtime changes or regression to ALE-46 work. Rollback restores the
+previous manifest/lock but also the advisory, so is diagnostic only. Hosted
+Linux CI remains separate from local macOS evidence. Source: [upstream advisory](https://github.com/advisories/GHSA-g3hv-75wg-m249).
+
+Next: observe characterization/version-floor results on the original tree, then
+apply the bounded override and verify the actual consumers. No new Linear issue
+or parent completion; this dependency follow-up has its own review scope.
+
+Implemented: extension-only override pins minimatch11.0.3. Semantic lock diff
+changes only minimatch10.2.5→11.0.3 and adds its dev-only upstream matcher
+`@isaacs/nonrecursive-glob-match`1.0.3; brace-expansion was already compatible.
+No root lock, direct tooling version, application or packaged source changed.
+The version-floor test failed on the original lock while the real-config
+characterization passed; after clean install both pass. Fresh Node24 complete
+extension CI passes: audit0, types, lint,242 tests/24files and build. Version
+policy reports no packaged extension changes. Root high-severity audit passes
+with the unchanged20 moderate advisories still reported; this scoped repair
+does not resolve those. Formatting/diff checks pass. No application suite/build
+rerun for unchanged application/root dependency inputs; no provider/production
+calls, Linux hosted CI or Store submission. Fresh review receipt is external;
+its actual verdict must be checked before claiming independent approval.
+
+Evidence: `/tmp/ale46-extension-audit-before.json`,
+`/tmp/ale46-extension-lint-red.log`, `/tmp/ale46-extension-ci-fixed.log` and
+`/tmp/ale46-web-audit-followup.log`. Final next step: independent tooling review,
+then commit/push the repair for the existing PR's hosted CI. This review does
+not close the separate pending ALE-46 contraction review or parent gates.
