@@ -1,3 +1,4 @@
+import { proseFixture } from "@/__tests__/helpers/prose-fixture";
 import { linkedinOptionResponse } from "@/__tests__/helpers/linkedin-option";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { makeRequest } from "@/__tests__/helpers/request";
@@ -120,33 +121,23 @@ function connectionCompositionBlock() {
   };
 }
 
-function coldEmailCompositionBlock() {
-  return {
-    type: "tool_use",
-    id: "toolu_cold_email",
-    name: "return_cold_email_composition",
-    input: {
-      subject_line: "Hello",
-      greeting: "M",
-      target_opening: "Hello",
-      candidate_positioning: "Builder",
-      proof_points: [],
-      value_statement: "Relevant",
-      cta: "Chat?",
-    },
+function proseOptionResponse(request: {
+  tools: readonly { name: string; input_schema: unknown }[];
+}) {
+  const tool = request.tools[0]!;
+  const schema = tool.input_schema as {
+    properties: { option_id: { enum: string[] } };
   };
-}
-
-function inmailDraftToolBlock() {
   return {
-    type: "tool_use",
-    id: "toolu_inmail",
-    name: "return_email_draft",
-    input: {
-      subject_line: "Hello",
-      body: "Hello",
-      word_count: 1,
-    },
+    stop_reason: "tool_use",
+    content: [
+      {
+        type: "tool_use",
+        name: tool.name,
+        input: { option_id: schema.properties.option_id.enum[0] },
+      },
+    ],
+    usage: { input_tokens: 100, output_tokens: 40 },
   };
 }
 
@@ -218,17 +209,21 @@ beforeEach(() => {
   mockAnthropicCreate.mockImplementation(async (input) =>
     linkedinOptionResponse(input),
   );
-  mockPrepareOutreachGroundingContext.mockResolvedValue({
-    identity: { fullName: "Candidate Name", linkedinUrl: "" },
-    sources: [],
-    metadata: {
-      groundingLevel: "target_only",
-      fallbackReason: "no_resume_context",
-      selectedSourceCount: 0,
-      selectedEvidenceCount: 0,
-      selectedSourceKinds: [],
-      injectionSafeMode: false,
-    },
+  mockPrepareOutreachGroundingContext.mockImplementation(async (input) => {
+    if (input.target.category !== "linkedin_connection")
+      return proseFixture(input.target.category, "initial_outreach").context;
+    return {
+      identity: { fullName: "Candidate Name", linkedinUrl: "" },
+      sources: [],
+      metadata: {
+        groundingLevel: "target_only",
+        fallbackReason: "no_resume_context",
+        selectedSourceCount: 0,
+        selectedEvidenceCount: 0,
+        selectedSourceKinds: [],
+        injectionSafeMode: false,
+      },
+    };
   });
   mockRpc.mockImplementation(async (name: string) => {
     if (name === "reserve_generation_daily_slot") {
@@ -696,76 +691,101 @@ describe("POST /api/extension/generate with credit billing enabled", () => {
     );
   });
 
-  it.each([
-    ["cold_email", coldEmailCompositionBlock],
-    ["linkedin_inmail", inmailDraftToolBlock],
-  ] as const)(
-    "refunds reserved credits when a %s body is below its minimum",
-    async (category, buildBlock) => {
-      mockAnthropicCreate.mockResolvedValueOnce({
-        content: [buildBlock()],
-        usage: { input_tokens: 100, output_tokens: 40 },
-      });
+  it.each(
+    (["cold_email", "linkedin_inmail"] as const).flatMap((category) =>
+      ["underlength", "overlength"].map((failure) => ({ category, failure })),
+    ),
+  )(
+    "refunds exact credit/daily reservations after final $category $failure rejection without restoring consumed model work",
+    async ({ category, failure }) => {
+      mockAnthropicCreate.mockImplementationOnce(async (input) =>
+        proseOptionResponse(input),
+      );
       const { POST } = await importRouteWithBillingEnabled();
-
-      const res = await POST(
-        makeRequest({
-          method: "POST",
-          headers: { authorization: "Bearer test" },
-          body: { ...validPayload, category },
-        }),
-      );
-
-      expect(res.status).toBe(502);
+      const validator =
+        await import("@/modules/outreach/application/validate-outreach-provenance");
+      const original = validator.validateOutreachProvenance;
+      const finalCheck = vi
+        .spyOn(validator, "validateOutreachProvenance")
+        .mockImplementation((input) =>
+          original(
+            mockAnthropicCreate.mock.calls.length
+              ? {
+                  ...input,
+                  body:
+                    failure === "underlength"
+                      ? "Hi there,"
+                      : `${input.body} ${"Hi there, ".repeat(100)}`,
+                }
+              : input,
+          ),
+        );
+      let response: Response;
+      try {
+        response = await POST(
+          makeRequest({
+            method: "POST",
+            headers: { authorization: "Bearer test" },
+            body: { ...validPayload, category },
+          }),
+        );
+      } finally {
+        finalCheck.mockRestore();
+      }
+      expect(response.status).toBe(502);
+      expect(await response.json()).toMatchObject({
+        code: "PARSE_FAILED",
+        quotaRestoration: "released",
+      });
+      expect(
+        mockRpc.mock.calls.filter(
+          ([name]) => name === "refund_generation_credits",
+        ),
+      ).toHaveLength(1);
+      expect(mockRpc).toHaveBeenCalledWith("refund_generation_credits", {
+        p_user_id: "test-user-id",
+        p_reservation_id: "reservation-1",
+        p_amount: 4,
+        p_metadata: { reason: "parse_failed" },
+      });
+      expect(mockRpc).toHaveBeenCalledWith("release_generation_daily_slot", {
+        p_user_id: "test-user-id",
+        p_reservation_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      });
+      expect(
+        mockRpc.mock.calls.filter(
+          ([name]) => name === "release_generation_daily_slot",
+        ),
+      ).toHaveLength(1);
       expect(mockRpc).toHaveBeenCalledWith(
-        "refund_generation_credits",
+        "start_generation_attempt",
+        expect.objectContaining({ p_work_units: 3 }),
+      );
+      expect(mockRpc).toHaveBeenCalledWith(
+        "finish_generation_attempt",
         expect.objectContaining({
-          p_user_id: "test-user-id",
-          p_reservation_id: "reservation-1",
-          p_metadata: { reason: "parse_failed" },
+          p_attempt_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
         }),
       );
-      expect(mockRpc.mock.calls.map((call) => call[0])).toContain(
-        "release_generation_daily_slot",
-      );
+      expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
+      expect(
+        mockRpc.mock.calls.every(
+          ([name]) =>
+            !/refund.*attempt|refund.*work|release.*attempt/.test(name),
+        ),
+      ).toBe(true);
     },
   );
 
   it.each(["cold_email", "linkedin_inmail"] as const)(
-    "refunds the exact credit and daily reservations for grounded overlength %s output",
+    "rejects impossible complete %s facts before reserving credits or quota",
     async (category) => {
-      const neutral = Array(18).fill("I'd welcome a conversation.").join(" ");
-      const input =
-        category === "cold_email"
-          ? {
-              subject_line: "A brief introduction",
-              greeting: "there",
-              target_opening: neutral,
-              candidate_positioning: neutral,
-              proof_points: [],
-              value_statement: neutral,
-              cta: "Would you be open to a brief chat?",
-              claims: [],
-            }
-          : {
-              subject_line: "A brief introduction",
-              body: `${neutral} ${neutral}`,
-              word_count: 144,
-              claims: [],
-            };
-      mockAnthropicCreate.mockResolvedValueOnce({
-        content: [
-          {
-            type: "tool_use",
-            name:
-              category === "cold_email"
-                ? "return_cold_email_composition"
-                : "return_email_draft",
-            input,
-          },
-        ],
-        usage: { input_tokens: 100, output_tokens: 180 },
-      });
+      const fixture = proseFixture(category, "initial_outreach");
+      fixture.context.sources = [];
+      fixture.context.atomicSources = [];
+      mockPrepareOutreachGroundingContext.mockResolvedValueOnce(
+        fixture.context,
+      );
       const { POST } = await importRouteWithBillingEnabled();
       const response = await POST(
         makeRequest({
@@ -774,21 +794,12 @@ describe("POST /api/extension/generate with credit billing enabled", () => {
           body: { ...validPayload, category },
         }),
       );
-      expect(response.status).toBe(502);
-      expect((await response.json()).code).toBe("PARSE_FAILED");
-      expect(mockRpc).toHaveBeenCalledWith(
-        "refund_generation_credits",
-        expect.objectContaining({
-          p_reservation_id: "reservation-1",
-          p_metadata: { reason: "parse_failed" },
-        }),
-      );
-      expect(
-        mockRpc.mock.calls.filter(
-          ([name]) => name === "release_generation_daily_slot",
-        ),
-      ).toHaveLength(1);
-      expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
+      expect(response.status).toBe(422);
+      expect(await response.json()).toMatchObject({
+        code: "INSUFFICIENT_GROUNDING",
+      });
+      expect(mockRpc).not.toHaveBeenCalled();
+      expect(mockAnthropicCreate).not.toHaveBeenCalled();
     },
   );
 

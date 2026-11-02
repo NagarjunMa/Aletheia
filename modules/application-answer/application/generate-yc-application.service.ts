@@ -264,6 +264,14 @@ export async function generateYcApplication(
   let reservedCredit:
     { userId: string; reservationId: string; amount: number } | undefined;
   let modelRequested = false;
+  let validationStage:
+    | "tool_parse"
+    | "batch_contract"
+    | "sanitize"
+    | "grounding"
+    | "response"
+    | undefined;
+  let validationItem: number | undefined;
 
   try {
     timing?.enter("groundingLoad");
@@ -532,11 +540,13 @@ export async function generateYcApplication(
         ? { cacheWriteUnits: cacheUsage.cache_creation_input_tokens }
         : {}),
     });
+    validationStage = "tool_parse";
     if (message.stop_reason === "max_tokens")
-      throw new YcApplicationStructuredOutputError();
+      throw new YcApplicationStructuredOutputError("YC_TOOL_TRUNCATED");
     const parsedAnswers = isBatch
       ? getApplicationBatchToolInput(message)
       : [{ questionId: "q1", ...dependencies.parseMessage(message) }];
+    validationStage = "batch_contract";
     const byId = new Map(
       parsedAnswers.map((answer) => [answer.questionId, answer]),
     );
@@ -545,7 +555,7 @@ export async function generateYcApplication(
       byId.size !== questions.length ||
       questions.some((_, index) => !byId.has(`q${index + 1}`))
     ) {
-      throw new YcApplicationStructuredOutputError();
+      throw new YcApplicationStructuredOutputError("YC_BATCH_IDS");
     }
     timing?.metrics({
       claimCount: parsedAnswers.reduce(
@@ -562,7 +572,9 @@ export async function generateYcApplication(
     for (const [index, question] of questions.entries()) {
       const questionId = `q${index + 1}`;
       const parsed = byId.get(questionId);
-      if (!parsed) throw new YcApplicationStructuredOutputError();
+      if (!parsed) throw new YcApplicationStructuredOutputError("YC_BATCH_IDS");
+      validationItem = index + 1;
+      validationStage = "sanitize";
       const sanitized = await dependencies.sanitizeOutput({
         body: parsed.body,
         claims: parsed.claims,
@@ -584,6 +596,7 @@ export async function generateYcApplication(
             ),
           }
         : context;
+      validationStage = "grounding";
       const validated = validateYcApplicationOutput({
         context: answerContext,
         output: sanitized.output,
@@ -604,6 +617,8 @@ export async function generateYcApplication(
       ...new Set(claims.flatMap((claim) => claim.sourceIds)),
     ];
 
+    validationItem = undefined;
+    validationStage = "response";
     const result = ycApplicationGenerationResultSchema.parse({
       response: {
         success: true,
@@ -659,6 +674,35 @@ export async function generateYcApplication(
       error instanceof YcApplicationOutputSanitizationError ||
       error instanceof YcApplicationStructuredOutputError ||
       (modelRequested && error instanceof z.ZodError);
+    if (outputInvalid) {
+      const validationCode =
+        error instanceof AtomicClaimValidationError ||
+        error instanceof GroundedOutputLimitError ||
+        error instanceof YcApplicationOutputValidationError ||
+        error instanceof YcApplicationStructuredOutputError
+          ? error.code
+          : error instanceof GroundedTextSanitizationError ||
+              error instanceof YcApplicationOutputSanitizationError
+            ? "YC_SANITIZATION_FAILED"
+            : validationStage === "response"
+              ? "YC_RESPONSE_SCHEMA"
+              : "YC_TOOL_SCHEMA";
+      operationLog.warn(
+        {
+          event: "yc.output_validation.failed",
+          validationStage,
+          validationCode,
+          ...(validationItem === undefined
+            ? {}
+            : { itemIndex: validationItem }),
+          ...(error instanceof YcApplicationStructuredOutputError &&
+          error.validationDetails.length
+            ? { validationDetails: error.validationDetails }
+            : {}),
+        },
+        "Application output validation failed",
+      );
+    }
     const timeout = isAnthropicTimeoutError(error);
     timing?.failure(
       outputInvalid

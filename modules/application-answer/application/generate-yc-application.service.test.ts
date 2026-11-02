@@ -12,6 +12,8 @@ import {
 } from "./sanitize-yc-application-output";
 import { createGenerationTiming } from "@/lib/generation-timing";
 import { createLogger } from "@/lib/logger";
+import { sanitizeLogFields } from "@/lib/logging-core";
+import { prepareFactReview } from "@/lib/candidate-profile/fact-review";
 import { buildYcGroundingContext } from "./build-yc-grounding-context";
 import { startGenerationAttempt } from "@/modules/outreach/infrastructure/extension-generate.repository";
 import { candidateProfileInputSchema } from "@/lib/candidate-profile/schema";
@@ -533,7 +535,7 @@ describe("generateYcApplication", () => {
       creditsRemaining: 36,
       evalMetadata: {
         generationId: "33333333-3333-4333-8333-333333333333",
-        promptVersion: "yc-2.0.0",
+        promptVersion: "yc-2.0.1",
         model: "claude-test-model",
         category: "yc_application",
         profileFieldCount: 2,
@@ -869,6 +871,224 @@ describe("ALE-37 batch orchestration", () => {
       }),
     });
   }
+  it.each([
+    ["tool_schema", "tool_parse", "YC_TOOL_SCHEMA", undefined],
+    ["ids", "batch_contract", "YC_BATCH_IDS", undefined],
+    ["source", "grounding", "CLAIM_SOURCE", 1],
+    ["coverage", "grounding", "CLAIM_COVERAGE", 1],
+    ["limit", "grounding", "OUTPUT_LIMIT", 1],
+    ["sanitize", "sanitize", "YC_SANITIZATION_FAILED", 1],
+    ["response", "response", "YC_RESPONSE_SCHEMA", undefined],
+  ] as const)(
+    "distinguishes %s failure without exposing private values",
+    async (kind, stage, code, itemIndex) => {
+      const output = batch(["q1", "q2"]);
+      const deps = batchDeps(output);
+      const logger = createLogger("test-yc-diagnostics");
+      const warn = vi.spyOn(logger, "warn");
+      if (kind === "tool_schema")
+        Object.assign(output.answers[0]!, {
+          word_count: "PRIVATE_TOOL_VALUE",
+          PRIVATE_FIELD: "PRIVATE_RAW_INPUT",
+        });
+      if (kind === "ids") output.answers[1]!.questionId = "q1";
+      if (kind === "source")
+        output.answers[0]!.claims[0]!.source_id = "PRIVATE_SOURCE_ID";
+      if (kind === "coverage")
+        output.answers[0]!.body += " PRIVATE_UNSUPPORTED_TEXT";
+      if (kind === "limit")
+        output.answers[0]!.body = Array(4).fill(answer).join(" ");
+      if (kind === "sanitize")
+        deps.sanitizeOutput = vi
+          .fn()
+          .mockRejectedValue(
+            new YcApplicationOutputSanitizationError(
+              "PRIVATE_SANITIZATION_ERROR",
+            ),
+          );
+      if (kind === "response") deps.randomUuid = () => "PRIVATE_GENERATION_ID";
+      const result = await generateYcApplication(
+        {
+          caller,
+          request: { category: "yc_application", jd: request.jd, questions },
+          corsHeaders: {},
+          applicationBaseUrl: "https://aletheia.live",
+          logger,
+        },
+        deps,
+      );
+      expect(result.status).toBe(502);
+      expect(warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: "yc.output_validation.failed",
+          validationStage: stage,
+          validationCode: code,
+          ...(itemIndex ? { itemIndex } : {}),
+        }),
+        "Application output validation failed",
+      );
+      const diagnostics = warn.mock.calls.find(
+        ([fields]) =>
+          typeof fields === "object" &&
+          fields?.event === "yc.output_validation.failed",
+      )?.[0];
+      expect(diagnostics).toBeDefined();
+      expect(JSON.stringify(diagnostics)).not.toContain("PRIVATE");
+      expect(JSON.stringify(diagnostics)).not.toContain(answer);
+      expect(JSON.stringify(diagnostics)).not.toContain("evidence:");
+      if (kind === "tool_schema")
+        expect(diagnostics).toMatchObject({
+          validationDetails: expect.arrayContaining([
+            expect.objectContaining({
+              field: "answers.item.word_count",
+              code: "invalid_type",
+              itemIndex: 1,
+            }),
+          ]),
+        });
+      expect(
+        sanitizeLogFields(diagnostics as Record<string, unknown>),
+      ).toMatchObject({ validationStage: stage, validationCode: code });
+      const publicResult = await result.json();
+      expect(publicResult).toMatchObject({
+        code: "YC_OUTPUT_INVALID",
+        billing: "refunded",
+        quotaRestoration: "released",
+      });
+      expect(publicResult).not.toHaveProperty("validationCode");
+      expect(publicResult).not.toHaveProperty("validationDetails");
+      expect(deps.createMessage).toHaveBeenCalledTimes(1);
+      expect(deps.refundCredits).toHaveBeenCalledTimes(1);
+      expect(deps.releaseRateLimit).toHaveBeenCalledTimes(1);
+      expect(deps.finishAttempt).toHaveBeenCalledTimes(1);
+      warn.mockRestore();
+    },
+  );
+  it("passes a reviewed fact through five answers with real preparation, parsing, sanitation and final public projection", async () => {
+    const record = {
+      id: "11111111-1111-4111-8111-111111111111",
+      kind: "technical_project" as const,
+      title: "TypeScript production delivery",
+      context: "",
+      actions: answer,
+      outcome: "",
+      metrics: [],
+      skills: ["TypeScript"],
+      links: [],
+      confirmed: true,
+      sortOrder: 0,
+    };
+    const fiveQuestions = Array.from(
+      { length: 5 },
+      (_, i) => `Describe TypeScript production delivery experience ${i + 1}?`,
+    );
+    const context = buildYcGroundingContext({
+      question: fiveQuestions[0]!,
+      questions: fiveQuestions,
+      jobDescription: request.jd,
+      candidate: {
+        identity: { fullName: "Synthetic", linkedinUrl: "" },
+        profile: candidateProfileInputSchema.parse({
+          currentRole: "Software Engineer",
+        }),
+        resume: { text: "", source: "none" },
+        confirmedEvidence: [
+          {
+            ...record,
+            factReview: prepareFactReview(record, [
+              {
+                id: "22222222-2222-4222-8222-222222222222",
+                kind: "action",
+                excerpt: answer,
+                confirmed: true,
+              },
+            ]),
+          },
+        ],
+      },
+    });
+    expect(context.readiness.ready).toBe(true);
+    const source = context.atomicSources!.find((s) => s.scope === "candidate")!;
+    const before = JSON.stringify(context);
+    const output = {
+      answers: fiveQuestions.map((_, i) => ({
+        questionId: `q${i + 1}`,
+        body: answer,
+        word_count: answer.split(/\s+/u).length,
+        claims: [
+          {
+            text: answer,
+            kind: source.kind,
+            source_id: source.id,
+            supporting_excerpt: source.content,
+          },
+        ],
+      })),
+    };
+    const deps = batchDeps(output);
+    deps.prepareGrounding = vi.fn().mockResolvedValue(context);
+    deps.sanitizeOutput = vi.fn(sanitizeYcApplicationOutput);
+    const result = await generateYcApplication(
+      {
+        caller,
+        request: {
+          category: "yc_application",
+          jd: request.jd,
+          questions: fiveQuestions,
+        },
+        corsHeaders: {},
+        applicationBaseUrl: "https://aletheia.live",
+      },
+      deps,
+    );
+    expect(result.status).toBe(200);
+    const body = await result.json();
+    expect(body.answers).toHaveLength(5);
+    expect(body.answers.every((a: { body: string }) => a.body === answer)).toBe(
+      true,
+    );
+    expect(JSON.stringify(body)).not.toMatch(
+      /supporting_excerpt|source_id|provenance|claims|evidence:/u,
+    );
+    expect(JSON.stringify(context)).toBe(before);
+    expect(deps.refundCredits).not.toHaveBeenCalled();
+    expect(deps.createMessage).toHaveBeenCalledTimes(1);
+    expect(deps.startAttempt).toHaveBeenCalledWith(
+      caller.userId,
+      expect.any(String),
+      8,
+      expect.anything(),
+    );
+  });
+  it("reports the second answer index for a late grounding failure", async () => {
+    const output = batch(["q1", "q2"]);
+    output.answers[1]!.claims[0]!.supporting_excerpt += " PRIVATE_QUALIFIER";
+    const deps = batchDeps(output);
+    const logger = createLogger("test-yc-late-failure");
+    const warn = vi.spyOn(logger, "warn");
+    const result = await generateYcApplication(
+      {
+        caller,
+        request: { category: "yc_application", jd: request.jd, questions },
+        corsHeaders: {},
+        applicationBaseUrl: "https://aletheia.live",
+        logger,
+      },
+      deps,
+    );
+    expect(result.status).toBe(502);
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        validationStage: "grounding",
+        validationCode: "CLAIM_SUPPORT",
+        itemIndex: 2,
+      }),
+      expect.any(String),
+    );
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("PRIVATE_QUALIFIER");
+    expect(deps.refundCredits).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
   it("orders exact IDs, validates independently and charges one batch", async () => {
     const deps = batchDeps();
     const response = await run(deps);

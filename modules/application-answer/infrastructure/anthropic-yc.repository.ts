@@ -112,7 +112,11 @@ export function getApplicationBatchToolInput(
 ) {
   try {
     if (response.stop_reason !== "tool_use")
-      throw new YcApplicationStructuredOutputError();
+      throw new YcApplicationStructuredOutputError(
+        response.stop_reason === "max_tokens"
+          ? "YC_TOOL_TRUNCATED"
+          : "YC_TOOL_ENVELOPE",
+      );
     const blocks = response.content.filter(
       (block) => block.type === "tool_use",
     );
@@ -123,7 +127,7 @@ export function getApplicationBatchToolInput(
       block.type !== "tool_use" ||
       block.name !== applicationBatchTool.name
     ) {
-      throw new YcApplicationStructuredOutputError();
+      throw new YcApplicationStructuredOutputError("YC_TOOL_ENVELOPE");
     }
     const parsed = z
       .object({
@@ -146,8 +150,12 @@ export function getApplicationBatchToolInput(
         sourceIds: [claim.source_id],
       })),
     }));
-  } catch {
-    throw new YcApplicationStructuredOutputError();
+  } catch (error) {
+    if (error instanceof YcApplicationStructuredOutputError) throw error;
+    throw new YcApplicationStructuredOutputError(
+      "YC_TOOL_SCHEMA",
+      error instanceof z.ZodError ? toolValidationDetails(error) : [],
+    );
   }
 }
 
@@ -158,9 +166,54 @@ export type YcApplicationToolOutput = {
   >;
 };
 
+export type YcToolValidationCode =
+  "YC_TOOL_SCHEMA" | "YC_TOOL_ENVELOPE" | "YC_TOOL_TRUNCATED" | "YC_BATCH_IDS";
+
+type ToolValidationDetail = { field: string; code: string; itemIndex?: number };
+
+function toolValidationDetails(error: z.ZodError): ToolValidationDetail[] {
+  return error.issues.slice(0, 8).map((issue) => {
+    let path = [...issue.path];
+    let prefix = "";
+    let itemIndex: number | undefined;
+    if (path[0] === "answers" && typeof path[1] === "number") {
+      prefix = "answers.item.";
+      if (path[1] >= 0 && path[1] < 5) itemIndex = path[1] + 1;
+      path = path.slice(2);
+    }
+    let field = "tool";
+    if (
+      path.length === 1 &&
+      ["body", "word_count", "questionId", "claims"].includes(String(path[0]))
+    )
+      field = prefix + String(path[0]);
+    if (
+      path[0] === "claims" &&
+      typeof path[1] === "number" &&
+      path.length === 3 &&
+      ["text", "kind", "source_id", "supporting_excerpt"].includes(
+        String(path[2]),
+      )
+    )
+      field = prefix + "claims.item." + String(path[2]);
+    return {
+      field,
+      code: issue.code,
+      ...(itemIndex === undefined ? {} : { itemIndex }),
+    };
+  });
+}
+
 export class YcApplicationStructuredOutputError extends Error {
-  constructor() {
+  readonly code: YcToolValidationCode;
+  readonly validationDetails: ToolValidationDetail[];
+  constructor(
+    code: YcToolValidationCode = "YC_TOOL_SCHEMA",
+    validationDetails: ToolValidationDetail[] = [],
+  ) {
     super("Claude returned an invalid YC application tool result");
+    this.code = code;
+    this.validationDetails = validationDetails;
     this.name = "YcApplicationStructuredOutputError";
   }
 }
@@ -169,6 +222,8 @@ export function getYcApplicationToolInput(
   response: Anthropic.Messages.Message,
 ): YcApplicationToolOutput {
   try {
+    if (response.stop_reason === "max_tokens")
+      throw new YcApplicationStructuredOutputError("YC_TOOL_TRUNCATED");
     const toolBlock = response.content.find(
       (block) =>
         block.type === "tool_use" &&
@@ -178,7 +233,7 @@ export function getYcApplicationToolInput(
     );
 
     if (!toolBlock || toolBlock.type !== "tool_use") {
-      throw new YcApplicationStructuredOutputError();
+      throw new YcApplicationStructuredOutputError("YC_TOOL_ENVELOPE");
     }
 
     const parsed = ycApplicationToolInputSchema.parse(toolBlock.input);
@@ -189,8 +244,12 @@ export function getYcApplicationToolInput(
         sourceIds: [claim.source_id],
       })),
     };
-  } catch {
-    throw new YcApplicationStructuredOutputError();
+  } catch (error) {
+    if (error instanceof YcApplicationStructuredOutputError) throw error;
+    throw new YcApplicationStructuredOutputError(
+      "YC_TOOL_SCHEMA",
+      error instanceof z.ZodError ? toolValidationDetails(error) : [],
+    );
   }
 }
 

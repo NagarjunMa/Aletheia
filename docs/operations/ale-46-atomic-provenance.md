@@ -1,5 +1,555 @@
 # ALE-46 — Atomic claim provenance
 
+## Final three-call result and structural correction — 2026-11-02
+
+The user approved three additional synthetic calls (combined output ceiling
+7,200 tokens, zero retries/database writes). **All three are consumed and all
+three failed** under prompt5.1.0: cold initial CLAIM_COVERAGE (984output tokens),
+follow-up CLAIM_REWRITE (464), InMail CLAIM_REWRITE (654). Each completed with
+tool_use below2400. Totals:9,506input/2,102output tokens. Citation namespace
+resolution progressed, but prompt instructions alone did not prevent unsupported
+wording or uncovered spans. Keep these failures as evidence, not passing prose
+quality results. Temporary credential files were removed after the calls.
+Private synthetic responses, frozen inputs, safe events and exact manifests:
+`/Users/nagarjunmallesh/.codex/artifacts/aletheia/ale46-prose-final-live-2026-11-02/`.
+
+### Corrected change contract
+
+Reuse LinkedIn's existing complete-option boundary for cold email and InMail.
+`prose-compositions.ts` prepares complete immutable drafts from request-selected,
+reviewed candidate facts and supported target context. Prefer candidate-bearing,
+target-aware combinations; permit explicit target-only output only if no complete
+candidate-bearing combination fits. InMail may use candidate-only proof when a
+complete target would exceed its shorter canonical budget. Never repeat facts,
+shorten qualifications, infer fit, or invent a subject. Reuse approved neutral
+framing, existing cold renderer/signature, final provenance, exclusion and mode
+limits. This intentionally reduces writing flexibility; useful prose remains a
+human evaluation gate. No graph, model judge, repair retry, SDK/dependency change,
+client API change, extension release or database mutation.
+
+The service builds options before quota/credits/provider work. No complete option
+returns422 preparation guidance without cost. Each offered draft is independently
+validated against its private immutable ledger and final channel limits. Search
+is bounded to64sources, at most three distinct candidate facts per combination,
+256fitting validation attempts,8options and12,000UTF-8 preview bytes. Sources
+already follow upstream bounds/ranking; exceeding the bounded search can return
+preparation guidance even if a later combination might fit. Do not claim exhaustive
+composition search. An adversarial excluded-source case reproduced36,096checks
+before the new256check cap; the red/green regression now enforces the bound.
+
+Claude returns only one current opaque option_id, bound to mode, identity and
+current sources/review. Strict parsing rejects stale/unknown IDs and all extra
+prose/claim/count fields. The server resolves the original draft, renders it,
+then reruns the existing final grounding/length checks. Public responses expose
+only existing content/counts/metadata; no private ledger, source IDs or previews.
+Prompt6.0.0 removes conflicting authoring instructions. Legacy semantic tool
+helpers remain for offline compatibility tests; production requests always use
+complete-option tools. Existing2400prose/600LinkedIn output ceilings and admission
+work units remain conservatively reserved; no performance/cost saving claimed.
+
+### Verification and remaining gates
+
+TDD reproduced prompt-only provider failures and the unbounded excluded-combination
+case. Local complete-option tests cover all twelve category/mode pairs, immutable
+sources, stale/extra-field rejection, qualifications/literal whitespace, source
+aliases and bounded preparation. HTTP tests exercise real complete qualified
+fixtures through current tool/parser/render/final validation, preflight422before
+admission and502once-only compensation, with privacy canaries. Final-length
+mutation cases still fail after selection; source and final safeguards stay active.
+
+Current check execution and final independent-review receipt live outside source
+under `/tmp/ale46-prose-contract-2026-11-02/`; final results will be reported with
+the handoff. Previous1698-test/review evidence applies to prompt5.1.0 only. The
+three default repair review rounds are exhausted. The user approved one additional
+fresh review specifically for this structural correction; that review is pending.
+No paid calls remain. New protocol live-provider reliability/quality and hosted
+migration/auth/RLS/concurrency/cost remain unverified. Keep ALE-46 **In Progress**,
+**Risk: Critical**. Do not label this a production-readiness certification.
+Rollout requires reviewed backend deployment and monitored codes, tokens, latency
+and fair refunds; rollback is backend revert/redeploy. No extension/storage rollback.
+
+## Prose citation/composition correction — 2026-11-02
+
+User authorized fixing LIVE-003/LIVE-004, then committing/pushing this existing
+branch for a manually created PR. Preserve all current ALE-46 work and unrelated
+checkouts. Remote main remains86215c4. Risk **Critical**: selected private source
+binding plus the branch's existing cost/admission and safe logging changes.
+
+Contract: cold proofs may cite either an existing selected parent ID or a current
+selected candidate atomic fact whose root is selected. No target/unknown or
+unselected-root aliases. Map only server-prepared sources, never infer parents
+by stripping model strings; retain overlap checks and the exact final claim
+validator. The returned draft/ledger stays immutable and private.
+
+Prose correction: replace the conflicting legacy prose prompts (inferred subjects,
+compressed/paraphrased proof lines and fabricated fit prose) with concise guidance
+matching the current atomic contract and existing semantic tools. Facts remain
+complete approved spans; neutral text comes only from NEUTRAL_FRAMING. Selected
+parent records and resumes are context, not permission for unreviewed claims.
+Use approved neutral subjects instead of impossible ungrounded subject templates.
+Keep all six modes and canonical tool word limits, paragraph/proof layout,
+server-owned signature and generic API failure/compensation behavior. Follow-ups
+select fewer complete facts; never shorten qualifiers or pad/repeat to meet bounds.
+Bump PROMPT_VERSION. No new graph, model judge, fallback repair, output-cap change,
+dependency or extension release. Existing2400/600ceilings and admission units stay.
+
+TDD: first reproduce selected atomic proof-ID rejection; retain unknown/target/
+unselected-root and unsupported-overlap negatives. New prompt regressions reject
+legacy inference/rewrite guidance and verify canonical mode/tool guidance.
+Exercise corrected cold initial/follow-up and InMail fixtures with the same
+complete qualified synthetic facts, real parser/render/final grounding, through
+the HTTP boundary; old paraphrases and155-word follow-up must still fail. Public
+responses/logs must not contain private ledger fields. Run affected/native gates,
+independent review, hooks and push only verified source. The previous repair used
+two reviewer rounds; preserve receipts and count the next review as round3.
+
+The four real-provider calls are exhausted. No additional paid or production
+calls are authorized. Local prompt/contract regression evidence does not prove
+post-correction live-provider reliability; include that limitation in the PR.
+Keep ALE-46 In Progress and parent human/platform/composer gates. Rollback is a
+backend revert/redeploy retaining additive review storage and patched tooling.
+Evidence for this correction: `/tmp/ale46-prose-contract-2026-11-02/`.
+
+### Prose correction checkpoint
+
+Red-first checks reproduced5intended failures: valid atomic proof rejection,
+HTTP initial-email502 instead of200 and three conflicting-prompt assertions.
+A separate alias-chain red case proved roots must be checked against the original
+parent set rather than a map expanded with aliases. Both corrections now pass.
+Parent-ID compatibility remains; alias/source/claim objects are not mutated.
+
+Removed the obsolete inference/shortened-proof/subject-template instructions,
+not the safety tests. Prompt5.1.0 now uses the authoritative atomic wording,
+neutral subject, server signature and word policy from each requested tool.
+Historical prompt-string assertions requiring inferred subjects and compressed
+proofs were replaced with contract assertions; all canonical tool-mode tests,
+negative grounding, attachment/privacy and final-length checks remain.
+
+Passed so far:862affected tests,1698native tests/116files with unchanged coverage
+thresholds,15guardrails, lint(existing refund-admin warning),types,policy,audit
+high gate and dummy-environment build. Three qualified synthetic HTTP success
+cases pass; unsupported rewriting and overlength follow-up still502 with one
+release. New review uses the remaining third round of the repair budget.
+The user separately approved3final synthetic prose calls (7200total output
+ceiling, no retries/database writes); these are not yet executed. Keep both
+previous live failures and any final results. No production deploy is authorized;
+branch publication is authorized after checks/review. Do not mark parent Done.
+
+## Four-call follow-up — authorization and result
+
+The user approved the separate four-call synthetic evaluation after the local
+repair review. All **four calls are consumed**, no retries/database writes or
+hosted app requests. The tested runtime/tests match the independent return-review
+snapshot; only later evidence documentation differs. Temporary production model
+credentials were removed after execution. No application code changed in this
+follow-up. Frozen fixtures, exact call timestamps, private synthetic responses,
+source receipts and reports are retained under
+`/Users/nagarjunmallesh/.codex/artifacts/aletheia/ale46-four-call-2026-11-01/`.
+The prior pending-approval notes below are superseded by this result.
+
+| Sample             | Output tokens/cap | Final result                                                                  |
+| ------------------ | ----------------- | ----------------------------------------------------------------------------- |
+| Cold initial email | 961/2400          | Rejected: proof-reference namespace mismatch                                  |
+| Cold follow-up     | 975/2400          | Rejected: proof-reference namespace mismatch                                  |
+| InMail             | 609/2400          | Rejected: CLAIM_REWRITE                                                       |
+| Five-answer YC     | 1538/8000         | Passed current service with real provider and local DB/auth/admission doubles |
+
+All responses stop normally with tool_use; none hits max_tokens. Totals:
+19,817input/4,083output tokens. LIVE-001's revised ceiling fits these three prose
+samples, but **three of four final generation checks fail**. Do not describe
+budget fit as successful email/InMail generation or complete parent acceptance.
+
+**ALE46-LIVE-003:** Both cold drafts cite selected candidate atomic fact IDs in
+proof_points.source_ids, while validateOutreachDraft checks only parent source
+IDs. All four observed references have selected candidate parents. The contract
+must align those namespaces without accepting unknown/unselected/target facts
+or bypassing final exact grounding.
+
+**ALE46-LIVE-004:** All three prose responses include unapproved claim rewrites,
+despite complete supporting excerpts. Offline inspection of the unchanged next
+gate shows both cold drafts also fail CLAIM_REWRITE; resolving IDs alone would
+not fix them. The follow-up renders155words against its30–90word limit. Preserve
+complete approved facts/qualifications and canonical word limits; align the prose
+prompt/tool/composition contract instead of relaxing guards.
+
+The revised YC path accepts all five answers in this synthetic sample. It is
+not a hosted repaired deployment test, proof of the original rejected field,
+or a human usefulness evaluation. Local simulated admission/compensation is not
+live quota/credit evidence. The exact historical YC field remains unconfirmed.
+The scoped captured first-party logger events contain no tested synthetic source
+canaries; raw responses are separate private evaluation artifacts, never app logs.
+
+ALE-46 remains **In Progress**, risk **Critical**. Next development is the
+reference/composition contract repair and its regressions/independent review,
+then a separately authorized provider recheck. No calls remain in this approval;
+no deployment/commit/push or Done transition occurred. Keep all original failed
+and successful artifacts and the remaining human/platform/composer gates.
+
+## Live-failure repair contract — 2026-11-01
+
+Active branch: `fix/ale-46-generation-output-fit`, from verified main
+`86215c4981a7df54a27e8f3486378763391a171c`. Prior completion-audit notes are
+preserved on this branch and in an external patch; the unrelated primary
+checkout, other worktrees and retained stashes remain untouched.
+
+**Risk: Critical** for private model-validation diagnostics and cost/admission
+accounting. No authentication, RLS, migrations, billing prices or client API
+change is planned. This repair does not close the parent acceptance gates.
+
+### Change contract and decisions
+
+1. Fix ALE46-LIVE-001 with a server-owned **2,400-token prose ceiling** for cold
+   email and InMail; retain the **600-token LinkedIn** ceiling. Three real prose
+   samples exhausted600 before returning the required ledger. The new ceiling
+   gives up to four times the previous output allowance for complete prose plus
+   provenance; it is bounded headroom, not a guarantee that every source/ledger
+   maximum fits. The user explicitly requested fixing this limit after those
+   measurements. Reuse one resolver for SDK requests, timing and admission:
+   prose reserves **three** output-work units instead of one; LinkedIn retains
+   one. Preserve the rolling work budget, daily quota, no hidden retries and
+   30-second complete-response deadline. No input/output limits or grounding
+   checks are relaxed. Explicitly reject token-truncated tool results even if
+   their partial JSON looks structurally usable.
+2. Investigate ALE46-LIVE-002 without guessing its lost private response. The
+   production five-answer result completed at1863/8000 and only exposed a
+   general validation failure. Keep YC caps unchanged. Align stale YC
+   candidate-source/plural-source instructions with the actual approved atomic
+   text, singular source_id, complete excerpt and per-question selection rules;
+   bump the YC prompt version. This is an evidenced contract inconsistency, not
+   proof of the exact historical production failure.
+3. Add bounded allowlisted failure stage/reason/schema-field codes to first-party
+   logs. Never log generated prose, source IDs/values, excerpts, Zod messages,
+   unrecognized property names, credentials or raw tool input. Keep public
+   errors generic and preserve once-only credit/quota compensation and consumed
+   attempt/work budgets. Do not return diagnostics or private provenance to the
+   extension.
+
+### Execution context and evaluations
+
+Verified edit locations: outreach Anthropic repository (tool/provider budget),
+`extension-generate.service.ts` (timing and cost reservation), YC repository
+(strict tool parsing), `generate-yc-application.service.ts` (per-answer
+sanitization/final validation/catch), YC prompt and relevant co-located tests.
+Existing atomic validator/finalizer, logging redaction and admission repository
+remain authoritative. No dependency, graph, judge, repair call or extension
+release is needed.
+
+TDD: prove per-category SDK/admission/timing ceilings before changing them;
+reject token-truncated otherwise-shaped outputs; reproduce indistinguishable
+YC tool-schema, wrong-question source, coverage and final-limit failures, then
+verify safe distinct diagnostics with private canaries. Include a valid
+five-answer real-parser/finalizer path and keep wrong-source/exclusion/rewrite
+negative cases. Prompt tests must reject obsolete schema guidance.
+
+Run affected suites, guardrails, native coverage, lint, types, policy, build and
+scoped formatting/diff checks. Obtain fresh independent review under this
+repair's three-round budget; prior completion-audit review is historical.
+Synthetic provider re-evaluation requires a new bounded authorization; do not
+reuse the exhausted41-call budget. No production writes/deployment are part of
+this repair. If historical YC cause remains unobservable, retain the finding
+as investigated/diagnostics prepared, pending hosted reproduction.
+
+Rollout: reviewed backend deployment after merge; monitor safe validation
+codes/stages, stop reason, tokens, quota restoration and latency. Rollback:
+revert this backend repair/redeploy; no stored-data rollback. Do not mark Done
+or claim cross-channel readiness from mocks alone.
+
+### Repair implementation / verification checkpoint
+
+Additional retained-log analysis narrows the historical YC failure to strict tool
+parsing/envelope or exact batch-ID validation: the normal tool_use response has
+no claimCount/ledgerChars metrics, which are assigned immediately after those
+gates and before per-answer sanitation/grounding. The existing timing/logger
+allowlist preserves these names. This still does not identify a particular field
+or prove prompt corrections resolve the original production incident.
+
+Independent repair round1 found one introduced test-fixture issue,
+ALE46-OUTPUT-R1-001: two budget route tests reused a LinkedIn-only SDK mock, which
+threw before producing a prose response. Keep their502 expectation and supply an
+explicit completed invalid prose tool response. The fixture correction is local;
+return-review evidence is recorded externally. The failed coverage/reviewer runs
+are retained. No additional material runtime finding was reported. Browser smoke
+29checks, focused resume146checks, final build and types pass. No runtime changes
+were required after this review; the reviewed-fact characterization title now
+accurately says one reviewed fact reused across five answers.
+
+Local repair implemented with red-first coverage: 14 intended failures reproduced
+before correction (one additional SDK test setup failure was corrected separately).
+Prose SDK requests, admission units and timing share the category resolver.
+Partial max-token output is explicitly rejected. YC prompt2.0.1 uses the actual
+atomic schema; bounded parse fields, fixed validation codes/stages and numeric
+item indexes cross the existing logger, not private source text or error messages.
+The public failure/compensation shape is unchanged. Real prepared five-answer
+fixtures traverse parsing, sanitation, per-question grounding and final public
+projection; negative cases retain fail-closed rejection and once-only release.
+
+Initial checks:847affected tests,1686native tests/116files with coverage gate,
+15guardrails, types, engineering policy and dummy-environment build pass. Root
+high-severity audit gate passes with20 inherited moderate advisories. Lint has
+only the existing refund-admin warning after correcting parameter-property lint
+warnings in the first pass. Final current-source checks and independent review
+are recorded in external receipts under `/tmp/ale46-output-fit-2026-11-01/`.
+No new provider invocation is authorized yet; a new four-call/15,200-output-token
+maximum proposal is pending. Exact historical hosted YC cause and parent human,
+platform and composer gates remain open. Current evidence is local, not a claim
+that the deployed generation defect is resolved.
+
+### Repair handoff — local checks complete
+
+Passed on the corrected repair:1686native tests/116files with coverage thresholds
+(statements89.33%,branches82.61%,functions89.29%,lines90.68%),15guardrails,
+146resume security checks,29browser/health smoke checks, types, build, lint
+(existing refund-admin warning only), policy, scoped formatting and diff hygiene.
+The root high-severity audit gate passes;20 inherited moderate advisories remain.
+No dependency or extension files changed. Hosted PR CI and unchanged extension CI
+were not rerun locally as part of this backend repair; future PR CI remains
+separate from these checks.
+
+Independent return review on the corrected frozen source resolved
+ALE46-OUTPUT-R1-001 with no material findings:429fresh focused tests,3isolated
+budget cases and15adversarial probes pass, with manifest freshness at start/end.
+Two repair review rounds were used. Exact reviewer model identity is unknown;
+this is fresh-context review, not a cross-model claim. These handoff lines are
+later evidence-only documentation; the reviewed runtime/tests remain unchanged.
+Final manifests/reports and failed diagnostic history are preserved privately at
+`/Users/nagarjunmallesh/.codex/artifacts/aletheia/ale46-output-fit-2026-11-01/`.
+
+ALE46-LIVE-001 has a locally verified bounded-cap/accounting correction; actual
+provider fit at2400 remains not run. ALE46-LIVE-002 now has narrower historical
+stage evidence, corrected prompt/schema guidance and safe failure diagnostics;
+the exact original rejected field and hosted closure remain unverified. The
+separate four-call authorization request is pending; no new paid/provider or
+production call was made. Keep ALE-46 In Progress. No commit/push/deploy occurred.
+Human quality, platform replay and composer gates from the parent record remain.
+
+## Latest live verification — 2026-11-01 America/New_York
+
+**Acceptance incomplete; ALE-46 remains In Progress. Final risk: Critical.**
+The user authorized up to 41 synthetic Claude calls and expressly selected
+production for hosted tests. This supersedes the pre-live authorization limits
+recorded below only for this bounded evaluation. Tested deployed source:
+`86215c4981a7df54a27e8f3486378763391a171c`. No application, dependency, migration,
+configuration or deployment change was made during verification.
+
+### Passed
+
+- All **41 actual model calls** are consumed: 35 direct synthetic provider calls
+  and six authenticated production API calls. Six additional local preflight
+  rejections made no model call. No automatic retries, repair/judge calls or token
+  cap increase. The direct runner performs no database writes; hosted lifecycle
+  tests use only dedicated temporary synthetic accounts/records.
+- **30/30 direct LinkedIn outputs** pass exact grounding and the 300-character
+  contract. Production generation with a JD and with no JD both returns 200 and
+  retains the reviewed candidate assertion. After actual review withdrawal,
+  generation returns 200 with target-only text and omits that assertion.
+- Real production owner save/reload, anonymous/cross-user read/update denial,
+  native browser server-action cross-owner denial, source-edit invalidation,
+  stale action rejection, current revision re-review and confirmation revocation
+  all pass. Cross-owner action testing changes only synthetic record IDs in the
+  browser's native action request, retaining its normal authentication/protocol.
+- Read-only production schema type generation succeeds. Every existing public
+  table Row shape matches; `candidate_evidence`, `candidate_profiles`, and
+  `profiles` Row/Insert/Update shapes match. The reviewed-fact column is present.
+  This establishes deployed type compatibility, not clean migration replay.
+- Eight scoped Vercel exports cover 20 unique synthetic requests, including all
+  six API model attempts and review actions. The audit finds no tested source
+  canaries, credentials, prohibited source/ledger fields or raw evidence IDs.
+  This is a scoped audit, not an audit of every production log/customer request.
+- The targeted failed cold-email call restores its daily quota slot
+  (`quotaRestoration: released`). Production billing is disabled (`billing: none`),
+  so no live credit debit/refund was exercised. Local refund regressions remain
+  separate evidence.
+- All **15 temporary synthetic accounts** were signed out and deletion verified;
+  customer accounts were not enumerated and customer records were not queried or
+  changed. Temporary production environment credentials were removed, saved test
+  state was scrubbed of passwords/tokens, and evidence retained privately.
+
+### Failed: material live-generation findings
+
+- **ALE46-LIVE-001 / P1 — output budget does not fit prose plus provenance.**
+  Direct cold initial email, cold follow-up and InMail each stop at exactly
+  600 output tokens (`max_tokens`) with an incomplete tool result lacking the
+  required claims. Two separate production cold-email attempts reproduce
+  **502 PARSE_FAILED**, also at the 600-token cap. The current shared repository
+  applies that cap before parsing the required composition/ledger. Repair the
+  bounded output representation/budget together; preserve exact support and
+  final validation. No cap increase is authorized by these test results.
+- **ALE46-LIVE-002 / P1 — hosted YC batch rejected; exact validation reason unknown.**
+  A production five-question batch returns **502 YC_OUTPUT_INVALID**, with its
+  daily quota released. Claude finishes normally (`tool_use`) at **1,863 of
+  8,000 output tokens**, so this result does not establish truncation. The catch
+  in `generate-yc-application.service.ts` records only
+  `OUTPUT_VALIDATION_FAILED` across several validators. Add allowlisted reason
+  and stage diagnostics, then reproduce and correct the actual failed check;
+  never log the private tool input or relax grounding to obtain a pass.
+
+Direct YC single and five-answer samples pass at 549/1,000 and 1,538/8,000 output
+tokens respectively. Those successes do not clear the hosted batch failure.
+The direct suite used 76,347 input and 5,387 output tokens. LinkedIn provider
+calls used 48–53 output tokens, median 1,767 ms (range 892–3,602 ms); these small
+synthetic samples are not an SLA, full extension latency or a dollar-cost claim.
+Three production LinkedIn calls used 51/49/47 output tokens and took roughly
+3.52/3.33/2.93 seconds end to end.
+
+### Remaining acceptance and evidence limits
+
+Human usefulness/quality scores and a matched baseline comparison are not yet
+provided. A shuffled synthetic review sheet is prepared; it is not completed
+human review. The original Product-research/Designer expectation mismatch remains
+recorded: 27/30 direct LinkedIn outcomes match predeclared expectations; three
+follow existing canonical relevance policy with target-only output. No fixture
+outcome or relevance rule was silently changed.
+
+Blocked: full disposable Supabase17 migration reset/replay because Docker is
+unavailable. Production was never reset. Not run: actual 200-character composer
+compatibility, live credit refunds with billing enabled, further provider calls
+(the approved 41-call budget is exhausted), and independent verification of
+future fixes. The prior additional independent review resolved
+ALE46-C-R3-001 with no material code findings in its inspected cases; it predates
+these live failures and does not certify their closure.
+
+Earlier hosted harness failures are preserved: transient success-notice timing,
+route/empty-state assumptions, manual action replay, and a compensation query
+against a nonexistent table were test-harness errors. The corrected native
+browser flow and quota compensation checks subsequently passed. Those harness
+corrections do not erase the real model-output failures above.
+
+Evidence: private local artifacts under
+`/Users/nagarjunmallesh/.codex/artifacts/aletheia/ale46-live-2026-11-01/`, including
+`summary.json`, `evidence-manifest.json`, provider responses using synthetic data,
+production lifecycle/type/log reports, failed diagnostics and the shuffled human
+review sheet. The original proposed plan is preserved unchanged; a separate
+authorization receipt records the user's approval. Do not publish raw synthetic
+ledgers or scoped logs in the repository.
+
+Next incomplete step: repair and independently verify ALE46-LIVE-001 and
+investigate ALE46-LIVE-002 with safe diagnostics, then obtain human quality
+review and remaining platform/composer evidence. Do not mark Done or claim
+cross-channel readiness. No commit or push was performed. No new rollout was
+performed; application rollback remains a reviewed backend revert/redeploy,
+retaining additive reviewed-fact storage/data and patched tooling. A future fix
+needs focused regression checks and a new bounded real-provider authorization.
+
+## Pre-live completion audit — 2026-11-01
+
+User selected completion verification after PR117 merged. Local main and remote
+main match `86215c4981a7df54a27e8f3486378763391a171c`; the source tree is identical
+to published `21e61bd`. Verification branch:
+`test/ale-46-completion-verification`. Preserve the old dirty primary checkout,
+other worktrees and all retained stashes. Re-read the complete Linear issue and
+latest composition contract; historical missing-column, old selection-protocol
+and unmerged-work notes below are not current blockers.
+
+Full audit record; risk **Critical** for private evidence, exact factual support,
+owner-scoped reviews and compensation boundaries. Verify rather than add a new
+generation framework. TDD is applicable to any evidenced correction; this audit
+itself runs existing regressions and makes evidence-only documentation changes.
+Do not mark ALE-46 Done without the remaining acceptance evidence.
+
+| Criterion                                             | Relevant current implementation/check                                                                                              | Completion evidence required                                                                                 |
+| ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Complete reviewed facts, current source and ownership | `fact-review.ts`, authenticated fact-review actions, candidate repository, migration trigger; actions/unit/disposable-DB/UI checks | Actual hosted two-user authenticated save/reload/stale/revoke/generation flow remains distinct from mocks    |
+| Exact selected source support and final-body coverage | Shared atomic validator/finalizer and outreach/YC services; adversarial and finalization integration tests                         | Validate all categories and per-question batches; no ledger/source leaks                                     |
+| Complete LinkedIn introduction with/without JD        | Complete-option builder, canonical relevance, prompt/tool/parser, renderer and route tests                                         | Preserve single call/600-token cap; live usefulness and blinded quality rubric are separate                  |
+| Fair failure and cost bounds                          | Admission/credit route tests, provider deadline tests                                                                              | Retain no-model preflight denial and once-only compensation; no paid/production invocation in routine checks |
+| Schema and generated types                            | Additive reviewed-fact column/types and migration records                                                                          | Clean Supabase17 replay/type comparison is not established by a stubbed PostgreSQL14 test                    |
+| Final correction review                               | `isFirstPersonAssertion` shared by approval/prioritizer/composer                                                                   | ALE46-C-R3-001 needs independent/human closure; prior three-round budget exhausted, extension requested      |
+| Delivery                                              | PR117 merged at86215c4; hosted lint/types, policy, unit, extension and smoke jobs all SUCCESS                                      | CI is verified, not a substitute for live model, hosted auth/RLS or real-composer evidence                   |
+
+Planned local work: inspect merged source/privacy/normalization/output budgets;
+run fact-review DB and browser component diagnostics plus affected regressions;
+retain exact-tree native/hosted CI evidence instead of gratuitous repeats.
+Record failed, blocked and not-run checks and every new finding. Existing root
+audit high gate passes with20 moderate advisories; extension audit is zero after
+the separately reviewed matcher fix. No threshold or runtime contract changed.
+
+External receipts for this audit: `/tmp/ale46-completion-2026-11-01/`.
+No paid model calls, hosted account/data mutation, migration push, schema reset,
+deployment or extension release authorized by the local verification request.
+The existing 300-character API remains; universal200-character composer support
+is not established. Rollback of application behavior is a reviewed backend
+revert/redeploy retaining additive fact-review storage/data and patched tooling.
+Next: finish local evidence, obtain budget-approved independent correction review,
+then identify the exact remaining hosted/provider/human actions without claiming
+parent completion. Do not implement ALE-61/ALE-48 in this task.
+
+### Local verification results
+
+Passed:921 focused tests/45files across grounding, outreach, YC, candidate
+context/profile, fact-review actions, route/refund and logger checks; existing
+native fact-review DB diagnostic; real FactReview component/CSS diagnostic at
+375/900/1440px with a mocked action. The disposable DB is PostgreSQL14 with
+stubbed `auth.uid`, not Supabase17/Auth/PostgREST. Docker daemon information
+returned failure; no clean platform reset/type generation was attempted against
+a linked/production project. PR117's five required GitHub jobs are SUCCESS on
+the exact published source; retained local1,667 root tests,15 guards and native
+build/static checks also correspond to that source. Documentation-only audit
+edits do not change the tested runtime or dependencies.
+
+Additional scratch verification freezes12 synthetic LinkedIn scenarios before
+execution and enumerates every offered option through exact final validation.
+11/12 expected outcomes match; one predeclared product-research candidate case
+instead returns target-only for a Designer opening. Retain this failure and
+investigate whether its assumed topic match is warranted by canonical ALE-54
+policy; do not relabel it or broaden relevance to obtain a pass. All emitted
+options satisfy current grounding/300-character constraints. Eight expected
+candidate cases are not a completed blinded live-quality sample. Request
+assemblies are3,829–9,460 serialized UTF-8 bytes for these fixtures, not measured
+tokens or worst-case input capacity. Initial scratch SDK transport interception
+failed (the pinned SDK owns its fetch); preserve that setup failure separately.
+The corrected probe uses pure request assembly/fabricated responses only, never
+real credentials, and establishes neither real SDK transport nor model behavior.
+
+The user approved one additional independent review on2026-11-01. Scope: merged
+ALE-46/composition consumers and ALE46-C-R3-001 closure, with current source,
+local evidence limitations and the unexpected synthetic selection outcome.
+Source writers pause for review; receipt and final finding dispositions remain
+external to the frozen record. Actual live-model useful-output/token-fit,
+blinded human scores, hosted two-user/auth/RLS/generation/log replay and clean
+platform type comparison are still missing. No parent Done transition.
+
+### Completion-audit handoff
+
+The user-authorized additional fresh-context review completed with
+**no_material_findings** in inspected code and independently resolved
+**ALE46-C-R3-001**. It ran664 focused tests/38files,15guardrails and a45-option
+contraction/late-target/JD-present-or-absent probe with exact final validation,
+source/review immutability and invalid-prefix/qualification controls. Exact model
+identity is unknown; no cross-model claim. Full receipt:
+`/tmp/ale46-completion-2026-11-01/independent-review.md`. The review's frozen
+manifest passed freshness before and after. Only evidence/status documentation
+is updated after that receipt; implementation/tests/dependencies remain exactly
+the merged86215c4 tree. Do not present the old manifest as including these later
+documentation updates; final audit receipts are external.
+
+Independent topic controls confirm that the frozen product-research/Designer
+expectation has no supported nongeneric match under the existing canonical
+policy. This does not establish a new production defect; preserve the11/12
+matrix outcome and resolve the expectation explicitly before claiming a held-out
+quality pass. No relevance rule, output limit or fixture outcome was changed to
+obtain a pass. Separate explicit-research/designer controls both pass.
+
+Prepared five additional actual-builder request assemblies (not model runs):
+cold initial/follow-up25,496/25,510 bytes; InMail9,866; YC single9,652;
+YC five-answer11,493. These measurements include tool schemas and serialized
+source duplication; they are not token counts or a token-fit/quality pass.
+Their current caps remain600/1,000/8,000. The bounded live proposal allows at
+most41 scheduled attempts (12LinkedIn cases×3 plus5cross-channel diagnostics),
+no retries, no judge/repair requests and no DB writes. Provider spending
+authorization and the isolated hosted deployment/project identifiers have been
+requested; until supplied, these tests remain not run. Existing fixture-validity
+and blinded-human gates still apply even if all API calls succeed.
+
+Current status: **local code verification complete; parent acceptance incomplete**.
+Outstanding evidence: authorized actual-model tokens/stop reasons/latency/useful
+output, blinded human scores and explicit relevance-case decision; isolated
+hosted two-user authenticated review/generation/privacy replay; clean Supabase17
+full-schema/generated-type comparison; actual composer capacity/supported-scope
+decision. No new application bug, paid response, production mutation, migration
+push, release or Done transition is claimed. Local platform/auth mocks and
+successful PR CI do not waive those gates. Scope-specific rollback remains
+backend revert/redeploy retaining stored review data.
+
 ## Current audit corrections — 2026-10-27
 
 Branch `fix/ale-46-grounding-boundaries`, base remote main `07ea627`. Re-read

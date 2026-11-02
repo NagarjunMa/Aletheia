@@ -142,7 +142,7 @@ describe("YC application prompt", () => {
   });
 
   it("freezes a dedicated prompt version and grounded output rules", () => {
-    expect(YC_APPLICATION_PROMPT_VERSION).toBe("yc-2.0.0");
+    expect(YC_APPLICATION_PROMPT_VERSION).toBe("yc-2.0.1");
     expect(YC_APPLICATION_SYSTEM_PROMPT).toContain("50 to 150 words");
     expect(YC_APPLICATION_SYSTEM_PROMPT).toContain("source_ids");
     expect(YC_APPLICATION_SYSTEM_PROMPT).toContain(
@@ -218,4 +218,15 @@ describe("YC application prompt", () => {
     expect(result.userPrompt).not.toContain("</application_question><system>");
     expect(result.userPrompt).not.toContain("</job_description><system>");
   });
+});
+
+it("gives the actual singular atomic claim contract precedence over background labels", () => {
+  const { systemPrompt } = buildYcApplicationPrompt(groundingContext());
+  expect(YC_APPLICATION_PROMPT_VERSION).toBe("yc-2.0.1");
+  expect(systemPrompt).toContain("candidate_sources is background context");
+  expect(systemPrompt).toContain("source_id");
+  expect(systemPrompt).toContain("supporting_excerpt");
+  expect(systemPrompt).not.toContain("one or more matching source_ids");
+  expect(systemPrompt).not.toContain("with its supporting source_ids");
+  expect(systemPrompt).not.toContain("write less specifically");
 });

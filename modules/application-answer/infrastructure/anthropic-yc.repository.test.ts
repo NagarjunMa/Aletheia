@@ -3,6 +3,7 @@ import { CLAUDE_MODEL } from "@/modules/outreach/infrastructure/anthropic.reposi
 import {
   createYcApplicationMessage,
   getYcApplicationToolInput,
+  getApplicationBatchToolInput,
   YcApplicationStructuredOutputError,
   ycApplicationTool,
 } from "./anthropic-yc.repository";
@@ -175,4 +176,47 @@ describe("ALE-37 bounded batch tool", () => {
       expect(create).not.toHaveBeenCalled();
     },
   );
+});
+
+it("bounds parser diagnostics and drops model-chosen field names, values and messages", () => {
+  const tool = {
+    stop_reason: "tool_use",
+    content: [
+      {
+        type: "tool_use",
+        name: "return_application_answers",
+        input: {
+          answers: Array.from({ length: 5 }, () => ({
+            questionId: "PRIVATE_ID",
+            word_count: "PRIVATE_COUNT",
+            body: 123,
+            claims: [
+              {
+                text: 12,
+                kind: "PRIVATE_KIND",
+                source_id: null,
+                supporting_excerpt: null,
+                PRIVATE_KEY: "PRIVATE_VALUE",
+              },
+            ],
+            PRIVATE_OBJECT_KEY: "PRIVATE_OBJECT_VALUE",
+          })),
+        },
+      },
+    ],
+  };
+  try {
+    getApplicationBatchToolInput(tool as never);
+    throw new Error("Parser accepted invalid output");
+  } catch (error) {
+    expect(error).toBeInstanceOf(YcApplicationStructuredOutputError);
+    const invalid = error as YcApplicationStructuredOutputError;
+    expect(invalid.code).toBe("YC_TOOL_SCHEMA");
+    expect(invalid.validationDetails.length).toBeLessThanOrEqual(8);
+    expect(invalid.validationDetails.length).toBeGreaterThan(0);
+    expect(JSON.stringify(invalid)).not.toContain("PRIVATE");
+    expect(invalid.message).toBe(
+      "Claude returned an invalid YC application tool result",
+    );
+  }
 });
