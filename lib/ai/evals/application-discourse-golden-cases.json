@@ -1,0 +1,249 @@
+[
+  {
+    "id": "synthetic-application-q1",
+    "category": "yc_application",
+    "emailMode": "initial_outreach",
+    "body": "I designed a fictional classroom1 sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.\n\nI wrote a fictional classroom1 review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting.",
+    "sources": [
+      {
+        "id": "synthetic-answer-source-1",
+        "scope": "candidate",
+        "kind": "action",
+        "content": "I designed a fictional classroom1 sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.",
+        "rootId": "synthetic-root"
+      },
+      {
+        "id": "synthetic-answer-outcome-1",
+        "scope": "candidate",
+        "kind": "outcome",
+        "rootId": "synthetic-root",
+        "content": "I wrote a fictional classroom1 review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting."
+      }
+    ],
+    "claims": [
+      {
+        "text": "I designed a fictional classroom1 sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.",
+        "kind": "action",
+        "source_id": "synthetic-answer-source-1",
+        "supporting_excerpt": "I designed a fictional classroom1 sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production."
+      },
+      {
+        "text": "I wrote a fictional classroom1 review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting.",
+        "kind": "outcome",
+        "source_id": "synthetic-answer-outcome-1",
+        "supporting_excerpt": "I wrote a fictional classroom1 review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting."
+      }
+    ],
+    "excludedClaims": [],
+    "targetRequired": false,
+    "expectedViolations": []
+  },
+  {
+    "id": "synthetic-application-q2",
+    "category": "yc_application",
+    "emailMode": "initial_outreach",
+    "body": "I designed a fictional classroom2 sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.\n\nI wrote a fictional classroom2 review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting.",
+    "sources": [
+      {
+        "id": "synthetic-answer-source-2",
+        "scope": "candidate",
+        "kind": "action",
+        "content": "I designed a fictional classroom2 sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.",
+        "rootId": "synthetic-root"
+      },
+      {
+        "id": "synthetic-answer-outcome-2",
+        "scope": "candidate",
+        "kind": "outcome",
+        "rootId": "synthetic-root",
+        "content": "I wrote a fictional classroom2 review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting."
+      }
+    ],
+    "claims": [
+      {
+        "text": "I designed a fictional classroom2 sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.",
+        "kind": "action",
+        "source_id": "synthetic-answer-source-2",
+        "supporting_excerpt": "I designed a fictional classroom2 sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production."
+      },
+      {
+        "text": "I wrote a fictional classroom2 review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting.",
+        "kind": "outcome",
+        "source_id": "synthetic-answer-outcome-2",
+        "supporting_excerpt": "I wrote a fictional classroom2 review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting."
+      }
+    ],
+    "excludedClaims": [],
+    "targetRequired": false,
+    "expectedViolations": []
+  },
+  {
+    "id": "synthetic-application-q3",
+    "category": "yc_application",
+    "emailMode": "initial_outreach",
+    "body": "I designed a fictional classroom3 sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.\n\nI wrote a fictional classroom3 review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting.",
+    "sources": [
+      {
+        "id": "synthetic-answer-source-3",
+        "scope": "candidate",
+        "kind": "action",
+        "content": "I designed a fictional classroom3 sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.",
+        "rootId": "synthetic-root"
+      },
+      {
+        "id": "synthetic-answer-outcome-3",
+        "scope": "candidate",
+        "kind": "outcome",
+        "rootId": "synthetic-root",
+        "content": "I wrote a fictional classroom3 review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting."
+      }
+    ],
+    "claims": [
+      {
+        "text": "I designed a fictional classroom3 sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.",
+        "kind": "action",
+        "source_id": "synthetic-answer-source-3",
+        "supporting_excerpt": "I designed a fictional classroom3 sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production."
+      },
+      {
+        "text": "I wrote a fictional classroom3 review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting.",
+        "kind": "outcome",
+        "source_id": "synthetic-answer-outcome-3",
+        "supporting_excerpt": "I wrote a fictional classroom3 review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting."
+      }
+    ],
+    "excludedClaims": [],
+    "targetRequired": false,
+    "expectedViolations": []
+  },
+  {
+    "id": "synthetic-application-q4",
+    "category": "yc_application",
+    "emailMode": "initial_outreach",
+    "body": "I designed a fictional classroom4 sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.\n\nI wrote a fictional classroom4 review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting.",
+    "sources": [
+      {
+        "id": "synthetic-answer-source-4",
+        "scope": "candidate",
+        "kind": "action",
+        "content": "I designed a fictional classroom4 sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.",
+        "rootId": "synthetic-root"
+      },
+      {
+        "id": "synthetic-answer-outcome-4",
+        "scope": "candidate",
+        "kind": "outcome",
+        "rootId": "synthetic-root",
+        "content": "I wrote a fictional classroom4 review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting."
+      }
+    ],
+    "claims": [
+      {
+        "text": "I designed a fictional classroom4 sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.",
+        "kind": "action",
+        "source_id": "synthetic-answer-source-4",
+        "supporting_excerpt": "I designed a fictional classroom4 sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production."
+      },
+      {
+        "text": "I wrote a fictional classroom4 review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting.",
+        "kind": "outcome",
+        "source_id": "synthetic-answer-outcome-4",
+        "supporting_excerpt": "I wrote a fictional classroom4 review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting."
+      }
+    ],
+    "excludedClaims": [],
+    "targetRequired": false,
+    "expectedViolations": []
+  },
+  {
+    "id": "synthetic-application-q5",
+    "category": "yc_application",
+    "emailMode": "initial_outreach",
+    "body": "I designed a fictional classroom5 sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.\n\nI wrote a fictional classroom5 review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting.",
+    "sources": [
+      {
+        "id": "synthetic-answer-source-5",
+        "scope": "candidate",
+        "kind": "action",
+        "content": "I designed a fictional classroom5 sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.",
+        "rootId": "synthetic-root"
+      },
+      {
+        "id": "synthetic-answer-outcome-5",
+        "scope": "candidate",
+        "kind": "outcome",
+        "rootId": "synthetic-root",
+        "content": "I wrote a fictional classroom5 review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting."
+      }
+    ],
+    "claims": [
+      {
+        "text": "I designed a fictional classroom5 sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.",
+        "kind": "action",
+        "source_id": "synthetic-answer-source-5",
+        "supporting_excerpt": "I designed a fictional classroom5 sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production."
+      },
+      {
+        "text": "I wrote a fictional classroom5 review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting.",
+        "kind": "outcome",
+        "source_id": "synthetic-answer-outcome-5",
+        "supporting_excerpt": "I wrote a fictional classroom5 review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting."
+      }
+    ],
+    "excludedClaims": [],
+    "targetRequired": false,
+    "expectedViolations": []
+  },
+  {
+    "id": "synthetic-application-wrong-question-source",
+    "category": "yc_application",
+    "emailMode": "initial_outreach",
+    "body": "I designed a fictional classroom1 sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.",
+    "sources": [
+      {
+        "id": "synthetic-answer-source-1",
+        "scope": "candidate",
+        "kind": "action",
+        "content": "I designed a fictional classroom1 sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.",
+        "rootId": "synthetic-root"
+      }
+    ],
+    "claims": [
+      {
+        "text": "I designed a fictional classroom1 sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.",
+        "kind": "action",
+        "source_id": "synthetic-answer-source-2",
+        "supporting_excerpt": "I designed a fictional classroom1 sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production."
+      }
+    ],
+    "excludedClaims": [],
+    "targetRequired": false,
+    "expectedViolations": ["factual_coverage", "channel_format"]
+  },
+  {
+    "id": "synthetic-application-outreach-ask",
+    "category": "yc_application",
+    "emailMode": "initial_outreach",
+    "body": "I designed a fictional classroom1 sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production. Open to connecting?",
+    "sources": [
+      {
+        "id": "synthetic-answer-source-1",
+        "scope": "candidate",
+        "kind": "action",
+        "content": "I designed a fictional classroom1 sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.",
+        "rootId": "synthetic-root"
+      }
+    ],
+    "claims": [
+      {
+        "text": "I designed a fictional classroom1 sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.",
+        "kind": "action",
+        "source_id": "synthetic-answer-source-1",
+        "supporting_excerpt": "I designed a fictional classroom1 sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production."
+      }
+    ],
+    "excludedClaims": [],
+    "targetRequired": false,
+    "expectedViolations": ["cta"]
+  }
+]

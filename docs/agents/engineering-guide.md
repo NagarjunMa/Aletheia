@@ -2,6 +2,8 @@
 
 ## Active Work
 
+ALE-48 offline discourse evaluation: see `docs/evals/grounded-response-quality.md` for the synthetic ledger-backed rubric, current server-option/reference baseline, privacy-safe report and Phase 4 decision thresholds. This stage changes no production generation behavior; provider/human and parent release gates remain separate.
+
 ALE-47 final-output finalization is merged: see `docs/operations/ale-47-grounded-finalization.md`. Grounded channels preserve source-backed text, inspect style without rewriting, and validate the exact final output before canonical limits. Reviewed-fact whitespace and deny-only exclusion folding corrections passed independent review before publication. Hosted/provider rollout evidence remains separate from local verification.
 
 LinkedIn introductory composition: see `docs/operations/linkedin-relevance-composition-plan.md` for the active ALE-46 complete-option increment and `docs/operations/linkedin-introductory-messages.md` for history. A/B1, ALE-54 relevance and ALE-47 finalization are merged. The current backend prepares complete supported sender-first introductions and the model selects one opaque current-option ID. Preserve per-fact review, complete source support and final validation; independently verify the new code and live usefulness before parent completion.

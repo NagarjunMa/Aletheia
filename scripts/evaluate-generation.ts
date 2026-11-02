@@ -17,7 +17,7 @@ import {
 } from "./generation-evaluation";
 
 /** Read through the same descriptor used for the size/type check, with a hard cap. */
-function readBounded(path: string, remaining: number): string {
+export function readBounded(path: string, remaining: number): string {
   const fd = openSync(path, constants.O_RDONLY | constants.O_NONBLOCK);
   try {
     const stat = fstatSync(fd);

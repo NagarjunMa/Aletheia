@@ -41,7 +41,8 @@
     "prepare": "husky",
     "test:generation-admission-db": "node scripts/test-generation-admission-db.mjs",
     "policy:check": "eslint scripts/validate-engineering-policy.ts scripts/validate-engineering-policy.test.ts && tsx scripts/validate-engineering-policy.ts && prettier --check AGENTS.md docs/agents/engineering-guide.md .github/pull_request_template.md scripts/validate-engineering-policy.ts scripts/validate-engineering-policy.test.ts",
-    "policy:pr": "node scripts/validate-engineering-policy.ts"
+    "policy:pr": "node scripts/validate-engineering-policy.ts",
+    "eval:discourse": "LOG_LEVEL=silent tsx scripts/evaluate-grounded-discourse.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.24.3",
