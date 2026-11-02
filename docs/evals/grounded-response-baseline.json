@@ -1,0 +1,945 @@
+{
+  "schemaVersion": 1,
+  "mode": "offline",
+  "fixtureFingerprint": "d5f62e0944578e5d2682a7c4df3f9ecbe978377ab6fb7c41a52f951edd2ef289",
+  "configuration": {
+    "outreachPromptVersion": "6.0.0",
+    "applicationPromptVersion": "yc-2.0.1",
+    "model": "claude-sonnet-4-6",
+    "temperatures": {
+      "outreach": 0.8,
+      "application": 0.3
+    },
+    "promptFingerprint": "bb6c8e5964695381f17681f4bd959abd216d7845ac651e5b33055c3576c041ab",
+    "configuredOutputTokenCeilings": {
+      "connection": 600,
+      "prose": 2400,
+      "applicationSingle": 1000,
+      "applicationFive": 8000
+    },
+    "configuredInputTokenCeiling": null,
+    "configuredSourceCharacterBudgets": {
+      "linkedin_connection": {
+        "maxEvidence": 1,
+        "maxSourceChars": 1800,
+        "maxTotalChars": 4000
+      },
+      "linkedin_inmail": {
+        "maxEvidence": 1,
+        "maxSourceChars": 2400,
+        "maxTotalChars": 6000
+      },
+      "cold_email": {
+        "maxEvidence": 2,
+        "maxSourceChars": 2400,
+        "maxTotalChars": 8000
+      }
+    },
+    "measuredProviderTokenUsage": null,
+    "providerCalls": 0
+  },
+  "expectedPropertyChecks": [
+    {
+      "id": "synthetic-connection-candidate",
+      "expectedPropertiesMet": true
+    },
+    {
+      "id": "synthetic-connection-target-only",
+      "expectedPropertiesMet": true
+    },
+    {
+      "id": "synthetic-email-initial-outreach",
+      "expectedPropertiesMet": true
+    },
+    {
+      "id": "synthetic-email-founder-ceo-outreach",
+      "expectedPropertiesMet": true
+    },
+    {
+      "id": "synthetic-email-follow-up",
+      "expectedPropertiesMet": true
+    },
+    {
+      "id": "synthetic-email-clarification",
+      "expectedPropertiesMet": true
+    },
+    {
+      "id": "synthetic-email-role-fit-summary",
+      "expectedPropertiesMet": true
+    },
+    {
+      "id": "synthetic-email-referral-request",
+      "expectedPropertiesMet": true
+    },
+    {
+      "id": "synthetic-email-initial-library",
+      "expectedPropertiesMet": true
+    },
+    {
+      "id": "synthetic-email-initial-bridge",
+      "expectedPropertiesMet": true
+    },
+    {
+      "id": "synthetic-inmail-initial-outreach",
+      "expectedPropertiesMet": true
+    },
+    {
+      "id": "synthetic-inmail-founder-ceo-outreach",
+      "expectedPropertiesMet": true
+    },
+    {
+      "id": "synthetic-inmail-follow-up",
+      "expectedPropertiesMet": true
+    },
+    {
+      "id": "synthetic-inmail-clarification",
+      "expectedPropertiesMet": true
+    },
+    {
+      "id": "synthetic-inmail-role-fit-summary",
+      "expectedPropertiesMet": true
+    },
+    {
+      "id": "synthetic-inmail-referral-request",
+      "expectedPropertiesMet": true
+    },
+    {
+      "id": "synthetic-inmail-initial-bridge",
+      "expectedPropertiesMet": true
+    },
+    {
+      "id": "synthetic-inmail-initial-library",
+      "expectedPropertiesMet": true
+    },
+    {
+      "id": "synthetic-control-generic-praise",
+      "expectedPropertiesMet": true
+    },
+    {
+      "id": "synthetic-control-hidden-assertion",
+      "expectedPropertiesMet": true
+    },
+    {
+      "id": "synthetic-control-explanation",
+      "expectedPropertiesMet": true
+    },
+    {
+      "id": "synthetic-control-repeated-fact",
+      "expectedPropertiesMet": true
+    },
+    {
+      "id": "synthetic-control-incomplete-ask",
+      "expectedPropertiesMet": true
+    },
+    {
+      "id": "synthetic-application-q1",
+      "expectedPropertiesMet": true
+    },
+    {
+      "id": "synthetic-application-q2",
+      "expectedPropertiesMet": true
+    },
+    {
+      "id": "synthetic-application-q3",
+      "expectedPropertiesMet": true
+    },
+    {
+      "id": "synthetic-application-q4",
+      "expectedPropertiesMet": true
+    },
+    {
+      "id": "synthetic-application-q5",
+      "expectedPropertiesMet": true
+    },
+    {
+      "id": "synthetic-application-wrong-question-source",
+      "expectedPropertiesMet": true
+    },
+    {
+      "id": "synthetic-application-outreach-ask",
+      "expectedPropertiesMet": true
+    }
+  ],
+  "rows": [
+    {
+      "origin": "first_server_option_no_provider",
+      "id": "synthetic-connection-candidate",
+      "category": "linkedin_connection",
+      "emailMode": "initial_outreach",
+      "violations": [],
+      "factualCoverage": true,
+      "unsupportedAssertionCount": 0,
+      "declaredClaimCount": 1,
+      "validDeclaredClaims": 1,
+      "targetReferenceCount": 1,
+      "candidateReferenceCount": 0,
+      "optionalFramingWords": 0,
+      "bodyWords": 19,
+      "duplicateFactCount": 0,
+      "ctaCount": 1,
+      "opening": "target.target_observation",
+      "ctaTemplate": 0,
+      "pattern": "target.target_observation",
+      "diversityEligible": false
+    },
+    {
+      "origin": "first_server_option_no_provider",
+      "id": "synthetic-connection-target-only",
+      "category": "linkedin_connection",
+      "emailMode": "initial_outreach",
+      "violations": [],
+      "factualCoverage": true,
+      "unsupportedAssertionCount": 0,
+      "declaredClaimCount": 1,
+      "validDeclaredClaims": 1,
+      "targetReferenceCount": 1,
+      "candidateReferenceCount": 0,
+      "optionalFramingWords": 0,
+      "bodyWords": 19,
+      "duplicateFactCount": 0,
+      "ctaCount": 1,
+      "opening": "target.target_observation",
+      "ctaTemplate": 0,
+      "pattern": "target.target_observation",
+      "diversityEligible": false
+    },
+    {
+      "origin": "first_server_option_no_provider",
+      "id": "synthetic-email-initial-outreach",
+      "category": "cold_email",
+      "emailMode": "initial_outreach",
+      "violations": [],
+      "factualCoverage": true,
+      "unsupportedAssertionCount": 0,
+      "declaredClaimCount": 3,
+      "validDeclaredClaims": 3,
+      "targetReferenceCount": 1,
+      "candidateReferenceCount": 2,
+      "optionalFramingWords": 0,
+      "bodyWords": 132,
+      "duplicateFactCount": 0,
+      "ctaCount": 1,
+      "opening": "target.target_observation",
+      "ctaTemplate": 1,
+      "pattern": "target.target_observation>candidate.action>candidate.outcome",
+      "diversityEligible": true
+    },
+    {
+      "origin": "first_server_option_no_provider",
+      "id": "synthetic-email-founder-ceo-outreach",
+      "category": "cold_email",
+      "emailMode": "founder_ceo_outreach",
+      "violations": [],
+      "factualCoverage": true,
+      "unsupportedAssertionCount": 0,
+      "declaredClaimCount": 3,
+      "validDeclaredClaims": 3,
+      "targetReferenceCount": 1,
+      "candidateReferenceCount": 2,
+      "optionalFramingWords": 0,
+      "bodyWords": 132,
+      "duplicateFactCount": 0,
+      "ctaCount": 1,
+      "opening": "target.target_observation",
+      "ctaTemplate": 1,
+      "pattern": "target.target_observation>candidate.action>candidate.outcome",
+      "diversityEligible": true
+    },
+    {
+      "origin": "first_server_option_no_provider",
+      "id": "synthetic-email-follow-up",
+      "category": "cold_email",
+      "emailMode": "follow_up",
+      "violations": [],
+      "factualCoverage": true,
+      "unsupportedAssertionCount": 0,
+      "declaredClaimCount": 2,
+      "validDeclaredClaims": 2,
+      "targetReferenceCount": 1,
+      "candidateReferenceCount": 1,
+      "optionalFramingWords": 0,
+      "bodyWords": 78,
+      "duplicateFactCount": 0,
+      "ctaCount": 1,
+      "opening": "target.target_observation",
+      "ctaTemplate": 1,
+      "pattern": "target.target_observation>candidate.action",
+      "diversityEligible": false
+    },
+    {
+      "origin": "first_server_option_no_provider",
+      "id": "synthetic-email-clarification",
+      "category": "cold_email",
+      "emailMode": "clarification",
+      "violations": [],
+      "factualCoverage": true,
+      "unsupportedAssertionCount": 0,
+      "declaredClaimCount": 2,
+      "validDeclaredClaims": 2,
+      "targetReferenceCount": 1,
+      "candidateReferenceCount": 1,
+      "optionalFramingWords": 0,
+      "bodyWords": 78,
+      "duplicateFactCount": 0,
+      "ctaCount": 1,
+      "opening": "target.target_observation",
+      "ctaTemplate": 1,
+      "pattern": "target.target_observation>candidate.action",
+      "diversityEligible": false
+    },
+    {
+      "origin": "first_server_option_no_provider",
+      "id": "synthetic-email-role-fit-summary",
+      "category": "cold_email",
+      "emailMode": "role_fit_summary",
+      "violations": [],
+      "factualCoverage": true,
+      "unsupportedAssertionCount": 0,
+      "declaredClaimCount": 2,
+      "validDeclaredClaims": 2,
+      "targetReferenceCount": 1,
+      "candidateReferenceCount": 1,
+      "optionalFramingWords": 0,
+      "bodyWords": 78,
+      "duplicateFactCount": 0,
+      "ctaCount": 1,
+      "opening": "target.target_observation",
+      "ctaTemplate": 1,
+      "pattern": "target.target_observation>candidate.action",
+      "diversityEligible": false
+    },
+    {
+      "origin": "first_server_option_no_provider",
+      "id": "synthetic-email-referral-request",
+      "category": "cold_email",
+      "emailMode": "referral_request",
+      "violations": [],
+      "factualCoverage": true,
+      "unsupportedAssertionCount": 0,
+      "declaredClaimCount": 2,
+      "validDeclaredClaims": 2,
+      "targetReferenceCount": 1,
+      "candidateReferenceCount": 1,
+      "optionalFramingWords": 0,
+      "bodyWords": 78,
+      "duplicateFactCount": 0,
+      "ctaCount": 1,
+      "opening": "target.target_observation",
+      "ctaTemplate": 1,
+      "pattern": "target.target_observation>candidate.action",
+      "diversityEligible": false
+    },
+    {
+      "origin": "first_server_option_no_provider",
+      "id": "synthetic-email-initial-library",
+      "category": "cold_email",
+      "emailMode": "initial_outreach",
+      "violations": [],
+      "factualCoverage": true,
+      "unsupportedAssertionCount": 0,
+      "declaredClaimCount": 3,
+      "validDeclaredClaims": 3,
+      "targetReferenceCount": 1,
+      "candidateReferenceCount": 2,
+      "optionalFramingWords": 0,
+      "bodyWords": 132,
+      "duplicateFactCount": 0,
+      "ctaCount": 1,
+      "opening": "target.target_observation",
+      "ctaTemplate": 1,
+      "pattern": "target.target_observation>candidate.action>candidate.outcome",
+      "diversityEligible": true
+    },
+    {
+      "origin": "first_server_option_no_provider",
+      "id": "synthetic-email-initial-bridge",
+      "category": "cold_email",
+      "emailMode": "initial_outreach",
+      "violations": [],
+      "factualCoverage": true,
+      "unsupportedAssertionCount": 0,
+      "declaredClaimCount": 3,
+      "validDeclaredClaims": 3,
+      "targetReferenceCount": 1,
+      "candidateReferenceCount": 2,
+      "optionalFramingWords": 0,
+      "bodyWords": 132,
+      "duplicateFactCount": 0,
+      "ctaCount": 1,
+      "opening": "target.target_observation",
+      "ctaTemplate": 1,
+      "pattern": "target.target_observation>candidate.action>candidate.outcome",
+      "diversityEligible": true
+    },
+    {
+      "origin": "first_server_option_no_provider",
+      "id": "synthetic-inmail-initial-outreach",
+      "category": "linkedin_inmail",
+      "emailMode": "initial_outreach",
+      "violations": [],
+      "factualCoverage": true,
+      "unsupportedAssertionCount": 0,
+      "declaredClaimCount": 3,
+      "validDeclaredClaims": 3,
+      "targetReferenceCount": 1,
+      "candidateReferenceCount": 2,
+      "optionalFramingWords": 0,
+      "bodyWords": 119,
+      "duplicateFactCount": 0,
+      "ctaCount": 1,
+      "opening": "target.target_observation",
+      "ctaTemplate": 2,
+      "pattern": "target.target_observation>candidate.action>candidate.outcome",
+      "diversityEligible": true
+    },
+    {
+      "origin": "first_server_option_no_provider",
+      "id": "synthetic-inmail-founder-ceo-outreach",
+      "category": "linkedin_inmail",
+      "emailMode": "founder_ceo_outreach",
+      "violations": [],
+      "factualCoverage": true,
+      "unsupportedAssertionCount": 0,
+      "declaredClaimCount": 3,
+      "validDeclaredClaims": 3,
+      "targetReferenceCount": 1,
+      "candidateReferenceCount": 2,
+      "optionalFramingWords": 0,
+      "bodyWords": 119,
+      "duplicateFactCount": 0,
+      "ctaCount": 1,
+      "opening": "target.target_observation",
+      "ctaTemplate": 2,
+      "pattern": "target.target_observation>candidate.action>candidate.outcome",
+      "diversityEligible": true
+    },
+    {
+      "origin": "first_server_option_no_provider",
+      "id": "synthetic-inmail-follow-up",
+      "category": "linkedin_inmail",
+      "emailMode": "follow_up",
+      "violations": [],
+      "factualCoverage": true,
+      "unsupportedAssertionCount": 0,
+      "declaredClaimCount": 2,
+      "validDeclaredClaims": 2,
+      "targetReferenceCount": 1,
+      "candidateReferenceCount": 1,
+      "optionalFramingWords": 0,
+      "bodyWords": 74,
+      "duplicateFactCount": 0,
+      "ctaCount": 1,
+      "opening": "target.target_observation",
+      "ctaTemplate": 1,
+      "pattern": "target.target_observation>candidate.action",
+      "diversityEligible": false
+    },
+    {
+      "origin": "first_server_option_no_provider",
+      "id": "synthetic-inmail-clarification",
+      "category": "linkedin_inmail",
+      "emailMode": "clarification",
+      "violations": [],
+      "factualCoverage": true,
+      "unsupportedAssertionCount": 0,
+      "declaredClaimCount": 2,
+      "validDeclaredClaims": 2,
+      "targetReferenceCount": 1,
+      "candidateReferenceCount": 1,
+      "optionalFramingWords": 0,
+      "bodyWords": 74,
+      "duplicateFactCount": 0,
+      "ctaCount": 1,
+      "opening": "target.target_observation",
+      "ctaTemplate": 1,
+      "pattern": "target.target_observation>candidate.action",
+      "diversityEligible": false
+    },
+    {
+      "origin": "first_server_option_no_provider",
+      "id": "synthetic-inmail-role-fit-summary",
+      "category": "linkedin_inmail",
+      "emailMode": "role_fit_summary",
+      "violations": [],
+      "factualCoverage": true,
+      "unsupportedAssertionCount": 0,
+      "declaredClaimCount": 2,
+      "validDeclaredClaims": 2,
+      "targetReferenceCount": 1,
+      "candidateReferenceCount": 1,
+      "optionalFramingWords": 0,
+      "bodyWords": 74,
+      "duplicateFactCount": 0,
+      "ctaCount": 1,
+      "opening": "target.target_observation",
+      "ctaTemplate": 1,
+      "pattern": "target.target_observation>candidate.action",
+      "diversityEligible": false
+    },
+    {
+      "origin": "first_server_option_no_provider",
+      "id": "synthetic-inmail-referral-request",
+      "category": "linkedin_inmail",
+      "emailMode": "referral_request",
+      "violations": [],
+      "factualCoverage": true,
+      "unsupportedAssertionCount": 0,
+      "declaredClaimCount": 2,
+      "validDeclaredClaims": 2,
+      "targetReferenceCount": 1,
+      "candidateReferenceCount": 1,
+      "optionalFramingWords": 0,
+      "bodyWords": 74,
+      "duplicateFactCount": 0,
+      "ctaCount": 1,
+      "opening": "target.target_observation",
+      "ctaTemplate": 1,
+      "pattern": "target.target_observation>candidate.action",
+      "diversityEligible": false
+    },
+    {
+      "origin": "first_server_option_no_provider",
+      "id": "synthetic-inmail-initial-bridge",
+      "category": "linkedin_inmail",
+      "emailMode": "initial_outreach",
+      "violations": [],
+      "factualCoverage": true,
+      "unsupportedAssertionCount": 0,
+      "declaredClaimCount": 3,
+      "validDeclaredClaims": 3,
+      "targetReferenceCount": 1,
+      "candidateReferenceCount": 2,
+      "optionalFramingWords": 0,
+      "bodyWords": 119,
+      "duplicateFactCount": 0,
+      "ctaCount": 1,
+      "opening": "target.target_observation",
+      "ctaTemplate": 2,
+      "pattern": "target.target_observation>candidate.action>candidate.outcome",
+      "diversityEligible": true
+    },
+    {
+      "origin": "first_server_option_no_provider",
+      "id": "synthetic-inmail-initial-library",
+      "category": "linkedin_inmail",
+      "emailMode": "initial_outreach",
+      "violations": [],
+      "factualCoverage": true,
+      "unsupportedAssertionCount": 0,
+      "declaredClaimCount": 3,
+      "validDeclaredClaims": 3,
+      "targetReferenceCount": 1,
+      "candidateReferenceCount": 2,
+      "optionalFramingWords": 0,
+      "bodyWords": 119,
+      "duplicateFactCount": 0,
+      "ctaCount": 1,
+      "opening": "target.target_observation",
+      "ctaTemplate": 2,
+      "pattern": "target.target_observation>candidate.action>candidate.outcome",
+      "diversityEligible": true
+    },
+    {
+      "origin": "synthetic_reference_no_provider",
+      "id": "synthetic-application-q1",
+      "category": "yc_application",
+      "emailMode": "initial_outreach",
+      "violations": [],
+      "factualCoverage": true,
+      "unsupportedAssertionCount": 0,
+      "declaredClaimCount": 2,
+      "validDeclaredClaims": 2,
+      "targetReferenceCount": 0,
+      "candidateReferenceCount": 2,
+      "optionalFramingWords": 0,
+      "bodyWords": 99,
+      "duplicateFactCount": 0,
+      "ctaCount": 0,
+      "opening": "candidate.action",
+      "ctaTemplate": null,
+      "pattern": "candidate.action>candidate.outcome",
+      "diversityEligible": true
+    },
+    {
+      "origin": "synthetic_reference_no_provider",
+      "id": "synthetic-application-q2",
+      "category": "yc_application",
+      "emailMode": "initial_outreach",
+      "violations": [],
+      "factualCoverage": true,
+      "unsupportedAssertionCount": 0,
+      "declaredClaimCount": 2,
+      "validDeclaredClaims": 2,
+      "targetReferenceCount": 0,
+      "candidateReferenceCount": 2,
+      "optionalFramingWords": 0,
+      "bodyWords": 99,
+      "duplicateFactCount": 0,
+      "ctaCount": 0,
+      "opening": "candidate.action",
+      "ctaTemplate": null,
+      "pattern": "candidate.action>candidate.outcome",
+      "diversityEligible": true
+    },
+    {
+      "origin": "synthetic_reference_no_provider",
+      "id": "synthetic-application-q3",
+      "category": "yc_application",
+      "emailMode": "initial_outreach",
+      "violations": [],
+      "factualCoverage": true,
+      "unsupportedAssertionCount": 0,
+      "declaredClaimCount": 2,
+      "validDeclaredClaims": 2,
+      "targetReferenceCount": 0,
+      "candidateReferenceCount": 2,
+      "optionalFramingWords": 0,
+      "bodyWords": 99,
+      "duplicateFactCount": 0,
+      "ctaCount": 0,
+      "opening": "candidate.action",
+      "ctaTemplate": null,
+      "pattern": "candidate.action>candidate.outcome",
+      "diversityEligible": true
+    },
+    {
+      "origin": "synthetic_reference_no_provider",
+      "id": "synthetic-application-q4",
+      "category": "yc_application",
+      "emailMode": "initial_outreach",
+      "violations": [],
+      "factualCoverage": true,
+      "unsupportedAssertionCount": 0,
+      "declaredClaimCount": 2,
+      "validDeclaredClaims": 2,
+      "targetReferenceCount": 0,
+      "candidateReferenceCount": 2,
+      "optionalFramingWords": 0,
+      "bodyWords": 99,
+      "duplicateFactCount": 0,
+      "ctaCount": 0,
+      "opening": "candidate.action",
+      "ctaTemplate": null,
+      "pattern": "candidate.action>candidate.outcome",
+      "diversityEligible": true
+    },
+    {
+      "origin": "synthetic_reference_no_provider",
+      "id": "synthetic-application-q5",
+      "category": "yc_application",
+      "emailMode": "initial_outreach",
+      "violations": [],
+      "factualCoverage": true,
+      "unsupportedAssertionCount": 0,
+      "declaredClaimCount": 2,
+      "validDeclaredClaims": 2,
+      "targetReferenceCount": 0,
+      "candidateReferenceCount": 2,
+      "optionalFramingWords": 0,
+      "bodyWords": 99,
+      "duplicateFactCount": 0,
+      "ctaCount": 0,
+      "opening": "candidate.action",
+      "ctaTemplate": null,
+      "pattern": "candidate.action>candidate.outcome",
+      "diversityEligible": true
+    }
+  ],
+  "groups": [
+    {
+      "group": "cold_email/clarification",
+      "count": 1,
+      "opening": {
+        "numerator": 1,
+        "denominator": 1,
+        "rate": 1
+      },
+      "cta": {
+        "numerator": 1,
+        "denominator": 1,
+        "rate": 1
+      },
+      "pattern": {
+        "numerator": 0,
+        "denominator": 0,
+        "rate": null
+      },
+      "harmfulPattern": false,
+      "diversityEvidence": "insufficient"
+    },
+    {
+      "group": "cold_email/follow_up",
+      "count": 1,
+      "opening": {
+        "numerator": 1,
+        "denominator": 1,
+        "rate": 1
+      },
+      "cta": {
+        "numerator": 1,
+        "denominator": 1,
+        "rate": 1
+      },
+      "pattern": {
+        "numerator": 0,
+        "denominator": 0,
+        "rate": null
+      },
+      "harmfulPattern": false,
+      "diversityEvidence": "insufficient"
+    },
+    {
+      "group": "cold_email/founder_ceo_outreach",
+      "count": 1,
+      "opening": {
+        "numerator": 1,
+        "denominator": 1,
+        "rate": 1
+      },
+      "cta": {
+        "numerator": 1,
+        "denominator": 1,
+        "rate": 1
+      },
+      "pattern": {
+        "numerator": 1,
+        "denominator": 1,
+        "rate": 1
+      },
+      "harmfulPattern": false,
+      "diversityEvidence": "insufficient"
+    },
+    {
+      "group": "cold_email/initial_outreach",
+      "count": 3,
+      "opening": {
+        "numerator": 3,
+        "denominator": 3,
+        "rate": 1
+      },
+      "cta": {
+        "numerator": 3,
+        "denominator": 3,
+        "rate": 1
+      },
+      "pattern": {
+        "numerator": 3,
+        "denominator": 3,
+        "rate": 1
+      },
+      "harmfulPattern": true,
+      "diversityEvidence": "measured"
+    },
+    {
+      "group": "cold_email/referral_request",
+      "count": 1,
+      "opening": {
+        "numerator": 1,
+        "denominator": 1,
+        "rate": 1
+      },
+      "cta": {
+        "numerator": 1,
+        "denominator": 1,
+        "rate": 1
+      },
+      "pattern": {
+        "numerator": 0,
+        "denominator": 0,
+        "rate": null
+      },
+      "harmfulPattern": false,
+      "diversityEvidence": "insufficient"
+    },
+    {
+      "group": "cold_email/role_fit_summary",
+      "count": 1,
+      "opening": {
+        "numerator": 1,
+        "denominator": 1,
+        "rate": 1
+      },
+      "cta": {
+        "numerator": 1,
+        "denominator": 1,
+        "rate": 1
+      },
+      "pattern": {
+        "numerator": 0,
+        "denominator": 0,
+        "rate": null
+      },
+      "harmfulPattern": false,
+      "diversityEvidence": "insufficient"
+    },
+    {
+      "group": "linkedin_connection/initial_outreach",
+      "count": 2,
+      "opening": {
+        "numerator": 2,
+        "denominator": 2,
+        "rate": 1
+      },
+      "cta": {
+        "numerator": 2,
+        "denominator": 2,
+        "rate": 1
+      },
+      "pattern": {
+        "numerator": 0,
+        "denominator": 0,
+        "rate": null
+      },
+      "harmfulPattern": false,
+      "diversityEvidence": "insufficient"
+    },
+    {
+      "group": "linkedin_inmail/clarification",
+      "count": 1,
+      "opening": {
+        "numerator": 1,
+        "denominator": 1,
+        "rate": 1
+      },
+      "cta": {
+        "numerator": 1,
+        "denominator": 1,
+        "rate": 1
+      },
+      "pattern": {
+        "numerator": 0,
+        "denominator": 0,
+        "rate": null
+      },
+      "harmfulPattern": false,
+      "diversityEvidence": "insufficient"
+    },
+    {
+      "group": "linkedin_inmail/follow_up",
+      "count": 1,
+      "opening": {
+        "numerator": 1,
+        "denominator": 1,
+        "rate": 1
+      },
+      "cta": {
+        "numerator": 1,
+        "denominator": 1,
+        "rate": 1
+      },
+      "pattern": {
+        "numerator": 0,
+        "denominator": 0,
+        "rate": null
+      },
+      "harmfulPattern": false,
+      "diversityEvidence": "insufficient"
+    },
+    {
+      "group": "linkedin_inmail/founder_ceo_outreach",
+      "count": 1,
+      "opening": {
+        "numerator": 1,
+        "denominator": 1,
+        "rate": 1
+      },
+      "cta": {
+        "numerator": 1,
+        "denominator": 1,
+        "rate": 1
+      },
+      "pattern": {
+        "numerator": 1,
+        "denominator": 1,
+        "rate": 1
+      },
+      "harmfulPattern": false,
+      "diversityEvidence": "insufficient"
+    },
+    {
+      "group": "linkedin_inmail/initial_outreach",
+      "count": 3,
+      "opening": {
+        "numerator": 3,
+        "denominator": 3,
+        "rate": 1
+      },
+      "cta": {
+        "numerator": 3,
+        "denominator": 3,
+        "rate": 1
+      },
+      "pattern": {
+        "numerator": 3,
+        "denominator": 3,
+        "rate": 1
+      },
+      "harmfulPattern": true,
+      "diversityEvidence": "measured"
+    },
+    {
+      "group": "linkedin_inmail/referral_request",
+      "count": 1,
+      "opening": {
+        "numerator": 1,
+        "denominator": 1,
+        "rate": 1
+      },
+      "cta": {
+        "numerator": 1,
+        "denominator": 1,
+        "rate": 1
+      },
+      "pattern": {
+        "numerator": 0,
+        "denominator": 0,
+        "rate": null
+      },
+      "harmfulPattern": false,
+      "diversityEvidence": "insufficient"
+    },
+    {
+      "group": "linkedin_inmail/role_fit_summary",
+      "count": 1,
+      "opening": {
+        "numerator": 1,
+        "denominator": 1,
+        "rate": 1
+      },
+      "cta": {
+        "numerator": 1,
+        "denominator": 1,
+        "rate": 1
+      },
+      "pattern": {
+        "numerator": 0,
+        "denominator": 0,
+        "rate": null
+      },
+      "harmfulPattern": false,
+      "diversityEvidence": "insufficient"
+    },
+    {
+      "group": "yc_application/initial_outreach",
+      "count": 5,
+      "opening": {
+        "numerator": 5,
+        "denominator": 5,
+        "rate": 1
+      },
+      "cta": {
+        "numerator": 0,
+        "denominator": 0,
+        "rate": null
+      },
+      "pattern": {
+        "numerator": 5,
+        "denominator": 5,
+        "rate": 1
+      },
+      "harmfulPattern": true,
+      "diversityEvidence": "measured"
+    }
+  ],
+  "activation": "not_evaluated_offline_baseline"
+}

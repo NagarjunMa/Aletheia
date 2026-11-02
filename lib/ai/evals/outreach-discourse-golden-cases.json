@@ -1,0 +1,1084 @@
+[
+  {
+    "id": "synthetic-connection-candidate",
+    "category": "linkedin_connection",
+    "emailMode": "initial_outreach",
+    "body": "Hi there, I built a fictional orchard sensor exercise. I'm interested in Applied AI and your Engineering Manager role at Example. Open to connecting?",
+    "sources": [
+      {
+        "id": "synthetic-short",
+        "scope": "candidate",
+        "kind": "action",
+        "content": "I built a fictional orchard sensor exercise.",
+        "rootId": "synthetic-root"
+      },
+      {
+        "id": "synthetic-role",
+        "scope": "target",
+        "kind": "target_observation",
+        "content": "Engineering Manager at Example | Applied AI",
+        "rewrite": "linkedin_profile_interest"
+      }
+    ],
+    "claims": [
+      {
+        "text": "I built a fictional orchard sensor exercise.",
+        "kind": "action",
+        "source_id": "synthetic-short",
+        "supporting_excerpt": "I built a fictional orchard sensor exercise."
+      },
+      {
+        "text": "I'm interested in Applied AI and your Engineering Manager role at Example.",
+        "kind": "target_observation",
+        "source_id": "synthetic-role",
+        "supporting_excerpt": "Engineering Manager at Example | Applied AI"
+      }
+    ],
+    "excludedClaims": [],
+    "targetRequired": true,
+    "expectedViolations": []
+  },
+  {
+    "id": "synthetic-connection-target-only",
+    "category": "linkedin_connection",
+    "emailMode": "initial_outreach",
+    "body": "Hi there, I'm interested in Applied AI and your Engineering Manager role at Example. Open to connecting?",
+    "sources": [
+      {
+        "id": "synthetic-role",
+        "scope": "target",
+        "kind": "target_observation",
+        "content": "Engineering Manager at Example | Applied AI",
+        "rewrite": "linkedin_profile_interest"
+      }
+    ],
+    "claims": [
+      {
+        "text": "I'm interested in Applied AI and your Engineering Manager role at Example.",
+        "kind": "target_observation",
+        "source_id": "synthetic-role",
+        "supporting_excerpt": "Engineering Manager at Example | Applied AI"
+      }
+    ],
+    "excludedClaims": [],
+    "targetRequired": true,
+    "expectedViolations": []
+  },
+  {
+    "id": "synthetic-email-initial-outreach",
+    "category": "cold_email",
+    "emailMode": "initial_outreach",
+    "body": "Hi there,\n\nThe supplied context says: \"The Example Research team is reviewing fictional orchard exercises.\" I designed a fictional orchard sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.\n\nA quick look at my background:\nI wrote a fictional orchard review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting.\n\nThank you. Would you be open to a brief conversation?\n\nBest,\nSynthetic",
+    "sources": [
+      {
+        "id": "synthetic-action",
+        "scope": "candidate",
+        "kind": "action",
+        "content": "I designed a fictional orchard sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.",
+        "rootId": "synthetic-root"
+      },
+      {
+        "id": "synthetic-outcome",
+        "scope": "candidate",
+        "kind": "outcome",
+        "content": "I wrote a fictional orchard review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting.",
+        "rootId": "synthetic-root"
+      },
+      {
+        "id": "synthetic-target",
+        "scope": "target",
+        "kind": "target_observation",
+        "content": "The Example Research team is reviewing fictional orchard exercises."
+      }
+    ],
+    "claims": [
+      {
+        "text": "The supplied context says: \"The Example Research team is reviewing fictional orchard exercises.\"",
+        "kind": "target_observation",
+        "source_id": "synthetic-target",
+        "supporting_excerpt": "The Example Research team is reviewing fictional orchard exercises."
+      },
+      {
+        "text": "I designed a fictional orchard sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.",
+        "kind": "action",
+        "source_id": "synthetic-action",
+        "supporting_excerpt": "I designed a fictional orchard sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production."
+      },
+      {
+        "text": "I wrote a fictional orchard review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting.",
+        "kind": "outcome",
+        "source_id": "synthetic-outcome",
+        "supporting_excerpt": "I wrote a fictional orchard review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting."
+      }
+    ],
+    "excludedClaims": [],
+    "targetRequired": true,
+    "expectedViolations": [],
+    "subject": "A brief introduction",
+    "identity": {
+      "fullName": "Synthetic",
+      "linkedinUrl": ""
+    }
+  },
+  {
+    "id": "synthetic-email-founder-ceo-outreach",
+    "category": "cold_email",
+    "emailMode": "founder_ceo_outreach",
+    "body": "Hi there,\n\nThe supplied context says: \"The Example Research team is reviewing fictional orchard exercises.\" I designed a fictional orchard sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.\n\nA quick look at my background:\nI wrote a fictional orchard review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting.\n\nThank you. Would you be open to a brief conversation?\n\nBest,\nSynthetic",
+    "sources": [
+      {
+        "id": "synthetic-action",
+        "scope": "candidate",
+        "kind": "action",
+        "content": "I designed a fictional orchard sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.",
+        "rootId": "synthetic-root"
+      },
+      {
+        "id": "synthetic-outcome",
+        "scope": "candidate",
+        "kind": "outcome",
+        "content": "I wrote a fictional orchard review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting.",
+        "rootId": "synthetic-root"
+      },
+      {
+        "id": "synthetic-target",
+        "scope": "target",
+        "kind": "target_observation",
+        "content": "The Example Research team is reviewing fictional orchard exercises."
+      }
+    ],
+    "claims": [
+      {
+        "text": "The supplied context says: \"The Example Research team is reviewing fictional orchard exercises.\"",
+        "kind": "target_observation",
+        "source_id": "synthetic-target",
+        "supporting_excerpt": "The Example Research team is reviewing fictional orchard exercises."
+      },
+      {
+        "text": "I designed a fictional orchard sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.",
+        "kind": "action",
+        "source_id": "synthetic-action",
+        "supporting_excerpt": "I designed a fictional orchard sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production."
+      },
+      {
+        "text": "I wrote a fictional orchard review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting.",
+        "kind": "outcome",
+        "source_id": "synthetic-outcome",
+        "supporting_excerpt": "I wrote a fictional orchard review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting."
+      }
+    ],
+    "excludedClaims": [],
+    "targetRequired": true,
+    "expectedViolations": [],
+    "subject": "A brief introduction",
+    "identity": {
+      "fullName": "Synthetic",
+      "linkedinUrl": ""
+    }
+  },
+  {
+    "id": "synthetic-email-follow-up",
+    "category": "cold_email",
+    "emailMode": "follow_up",
+    "body": "Hi there,\n\nThe supplied context says: \"The Example Research team is reviewing fictional orchard exercises.\" I designed a fictional orchard sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.\n\nThank you. Would you be open to a brief conversation?\n\nBest,\nSynthetic",
+    "sources": [
+      {
+        "id": "synthetic-action",
+        "scope": "candidate",
+        "kind": "action",
+        "content": "I designed a fictional orchard sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.",
+        "rootId": "synthetic-root"
+      },
+      {
+        "id": "synthetic-outcome",
+        "scope": "candidate",
+        "kind": "outcome",
+        "content": "I wrote a fictional orchard review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting.",
+        "rootId": "synthetic-root"
+      },
+      {
+        "id": "synthetic-target",
+        "scope": "target",
+        "kind": "target_observation",
+        "content": "The Example Research team is reviewing fictional orchard exercises."
+      }
+    ],
+    "claims": [
+      {
+        "text": "The supplied context says: \"The Example Research team is reviewing fictional orchard exercises.\"",
+        "kind": "target_observation",
+        "source_id": "synthetic-target",
+        "supporting_excerpt": "The Example Research team is reviewing fictional orchard exercises."
+      },
+      {
+        "text": "I designed a fictional orchard sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.",
+        "kind": "action",
+        "source_id": "synthetic-action",
+        "supporting_excerpt": "I designed a fictional orchard sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production."
+      }
+    ],
+    "excludedClaims": [],
+    "targetRequired": true,
+    "expectedViolations": [],
+    "subject": "A brief introduction",
+    "identity": {
+      "fullName": "Synthetic",
+      "linkedinUrl": ""
+    }
+  },
+  {
+    "id": "synthetic-email-clarification",
+    "category": "cold_email",
+    "emailMode": "clarification",
+    "body": "Hi there,\n\nThe supplied context says: \"The Example Research team is reviewing fictional orchard exercises.\" I designed a fictional orchard sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.\n\nThank you. Would you be open to a brief conversation?\n\nBest,\nSynthetic",
+    "sources": [
+      {
+        "id": "synthetic-action",
+        "scope": "candidate",
+        "kind": "action",
+        "content": "I designed a fictional orchard sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.",
+        "rootId": "synthetic-root"
+      },
+      {
+        "id": "synthetic-outcome",
+        "scope": "candidate",
+        "kind": "outcome",
+        "content": "I wrote a fictional orchard review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting.",
+        "rootId": "synthetic-root"
+      },
+      {
+        "id": "synthetic-target",
+        "scope": "target",
+        "kind": "target_observation",
+        "content": "The Example Research team is reviewing fictional orchard exercises."
+      }
+    ],
+    "claims": [
+      {
+        "text": "The supplied context says: \"The Example Research team is reviewing fictional orchard exercises.\"",
+        "kind": "target_observation",
+        "source_id": "synthetic-target",
+        "supporting_excerpt": "The Example Research team is reviewing fictional orchard exercises."
+      },
+      {
+        "text": "I designed a fictional orchard sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.",
+        "kind": "action",
+        "source_id": "synthetic-action",
+        "supporting_excerpt": "I designed a fictional orchard sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production."
+      }
+    ],
+    "excludedClaims": [],
+    "targetRequired": true,
+    "expectedViolations": [],
+    "subject": "A brief introduction",
+    "identity": {
+      "fullName": "Synthetic",
+      "linkedinUrl": ""
+    }
+  },
+  {
+    "id": "synthetic-email-role-fit-summary",
+    "category": "cold_email",
+    "emailMode": "role_fit_summary",
+    "body": "Hi there,\n\nThe supplied context says: \"The Example Research team is reviewing fictional orchard exercises.\" I designed a fictional orchard sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.\n\nThank you. Would you be open to a brief conversation?\n\nBest,\nSynthetic",
+    "sources": [
+      {
+        "id": "synthetic-action",
+        "scope": "candidate",
+        "kind": "action",
+        "content": "I designed a fictional orchard sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.",
+        "rootId": "synthetic-root"
+      },
+      {
+        "id": "synthetic-outcome",
+        "scope": "candidate",
+        "kind": "outcome",
+        "content": "I wrote a fictional orchard review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting.",
+        "rootId": "synthetic-root"
+      },
+      {
+        "id": "synthetic-target",
+        "scope": "target",
+        "kind": "target_observation",
+        "content": "The Example Research team is reviewing fictional orchard exercises."
+      }
+    ],
+    "claims": [
+      {
+        "text": "The supplied context says: \"The Example Research team is reviewing fictional orchard exercises.\"",
+        "kind": "target_observation",
+        "source_id": "synthetic-target",
+        "supporting_excerpt": "The Example Research team is reviewing fictional orchard exercises."
+      },
+      {
+        "text": "I designed a fictional orchard sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.",
+        "kind": "action",
+        "source_id": "synthetic-action",
+        "supporting_excerpt": "I designed a fictional orchard sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production."
+      }
+    ],
+    "excludedClaims": [],
+    "targetRequired": true,
+    "expectedViolations": [],
+    "subject": "A brief introduction",
+    "identity": {
+      "fullName": "Synthetic",
+      "linkedinUrl": ""
+    }
+  },
+  {
+    "id": "synthetic-email-referral-request",
+    "category": "cold_email",
+    "emailMode": "referral_request",
+    "body": "Hi there,\n\nThe supplied context says: \"The Example Research team is reviewing fictional orchard exercises.\" I designed a fictional orchard sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.\n\nThank you. Would you be open to a brief conversation?\n\nBest,\nSynthetic",
+    "sources": [
+      {
+        "id": "synthetic-action",
+        "scope": "candidate",
+        "kind": "action",
+        "content": "I designed a fictional orchard sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.",
+        "rootId": "synthetic-root"
+      },
+      {
+        "id": "synthetic-outcome",
+        "scope": "candidate",
+        "kind": "outcome",
+        "content": "I wrote a fictional orchard review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting.",
+        "rootId": "synthetic-root"
+      },
+      {
+        "id": "synthetic-target",
+        "scope": "target",
+        "kind": "target_observation",
+        "content": "The Example Research team is reviewing fictional orchard exercises."
+      }
+    ],
+    "claims": [
+      {
+        "text": "The supplied context says: \"The Example Research team is reviewing fictional orchard exercises.\"",
+        "kind": "target_observation",
+        "source_id": "synthetic-target",
+        "supporting_excerpt": "The Example Research team is reviewing fictional orchard exercises."
+      },
+      {
+        "text": "I designed a fictional orchard sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.",
+        "kind": "action",
+        "source_id": "synthetic-action",
+        "supporting_excerpt": "I designed a fictional orchard sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production."
+      }
+    ],
+    "excludedClaims": [],
+    "targetRequired": true,
+    "expectedViolations": [],
+    "subject": "A brief introduction",
+    "identity": {
+      "fullName": "Synthetic",
+      "linkedinUrl": ""
+    }
+  },
+  {
+    "id": "synthetic-email-initial-library",
+    "category": "cold_email",
+    "emailMode": "initial_outreach",
+    "body": "Hi there,\n\nThe supplied context says: \"The Example Research team is reviewing fictional library exercises.\" I designed a fictional library sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.\n\nA quick look at my background:\nI wrote a fictional library review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting.\n\nThank you. Would you be open to a brief conversation?\n\nBest,\nSynthetic",
+    "sources": [
+      {
+        "id": "synthetic-action",
+        "scope": "candidate",
+        "kind": "action",
+        "content": "I designed a fictional library sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.",
+        "rootId": "synthetic-root"
+      },
+      {
+        "id": "synthetic-outcome",
+        "scope": "candidate",
+        "kind": "outcome",
+        "content": "I wrote a fictional library review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting.",
+        "rootId": "synthetic-root"
+      },
+      {
+        "id": "synthetic-target",
+        "scope": "target",
+        "kind": "target_observation",
+        "content": "The Example Research team is reviewing fictional library exercises."
+      }
+    ],
+    "claims": [
+      {
+        "text": "The supplied context says: \"The Example Research team is reviewing fictional library exercises.\"",
+        "kind": "target_observation",
+        "source_id": "synthetic-target",
+        "supporting_excerpt": "The Example Research team is reviewing fictional library exercises."
+      },
+      {
+        "text": "I designed a fictional library sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.",
+        "kind": "action",
+        "source_id": "synthetic-action",
+        "supporting_excerpt": "I designed a fictional library sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production."
+      },
+      {
+        "text": "I wrote a fictional library review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting.",
+        "kind": "outcome",
+        "source_id": "synthetic-outcome",
+        "supporting_excerpt": "I wrote a fictional library review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting."
+      }
+    ],
+    "excludedClaims": [],
+    "targetRequired": true,
+    "expectedViolations": [],
+    "subject": "A brief introduction",
+    "identity": {
+      "fullName": "Synthetic",
+      "linkedinUrl": ""
+    }
+  },
+  {
+    "id": "synthetic-email-initial-bridge",
+    "category": "cold_email",
+    "emailMode": "initial_outreach",
+    "body": "Hi there,\n\nThe supplied context says: \"The Example Research team is reviewing fictional bridge exercises.\" I designed a fictional bridge sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.\n\nA quick look at my background:\nI wrote a fictional bridge review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting.\n\nThank you. Would you be open to a brief conversation?\n\nBest,\nSynthetic",
+    "sources": [
+      {
+        "id": "synthetic-action",
+        "scope": "candidate",
+        "kind": "action",
+        "content": "I designed a fictional bridge sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.",
+        "rootId": "synthetic-root"
+      },
+      {
+        "id": "synthetic-outcome",
+        "scope": "candidate",
+        "kind": "outcome",
+        "content": "I wrote a fictional bridge review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting.",
+        "rootId": "synthetic-root"
+      },
+      {
+        "id": "synthetic-target",
+        "scope": "target",
+        "kind": "target_observation",
+        "content": "The Example Research team is reviewing fictional bridge exercises."
+      }
+    ],
+    "claims": [
+      {
+        "text": "The supplied context says: \"The Example Research team is reviewing fictional bridge exercises.\"",
+        "kind": "target_observation",
+        "source_id": "synthetic-target",
+        "supporting_excerpt": "The Example Research team is reviewing fictional bridge exercises."
+      },
+      {
+        "text": "I designed a fictional bridge sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.",
+        "kind": "action",
+        "source_id": "synthetic-action",
+        "supporting_excerpt": "I designed a fictional bridge sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production."
+      },
+      {
+        "text": "I wrote a fictional bridge review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting.",
+        "kind": "outcome",
+        "source_id": "synthetic-outcome",
+        "supporting_excerpt": "I wrote a fictional bridge review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting."
+      }
+    ],
+    "excludedClaims": [],
+    "targetRequired": true,
+    "expectedViolations": [],
+    "subject": "A brief introduction",
+    "identity": {
+      "fullName": "Synthetic",
+      "linkedinUrl": ""
+    }
+  },
+  {
+    "id": "synthetic-inmail-initial-outreach",
+    "category": "linkedin_inmail",
+    "emailMode": "initial_outreach",
+    "body": "Hi there,\n\nThe supplied context says: \"The Example Research team is reviewing fictional orchard exercises.\"\n\nI designed a fictional orchard sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.\n\nI wrote a fictional orchard review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting.\n\nOpen to a brief chat?",
+    "sources": [
+      {
+        "id": "synthetic-action",
+        "scope": "candidate",
+        "kind": "action",
+        "content": "I designed a fictional orchard sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.",
+        "rootId": "synthetic-root"
+      },
+      {
+        "id": "synthetic-outcome",
+        "scope": "candidate",
+        "kind": "outcome",
+        "content": "I wrote a fictional orchard review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting.",
+        "rootId": "synthetic-root"
+      },
+      {
+        "id": "synthetic-target",
+        "scope": "target",
+        "kind": "target_observation",
+        "content": "The Example Research team is reviewing fictional orchard exercises."
+      }
+    ],
+    "claims": [
+      {
+        "text": "The supplied context says: \"The Example Research team is reviewing fictional orchard exercises.\"",
+        "kind": "target_observation",
+        "source_id": "synthetic-target",
+        "supporting_excerpt": "The Example Research team is reviewing fictional orchard exercises."
+      },
+      {
+        "text": "I designed a fictional orchard sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.",
+        "kind": "action",
+        "source_id": "synthetic-action",
+        "supporting_excerpt": "I designed a fictional orchard sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production."
+      },
+      {
+        "text": "I wrote a fictional orchard review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting.",
+        "kind": "outcome",
+        "source_id": "synthetic-outcome",
+        "supporting_excerpt": "I wrote a fictional orchard review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting."
+      }
+    ],
+    "excludedClaims": [],
+    "targetRequired": true,
+    "expectedViolations": [],
+    "subject": "A brief introduction"
+  },
+  {
+    "id": "synthetic-inmail-founder-ceo-outreach",
+    "category": "linkedin_inmail",
+    "emailMode": "founder_ceo_outreach",
+    "body": "Hi there,\n\nThe supplied context says: \"The Example Research team is reviewing fictional orchard exercises.\"\n\nI designed a fictional orchard sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.\n\nI wrote a fictional orchard review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting.\n\nOpen to a brief chat?",
+    "sources": [
+      {
+        "id": "synthetic-action",
+        "scope": "candidate",
+        "kind": "action",
+        "content": "I designed a fictional orchard sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.",
+        "rootId": "synthetic-root"
+      },
+      {
+        "id": "synthetic-outcome",
+        "scope": "candidate",
+        "kind": "outcome",
+        "content": "I wrote a fictional orchard review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting.",
+        "rootId": "synthetic-root"
+      },
+      {
+        "id": "synthetic-target",
+        "scope": "target",
+        "kind": "target_observation",
+        "content": "The Example Research team is reviewing fictional orchard exercises."
+      }
+    ],
+    "claims": [
+      {
+        "text": "The supplied context says: \"The Example Research team is reviewing fictional orchard exercises.\"",
+        "kind": "target_observation",
+        "source_id": "synthetic-target",
+        "supporting_excerpt": "The Example Research team is reviewing fictional orchard exercises."
+      },
+      {
+        "text": "I designed a fictional orchard sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.",
+        "kind": "action",
+        "source_id": "synthetic-action",
+        "supporting_excerpt": "I designed a fictional orchard sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production."
+      },
+      {
+        "text": "I wrote a fictional orchard review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting.",
+        "kind": "outcome",
+        "source_id": "synthetic-outcome",
+        "supporting_excerpt": "I wrote a fictional orchard review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting."
+      }
+    ],
+    "excludedClaims": [],
+    "targetRequired": true,
+    "expectedViolations": [],
+    "subject": "A brief introduction"
+  },
+  {
+    "id": "synthetic-inmail-follow-up",
+    "category": "linkedin_inmail",
+    "emailMode": "follow_up",
+    "body": "Hi there,\n\nThe supplied context says: \"The Example Research team is reviewing fictional orchard exercises.\"\n\nI designed a fictional orchard sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.\n\nOpen to a brief chat?",
+    "sources": [
+      {
+        "id": "synthetic-action",
+        "scope": "candidate",
+        "kind": "action",
+        "content": "I designed a fictional orchard sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.",
+        "rootId": "synthetic-root"
+      },
+      {
+        "id": "synthetic-outcome",
+        "scope": "candidate",
+        "kind": "outcome",
+        "content": "I wrote a fictional orchard review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting.",
+        "rootId": "synthetic-root"
+      },
+      {
+        "id": "synthetic-target",
+        "scope": "target",
+        "kind": "target_observation",
+        "content": "The Example Research team is reviewing fictional orchard exercises."
+      }
+    ],
+    "claims": [
+      {
+        "text": "The supplied context says: \"The Example Research team is reviewing fictional orchard exercises.\"",
+        "kind": "target_observation",
+        "source_id": "synthetic-target",
+        "supporting_excerpt": "The Example Research team is reviewing fictional orchard exercises."
+      },
+      {
+        "text": "I designed a fictional orchard sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.",
+        "kind": "action",
+        "source_id": "synthetic-action",
+        "supporting_excerpt": "I designed a fictional orchard sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production."
+      }
+    ],
+    "excludedClaims": [],
+    "targetRequired": true,
+    "expectedViolations": [],
+    "subject": "A brief introduction"
+  },
+  {
+    "id": "synthetic-inmail-clarification",
+    "category": "linkedin_inmail",
+    "emailMode": "clarification",
+    "body": "Hi there,\n\nThe supplied context says: \"The Example Research team is reviewing fictional orchard exercises.\"\n\nI designed a fictional orchard sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.\n\nOpen to a brief chat?",
+    "sources": [
+      {
+        "id": "synthetic-action",
+        "scope": "candidate",
+        "kind": "action",
+        "content": "I designed a fictional orchard sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.",
+        "rootId": "synthetic-root"
+      },
+      {
+        "id": "synthetic-outcome",
+        "scope": "candidate",
+        "kind": "outcome",
+        "content": "I wrote a fictional orchard review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting.",
+        "rootId": "synthetic-root"
+      },
+      {
+        "id": "synthetic-target",
+        "scope": "target",
+        "kind": "target_observation",
+        "content": "The Example Research team is reviewing fictional orchard exercises."
+      }
+    ],
+    "claims": [
+      {
+        "text": "The supplied context says: \"The Example Research team is reviewing fictional orchard exercises.\"",
+        "kind": "target_observation",
+        "source_id": "synthetic-target",
+        "supporting_excerpt": "The Example Research team is reviewing fictional orchard exercises."
+      },
+      {
+        "text": "I designed a fictional orchard sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.",
+        "kind": "action",
+        "source_id": "synthetic-action",
+        "supporting_excerpt": "I designed a fictional orchard sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production."
+      }
+    ],
+    "excludedClaims": [],
+    "targetRequired": true,
+    "expectedViolations": [],
+    "subject": "A brief introduction"
+  },
+  {
+    "id": "synthetic-inmail-role-fit-summary",
+    "category": "linkedin_inmail",
+    "emailMode": "role_fit_summary",
+    "body": "Hi there,\n\nThe supplied context says: \"The Example Research team is reviewing fictional orchard exercises.\"\n\nI designed a fictional orchard sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.\n\nOpen to a brief chat?",
+    "sources": [
+      {
+        "id": "synthetic-action",
+        "scope": "candidate",
+        "kind": "action",
+        "content": "I designed a fictional orchard sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.",
+        "rootId": "synthetic-root"
+      },
+      {
+        "id": "synthetic-outcome",
+        "scope": "candidate",
+        "kind": "outcome",
+        "content": "I wrote a fictional orchard review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting.",
+        "rootId": "synthetic-root"
+      },
+      {
+        "id": "synthetic-target",
+        "scope": "target",
+        "kind": "target_observation",
+        "content": "The Example Research team is reviewing fictional orchard exercises."
+      }
+    ],
+    "claims": [
+      {
+        "text": "The supplied context says: \"The Example Research team is reviewing fictional orchard exercises.\"",
+        "kind": "target_observation",
+        "source_id": "synthetic-target",
+        "supporting_excerpt": "The Example Research team is reviewing fictional orchard exercises."
+      },
+      {
+        "text": "I designed a fictional orchard sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.",
+        "kind": "action",
+        "source_id": "synthetic-action",
+        "supporting_excerpt": "I designed a fictional orchard sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production."
+      }
+    ],
+    "excludedClaims": [],
+    "targetRequired": true,
+    "expectedViolations": [],
+    "subject": "A brief introduction"
+  },
+  {
+    "id": "synthetic-inmail-referral-request",
+    "category": "linkedin_inmail",
+    "emailMode": "referral_request",
+    "body": "Hi there,\n\nThe supplied context says: \"The Example Research team is reviewing fictional orchard exercises.\"\n\nI designed a fictional orchard sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.\n\nI wrote a fictional orchard review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting.\n\nOpen to a brief chat?",
+    "sources": [
+      {
+        "id": "synthetic-action",
+        "scope": "candidate",
+        "kind": "action",
+        "content": "I designed a fictional orchard sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.",
+        "rootId": "synthetic-root"
+      },
+      {
+        "id": "synthetic-outcome",
+        "scope": "candidate",
+        "kind": "outcome",
+        "content": "I wrote a fictional orchard review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting.",
+        "rootId": "synthetic-root"
+      },
+      {
+        "id": "synthetic-target",
+        "scope": "target",
+        "kind": "target_observation",
+        "content": "The Example Research team is reviewing fictional orchard exercises."
+      }
+    ],
+    "claims": [
+      {
+        "text": "The supplied context says: \"The Example Research team is reviewing fictional orchard exercises.\"",
+        "kind": "target_observation",
+        "source_id": "synthetic-target",
+        "supporting_excerpt": "The Example Research team is reviewing fictional orchard exercises."
+      },
+      {
+        "text": "I designed a fictional orchard sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.",
+        "kind": "action",
+        "source_id": "synthetic-action",
+        "supporting_excerpt": "I designed a fictional orchard sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production."
+      },
+      {
+        "text": "I wrote a fictional orchard review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting.",
+        "kind": "outcome",
+        "source_id": "synthetic-outcome",
+        "supporting_excerpt": "I wrote a fictional orchard review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting."
+      }
+    ],
+    "excludedClaims": [],
+    "targetRequired": true,
+    "expectedViolations": [],
+    "subject": "A brief introduction"
+  },
+  {
+    "id": "synthetic-inmail-initial-bridge",
+    "category": "linkedin_inmail",
+    "emailMode": "initial_outreach",
+    "body": "Hi there,\n\nThe supplied context says: \"The Example Research team is reviewing fictional bridge exercises.\"\n\nI designed a fictional bridge sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.\n\nI wrote a fictional bridge review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting.\n\nOpen to a brief chat?",
+    "sources": [
+      {
+        "id": "synthetic-action",
+        "scope": "candidate",
+        "kind": "action",
+        "content": "I designed a fictional bridge sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.",
+        "rootId": "synthetic-root"
+      },
+      {
+        "id": "synthetic-outcome",
+        "scope": "candidate",
+        "kind": "outcome",
+        "content": "I wrote a fictional bridge review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting.",
+        "rootId": "synthetic-root"
+      },
+      {
+        "id": "synthetic-target",
+        "scope": "target",
+        "kind": "target_observation",
+        "content": "The Example Research team is reviewing fictional bridge exercises."
+      }
+    ],
+    "claims": [
+      {
+        "text": "The supplied context says: \"The Example Research team is reviewing fictional bridge exercises.\"",
+        "kind": "target_observation",
+        "source_id": "synthetic-target",
+        "supporting_excerpt": "The Example Research team is reviewing fictional bridge exercises."
+      },
+      {
+        "text": "I designed a fictional bridge sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.",
+        "kind": "action",
+        "source_id": "synthetic-action",
+        "supporting_excerpt": "I designed a fictional bridge sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production."
+      },
+      {
+        "text": "I wrote a fictional bridge review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting.",
+        "kind": "outcome",
+        "source_id": "synthetic-outcome",
+        "supporting_excerpt": "I wrote a fictional bridge review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting."
+      }
+    ],
+    "excludedClaims": [],
+    "targetRequired": true,
+    "expectedViolations": [],
+    "subject": "A brief introduction"
+  },
+  {
+    "id": "synthetic-inmail-initial-library",
+    "category": "linkedin_inmail",
+    "emailMode": "initial_outreach",
+    "body": "Hi there,\n\nThe supplied context says: \"The Example Research team is reviewing fictional library exercises.\"\n\nI designed a fictional library sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.\n\nI wrote a fictional library review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting.\n\nOpen to a brief chat?",
+    "sources": [
+      {
+        "id": "synthetic-action",
+        "scope": "candidate",
+        "kind": "action",
+        "content": "I designed a fictional library sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.",
+        "rootId": "synthetic-root"
+      },
+      {
+        "id": "synthetic-outcome",
+        "scope": "candidate",
+        "kind": "outcome",
+        "content": "I wrote a fictional library review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting.",
+        "rootId": "synthetic-root"
+      },
+      {
+        "id": "synthetic-target",
+        "scope": "target",
+        "kind": "target_observation",
+        "content": "The Example Research team is reviewing fictional library exercises."
+      }
+    ],
+    "claims": [
+      {
+        "text": "The supplied context says: \"The Example Research team is reviewing fictional library exercises.\"",
+        "kind": "target_observation",
+        "source_id": "synthetic-target",
+        "supporting_excerpt": "The Example Research team is reviewing fictional library exercises."
+      },
+      {
+        "text": "I designed a fictional library sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production.",
+        "kind": "action",
+        "source_id": "synthetic-action",
+        "supporting_excerpt": "I designed a fictional library sensor exercise using invented measurements, compared the expected warnings with the observed decisions, and documented the disagreements for a local classroom review, without deploying the exercise to real farms or claiming that its results measured customer outcomes, commercial reliability, or any actual changes in crop production."
+      },
+      {
+        "text": "I wrote a fictional library review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting.",
+        "kind": "outcome",
+        "source_id": "synthetic-outcome",
+        "supporting_excerpt": "I wrote a fictional library review guide describing the invented measurements, the expected warnings, and the unresolved disagreements, so classmates could repeat the exercise and discuss its limits, without claiming that the guide certified a commercial product, replaced professional judgment, or demonstrated reliable performance outside the classroom setting."
+      }
+    ],
+    "excludedClaims": [],
+    "targetRequired": true,
+    "expectedViolations": [],
+    "subject": "A brief introduction"
+  },
+  {
+    "id": "synthetic-control-generic-praise",
+    "category": "linkedin_connection",
+    "emailMode": "initial_outreach",
+    "body": "Hi there, I built a fictional orchard sensor exercise. I'm interested in Applied AI and your Engineering Manager role at Example. Your revolutionary work changed the industry. Open to connecting?",
+    "sources": [
+      {
+        "id": "synthetic-short",
+        "scope": "candidate",
+        "kind": "action",
+        "content": "I built a fictional orchard sensor exercise.",
+        "rootId": "synthetic-root"
+      },
+      {
+        "id": "synthetic-role",
+        "scope": "target",
+        "kind": "target_observation",
+        "content": "Engineering Manager at Example | Applied AI",
+        "rewrite": "linkedin_profile_interest"
+      }
+    ],
+    "claims": [
+      {
+        "text": "I built a fictional orchard sensor exercise.",
+        "kind": "action",
+        "source_id": "synthetic-short",
+        "supporting_excerpt": "I built a fictional orchard sensor exercise."
+      },
+      {
+        "text": "I'm interested in Applied AI and your Engineering Manager role at Example.",
+        "kind": "target_observation",
+        "source_id": "synthetic-role",
+        "supporting_excerpt": "Engineering Manager at Example | Applied AI"
+      }
+    ],
+    "excludedClaims": [],
+    "targetRequired": true,
+    "expectedViolations": ["factual_coverage", "channel_format"]
+  },
+  {
+    "id": "synthetic-control-hidden-assertion",
+    "category": "linkedin_connection",
+    "emailMode": "initial_outreach",
+    "body": "Hi there, I built a fictional orchard sensor exercise. I'm interested in Applied AI and your Engineering Manager role at Example. I increased revenue by 70%. Open to connecting?",
+    "sources": [
+      {
+        "id": "synthetic-short",
+        "scope": "candidate",
+        "kind": "action",
+        "content": "I built a fictional orchard sensor exercise.",
+        "rootId": "synthetic-root"
+      },
+      {
+        "id": "synthetic-role",
+        "scope": "target",
+        "kind": "target_observation",
+        "content": "Engineering Manager at Example | Applied AI",
+        "rewrite": "linkedin_profile_interest"
+      }
+    ],
+    "claims": [
+      {
+        "text": "I built a fictional orchard sensor exercise.",
+        "kind": "action",
+        "source_id": "synthetic-short",
+        "supporting_excerpt": "I built a fictional orchard sensor exercise."
+      },
+      {
+        "text": "I'm interested in Applied AI and your Engineering Manager role at Example.",
+        "kind": "target_observation",
+        "source_id": "synthetic-role",
+        "supporting_excerpt": "Engineering Manager at Example | Applied AI"
+      }
+    ],
+    "excludedClaims": [],
+    "targetRequired": true,
+    "expectedViolations": ["factual_coverage", "channel_format"]
+  },
+  {
+    "id": "synthetic-control-explanation",
+    "category": "linkedin_connection",
+    "emailMode": "initial_outreach",
+    "body": "Hi there, I built a fictional orchard sensor exercise. I'm interested in Applied AI and your Engineering Manager role at Example. I'd welcome a conversation. I'd welcome a conversation. I'd welcome a conversation. I'd welcome a conversation. I'd welcome a conversation. Open to connecting?",
+    "sources": [
+      {
+        "id": "synthetic-short",
+        "scope": "candidate",
+        "kind": "action",
+        "content": "I built a fictional orchard sensor exercise.",
+        "rootId": "synthetic-root"
+      },
+      {
+        "id": "synthetic-role",
+        "scope": "target",
+        "kind": "target_observation",
+        "content": "Engineering Manager at Example | Applied AI",
+        "rewrite": "linkedin_profile_interest"
+      }
+    ],
+    "claims": [
+      {
+        "text": "I built a fictional orchard sensor exercise.",
+        "kind": "action",
+        "source_id": "synthetic-short",
+        "supporting_excerpt": "I built a fictional orchard sensor exercise."
+      },
+      {
+        "text": "I'm interested in Applied AI and your Engineering Manager role at Example.",
+        "kind": "target_observation",
+        "source_id": "synthetic-role",
+        "supporting_excerpt": "Engineering Manager at Example | Applied AI"
+      }
+    ],
+    "excludedClaims": [],
+    "targetRequired": true,
+    "expectedViolations": ["explanation_budget"]
+  },
+  {
+    "id": "synthetic-control-repeated-fact",
+    "category": "linkedin_connection",
+    "emailMode": "initial_outreach",
+    "body": "Hi there, I built a fictional orchard sensor exercise. I'm interested in Applied AI and your Engineering Manager role at Example. I built a fictional orchard sensor exercise. Open to connecting?",
+    "sources": [
+      {
+        "id": "synthetic-short",
+        "scope": "candidate",
+        "kind": "action",
+        "content": "I built a fictional orchard sensor exercise.",
+        "rootId": "synthetic-root"
+      },
+      {
+        "id": "synthetic-role",
+        "scope": "target",
+        "kind": "target_observation",
+        "content": "Engineering Manager at Example | Applied AI",
+        "rewrite": "linkedin_profile_interest"
+      }
+    ],
+    "claims": [
+      {
+        "text": "I built a fictional orchard sensor exercise.",
+        "kind": "action",
+        "source_id": "synthetic-short",
+        "supporting_excerpt": "I built a fictional orchard sensor exercise."
+      },
+      {
+        "text": "I'm interested in Applied AI and your Engineering Manager role at Example.",
+        "kind": "target_observation",
+        "source_id": "synthetic-role",
+        "supporting_excerpt": "Engineering Manager at Example | Applied AI"
+      }
+    ],
+    "excludedClaims": [],
+    "targetRequired": true,
+    "expectedViolations": ["repetition"]
+  },
+  {
+    "id": "synthetic-control-incomplete-ask",
+    "category": "linkedin_connection",
+    "emailMode": "initial_outreach",
+    "body": "Hi there, I built a fictional orchard sensor exercise. I'm interested in Applied AI and your Engineering Manager role at Example. Open to",
+    "sources": [
+      {
+        "id": "synthetic-short",
+        "scope": "candidate",
+        "kind": "action",
+        "content": "I built a fictional orchard sensor exercise.",
+        "rootId": "synthetic-root"
+      },
+      {
+        "id": "synthetic-role",
+        "scope": "target",
+        "kind": "target_observation",
+        "content": "Engineering Manager at Example | Applied AI",
+        "rewrite": "linkedin_profile_interest"
+      }
+    ],
+    "claims": [
+      {
+        "text": "I built a fictional orchard sensor exercise.",
+        "kind": "action",
+        "source_id": "synthetic-short",
+        "supporting_excerpt": "I built a fictional orchard sensor exercise."
+      },
+      {
+        "text": "I'm interested in Applied AI and your Engineering Manager role at Example.",
+        "kind": "target_observation",
+        "source_id": "synthetic-role",
+        "supporting_excerpt": "Engineering Manager at Example | Applied AI"
+      }
+    ],
+    "excludedClaims": [],
+    "targetRequired": true,
+    "expectedViolations": ["factual_coverage", "cta", "channel_format"]
+  }
+]
