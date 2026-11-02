@@ -14,8 +14,18 @@ const FORBIDDEN_FRAMING = [
 ];
 
 export class YcApplicationOutputValidationError extends Error {
-  constructor(message: string) {
+  readonly code:
+    | "YC_CONTEXT_NOT_READY"
+    | "YC_FORBIDDEN_FRAMING"
+    | "CLAIM_EXCLUDED"
+    | "YC_LEDGER_REQUIRED"
+    | "YC_CHARACTER_LIMIT";
+  constructor(
+    message: string,
+    code: YcApplicationOutputValidationError["code"],
+  ) {
     super(message);
+    this.code = code;
     this.name = "YcApplicationOutputValidationError";
   }
 }
@@ -43,6 +53,7 @@ export function validateYcApplicationOutput(input: {
   if (!input.context.readiness.ready) {
     throw new YcApplicationOutputValidationError(
       "Grounding context is not ready",
+      "YC_CONTEXT_NOT_READY",
     );
   }
 
@@ -52,6 +63,7 @@ export function validateYcApplicationOutput(input: {
   if (FORBIDDEN_FRAMING.some((pattern) => pattern.test(body))) {
     throw new YcApplicationOutputValidationError(
       "Answer contains forbidden framing",
+      "YC_FORBIDDEN_FRAMING",
     );
   }
 
@@ -61,6 +73,7 @@ export function validateYcApplicationOutput(input: {
     if (compactExcludedClaim && compactBody.includes(compactExcludedClaim)) {
       throw new YcApplicationOutputValidationError(
         "Answer contains an excluded claim",
+        "CLAIM_EXCLUDED",
       );
     }
   }
@@ -68,6 +81,7 @@ export function validateYcApplicationOutput(input: {
   if (input.output.claims.length === 0) {
     throw new YcApplicationOutputValidationError(
       "Answer must include a claim ledger",
+      "YC_LEDGER_REQUIRED",
     );
   }
 
@@ -83,6 +97,7 @@ export function validateYcApplicationOutput(input: {
   if (body.length > 3000) {
     throw new YcApplicationOutputValidationError(
       "Answer exceeds the character limit",
+      "YC_CHARACTER_LIMIT",
     );
   }
 

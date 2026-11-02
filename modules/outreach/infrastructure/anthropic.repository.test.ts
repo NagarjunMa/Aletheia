@@ -1,3 +1,5 @@
+import { proseFixture } from "@/__tests__/helpers/prose-fixture";
+import { buildProseCompositions } from "../application/prose-compositions";
 import { firstLinkedinOption } from "@/__tests__/helpers/linkedin-option";
 import { describe, expect, it } from "vitest";
 import { EMAIL_MODES } from "@/lib/ai/email-formatter";
@@ -8,6 +10,7 @@ import {
   buildLinkedinConnectionDraftTool,
   coldEmailDraftTool,
   getColdEmailDraftToolInput,
+  getEmailDraftToolInput,
   getLinkedinConnectionDraftToolInput,
   linkedinConnectionDraftTool,
 } from "./anthropic.repository";
@@ -294,6 +297,102 @@ describe("LinkedIn connection Anthropic tool", () => {
           connectionMessage({ ...input, claims: [] }),
         ),
       ).toEqual({ ...input, claims: [] });
+    },
+  );
+});
+
+it("rejects max-token output even if the partial cold-email result looks complete", () => {
+  expect(() =>
+    getColdEmailDraftToolInput({
+      ...(message(valid) as object),
+      stop_reason: "max_tokens",
+    } as never),
+  ).toThrow();
+});
+it("rejects max-token output even if the partial InMail result looks complete", () => {
+  expect(() =>
+    getEmailDraftToolInput({
+      stop_reason: "max_tokens",
+      content: [
+        {
+          type: "tool_use",
+          name: "return_email_draft",
+          input: {
+            subject_line: "A brief introduction",
+            body: "Hello,",
+            word_count: 1,
+            claims: [],
+          },
+        },
+      ],
+    } as never),
+  ).toThrow();
+});
+
+// Production parsers resolve only the current server-owned option; semantic parsing above is standalone compatibility coverage.
+describe("current prose option parser boundary", () => {
+  it.each(["cold_email", "linkedin_inmail"] as const)(
+    "returns the immutable %s draft and rejects model-authored fields",
+    (category) => {
+      const fixture = proseFixture(category, "initial_outreach");
+      const options = buildProseCompositions({
+        category,
+        emailMode: "initial_outreach",
+        context: fixture.context,
+      });
+      const selected = options[0]!;
+      const response = (input: unknown, stop_reason = "tool_use") =>
+        ({
+          stop_reason,
+          content: [
+            {
+              type: "tool_use",
+              name:
+                category === "cold_email"
+                  ? "return_cold_email_composition"
+                  : "return_email_draft",
+              input,
+            },
+          ],
+        }) as never;
+      const parse = (input: unknown) =>
+        category === "cold_email"
+          ? getColdEmailDraftToolInput(response(input), options)
+          : getEmailDraftToolInput(response(input), options);
+      const valid = parse({ option_id: selected.id });
+      if (category === "cold_email") expect(valid).toBe(selected.coldDraft);
+      else
+        expect(valid).toEqual({
+          subject_line: selected.subject,
+          body: selected.body,
+          word_count: selected.body.trim().split(/\s+/u).length,
+          claims: selected.claims,
+        });
+      for (const invalid of [
+        { option_id: "stale" },
+        { option_id: selected.id, body: "PRIVATE_UNSUPPORTED_REWRITE" },
+        { option_id: selected.id, claims: [] },
+        { option_id: selected.id, character_count: 1 },
+        {},
+        category === "cold_email" ? fixture.coldDraft : fixture.inmailDraft,
+      ])
+        expect(() => parse(invalid)).toThrow();
+      expect(() =>
+        category === "cold_email"
+          ? getColdEmailDraftToolInput(
+              response({ option_id: selected.id }, "max_tokens"),
+              options,
+            )
+          : getEmailDraftToolInput(
+              response({ option_id: selected.id }, "max_tokens"),
+              options,
+            ),
+      ).toThrow();
+      expect(() =>
+        category === "cold_email"
+          ? getColdEmailDraftToolInput({ content: [] } as never, options)
+          : getEmailDraftToolInput({ content: [] } as never, options),
+      ).toThrow();
     },
   );
 });

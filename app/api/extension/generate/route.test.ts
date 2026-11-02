@@ -1,4 +1,6 @@
 import { linkedinOptionResponse } from "@/__tests__/helpers/linkedin-option";
+import { proseFixture } from "@/__tests__/helpers/prose-fixture";
+import * as provenanceValidator from "@/modules/outreach/application/validate-outreach-provenance";
 import * as connectionRenderer from "@/modules/outreach/application/render-linkedin-connection";
 const billingForCapture = vi.hoisted(() => ({ enabled: false }));
 vi.mock("@/lib/billing/credits", async (importOriginal) => ({
@@ -521,11 +523,6 @@ describe("ALE-38 comparable request timings", () => {
         .spyOn(loggerModule, "createRequestLogger")
         .mockReturnValue(logger);
       try {
-        if (category === "cold_email")
-          mockAnthropicCreate.mockResolvedValue({
-            content: [coldEmailCompositionBlock()],
-            usage: { input_tokens: 10, output_tokens: 20 },
-          });
         const response = await POST(
           makeRequest({
             method: "POST",
@@ -552,7 +549,7 @@ describe("ALE-38 comparable request timings", () => {
           },
           config: {
             temperature: 0.8,
-            maxOutputUnits: 600,
+            maxOutputUnits: category === "cold_email" ? 2400 : 600,
             mode: "initial_outreach",
             billingMode: "disabled",
           },
@@ -762,7 +759,9 @@ beforeEach(() => {
   mockMaybeSingle.mockResolvedValue({ data: null, error: null });
   // Happy path claude response
   mockAnthropicCreate.mockImplementation(async (input) =>
-    linkedinOptionResponse(input),
+    input.tools[0].name === "return_linkedin_connection_composition"
+      ? linkedinOptionResponse(input)
+      : proseOptionResponse(input),
   );
   mockGenerateYcApplication.mockResolvedValue(
     new Response(
@@ -773,41 +772,48 @@ beforeEach(() => {
       },
     ),
   );
-  mockPrepareOutreachGroundingContext.mockResolvedValue({
-    identity: { fullName: "Candidate Name", linkedinUrl: "" },
-    sources: [
-      {
-        id: "profile.current_responsibilities",
-        type: "profile",
-        label: "Responsibilities",
-        priority: 2,
-        content: "I build tools and I help teams.",
+  mockPrepareOutreachGroundingContext.mockImplementation(async (input) => {
+    if (input.target.category !== "linkedin_connection") {
+      const fixture = proseFixture(input.target.category, "initial_outreach");
+      fixture.context.identity.fullName = "Candidate Name";
+      return fixture.context;
+    }
+    return {
+      identity: { fullName: "Candidate Name", linkedinUrl: "" },
+      sources: [
+        {
+          id: "profile.current_responsibilities",
+          type: "profile",
+          label: "Responsibilities",
+          priority: 2,
+          content: "I build tools and I help teams.",
+        },
+      ],
+      atomicSources: [
+        {
+          id: "target.profile.0",
+          scope: "target",
+          kind: "target_observation",
+          content: "Engineering Manager at Example | AI Evaluation",
+          rewrite: "linkedin_profile_interest",
+        },
+        {
+          id: "profile.current_responsibilities.value",
+          rootId: "profile.current_responsibilities",
+          scope: "candidate",
+          kind: "action",
+          content: "I build tools and I help teams.",
+        },
+      ],
+      metadata: {
+        groundingLevel: "profile_grounded",
+        fallbackReason: "no_confirmed_evidence",
+        selectedSourceCount: 1,
+        selectedEvidenceCount: 0,
+        selectedSourceKinds: ["profile"],
+        injectionSafeMode: false,
       },
-    ],
-    atomicSources: [
-      {
-        id: "target.profile.0",
-        scope: "target",
-        kind: "target_observation",
-        content: "Engineering Manager at Example | AI Evaluation",
-        rewrite: "linkedin_profile_interest",
-      },
-      {
-        id: "profile.current_responsibilities.value",
-        rootId: "profile.current_responsibilities",
-        scope: "candidate",
-        kind: "action",
-        content: "I build tools and I help teams.",
-      },
-    ],
-    metadata: {
-      groundingLevel: "profile_grounded",
-      fallbackReason: "no_confirmed_evidence",
-      selectedSourceCount: 1,
-      selectedEvidenceCount: 0,
-      selectedSourceKinds: ["profile"],
-      injectionSafeMode: false,
-    },
+    };
   });
 });
 
@@ -816,6 +822,27 @@ const validPayload = {
     "# Jane Doe\nSoftware Engineer at Acme Corp\nSan Francisco, CA",
   category: "linkedin_connection",
 };
+
+function proseOptionResponse(
+  request: { tools: readonly { name: string; input_schema: unknown }[] },
+  usage = { input_tokens: 10, output_tokens: 20 },
+) {
+  const tool = request.tools[0]!;
+  const schema = tool.input_schema as {
+    properties: { option_id: { enum: string[] } };
+  };
+  return {
+    stop_reason: "tool_use",
+    content: [
+      {
+        type: "tool_use",
+        name: tool.name,
+        input: { option_id: schema.properties.option_id.enum[0] },
+      },
+    ],
+    usage,
+  };
+}
 
 function emailDraftToolBlock(input: {
   subject_line: string;
@@ -1490,10 +1517,9 @@ describe("POST /api/extension/generate", () => {
   });
 
   it("reads cold email content from the forced email draft tool", async () => {
-    mockAnthropicCreate.mockResolvedValueOnce({
-      content: [coldEmailCompositionBlock()],
-      usage: { input_tokens: 10, output_tokens: 20 },
-    });
+    mockAnthropicCreate.mockImplementationOnce(async (input) =>
+      proseOptionResponse(input),
+    );
 
     const testPayload = { ...validPayload, category: "cold_email" };
     const res = await POST(
@@ -1520,14 +1546,9 @@ describe("POST /api/extension/generate", () => {
   });
 
   it("formats cold email bodies and returns emailMode in eval metadata", async () => {
-    mockAnthropicCreate.mockResolvedValueOnce({
-      content: [
-        coldEmailCompositionBlock({
-          subject_line: "A brief introduction",
-        }),
-      ],
-      usage: { input_tokens: 100, output_tokens: 80 },
-    });
+    mockAnthropicCreate.mockImplementationOnce(async (input) =>
+      proseOptionResponse(input, { input_tokens: 100, output_tokens: 80 }),
+    );
 
     const res = await POST(
       makeRequest({
@@ -1544,7 +1565,7 @@ describe("POST /api/extension/generate", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.body).toContain("Hi there,\n\n");
-    expect(body.body).toContain("Would you be open to a brief chat?");
+    expect(body.body).toContain("Would you be open to a brief conversation?");
     expect(body.body).toContain("Best,\nCandidate Name");
     expect(body.evalMetadata.emailMode).toBe("initial_outreach");
   });
@@ -1552,53 +1573,20 @@ describe("POST /api/extension/generate", () => {
   it.each(["cold_email", "linkedin_inmail"] as const)(
     "keeps supported technical wording and paragraph structure through the actual %s service",
     async (category) => {
-      const fact =
-        'I built robust AI-first Node.js v20.2 services using --name="two  spaces".';
-      const id = "evidence:technical";
-      const claim = {
-        text: fact,
-        kind: "action",
-        source_id: id,
-        supporting_excerpt: fact,
-      };
-      mockPrepareOutreachGroundingContext.mockResolvedValueOnce({
-        identity: { fullName: "Synthetic", linkedinUrl: "" },
-        sources: [
-          { id, type: "evidence", label: "Work", content: fact, priority: 1 },
-        ],
-        atomicSources: [
-          { id, scope: "candidate", kind: "action", content: fact },
-        ],
-        metadata: {},
-      });
-      const repeat = (n: number) => Array(n).fill(fact).join(" ");
-      const inmailBody = `${repeat(4)}\n\n${repeat(4)}`;
-      const block =
-        category === "cold_email"
-          ? coldEmailCompositionBlock({
-              claims: [claim],
-              target_opening: repeat(3),
-              candidate_positioning: repeat(4),
-              proof_points: [{ text: fact, source_ids: [id] }],
-              value_statement: repeat(3),
-            })
-          : {
-              ...emailDraftToolBlock({
-                subject_line: "A brief introduction",
-                body: inmailBody,
-                word_count: 96,
-              }),
-              input: {
-                subject_line: "A brief introduction",
-                body: inmailBody,
-                word_count: 96,
-                claims: [claim],
-              },
-            };
-      mockAnthropicCreate.mockResolvedValueOnce({
-        content: [block],
-        usage: { input_tokens: 10, output_tokens: 20 },
-      });
+      const fixture = proseFixture(category, "initial_outreach");
+      const fact = fixture.action.replace(
+        "I built a policy",
+        'I built robust AI-first Node.js v20.2 services using --name="two  spaces" and a policy',
+      );
+      const context = structuredClone(fixture.context);
+      for (const source of context.sources)
+        source.content = source.content.replace(fixture.action, fact);
+      for (const source of context.atomicSources!)
+        source.content = source.content.replace(fixture.action, fact);
+      mockPrepareOutreachGroundingContext.mockResolvedValueOnce(context);
+      mockAnthropicCreate.mockImplementationOnce(async (input) =>
+        proseOptionResponse(input),
+      );
       const response = await POST(
         makeRequest({
           method: "POST",
@@ -1610,11 +1598,6 @@ describe("POST /api/extension/generate", () => {
       const result = await response.json();
       expect(result.body).toContain(fact);
       expect(result.body).toContain("\n\n");
-      if (category === "linkedin_inmail") expect(result.body).toBe(inmailBody);
-      else
-        expect(result.body).toContain(
-          `A quick look at my background:\n${fact}`,
-        );
       expect(result.character_count).toBe(result.body.length);
       expect(result.word_count).toBe(result.body.trim().split(/\s+/u).length);
       expect(JSON.stringify(result)).not.toMatch(
@@ -1804,7 +1787,7 @@ describe("POST /api/extension/generate", () => {
     expect(result.character_count).toBe(result.body.length);
     expect(result.character_count).toBeLessThanOrEqual(300);
     expect(result.evalMetadata).toMatchObject({
-      promptVersion: "5.0.0",
+      promptVersion: "6.0.0",
       hasCandidateRelevance: true,
     });
     expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
@@ -2277,17 +2260,9 @@ describe("POST /api/extension/generate", () => {
 
   // T4 — linkedin_inmail happy path
   it("returns 200 with subject_line + body + word_count for linkedin_inmail", async () => {
-    const inmailBody = Array(24).fill("I'd welcome a conversation.").join(" ");
-    mockAnthropicCreate.mockResolvedValueOnce({
-      content: [
-        emailDraftToolBlock({
-          subject_line: "A brief introduction",
-          body: inmailBody,
-          word_count: 120,
-        }),
-      ],
-      usage: { input_tokens: 100, output_tokens: 80 },
-    });
+    mockAnthropicCreate.mockImplementationOnce(async (input) =>
+      proseOptionResponse(input, { input_tokens: 100, output_tokens: 80 }),
+    );
 
     const testPayload = { ...validPayload, category: "linkedin_inmail" };
     const res = await POST(
@@ -2316,24 +2291,19 @@ describe("POST /api/extension/generate", () => {
   )(
     "rejects a final $category body below the $emailMode minimum",
     async ({ category, emailMode }) => {
-      mockAnthropicCreate.mockResolvedValueOnce({
-        content: [
-          category === "cold_email"
-            ? coldEmailCompositionBlock({
-                greeting: "M",
-                target_opening: "Hello",
-                candidate_positioning: "Builder",
-                value_statement: "Relevant",
-                cta: "Chat?",
-              })
-            : emailDraftToolBlock({
-                subject_line: "Hello",
-                body: "Hello",
-                word_count: 1,
-              }),
-        ],
-        usage: { input_tokens: 100, output_tokens: 20 },
-      });
+      mockAnthropicCreate.mockImplementationOnce(async (input) =>
+        proseOptionResponse(input),
+      );
+      const original = provenanceValidator.validateOutreachProvenance;
+      const finalCheck = vi
+        .spyOn(provenanceValidator, "validateOutreachProvenance")
+        .mockImplementation((input) =>
+          original(
+            mockAnthropicCreate.mock.calls.length
+              ? { ...input, body: "Hi there," }
+              : input,
+          ),
+        );
 
       const res = await POST(
         makeRequest({
@@ -2343,6 +2313,7 @@ describe("POST /api/extension/generate", () => {
         }),
       );
 
+      finalCheck.mockRestore();
       expect(res.status).toBe(502);
       await expect(res.json()).resolves.toMatchObject({ code: "PARSE_FAILED" });
       expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
@@ -3161,4 +3132,202 @@ it("reports pending compensation when admission denies and both refunds fail", a
   } finally {
     billingForCapture.enabled = false;
   }
+});
+
+describe("ALE-46 prose output budget accounting", () => {
+  it.each([
+    ["linkedin_connection", 600, 1],
+    ["cold_email", 2400, 3],
+    ["linkedin_inmail", 2400, 3],
+  ] as const)(
+    "uses the %s ceiling for provider, admission and timings",
+    async (category, cap, workUnits) => {
+      const info = vi.fn();
+      const spy = vi
+        .spyOn(loggerModule, "createRequestLogger")
+        .mockReturnValue({
+          info,
+          debug: vi.fn(),
+          warn: vi.fn(),
+          error: vi.fn(),
+          child: vi.fn(),
+        });
+      try {
+        if (category !== "linkedin_connection")
+          mockAnthropicCreate.mockResolvedValueOnce({
+            stop_reason: "tool_use",
+            content: [],
+            usage: { input_tokens: 10, output_tokens: 20 },
+          });
+        const response = await POST(
+          makeRequest({
+            method: "POST",
+            headers: { Authorization: "Bearer test" },
+            body: { ...validPayload, category },
+          }),
+        );
+        expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
+        expect(mockAnthropicCreate.mock.calls[0]![0].max_tokens).toBe(cap);
+        expect(mockRpc).toHaveBeenCalledWith(
+          "start_generation_attempt",
+          expect.objectContaining({ p_work_units: workUnits }),
+        );
+        const timing = info.mock.calls.find(
+          ([fields]) => fields.event === "generation.timing",
+        )?.[0];
+        expect(timing).toMatchObject({ config: { maxOutputUnits: cap } });
+        // The completed prose response deliberately omits the required tool.
+        expect(response.status).toBe(
+          category === "linkedin_connection" ? 200 : 502,
+        );
+      } finally {
+        spy.mockRestore();
+      }
+    },
+  );
+});
+
+describe("ALE-46 qualified prose through the HTTP boundary", () => {
+  it.each([
+    ["cold_email", "initial_outreach"],
+    ["cold_email", "follow_up"],
+    ["linkedin_inmail", "initial_outreach"],
+  ] as const)(
+    "returns complete qualified %s/%s text without private provenance",
+    async (category, emailMode) => {
+      const fixture = proseFixture(category, emailMode);
+      const before = JSON.stringify(fixture.context);
+      mockPrepareOutreachGroundingContext.mockResolvedValue(fixture.context);
+      mockAnthropicCreate.mockImplementation(async (input) =>
+        proseOptionResponse(input, { input_tokens: 10, output_tokens: 1000 }),
+      );
+      const response = await POST(
+        makeRequest({
+          method: "POST",
+          headers: { Authorization: "Bearer test" },
+          body: { ...validPayload, category, emailMode },
+        }),
+      );
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body.body).toContain(fixture.action);
+      if (emailMode !== "follow_up")
+        expect(body.body).toContain(fixture.outcome);
+      expect(body.body).toContain(
+        "without deploying the prototype to production",
+      );
+      expect(body.word_count).toBe(body.body.split(/\s+/u).length);
+      expect(body.character_count).toBe(body.body.length);
+      expect(JSON.stringify(body)).not.toMatch(
+        /supporting_excerpt|source_id|provenance|claims|evidence:/u,
+      );
+      expect(JSON.stringify(fixture.context)).toBe(before);
+      expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
+    },
+  );
+  it.each(["rewrite", "overlength"])(
+    "rejects %s after atomic IDs resolve, with one daily refund",
+    async (issue) => {
+      const fixture = proseFixture("cold_email", "initial_outreach");
+      mockPrepareOutreachGroundingContext.mockResolvedValue(fixture.context);
+      mockAnthropicCreate.mockImplementation(async (input) => {
+        const response = proseOptionResponse(input, {
+          input_tokens: 10,
+          output_tokens: 1000,
+        });
+        if (issue === "rewrite")
+          Object.assign(response.content[0]!.input, {
+            body: "I documented the prototype.",
+          });
+        return response;
+      });
+      const original = provenanceValidator.validateOutreachProvenance;
+      const finalCheck = vi
+        .spyOn(provenanceValidator, "validateOutreachProvenance")
+        .mockImplementation((input) =>
+          original(
+            issue === "overlength" && mockAnthropicCreate.mock.calls.length
+              ? { ...input, body: `${input.body} ${"Hi there, ".repeat(80)}` }
+              : input,
+          ),
+        );
+      const response = await POST(
+        makeRequest({
+          method: "POST",
+          headers: { Authorization: "Bearer test" },
+          body: {
+            ...validPayload,
+            category: "cold_email",
+            emailMode:
+              issue === "overlength" ? "follow_up" : "initial_outreach",
+          },
+        }),
+      );
+      finalCheck.mockRestore();
+      expect(response.status).toBe(502);
+      expect(await response.json()).toMatchObject({
+        code: "PARSE_FAILED",
+        quotaRestoration: "released",
+      });
+      expect(
+        mockRpc.mock.calls.filter(
+          ([name]) => name === "release_generation_daily_slot",
+        ),
+      ).toHaveLength(1);
+      expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
+    },
+  );
+});
+
+describe("ALE-46 prose preparation admission boundary", () => {
+  it.each(["cold_email", "linkedin_inmail"] as const)(
+    "rejects %s when no complete facts can meet the mode budget before reserving quota or calling Claude",
+    async (category) => {
+      const context = proseFixture(category, "initial_outreach").context;
+      context.sources = [];
+      context.atomicSources = [];
+      mockPrepareOutreachGroundingContext.mockResolvedValueOnce(context);
+      const response = await POST(
+        makeRequest({
+          method: "POST",
+          headers: { authorization: "Bearer test" },
+          body: { ...validPayload, category },
+        }),
+      );
+      expect(response.status).toBe(422);
+      expect(await response.json()).toMatchObject({
+        code: "INSUFFICIENT_GROUNDING",
+      });
+      expect(mockRpc).not.toHaveBeenCalled();
+      expect(mockAnthropicCreate).not.toHaveBeenCalled();
+    },
+  );
+  it.each(["cold_email", "linkedin_inmail"] as const)(
+    "rejects a stale %s option and returns the reserved daily slot once",
+    async (category) => {
+      mockAnthropicCreate.mockImplementationOnce(async (input) => {
+        const response = proseOptionResponse(input);
+        response.content[0]!.input.option_id = "prose.stale.1";
+        return response;
+      });
+      const response = await POST(
+        makeRequest({
+          method: "POST",
+          headers: { authorization: "Bearer test" },
+          body: { ...validPayload, category },
+        }),
+      );
+      expect(response.status).toBe(502);
+      expect(await response.json()).toMatchObject({
+        code: "PARSE_FAILED",
+        quotaRestoration: "released",
+      });
+      expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
+      expect(
+        mockRpc.mock.calls.filter(
+          ([name]) => name === "release_generation_daily_slot",
+        ),
+      ).toHaveLength(1);
+    },
+  );
 });

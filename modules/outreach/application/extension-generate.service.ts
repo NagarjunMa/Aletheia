@@ -1,4 +1,9 @@
 import {
+  buildProseCompositions,
+  ProseGroundingUnavailableError,
+  type ProseCompositions,
+} from "./prose-compositions";
+import {
   finalizeGroundedOutput,
   GroundedOutputLimitError,
   prepareGroundedText,
@@ -82,6 +87,7 @@ import {
 import {
   CLAUDE_MODEL,
   OUTREACH_GENERATION_SETTINGS,
+  getOutreachOutputBudget,
   createOutreachDraftMessage,
   getColdEmailDraftToolInput,
   getLinkedinConnectionDraftToolInput,
@@ -307,6 +313,7 @@ async function handlePost(
     failureContext.category = validatedData.category;
     timing.config({
       ...OUTREACH_GENERATION_SETTINGS,
+      maxOutputUnits: getOutreachOutputBudget(validatedData.category),
       intent: validatedData.intent ?? "networking",
       mode: validatedData.emailMode,
     });
@@ -343,6 +350,7 @@ async function handlePost(
       return candidateContextUnavailableResponse(corsHeaders);
     }
 
+    let proseCompositions: ProseCompositions | undefined;
     if (validatedData.category === "linkedin_connection") {
       const eligibleTargetCount = (
         preparedGrounding.atomicSources ?? []
@@ -364,6 +372,28 @@ async function handlePost(
             ...preparedGrounding.targetDiagnostics,
           },
           "LinkedIn composition eligibility checked",
+        );
+      }
+    }
+
+    if (validatedData.category !== "linkedin_connection") {
+      try {
+        proseCompositions = buildProseCompositions({
+          category: validatedData.category,
+          emailMode: validatedData.emailMode,
+          context: preparedGrounding,
+        });
+      } catch (error) {
+        if (!(error instanceof ProseGroundingUnavailableError)) throw error;
+        timing.failure("INSUFFICIENT_GROUNDING");
+        return NextResponse.json(
+          {
+            error: "Insufficient grounding",
+            code: "INSUFFICIENT_GROUNDING",
+            message:
+              "No complete reviewed fact combination fits this mode. Review complete facts or choose another message mode; qualifications will not be shortened.",
+          },
+          { status: 422, headers: corsHeaders },
         );
       }
     }
@@ -662,7 +692,7 @@ async function handlePost(
     const admission = await startGenerationAttempt(
       authResult.userId,
       reservedSlot.id,
-      outputWorkUnits(OUTREACH_GENERATION_SETTINGS.maxOutputUnits),
+      outputWorkUnits(getOutreachOutputBudget(category)),
       log,
     );
     if (!admission.allowed) {
@@ -715,6 +745,7 @@ async function handlePost(
       category,
       emailMode,
       atomicSources: preparedGrounding.atomicSources ?? [],
+      ...(proseCompositions ? { proseCompositions } : {}),
       intent: validatedData.intent ?? "networking",
       logger: log,
     });
@@ -787,8 +818,9 @@ async function handlePost(
     if (category === "cold_email") {
       try {
         const draft = validateOutreachDraft({
-          draft: getColdEmailDraftToolInput(response),
+          draft: getColdEmailDraftToolInput(response, proseCompositions),
           sources: preparedGrounding.sources,
+          atomicSources: preparedGrounding.atomicSources,
         });
         const rendered = renderColdEmail({
           draft,
@@ -890,7 +922,7 @@ async function handlePost(
     // LinkedIn InMail retains its existing body-only contract.
     if (category === "linkedin_inmail") {
       try {
-        const parsed = getEmailDraftToolInput(response);
+        const parsed = getEmailDraftToolInput(response, proseCompositions);
         const sanitizedSubject = prepareGroundedText(parsed.subject_line);
         const finalBody = prepareGroundedText(parsed.body);
 

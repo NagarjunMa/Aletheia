@@ -1,3 +1,9 @@
+import {
+  buildProseSelectionTool,
+  resolveProseSelection,
+  type ProseCompositions,
+  ProseGroundingUnavailableError,
+} from "../application/prose-compositions";
 import Anthropic from "@anthropic-ai/sdk";
 import type { AtomicSource } from "@/modules/grounding/domain/atomic-claim";
 import type { CandidateGroundingSource } from "@/modules/candidate-context/domain/candidate-context.types";
@@ -32,8 +38,14 @@ import {
 export const CLAUDE_MODEL = "claude-sonnet-4-6";
 export const OUTREACH_GENERATION_SETTINGS = {
   temperature: 0.8,
-  maxOutputUnits: 600,
 } as const;
+/** Retain the measured prose ceiling; admission reserves the same allowance even for shorter selections. */
+export function getOutreachOutputBudget(
+  category: "linkedin_connection" | "cold_email" | "linkedin_inmail",
+): number {
+  return category === "linkedin_connection" ? 600 : 2_400;
+}
+
 const log = createLogger("outreach-anthropic-repository");
 
 const EMAIL_DRAFT_TOOL_NAME = "return_email_draft";
@@ -61,14 +73,14 @@ export function buildEmailDraftTool(
         subject_line: {
           type: "string",
           description:
-            "The final subject line. Must follow the approved subject templates from the system instructions.",
+            "Use a whole approved neutral subject, such as A brief introduction; do not infer role/company wording.",
           minLength: 1,
           maxLength: EMAIL_SUBJECT_MAX_CHARACTERS,
         },
         body: {
           type: "string",
           description:
-            "The final email or InMail body. Preserve intentional paragraph breaks and proof-point lines.",
+            "Compose only complete approved_texts and whole NEUTRAL_FRAMING phrases. Preserve qualifications and paragraph breaks.",
           minLength: 1,
           maxLength: 5000,
         },
@@ -108,7 +120,12 @@ export function buildColdEmailDraftTool(emailMode: EmailMode) {
           maxLength: EMAIL_SUBJECT_MAX_CHARACTERS,
         },
         claims: atomicClaimsToolSchema,
-        greeting: { type: "string", minLength: 1, maxLength: 80 },
+        greeting: {
+          type: "string",
+          minLength: 1,
+          maxLength: 80,
+          description: "Use there only; the server adds Hi and the comma.",
+        },
         target_opening: { type: "string", minLength: 1, maxLength: 500 },
         candidate_positioning: { type: "string", minLength: 1, maxLength: 500 },
         proof_points: {
@@ -118,12 +135,24 @@ export function buildColdEmailDraftTool(emailMode: EmailMode) {
             type: "object",
             additionalProperties: false,
             properties: {
-              text: { type: "string", minLength: 1, maxLength: 420 },
+              text: {
+                type: "string",
+                minLength: 1,
+                maxLength: 420,
+                description:
+                  "One complete approved candidate span; no label, paraphrase or removed qualification.",
+              },
               source_ids: {
                 type: "array",
                 minItems: 1,
                 maxItems: 3,
-                items: { type: "string", minLength: 1, maxLength: 120 },
+                items: {
+                  type: "string",
+                  minLength: 1,
+                  maxLength: 120,
+                  description:
+                    "A selected candidate atomic fact ID from ATOMIC_SOURCES.",
+                },
               },
             },
             required: ["text", "source_ids"],
@@ -227,6 +256,7 @@ export async function createOutreachDraftMessage(input: {
   category: "linkedin_connection" | "cold_email" | "linkedin_inmail";
   emailMode: EmailMode;
   atomicSources?: readonly AtomicSource[];
+  proseCompositions?: ProseCompositions;
   intent?: LinkedinIntent;
   logger?: SafeLogger;
 }) {
@@ -234,16 +264,21 @@ export async function createOutreachDraftMessage(input: {
   const complete = startTimedStage(stageLogger, "model.outreach_generate", {
     model: CLAUDE_MODEL,
   });
+  if (
+    input.category !== "linkedin_connection" &&
+    !input.proseCompositions?.length
+  )
+    throw new ProseGroundingUnavailableError();
   const tool =
     input.category === "cold_email"
-      ? buildColdEmailDraftTool(input.emailMode)
+      ? buildProseSelectionTool("cold_email", input.proseCompositions!)
       : input.category === "linkedin_connection"
         ? buildLinkedinSelectionTool(
             input.atomicSources ?? [],
             undefined,
             input.intent,
           )
-        : buildEmailDraftTool("linkedin_inmail", input.emailMode);
+        : buildProseSelectionTool("linkedin_inmail", input.proseCompositions!);
   const toolName = tool.name;
   const signal = AbortSignal.timeout(GENERATION_MODEL_TIMEOUT_MS);
   try {
@@ -251,7 +286,7 @@ export async function createOutreachDraftMessage(input: {
     const response = await client.messages.create(
       {
         model: CLAUDE_MODEL,
-        max_tokens: OUTREACH_GENERATION_SETTINGS.maxOutputUnits,
+        max_tokens: getOutreachOutputBudget(input.category),
         temperature: OUTREACH_GENERATION_SETTINGS.temperature,
         system: input.systemPrompt,
         messages: [{ role: "user", content: input.userPrompt }],
@@ -283,7 +318,10 @@ export async function createOutreachDraftMessage(input: {
 
 export function getColdEmailDraftToolInput(
   response: Anthropic.Messages.Message,
+  options?: ProseCompositions,
 ): ColdEmailDraft {
+  if (response.stop_reason === "max_tokens")
+    throw new Error("Cold email tool response exhausted its output budget");
   const toolBlock = response.content.find(
     (block) =>
       block.type === "tool_use" &&
@@ -295,6 +333,11 @@ export function getColdEmailDraftToolInput(
     throw new Error(
       "Claude did not return the required cold email composition tool",
     );
+  }
+  if (options) {
+    const selected = resolveProseSelection(toolBlock.input, options);
+    if (!selected.coldDraft) throw new Error("Invalid cold-email selection");
+    return selected.coldDraft;
   }
   return coldEmailDraftSchema.parse(toolBlock.input);
 }
@@ -352,7 +395,12 @@ export function getLinkedinConnectionDraftDiagnostics(
   );
 }
 
-export function getEmailDraftToolInput(response: Anthropic.Messages.Message) {
+export function getEmailDraftToolInput(
+  response: Anthropic.Messages.Message,
+  options?: ProseCompositions,
+) {
+  if (response.stop_reason === "max_tokens")
+    throw new Error("InMail tool response exhausted its output budget");
   const toolBlock = response.content.find(
     (block) =>
       block.type === "tool_use" &&
@@ -365,6 +413,15 @@ export function getEmailDraftToolInput(response: Anthropic.Messages.Message) {
     throw new Error("Claude did not return the required email draft tool");
   }
 
+  if (options) {
+    const selected = resolveProseSelection(toolBlock.input, options);
+    return {
+      subject_line: selected.subject,
+      body: selected.body,
+      word_count: selected.body.trim().split(/\s+/u).length,
+      claims: selected.claims,
+    };
+  }
   return emailDraftToolInputSchema.parse(toolBlock.input);
 }
 

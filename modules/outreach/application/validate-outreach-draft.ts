@@ -1,3 +1,4 @@
+import type { AtomicSource } from "@/modules/grounding/domain/atomic-claim";
 import type { CandidateGroundingSource } from "@/modules/candidate-context/domain/candidate-context.types";
 import type { ColdEmailDraft } from "../domain/outreach-draft.types";
 
@@ -46,8 +47,22 @@ function tokens(value: string): string[] {
 export function validateOutreachDraft(input: {
   draft: ColdEmailDraft;
   sources: CandidateGroundingSource[];
+  atomicSources?: readonly AtomicSource[] | undefined;
 }): ColdEmailDraft {
-  const byId = new Map(input.sources.map((source) => [source.id, source]));
+  const byId = new Map<string, { content: string }>(
+    input.sources.map((source) => [source.id, source]),
+  );
+  const selectedIds = new Set(byId.keys());
+  // Atomic aliases come only from this request's selected candidate facts, never ID-prefix inference.
+  for (const source of input.atomicSources ?? []) {
+    if (
+      source.scope === "candidate" &&
+      source.rootId &&
+      selectedIds.has(source.rootId) &&
+      !byId.has(source.id)
+    )
+      byId.set(source.id, source);
+  }
   for (const proof of input.draft.proof_points) {
     const supporting = proof.source_ids.map((id) => byId.get(id));
     if (supporting.some((source) => !source)) {
