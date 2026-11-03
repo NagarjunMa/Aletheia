@@ -396,3 +396,56 @@ describe("current prose option parser boundary", () => {
     },
   );
 });
+
+it("ALE49-R1-001 rejects obsolete count fields only for enabled plan selections", async () => {
+  const { buildLinkedinCompositions } =
+    await import("../domain/linkedin-grounded-selection");
+  const { planSelection } =
+    await import("@/modules/grounding/domain/rhetorical-plan");
+  const sources = [
+    {
+      id: "target.profile.0",
+      scope: "target" as const,
+      kind: "target_observation" as const,
+      content: "Engineering Manager at Example | AI Evaluation",
+      rewrite: "linkedin_profile_interest" as const,
+    },
+  ];
+  const o = buildLinkedinCompositions(sources, "networking", true)[0]!;
+  const selected = {
+    option_id: o.id,
+    rhetorical_plan: planSelection(o.rhetoricalPlan!),
+  };
+  const response = (input: unknown) =>
+    ({
+      content: [
+        {
+          type: "tool_use",
+          name: "return_linkedin_connection_composition",
+          input,
+        },
+      ],
+    }) as never;
+  const grounding = {
+    atomicSources: sources,
+    candidateSources: [],
+    rhetoricalPlans: true,
+  };
+  expect(
+    getLinkedinConnectionDraftToolInput(response(selected), grounding)
+      .rhetoricalPlan,
+  ).toEqual(o.rhetoricalPlan);
+  expect(() =>
+    getLinkedinConnectionDraftToolInput(
+      response({ ...selected, character_count: 1 }),
+      grounding,
+    ),
+  ).toThrow();
+  const legacy = buildLinkedinCompositions(sources, "networking", false)[0]!;
+  expect(() =>
+    getLinkedinConnectionDraftToolInput(
+      response({ option_id: legacy.id, character_count: 1 }),
+      { ...grounding, rhetoricalPlans: false },
+    ),
+  ).not.toThrow();
+});

@@ -1,3 +1,4 @@
+import { buildYcPlannedOptions } from "@/modules/application-answer/application/yc-rhetorical-options";
 import { createHash } from "node:crypto";
 import outreachCases from "./outreach-discourse-golden-cases.json";
 import applicationCases from "./application-discourse-golden-cases.json";
@@ -5,6 +6,7 @@ import { parseDiscourseFixtures, summarizeDiscourse } from "./discourse-corpus";
 import { evaluateDiscourse, type DiscourseSample } from "./discourse-quality";
 import { buildProseCompositions } from "@/modules/outreach/application/prose-compositions";
 import {
+  buildLinkedinCompositions,
   buildLinkedinSelectionTool,
   resolveLinkedinSelection,
 } from "@/modules/outreach/domain/linkedin-grounded-selection";
@@ -45,7 +47,10 @@ function outputInput(
   const { expectedViolations: _expected, ...sample } = fixture;
   return sample;
 }
-function serverOption(sample: DiscourseSample): DiscourseSample {
+function serverOption(
+  sample: DiscourseSample,
+  rhetoricalPlans = false,
+): DiscourseSample {
   const candidates = sample.sources.filter(
     (s) => s.scope === "candidate" && s.rootId,
   );
@@ -74,11 +79,33 @@ function serverOption(sample: DiscourseSample): DiscourseSample {
     },
   };
   if (sample.category === "linkedin_connection") {
-    const tool = buildLinkedinSelectionTool(sample.sources);
+    const tool = buildLinkedinSelectionTool(
+      sample.sources,
+      undefined,
+      "networking",
+      rhetoricalPlans,
+    );
+    const option = buildLinkedinCompositions(
+      sample.sources,
+      "networking",
+      rhetoricalPlans,
+    )[0]!;
     const draft = resolveLinkedinSelection(
-      { option_id: tool.input_schema.properties.option_id.enum[0] },
+      {
+        option_id: tool.input_schema.properties.option_id.enum[0],
+        ...(option.rhetoricalPlan
+          ? {
+              rhetorical_plan: {
+                reference: option.rhetoricalPlan.reference,
+                archetype: option.rhetoricalPlan.archetype,
+              },
+            }
+          : {}),
+      },
       sample.sources,
       context.sources,
+      "networking",
+      rhetoricalPlans,
     );
     const rendered = renderLinkedinConnection({
       draft,
@@ -86,11 +113,28 @@ function serverOption(sample: DiscourseSample): DiscourseSample {
     });
     return { ...sample, body: rendered.body, claims: draft.claims };
   }
-  if (sample.category === "yc_application") return sample;
+  if (sample.category === "yc_application") {
+    if (!rhetoricalPlans) return sample;
+    const option = buildYcPlannedOptions({
+      question: "Synthetic evaluation question",
+      jobDescription: "Synthetic evaluation context",
+      sources: context.sources,
+      atomicSources: sample.sources,
+      excludedClaims: sample.excludedClaims,
+      readiness: { ready: true, missingFields: [], recommendedFields: [] },
+      metadata: {
+        profileFieldCount: 1,
+        confirmedEvidenceCount: roots.length,
+        resumeSource: "none",
+      },
+    })[0]!.options[0]!;
+    return { ...sample, body: option.body, claims: option.claims };
+  }
   const option = buildProseCompositions({
     category: sample.category,
     emailMode: sample.emailMode,
     context,
+    rhetoricalPlans,
   })[0]!;
   return {
     ...sample,
@@ -259,4 +303,13 @@ export function compareDiscourseVariant(input: unknown) {
         ? ("eligible_for_human_and_provider_review" as const)
         : ("no_go" as const),
   };
+}
+
+/** Actual enabled server composers over immutable synthetic sources; negative controls remain unchanged. */
+export function buildRhetoricalDiscourseVariant() {
+  return lockedDiscourseFixtures.map((f) =>
+    f.expectedViolations.length
+      ? structuredClone(f)
+      : { ...f, ...serverOption(f, true) },
+  );
 }

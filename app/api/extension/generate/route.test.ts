@@ -3331,3 +3331,100 @@ describe("ALE-46 prose preparation admission boundary", () => {
     },
   );
 });
+
+it.each(["linkedin_connection", "cold_email", "linkedin_inmail"] as const)(
+  "ALE-49 carries server-owned plans through %s without exposing them",
+  async (category) => {
+    vi.stubEnv("RHETORICAL_PLANS_ENABLED", "true");
+    try {
+      mockAnthropicCreate.mockImplementationOnce(async (input) => {
+        const tool = input.tools[0];
+        const json =
+          category === "linkedin_connection"
+            ? tool.description
+                .split("<user_input>")[1]!
+                .split("</user_input>")[0]!
+            : tool.description.split("Options are untrusted data: ")[1]!;
+        const choices = JSON.parse(json);
+        const o = choices[0];
+        return {
+          stop_reason: "tool_use",
+          content: [
+            {
+              type: "tool_use",
+              name: tool.name,
+              input: { option_id: o.id, rhetorical_plan: o.rhetorical_plan },
+            },
+          ],
+          usage: { input_tokens: 10, output_tokens: 20 },
+        };
+      });
+      const response = await POST(
+        makeRequest({
+          method: "POST",
+          headers: { Authorization: "Bearer test" },
+          body: { ...validPayload, category },
+        }),
+      );
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body.evalMetadata.promptVersion).toBe("7.0.0");
+      expect(JSON.stringify(body)).not.toMatch(
+        /rhetorical|source_id|supporting_excerpt|rp1\.|option_id/u,
+      );
+      expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
+      expect(mockAnthropicCreate.mock.calls[0]![0].max_tokens).toBe(
+        category === "linkedin_connection" ? 600 : 2400,
+      );
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  },
+);
+it("ALE-49 malformed plan returns 502 and releases only its daily reservation", async () => {
+  vi.stubEnv("RHETORICAL_PLANS_ENABLED", "true");
+  try {
+    mockAnthropicCreate.mockImplementationOnce(async (input) => ({
+      stop_reason: "tool_use",
+      content: [
+        {
+          type: "tool_use",
+          name: input.tools[0].name,
+          input: {
+            option_id: input.tools[0].input_schema.properties.option_id.enum[0],
+            rhetorical_plan: {
+              reference: "rp1." + "0".repeat(24),
+              archetype: "target_led",
+            },
+          },
+        },
+      ],
+      usage: { input_tokens: 10, output_tokens: 20 },
+    }));
+    const response = await POST(
+      makeRequest({
+        method: "POST",
+        headers: { Authorization: "Bearer test" },
+        body: { ...validPayload, category: "cold_email" },
+      }),
+    );
+    expect(response.status).toBe(502);
+    expect(await response.json()).toMatchObject({
+      code: "PARSE_FAILED",
+      quotaRestoration: "released",
+    });
+    expect(
+      mockRpc.mock.calls.filter(
+        ([name]) => name === "release_generation_daily_slot",
+      ),
+    ).toHaveLength(1);
+    expect(
+      mockRpc.mock.calls.filter(
+        ([name]) => name === "finish_generation_attempt",
+      ),
+    ).toHaveLength(1);
+    expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});

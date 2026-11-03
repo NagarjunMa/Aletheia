@@ -1,3 +1,10 @@
+import {
+  buildYcPlannedOptions,
+  ycQuestionContext,
+  YcPlanUnavailableError,
+} from "./yc-rhetorical-options";
+import { resolveYcPlannedTool } from "../infrastructure/yc-planned-tool";
+import { rhetoricalPlansEnabled } from "@/modules/grounding/domain/rhetorical-plan";
 import { GroundedOutputLimitError } from "@/modules/grounding/application/finalize-grounded-output";
 import { GroundedTextSanitizationError } from "@/lib/ai/sanitizer";
 import { AtomicClaimValidationError } from "@/modules/grounding/application/validate-atomic-claims";
@@ -15,6 +22,7 @@ import { createLogger, startTimedStage, type SafeLogger } from "@/lib/logger";
 import {
   buildYcApplicationPrompt,
   YC_APPLICATION_PROMPT_VERSION,
+  RHETORICAL_YC_PROMPT_VERSION,
 } from "@/lib/ai/prompts/yc-application";
 import {
   CREDIT_BILLING_ENABLED,
@@ -230,6 +238,7 @@ export async function generateYcApplication(
     request: YcApplicationRequest;
     corsHeaders: Record<string, string>;
     applicationBaseUrl: string;
+    rhetoricalPlans?: boolean;
     onCreditReserved?: (_id: string) => void;
     onCreditReservationPending?: (_pending: boolean) => void;
     logger?: SafeLogger;
@@ -237,6 +246,7 @@ export async function generateYcApplication(
   },
   dependencies: GenerateYcApplicationDependencies = defaultDependencies,
 ) {
+  const rhetoricalPlans = input.rhetoricalPlans ?? rhetoricalPlansEnabled();
   const operationLog = input.logger ?? log;
   const timing = input.timing;
   const isBatch = "questions" in input.request;
@@ -324,6 +334,9 @@ export async function generateYcApplication(
       });
     }
 
+    const plannedOptions = rhetoricalPlans
+      ? buildYcPlannedOptions(context)
+      : undefined;
     timing?.enter("rateLimit");
     const completeRateLimit = startTimedStage(
       operationLog,
@@ -454,7 +467,7 @@ export async function generateYcApplication(
     if (dependencies.billingEnabled && billingMode === "unlimited_developer")
       timing?.config({ billingMode: "unlimited" });
     timing?.enter("inputBuild");
-    const prompt = buildYcApplicationPrompt(context);
+    const prompt = buildYcApplicationPrompt(context, rhetoricalPlans);
     timing?.metrics({
       inputChars: prompt.systemPrompt.length + prompt.userPrompt.length,
     });
@@ -519,6 +532,7 @@ export async function generateYcApplication(
       systemPrompt: prompt.systemPrompt,
       userPrompt: prompt.userPrompt,
       ...(isBatch ? { questionCount: questions.length } : {}),
+      ...(plannedOptions ? { plannedOptions } : {}),
       logger: operationLog,
     });
     const processingTime = dependencies.now() - startedAt;
@@ -543,9 +557,19 @@ export async function generateYcApplication(
     validationStage = "tool_parse";
     if (message.stop_reason === "max_tokens")
       throw new YcApplicationStructuredOutputError("YC_TOOL_TRUNCATED");
-    const parsedAnswers = isBatch
-      ? getApplicationBatchToolInput(message)
-      : [{ questionId: "q1", ...dependencies.parseMessage(message) }];
+    let plannedAnswers;
+    if (plannedOptions) {
+      try {
+        plannedAnswers = resolveYcPlannedTool(message, plannedOptions, isBatch);
+      } catch {
+        throw new YcApplicationStructuredOutputError("YC_TOOL_SCHEMA");
+      }
+    }
+    const parsedAnswers =
+      plannedAnswers ??
+      (isBatch
+        ? getApplicationBatchToolInput(message)
+        : [{ questionId: "q1", ...dependencies.parseMessage(message) }]);
     validationStage = "batch_contract";
     const byId = new Map(
       parsedAnswers.map((answer) => [answer.questionId, answer]),
@@ -579,23 +603,11 @@ export async function generateYcApplication(
         body: parsed.body,
         claims: parsed.claims,
       });
-      const selection = context.questions?.find(
-        (entry) => entry.questionId === questionId,
+      const answerContext = ycQuestionContext(
+        context,
+        questionId,
+        rhetoricalPlans,
       );
-      const answerContext = selection
-        ? {
-            ...context,
-            question: selection.question,
-            atomicSources: (context.atomicSources ?? []).filter(
-              (source) =>
-                source.scope === "target" ||
-                (source.rootId && selection.sourceIds.includes(source.rootId)),
-            ),
-            sources: context.sources.filter((source) =>
-              selection.sourceIds.includes(source.id),
-            ),
-          }
-        : context;
       validationStage = "grounding";
       const validated = validateYcApplicationOutput({
         context: answerContext,
@@ -634,7 +646,9 @@ export async function generateYcApplication(
         processingTime,
         evalMetadata: {
           generationId,
-          promptVersion: YC_APPLICATION_PROMPT_VERSION,
+          promptVersion: rhetoricalPlans
+            ? RHETORICAL_YC_PROMPT_VERSION
+            : YC_APPLICATION_PROMPT_VERSION,
           model: dependencies.model,
           category: "yc_application",
           generationTimeMs: processingTime,
@@ -666,6 +680,19 @@ export async function generateYcApplication(
       },
     });
   } catch (error) {
+    if (error instanceof YcPlanUnavailableError) {
+      timing?.failure("INSUFFICIENT_GROUNDING");
+      return NextResponse.json(
+        {
+          success: false,
+          code: "INSUFFICIENT_GROUNDING",
+          error:
+            "No complete reviewed fact combination fits every answer. Review complete facts; qualifications will not be shortened.",
+          billing: "none",
+        },
+        { status: 422, headers: input.corsHeaders },
+      );
+    }
     const outputInvalid =
       error instanceof AtomicClaimValidationError ||
       error instanceof GroundedTextSanitizationError ||

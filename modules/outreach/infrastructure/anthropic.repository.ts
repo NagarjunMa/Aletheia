@@ -258,6 +258,7 @@ export async function createOutreachDraftMessage(input: {
   atomicSources?: readonly AtomicSource[];
   proseCompositions?: ProseCompositions;
   intent?: LinkedinIntent;
+  rhetoricalPlans?: boolean;
   logger?: SafeLogger;
 }) {
   const stageLogger = input.logger ?? log;
@@ -277,6 +278,7 @@ export async function createOutreachDraftMessage(input: {
             input.atomicSources ?? [],
             undefined,
             input.intent,
+            input.rhetoricalPlans,
           )
         : buildProseSelectionTool("linkedin_inmail", input.proseCompositions!);
   const toolName = tool.name;
@@ -358,6 +360,7 @@ export function getLinkedinConnectionDraftToolInput(
     atomicSources: readonly AtomicSource[];
     candidateSources: CandidateGroundingSource[];
     intent?: LinkedinIntent;
+    rhetoricalPlans?: boolean;
   },
 ): LinkedinConnectionDraft {
   const toolBlock = findLinkedinConnectionTool(response);
@@ -370,10 +373,11 @@ export function getLinkedinConnectionDraftToolInput(
     toolBlock.input as Record<string, unknown>;
   if (grounding) {
     return resolveLinkedinSelection(
-      composition,
+      grounding.rhetoricalPlans ? toolBlock.input : composition,
       grounding.atomicSources,
       grounding.candidateSources,
       grounding.intent,
+      grounding.rhetoricalPlans,
     );
   }
   // Standalone legacy parsing is retained for tooling; live requests always supply grounding.
