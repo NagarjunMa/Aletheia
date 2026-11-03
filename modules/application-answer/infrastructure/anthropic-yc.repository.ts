@@ -1,3 +1,5 @@
+import type { YcPlannedOptions } from "../application/yc-rhetorical-options";
+import { buildYcPlannedTool } from "./yc-planned-tool";
 import {
   atomicClaimsSchema,
   atomicClaimsToolSchema,
@@ -258,6 +260,7 @@ export async function createYcApplicationMessage(input: {
   systemPrompt: string;
   userPrompt: string;
   questionCount?: number;
+  plannedOptions?: YcPlannedOptions;
 }) {
   const signal = AbortSignal.timeout(GENERATION_MODEL_TIMEOUT_MS);
   try {
@@ -269,9 +272,14 @@ export async function createYcApplicationMessage(input: {
         system: input.systemPrompt,
         messages: [{ role: "user", content: input.userPrompt }],
         tools: [
-          input.questionCount === undefined
-            ? ycApplicationTool
-            : applicationBatchTool,
+          input.plannedOptions
+            ? buildYcPlannedTool(
+                input.plannedOptions,
+                input.questionCount !== undefined,
+              )
+            : input.questionCount === undefined
+              ? ycApplicationTool
+              : applicationBatchTool,
         ],
         tool_choice: {
           type: "tool",
@@ -294,6 +302,7 @@ export async function createYcApplicationDraft(input: {
   systemPrompt: string;
   userPrompt: string;
   questionCount?: number;
+  plannedOptions?: YcPlannedOptions;
   logger?: SafeLogger;
 }) {
   const apiKey = process.env.ANTHROPIC_API_KEY;

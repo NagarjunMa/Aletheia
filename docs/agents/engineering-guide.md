@@ -2,6 +2,12 @@
 
 ## Active Work
 
+ALE-49 constrained rhetorical plans: see `docs/operations/ale-49-rhetorical-plans.md`.
+Server-only `RHETORICAL_PLANS_ENABLED` defaults off; validated request-local plans
+vary complete fact ordering in the existing single model call. Preserve the exact
+legacy path when disabled. Provider/human evidence and release authorization are
+separate; do not enable this flag as an ordinary implementation/test action.
+
 ALE-48 offline discourse evaluation: see `docs/evals/grounded-response-quality.md` for the synthetic ledger-backed rubric, current server-option/reference baseline, privacy-safe report and Phase 4 decision thresholds. This stage changes no production generation behavior; provider/human and parent release gates remain separate.
 
 ALE-47 final-output finalization is merged: see `docs/operations/ale-47-grounded-finalization.md`. Grounded channels preserve source-backed text, inspect style without rewriting, and validate the exact final output before canonical limits. Reviewed-fact whitespace and deny-only exclusion folding corrections passed independent review before publication. Hosted/provider rollout evidence remains separate from local verification.

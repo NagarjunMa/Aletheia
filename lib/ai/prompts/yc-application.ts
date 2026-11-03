@@ -1,3 +1,4 @@
+import { RHETORICAL_PLAN_INSTRUCTIONS } from "@/modules/grounding/domain/rhetorical-plan";
 import {
   ATOMIC_PROVENANCE_INSTRUCTIONS,
   buildAtomicProvenancePrompt,
@@ -6,6 +7,7 @@ import { scanForInjection } from "./injection-heuristic";
 import type { YcGroundingContext } from "@/modules/application-answer/domain/yc-grounding.types";
 
 export const YC_APPLICATION_PROMPT_VERSION = "yc-2.0.1";
+export const RHETORICAL_YC_PROMPT_VERSION = "yc-3.0.0";
 
 export const YC_APPLICATION_SYSTEM_PROMPT = `You write concise answers for startup job application forms.
 
@@ -46,7 +48,10 @@ function renderSource(source: YcGroundingContext["sources"][number]): string {
   ].join("\n");
 }
 
-export function buildYcApplicationPrompt(context: YcGroundingContext) {
+export function buildYcApplicationPrompt(
+  context: YcGroundingContext,
+  rhetoricalPlans = false,
+) {
   const injectionScan = scanForInjection(
     `${context.questions?.map((entry) => entry.question).join("\n") ?? context.question}\n${context.jobDescription}`,
   );
@@ -56,15 +61,16 @@ export function buildYcApplicationPrompt(context: YcGroundingContext) {
     .join("\n");
 
   return {
-    systemPrompt:
-      (context.questions
-        ? YC_APPLICATION_SYSTEM_PROMPT.replace(
-            "- Return only the required return_yc_application_answer tool.",
-            "- Return only return_application_answers. Return exactly one answer per questionId in input order. Apply all answer and grounding rules independently to each answer. Use only that question’s listed source IDs.",
-          )
-        : YC_APPLICATION_SYSTEM_PROMPT) +
-      "\n\n" +
-      ATOMIC_PROVENANCE_INSTRUCTIONS,
+    systemPrompt: rhetoricalPlans
+      ? `Select a complete source-backed application answer for ${context.questions ? "each supplied question ID" : "the supplied question"}. Use only the current question’s offered options. Never add outreach framing, a greeting, signature, CTA, inferred fit or new facts.\n${RHETORICAL_PLAN_INSTRUCTIONS}`
+      : (context.questions
+          ? YC_APPLICATION_SYSTEM_PROMPT.replace(
+              "- Return only the required return_yc_application_answer tool.",
+              "- Return only return_application_answers. Return exactly one answer per questionId in input order. Apply all answer and grounding rules independently to each answer. Use only that question’s listed source IDs.",
+            )
+          : YC_APPLICATION_SYSTEM_PROMPT) +
+        "\n\n" +
+        ATOMIC_PROVENANCE_INSTRUCTIONS,
     userPrompt: [
       buildAtomicProvenancePrompt(context.atomicSources ?? []),
       "<target_context>",

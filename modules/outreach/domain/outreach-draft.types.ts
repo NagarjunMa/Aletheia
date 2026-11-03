@@ -1,3 +1,4 @@
+import type { RhetoricalPlan } from "@/modules/grounding/domain/rhetorical-plan";
 import { z } from "zod";
 import {
   EMAIL_SUBJECT_MAX_CHARACTERS,
@@ -43,7 +44,7 @@ export type ColdEmailProofPoint = z.infer<typeof coldEmailProofPointSchema>;
 export type ColdEmailDraft = Omit<
   z.infer<typeof coldEmailDraftSchema>,
   "claims"
-> & { claims?: AtomicClaim[] };
+> & { claims?: AtomicClaim[]; rhetoricalPlan?: RhetoricalPlan };
 
 export { LINKEDIN_CONNECTION_MAX_CHARACTERS };
 
@@ -83,4 +84,4 @@ export type LinkedinConnectionRelevance = z.infer<
 export type LinkedinConnectionDraft = Omit<
   z.infer<typeof linkedinConnectionDraftSchema>,
   "claims"
-> & { claims?: AtomicClaim[] };
+> & { claims?: AtomicClaim[]; rhetoricalPlan?: RhetoricalPlan };

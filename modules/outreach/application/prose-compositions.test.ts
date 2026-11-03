@@ -156,3 +156,54 @@ it("bounds final-validation work when every otherwise fitting combination is exc
     check.mockRestore();
   }
 });
+
+it.each(["cold_email", "linkedin_inmail"] as const)(
+  "binds enabled %s plans without weakening final provenance",
+  (category) => {
+    const { context } = proseFixture(category, "initial_outreach");
+    const input = { category, emailMode: "initial_outreach" as const, context };
+    expect(
+      buildProseCompositions({ ...input, rhetoricalPlans: false }),
+    ).toEqual(buildProseCompositions(input));
+    const options = buildProseCompositions({ ...input, rhetoricalPlans: true });
+    expect(options).toEqual(
+      buildProseCompositions({ ...input, rhetoricalPlans: true }),
+    );
+    for (const option of options) {
+      const p = option.rhetoricalPlan!;
+      const selection = {
+        option_id: option.id,
+        rhetorical_plan: { reference: p.reference, archetype: p.archetype },
+      };
+      expect(resolveProseSelection(selection, options)).toBe(option);
+      expect(() =>
+        resolveProseSelection(
+          {
+            ...selection,
+            rhetorical_plan: {
+              ...selection.rhetorical_plan,
+              reference: "rp1." + "0".repeat(24),
+            },
+          },
+          options,
+        ),
+      ).toThrow();
+      expect(() =>
+        resolveProseSelection({ option_id: option.id }, options),
+      ).toThrow();
+      expect(() =>
+        validateOutreachProvenance({
+          body: option.body,
+          subject: option.subject,
+          claims: option.claims,
+          context,
+          bodyConstraint: resolveOutputConstraint({
+            category,
+            emailMode: "initial_outreach",
+          }),
+          renderedSignature: category === "cold_email",
+        }),
+      ).not.toThrow();
+    }
+  },
+);

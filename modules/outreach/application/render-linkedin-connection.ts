@@ -1,3 +1,4 @@
+import { orderedPlanClaims } from "@/modules/grounding/domain/rhetorical-plan";
 import { prepareGroundedText } from "@/modules/grounding/application/finalize-grounded-output";
 import type { CandidateGroundingSource } from "@/modules/candidate-context/domain/candidate-context.types";
 import type { ConnectionValidationDetail } from "../domain/linkedin-connection-diagnostics";
@@ -115,7 +116,16 @@ export function renderLinkedinConnection(input: {
   if (!observation || !cta || (input.draft.candidate_relevance && !relevance)) {
     throw new LinkedinConnectionValidationError("CONNECTION_EMPTY_SECTION");
   }
-  const body = [relevance, observation, cta].filter(Boolean).join(" ");
+  const body = input.draft.rhetoricalPlan
+    ? [
+        "Hi there,",
+        ...orderedPlanClaims(
+          input.draft.rhetoricalPlan,
+          input.draft.claims ?? [],
+        ).map((c) => normalize(c.text)),
+        cta,
+      ].join(" ")
+    : [relevance, observation, cta].filter(Boolean).join(" ");
   if (body.length > LINKEDIN_CONNECTION_MAX_CHARACTERS) {
     throw new LinkedinConnectionValidationError("CONNECTION_OVER_LIMIT", {
       actualCharacterCount: body.length,

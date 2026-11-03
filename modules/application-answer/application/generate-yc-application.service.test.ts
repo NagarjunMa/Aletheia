@@ -1364,3 +1364,86 @@ describe("ALE-47 actual YC finalization", () => {
     },
   );
 });
+
+it.each([false, true])(
+  "ALE-49 planned YC output preserves privacy and fair compensation (invalid: %s)",
+  async (invalid) => {
+    const deps = dependencies();
+    deps.createMessage = vi.fn<
+      GenerateYcApplicationDependencies["createMessage"]
+    >(async (input) => {
+      const o = input.plannedOptions![0]!.options[0]!;
+      return {
+        id: "test",
+        type: "message",
+        role: "assistant",
+        model: "test",
+        stop_reason: "tool_use",
+        stop_sequence: null,
+        usage: { input_tokens: 10, output_tokens: 20 },
+        content: [
+          {
+            type: "tool_use",
+            id: "test",
+            name: "return_yc_application_answer",
+            input: {
+              option_id: o.id,
+              rhetorical_plan: {
+                reference: invalid
+                  ? "rp1." + "0".repeat(24)
+                  : o.rhetoricalPlan.reference,
+                archetype: o.rhetoricalPlan.archetype,
+              },
+            },
+          },
+        ],
+      };
+    });
+    const response = await generateYcApplication(
+      {
+        caller,
+        request,
+        corsHeaders: {},
+        applicationBaseUrl: "https://example.test",
+        rhetoricalPlans: true,
+      },
+      deps,
+    );
+    expect(response.status).toBe(invalid ? 502 : 200);
+    const body = await response.json();
+    expect(JSON.stringify(body)).not.toMatch(
+      /rhetorical|source_id|supporting_excerpt|rp1\.|option_id/u,
+    );
+    expect(deps.createMessage).toHaveBeenCalledTimes(1);
+    expect(deps.finishAttempt).toHaveBeenCalledTimes(1);
+    expect(deps.parseMessage).not.toHaveBeenCalled();
+    if (invalid) {
+      expect(deps.refundCredits).toHaveBeenCalledTimes(1);
+      expect(deps.releaseRateLimit).toHaveBeenCalledTimes(1);
+    } else {
+      expect(body.evalMetadata.promptVersion).toBe("yc-3.0.0");
+      expect(deps.refundCredits).not.toHaveBeenCalled();
+    }
+  },
+);
+it("ALE-49 rejects insufficient complete YC evidence before quota or model admission", async () => {
+  const context = grounding();
+  context.atomicSources![0]!.content = "I built a prototype.";
+  const deps = dependencies({
+    prepareGrounding: vi.fn().mockResolvedValue(context),
+  });
+  const response = await generateYcApplication(
+    {
+      caller,
+      request,
+      corsHeaders: {},
+      applicationBaseUrl: "https://example.test",
+      rhetoricalPlans: true,
+    },
+    deps,
+  );
+  expect(response.status).toBe(422);
+  expect(deps.checkRateLimit).not.toHaveBeenCalled();
+  expect(deps.reserveCredits).not.toHaveBeenCalled();
+  expect(deps.createMessage).not.toHaveBeenCalled();
+});

@@ -1,3 +1,4 @@
+import { rhetoricalPlansEnabled } from "@/modules/grounding/domain/rhetorical-plan";
 import {
   buildProseCompositions,
   ProseGroundingUnavailableError,
@@ -30,6 +31,7 @@ import {
   getSystemPrompt,
   buildPrompt,
   PROMPT_VERSION,
+  RHETORICAL_OUTREACH_PROMPT_VERSION,
   type GenerateInput,
 } from "@/lib/ai/prompts/linkedin-connection";
 import type { StylePatterns } from "@/lib/ai/style-analyzer";
@@ -57,7 +59,10 @@ import {
   createGenerationTiming,
   type GenerationTiming,
 } from "@/lib/generation-timing";
-import { YC_APPLICATION_PROMPT_VERSION } from "@/lib/ai/prompts/yc-application";
+import {
+  YC_APPLICATION_PROMPT_VERSION,
+  RHETORICAL_YC_PROMPT_VERSION,
+} from "@/lib/ai/prompts/yc-application";
 import {
   CURRENT_EXTENSION_API_VERSION,
   evaluateExtensionContract,
@@ -185,12 +190,19 @@ async function releaseOutreachReservations(input: {
 export async function POST(request: NextRequest) {
   return withRequestLifecycle("generate-route", request, async (log) => {
     const timing = createGenerationTiming();
+    const rhetoricalPlans = rhetoricalPlansEnabled();
     const failureContext = createFailureContext();
     const firstInvocation = !hasHandledGeneration;
     hasHandledGeneration = true;
     let status = 500;
     try {
-      const response = await handlePost(request, log, timing, failureContext);
+      const response = await handlePost(
+        request,
+        log,
+        timing,
+        failureContext,
+        rhetoricalPlans,
+      );
       status = response.status;
       return response;
     } finally {
@@ -209,8 +221,12 @@ export async function POST(request: NextRequest) {
         model: CLAUDE_MODEL,
         templateVersion:
           summary.category === "yc_application"
-            ? YC_APPLICATION_PROMPT_VERSION
-            : PROMPT_VERSION,
+            ? rhetoricalPlans
+              ? RHETORICAL_YC_PROMPT_VERSION
+              : YC_APPLICATION_PROMPT_VERSION
+            : rhetoricalPlans
+              ? RHETORICAL_OUTREACH_PROMPT_VERSION
+              : PROMPT_VERSION,
       });
     }
   });
@@ -221,6 +237,7 @@ async function handlePost(
   log: SafeLogger,
   timing: GenerationTiming,
   failureContext: FailureContext,
+  rhetoricalPlans: boolean,
 ) {
   const corsHeaders = createGenerateCorsHeaders(request);
 
@@ -293,6 +310,7 @@ async function handlePost(
         caller: authResult,
         request: parsed.data,
         corsHeaders,
+        rhetoricalPlans,
         applicationBaseUrl:
           process.env.NEXT_PUBLIC_APP_URL ?? request.nextUrl.origin,
         logger: log,
@@ -361,6 +379,7 @@ async function handlePost(
           preparedGrounding.atomicSources ?? [],
           preparedGrounding.targetDiagnostics,
           validatedData.intent ?? "networking",
+          rhetoricalPlans,
         ).input_schema.properties.option_id.enum.length;
       } finally {
         log.info(
@@ -382,6 +401,8 @@ async function handlePost(
           category: validatedData.category,
           emailMode: validatedData.emailMode,
           context: preparedGrounding,
+          rhetoricalPlans,
+          ...(validatedData.intent ? { intent: validatedData.intent } : {}),
         });
       } catch (error) {
         if (!(error instanceof ProseGroundingUnavailableError)) throw error;
@@ -670,7 +691,7 @@ async function handlePost(
       "Prepared generation context",
     );
 
-    const systemPrompt = `${getSystemPrompt(category)}\n\n${getAtomicProvenanceInstructions(category)}`;
+    const systemPrompt = `${getSystemPrompt(category, rhetoricalPlans)}\n\n${getAtomicProvenanceInstructions(category, rhetoricalPlans)}`;
     const promptInput: GenerateInput = {
       profileMarkdown: cleanMarkdown,
       resume: resumeForPrompt,
@@ -746,6 +767,7 @@ async function handlePost(
       emailMode,
       atomicSources: preparedGrounding.atomicSources ?? [],
       ...(proseCompositions ? { proseCompositions } : {}),
+      rhetoricalPlans,
       intent: validatedData.intent ?? "networking",
       logger: log,
     });
@@ -780,7 +802,9 @@ async function handlePost(
         totalTokens,
         processingTime,
         category,
-        promptVersion: PROMPT_VERSION,
+        promptVersion: rhetoricalPlans
+          ? RHETORICAL_OUTREACH_PROMPT_VERSION
+          : PROMPT_VERSION,
         apiVersion: contract.apiVersion,
         extensionVersion: contract.extensionVersion,
         legacyExtensionClient: contract.legacyClient,
@@ -791,7 +815,9 @@ async function handlePost(
     // Eval metadata — echoed back to client, sent back in feedback payload,
     // ultimately persisted in user_feedback.metadata for per-version eval analysis.
     const evalMetadata = {
-      promptVersion: PROMPT_VERSION,
+      promptVersion: rhetoricalPlans
+        ? RHETORICAL_OUTREACH_PROMPT_VERSION
+        : PROMPT_VERSION,
       model: CLAUDE_MODEL,
       temperature: OUTREACH_GENERATION_SETTINGS.temperature,
       category,
@@ -1031,6 +1057,7 @@ async function handlePost(
           atomicSources: preparedGrounding.atomicSources ?? [],
           candidateSources: preparedGrounding.sources,
           intent: validatedData.intent ?? "networking",
+          rhetoricalPlans,
         });
       } catch (error) {
         throw new LinkedinConnectionValidationError(

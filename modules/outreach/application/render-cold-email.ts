@@ -1,3 +1,4 @@
+import { orderedPlanClaims } from "@/modules/grounding/domain/rhetorical-plan";
 import { countWords } from "@/app/api/extension/generate/utils";
 import { prepareGroundedText } from "@/modules/grounding/application/finalize-grounded-output";
 import type { CandidateIdentity } from "@/modules/candidate-context/domain/candidate-context.types";
@@ -36,7 +37,17 @@ export function renderColdEmail(input: {
         .filter(Boolean)
         .join("\n")
     : "";
-  const body = [...blocks, signature].filter(Boolean).join("\n\n");
+  const plannedBlocks = input.draft.rhetoricalPlan
+    ? [
+        `Hi ${normalizeSection(input.draft.greeting)},`,
+        ...orderedPlanClaims(
+          input.draft.rhetoricalPlan,
+          input.draft.claims ?? [],
+        ).map((c) => normalizeSection(c.text)),
+        `${normalizeSection(input.draft.value_statement)} ${normalizeSection(input.draft.cta)}`,
+      ]
+    : blocks;
+  const body = [...plannedBlocks, signature].filter(Boolean).join("\n\n");
   return {
     subject: normalizeSection(input.draft.subject_line),
     body,
