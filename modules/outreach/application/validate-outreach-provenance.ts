@@ -12,8 +12,8 @@ export function validateOutreachProvenance(input: {
   context: OutreachGroundingContext;
   renderedSignature?: boolean;
   platform?: "email" | "linkedin";
-}): void {
-  finalizeGroundedOutput({
+}) {
+  return finalizeGroundedOutput({
     body: input.body,
     bodyConstraint: input.bodyConstraint,
     ...(input.requiredEnding ? { requiredEnding: input.requiredEnding } : {}),

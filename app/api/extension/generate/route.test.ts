@@ -1568,6 +1568,23 @@ describe("POST /api/extension/generate", () => {
     expect(body.body).toContain("Would you be open to a brief conversation?");
     expect(body.body).toContain("Best,\nCandidate Name");
     expect(body.evalMetadata.emailMode).toBe("initial_outreach");
+    expect(body.evalMetadata.generationId).toMatch(/^[a-f0-9-]{36}$/u);
+    expect(body.evalMetadata.quality).toMatchObject({
+      version: 1,
+      groundingPassed: true,
+      archetype: "legacy",
+    });
+    const { feedbackSchema } =
+      await import("@/app/api/extension/feedback/schema");
+    expect(
+      feedbackSchema.safeParse({
+        message: body.body,
+        subjectLine: body.subject_line,
+        category: body.category,
+        approved: true,
+        evalMetadata: body.evalMetadata,
+      }).success,
+    ).toBe(true);
   });
 
   it.each(["cold_email", "linkedin_inmail"] as const)(
@@ -3427,4 +3444,82 @@ it("ALE-49 malformed plan returns 502 and releases only its daily reservation", 
   } finally {
     vi.unstubAllEnvs();
   }
+});
+
+describe("ALE-51 content-free generation observations", () => {
+  it.each(["linkedin_connection", "cold_email", "linkedin_inmail"] as const)(
+    "correlates fresh IDs and finalized quality for %s without leaking source references",
+    async (category) => {
+      const info = vi.fn();
+      const spy = vi
+        .spyOn(loggerModule, "createRequestLogger")
+        .mockReturnValue({
+          info,
+          debug: vi.fn(),
+          warn: vi.fn(),
+          error: vi.fn(),
+          child: vi.fn(),
+        });
+      try {
+        const ids = [];
+        for (let i = 0; i < 2; i++) {
+          if (category !== "linkedin_connection")
+            mockAnthropicCreate.mockImplementationOnce(async (input) =>
+              proseOptionResponse(input),
+            );
+          const response = await POST(
+            makeRequest({
+              method: "POST",
+              headers: { authorization: "Bearer test" },
+              body: { ...validPayload, category },
+            }),
+          );
+          expect(response.status).toBe(200);
+          const body = await response.json();
+          ids.push(body.evalMetadata.generationId);
+          const observation = info.mock.calls
+            .filter(([fields]) => fields.event === "generation.quality")
+            .at(-1)?.[0];
+          expect(observation).toMatchObject({
+            generationId: ids.at(-1),
+            category,
+            groundingPassed: true,
+            quality: body.evalMetadata.quality,
+            inputUnits: expect.any(Number),
+            outputUnits: expect.any(Number),
+          });
+          expect(JSON.stringify(observation)).not.toMatch(
+            /supporting_excerpt|source_id|rp1\.|option_id|Candidate Name|build tools/,
+          );
+        }
+        expect(ids[0]).not.toBe(ids[1]);
+      } finally {
+        spy.mockRestore();
+      }
+    },
+  );
+  it("telemetry failure cannot replace a successful generation response", async () => {
+    const spy = vi.spyOn(loggerModule, "createRequestLogger").mockReturnValue({
+      info: vi.fn((fields) => {
+        if (typeof fields === "object" && fields.event === "generation.quality")
+          throw new Error("stdout unavailable");
+      }),
+      debug: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      child: vi.fn(),
+    });
+    try {
+      const response = await POST(
+        makeRequest({
+          method: "POST",
+          headers: { authorization: "Bearer test" },
+          body: validPayload,
+        }),
+      );
+      expect(response.status).toBe(200);
+    } finally {
+      spy.mockRestore();
+    }
+  });
 });

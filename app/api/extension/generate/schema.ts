@@ -1,3 +1,4 @@
+import { qualityMetadataSchema } from "@/lib/ai/generation-quality";
 import { z } from "zod";
 import { messageFocusSchema } from "@/modules/outreach/domain/message-focus";
 import { EMAIL_MODES } from "@/lib/ai/email-formatter";
@@ -195,6 +196,7 @@ export const generateRequestContractSchema = z.union([
 const ycApplicationEvalMetadataSchema = z
   .object({
     generationId: z.string().uuid(),
+    quality: qualityMetadataSchema.optional(),
     promptVersion: z.string().trim().min(1).max(100),
     model: z.string().trim().min(1).max(200),
     category: z.literal("yc_application"),

@@ -418,11 +418,58 @@ const APPLICATION_METADATA_FIELDS = [
 ];
 export function applicationMetadata(output) {
   if (!output.evalMetadata) return undefined;
-  return Object.fromEntries(
+  const metadata = Object.fromEntries(
     APPLICATION_METADATA_FIELDS.filter((key) =>
       ["string", "number", "boolean"].includes(typeof output.evalMetadata[key]),
     ).map((key) => [key, output.evalMetadata[key]]),
   );
+  const quality = output.evalMetadata.quality;
+  if (quality && typeof quality === "object" && !Array.isArray(quality)) {
+    const archetypes = [
+      "legacy",
+      "mixed",
+      "target_led",
+      "evidence_led",
+      "outcome_led",
+      "target_only",
+      "concise_direct",
+    ];
+    const kinds = [
+      "role",
+      "company",
+      "technology",
+      "action",
+      "outcome",
+      "metric",
+      "preference",
+      "target_observation",
+      "cta_rationale",
+    ];
+    if (
+      quality.version === 1 &&
+      archetypes.includes(quality.archetype) &&
+      quality.groundingPassed === true &&
+      Number.isInteger(quality.selectedSourceCount) &&
+      quality.selectedSourceCount >= 0 &&
+      quality.selectedSourceCount <= 64 &&
+      Number.isInteger(quality.finalizationPatternCount) &&
+      quality.finalizationPatternCount >= 0 &&
+      quality.finalizationPatternCount <= 256 &&
+      Array.isArray(quality.selectedSourceKinds) &&
+      quality.selectedSourceKinds.length <= 9 &&
+      quality.selectedSourceKinds.every((k) => kinds.includes(k))
+    ) {
+      metadata.quality = {
+        version: 1,
+        archetype: quality.archetype,
+        selectedSourceCount: quality.selectedSourceCount,
+        selectedSourceKinds: [...quality.selectedSourceKinds],
+        groundingPassed: true,
+        finalizationPatternCount: quality.finalizationPatternCount,
+      };
+    }
+  }
+  return metadata;
 }
 
 export function projectStoredApplication(output) {

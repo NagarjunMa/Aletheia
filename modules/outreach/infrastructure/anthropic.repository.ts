@@ -424,6 +424,9 @@ export function getEmailDraftToolInput(
       body: selected.body,
       word_count: selected.body.trim().split(/\s+/u).length,
       claims: selected.claims,
+      ...(selected.rhetoricalPlan
+        ? { rhetoricalArchetype: selected.rhetoricalPlan.archetype }
+        : {}),
     };
   }
   return emailDraftToolInputSchema.parse(toolBlock.input);

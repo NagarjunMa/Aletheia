@@ -14,7 +14,7 @@ export const metadata: Metadata = {
   },
 };
 
-const EFFECTIVE_DATE = "September 22, 2026";
+const EFFECTIVE_DATE = "November 3, 2026";
 const CONTACT_EMAIL = "hello@aletheia.live";
 const OPERATOR_NAME = "Nagarjun Mallesh";
 const OPERATOR_LOCATION = "Boston, Massachusetts, United States";
@@ -89,6 +89,9 @@ export default function PrivacyPage() {
             <li>
               <strong>Operational telemetry</strong> — request count, error
               traces, latency. No message body or profile content in error logs.
+              Draft-quality events use a random generation reference, category,
+              coarse source counts, validation results, timing, and token
+              counts, without source content or generated text.
             </li>
             <li>
               <strong>Optional support-chat information</strong> — questions,
@@ -282,6 +285,14 @@ export default function PrivacyPage() {
             account deletion, identifiable data is removed within 30 days.
             Anonymous aggregated metrics (e.g. total messages generated per day)
             may be retained for product analytics.
+          </p>
+          <p>
+            New draft-quality feedback records are scheduled for removal after
+            90 days by a bounded daily cleanup job; scheduling delays, failures,
+            or a backlog may extend this period. Private writing preferences
+            remain until reset or account deletion. Cross-user quality reports
+            include your feedback only while Share Analytics is enabled in
+            Settings; turning it off excludes past records from those reports.
           </p>
           <p>
             Ready original resume files and extracted text remain in your

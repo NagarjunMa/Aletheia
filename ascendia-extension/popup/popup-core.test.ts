@@ -649,3 +649,32 @@ describe("ALE-37 authentication draft lifetime", () => {
     ).toBeNull();
   });
 });
+
+it("keeps safe YC quality metadata through cache/feedback while discarding private extras", async () => {
+  const { projectStoredApplication, buildApplicationFeedback } =
+    await import("./popup-core.js");
+  const quality = {
+    version: 1,
+    archetype: "mixed",
+    selectedSourceCount: 4,
+    selectedSourceKinds: ["action"],
+    groundingPassed: true,
+    finalizationPatternCount: 2,
+  };
+  const output = {
+    category: "yc_application",
+    body: Array(50).fill("experience").join(" "),
+    evalMetadata: {
+      generationId: "33333333-3333-4333-8333-333333333333",
+      quality: {
+        ...quality,
+        sourceId: "PRIVATE_SOURCE_CANARY",
+        body: "PRIVATE_BODY_CANARY",
+      },
+    },
+  };
+  const stored = projectStoredApplication(output);
+  const feedback = buildApplicationFeedback(stored, true);
+  expect(feedback.evalMetadata.quality).toEqual(quality);
+  expect(JSON.stringify(feedback)).not.toContain("PRIVATE");
+});

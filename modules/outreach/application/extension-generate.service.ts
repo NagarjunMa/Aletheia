@@ -1,3 +1,9 @@
+import {
+  buildQualityMetadata,
+  sourceQualitySummary,
+  type QualityMetadata,
+  type GenerationQualityHooks,
+} from "@/lib/ai/generation-quality";
 import { rhetoricalPlansEnabled } from "@/modules/grounding/domain/rhetorical-plan";
 import {
   buildProseCompositions,
@@ -192,6 +198,23 @@ export async function POST(request: NextRequest) {
     const timing = createGenerationTiming();
     const rhetoricalPlans = rhetoricalPlansEnabled();
     const failureContext = createFailureContext();
+    const generationId = crypto.randomUUID();
+    let prepared: ReturnType<typeof sourceQualitySummary> | undefined;
+    let quality: QualityMetadata | undefined;
+    let groundingPassed: boolean | null = null;
+    const qualityHooks: GenerationQualityHooks = {
+      generationId,
+      onPrepared: (sources) => {
+        prepared = sourceQualitySummary(sources);
+      },
+      onValidated: (value) => {
+        quality = value;
+        groundingPassed = true;
+      },
+      onRejected: () => {
+        groundingPassed = false;
+      },
+    };
     const firstInvocation = !hasHandledGeneration;
     hasHandledGeneration = true;
     let status = 500;
@@ -202,6 +225,7 @@ export async function POST(request: NextRequest) {
         timing,
         failureContext,
         rhetoricalPlans,
+        qualityHooks,
       );
       status = response.status;
       return response;
@@ -210,6 +234,28 @@ export async function POST(request: NextRequest) {
       // response-body parsing. Failure queue capture is separately bounded.
       const summary = timing.finish(status);
       await recordFailedGeneration(failureContext, status, summary.errorCode);
+      recordMeasurement(log, {
+        event: "generation.quality",
+        generationId,
+        category: summary.category,
+        outcome: status < 400 ? "success" : "failure",
+        status,
+        durationMs: summary.durationMs,
+        templateVersion:
+          summary.category === "yc_application"
+            ? rhetoricalPlans
+              ? RHETORICAL_YC_PROMPT_VERSION
+              : YC_APPLICATION_PROMPT_VERSION
+            : rhetoricalPlans
+              ? RHETORICAL_OUTREACH_PROMPT_VERSION
+              : PROMPT_VERSION,
+        model: CLAUDE_MODEL,
+        inputUnits: summary.metrics.inputUnits ?? null,
+        outputUnits: summary.metrics.outputUnits ?? null,
+        ...(prepared ? { prepared } : {}),
+        groundingPassed,
+        ...(quality ? { quality } : {}),
+      });
       recordMeasurement(log, {
         ...summary,
         deployment: /^[a-f0-9]{7,40}$/i.test(
@@ -238,6 +284,7 @@ async function handlePost(
   timing: GenerationTiming,
   failureContext: FailureContext,
   rhetoricalPlans: boolean,
+  qualityHooks: GenerationQualityHooks,
 ) {
   const corsHeaders = createGenerateCorsHeaders(request);
 
@@ -311,6 +358,7 @@ async function handlePost(
         request: parsed.data,
         corsHeaders,
         rhetoricalPlans,
+        qualityHooks,
         applicationBaseUrl:
           process.env.NEXT_PUBLIC_APP_URL ?? request.nextUrl.origin,
         logger: log,
@@ -368,6 +416,7 @@ async function handlePost(
       return candidateContextUnavailableResponse(corsHeaders);
     }
 
+    qualityHooks.onPrepared?.(preparedGrounding.atomicSources ?? []);
     let proseCompositions: ProseCompositions | undefined;
     if (validatedData.category === "linkedin_connection") {
       const eligibleTargetCount = (
@@ -815,6 +864,7 @@ async function handlePost(
     // Eval metadata — echoed back to client, sent back in feedback payload,
     // ultimately persisted in user_feedback.metadata for per-version eval analysis.
     const evalMetadata = {
+      generationId: qualityHooks.generationId,
       promptVersion: rhetoricalPlans
         ? RHETORICAL_OUTREACH_PROMPT_VERSION
         : PROMPT_VERSION,
@@ -854,7 +904,7 @@ async function handlePost(
           mode: emailMode,
         });
         const { subject, body } = rendered;
-        validateOutreachProvenance({
+        const finalization = validateOutreachProvenance({
           body,
           subject,
           bodyConstraint: resolveOutputConstraint({ category, emailMode }),
@@ -863,6 +913,15 @@ async function handlePost(
           context: preparedGrounding,
           renderedSignature: true,
         });
+        const quality = buildQualityMetadata({
+          claims: draft.claims ?? [],
+          sources: preparedGrounding.atomicSources ?? [],
+          archetypes: draft.rhetoricalPlan
+            ? [draft.rhetoricalPlan.archetype]
+            : [],
+          patternCount: finalization.fingerprintPatternCount,
+        });
+        qualityHooks.onValidated?.(quality);
         const wordCount = countOutputUnits(body, "words");
 
         timing.metrics({
@@ -883,6 +942,7 @@ async function handlePost(
             processingTime,
             evalMetadata: {
               ...evalMetadata,
+              quality,
               identityIncluded: rendered.identityIncluded,
             },
             ...(CREDIT_BILLING_ENABLED
@@ -897,6 +957,8 @@ async function handlePost(
           { headers: { ...corsHeaders, ...rateLimitHeaders } },
         );
       } catch (error) {
+        if (error instanceof AtomicClaimValidationError)
+          qualityHooks.onRejected?.();
         timing.failure("OUTPUT_VALIDATION_FAILED");
         timing.enter("refund");
         log.warn(
@@ -952,7 +1014,7 @@ async function handlePost(
         const sanitizedSubject = prepareGroundedText(parsed.subject_line);
         const finalBody = prepareGroundedText(parsed.body);
 
-        validateOutreachProvenance({
+        const finalization = validateOutreachProvenance({
           body: finalBody,
           subject: sanitizedSubject,
           bodyConstraint: resolveOutputConstraint({ category, emailMode }),
@@ -960,6 +1022,17 @@ async function handlePost(
           context: preparedGrounding,
           platform: "linkedin",
         });
+        const quality = buildQualityMetadata({
+          claims: parsed.claims,
+          sources: preparedGrounding.atomicSources ?? [],
+          archetypes:
+            "rhetoricalArchetype" in parsed &&
+            typeof parsed.rhetoricalArchetype === "string"
+              ? [parsed.rhetoricalArchetype]
+              : [],
+          patternCount: finalization.fingerprintPatternCount,
+        });
+        qualityHooks.onValidated?.(quality);
         const wordCount = countOutputUnits(finalBody, "words");
 
         timing.metrics({ resultChars: finalBody.length });
@@ -976,7 +1049,7 @@ async function handlePost(
             character_count: finalBody.length,
             usage: tokenUsage,
             processingTime,
-            evalMetadata,
+            evalMetadata: { ...evalMetadata, quality },
             ...(CREDIT_BILLING_ENABLED
               ? {
                   billingMode,
@@ -991,6 +1064,8 @@ async function handlePost(
           },
         );
       } catch (error) {
+        if (error instanceof AtomicClaimValidationError)
+          qualityHooks.onRejected?.();
         timing.failure("OUTPUT_VALIDATION_FAILED");
         timing.enter("refund");
         log.warn(
@@ -1104,7 +1179,7 @@ async function handlePost(
       });
       const body = rendered.body;
 
-      finalizeGroundedOutput({
+      const finalization = finalizeGroundedOutput({
         body,
         bodyConstraint: resolveOutputConstraint({
           category: "linkedin_connection",
@@ -1123,6 +1198,15 @@ async function handlePost(
         ],
       });
 
+      const quality = buildQualityMetadata({
+        claims: draft.claims ?? [],
+        sources: preparedGrounding.atomicSources ?? [],
+        archetypes: draft.rhetoricalPlan
+          ? [draft.rhetoricalPlan.archetype]
+          : [],
+        patternCount: finalization.fingerprintPatternCount,
+      });
+      qualityHooks.onValidated?.(quality);
       timing.metrics({
         resultChars: body.length,
         claimCount: draft.candidate_relevance ? 1 : 0,
@@ -1139,6 +1223,7 @@ async function handlePost(
           processingTime,
           evalMetadata: {
             ...evalMetadata,
+            quality,
             hasCandidateRelevance: rendered.hasCandidateRelevance,
           },
           ...(CREDIT_BILLING_ENABLED
@@ -1153,6 +1238,8 @@ async function handlePost(
         { headers: { ...corsHeaders, ...rateLimitHeaders } },
       );
     } catch (error) {
+      if (error instanceof AtomicClaimValidationError)
+        qualityHooks.onRejected?.();
       timing.failure("OUTPUT_VALIDATION_FAILED");
       timing.enter("refund");
       const errorCode =

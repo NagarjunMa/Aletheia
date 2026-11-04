@@ -85,7 +85,7 @@ export function validateYcApplicationOutput(input: {
     );
   }
 
-  finalizeGroundedOutput({
+  const finalization = finalizeGroundedOutput({
     body,
     bodyConstraint: resolveOutputConstraint({ category: "yc_application" }),
     platform: "general",
@@ -103,6 +103,7 @@ export function validateYcApplicationOutput(input: {
 
   return {
     body,
+    fingerprintPatternCount: finalization.fingerprintPatternCount,
     wordCount,
     characterCount: body.length,
     claims: input.output.claims.map((claim) => ({

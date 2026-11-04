@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import type { StylePatterns } from "@/lib/ai/style-analyzer";
+import { isStyleReady, type StylePatterns } from "@/lib/ai/style-analyzer";
 import { createLogger, startTimedStage, type SafeLogger } from "@/lib/logger";
 import {
   createBearerAuthClient,
@@ -310,8 +310,7 @@ export async function getUserStyleProfile(
 
   if (
     prefs &&
-    (prefs.approved_message_count ?? 0) >= 1 &&
-    prefs.style_patterns
+    isStyleReady(prefs.approved_message_count ?? 0, prefs.style_patterns)
   ) {
     complete("success", { found: true });
     return prefs.style_patterns as unknown as StylePatterns;

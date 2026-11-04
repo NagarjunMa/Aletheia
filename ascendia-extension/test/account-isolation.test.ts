@@ -226,10 +226,10 @@ describe("extension account isolation", () => {
     const sendBackgroundMessage = vi.fn().mockResolvedValue({ success: true });
     const save = section(
       popupSource,
-      "async function saveAcceptedMessage()",
+      "async function saveAcceptedMessage(",
       "\nfunction updateUIForCategory()",
     );
-    await runInNewContext(`(${save})()`, {
+    await runInNewContext(`(${save})({ name: "Contact" }, "networking")`, {
       currentUserId: "user-b",
       currentOutput: { category: "cold_email", body: "account B draft" },
       currentProfile: { name: "Contact" },
@@ -463,6 +463,18 @@ describe("extension account isolation", () => {
       sandbox,
     );
     expect(fetch).toHaveBeenCalledTimes(1);
+
+    fetch.mockResolvedValueOnce({
+      ok: false,
+      status: 409,
+      json: async () => ({ code: "FEEDBACK_ALREADY_RECORDED" }),
+    });
+    await expect(
+      runInNewContext(
+        `(${feedback})({ message: "B draft" }, "user-b", "op")`,
+        sandbox,
+      ),
+    ).rejects.toMatchObject({ code: "FEEDBACK_ALREADY_RECORDED" });
   });
 
   it("keeps an in-flight draft through transient token refresh but reloads on account switch", async () => {

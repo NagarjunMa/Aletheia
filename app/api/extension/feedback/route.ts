@@ -1,3 +1,5 @@
+import { persistFeedback } from "./persist-feedback";
+import { projectFeedbackMetadata } from "@/lib/ai/feedback-quality";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import type { SafeLogger } from "@/lib/logger";
@@ -8,6 +10,7 @@ import {
 } from "@/lib/ai/style-analyzer";
 import {
   createBearerAuthClient,
+  createBearerDataClient,
   createBearerServiceClient,
 } from "@/lib/supabase/server";
 import { getCorsHeaders } from "@/lib/cors";
@@ -32,7 +35,7 @@ function getSupabaseAuth() {
 async function authenticateRequest(
   request: NextRequest,
   log: SafeLogger,
-): Promise<{ userId: string; email: string } | null> {
+): Promise<{ userId: string; email: string; accessToken: string } | null> {
   const authHeader = request.headers.get("authorization");
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     log.info("No Bearer token in Authorization header");
@@ -53,7 +56,7 @@ async function authenticateRequest(
     return null;
   }
 
-  return { userId: user.id, email: user.email || "" };
+  return { userId: user.id, email: user.email || "", accessToken };
 }
 
 // ─── POST handler ───
@@ -94,41 +97,98 @@ async function handlePost(request: NextRequest, log: SafeLogger) {
     // Parse
     const body = await request.json();
     const payload = feedbackSchema.parse(body);
-    if ("format" in payload) {
-      const { error } = await getSupabaseService()
-        .from("user_feedback")
-        .insert({
-          user_id: authResult.userId,
-          feedback_type: payload.approved ? "approved" : "rejected",
-          rating: payload.approved ? 5 : 1,
-          comment: payload.summary ?? null,
-          metadata: {
-            ...(payload.evalMetadata ?? {}),
-            generationId: payload.generationId,
-            category: payload.category,
-            feedback_format: payload.format,
-            report_status: "user_reported",
-            ...(payload.issueCategory
-              ? { issue_category: payload.issueCategory }
-              : {}),
-            extension_version: contract.extensionVersion,
-            extension_api_version: contract.apiVersion,
-          },
-        });
-      if (error) {
+    const ownerDb = createBearerDataClient(authResult.accessToken);
+    const persist = async (record: {
+      id?: string;
+      comment: string | null;
+      metadata: Record<string, unknown>;
+    }) => {
+      const result = await persistFeedback(ownerDb, {
+        ...record,
+        user_id: authResult.userId,
+        feedback_type: payload.approved ? "approved" : "rejected",
+        rating: payload.approved ? 5 : 1,
+        metadata: {
+          ...record.metadata,
+          quality_version: 1,
+          report_status: "user_reported",
+          metrics_trust: "client_reported_unverified",
+          extension_version: contract.extensionVersion,
+          extension_api_version: contract.apiVersion,
+        },
+      });
+      if (result.state === "unavailable") {
         log.error(
           { errorCode: "FEEDBACK_PERSIST_FAILED" },
-          "Application feedback was not saved",
+          "Feedback persistence unavailable",
         );
-        return NextResponse.json(
-          {
-            success: false,
-            error: "Feedback could not be saved. Please retry.",
-          },
-          { status: 503, headers: corsHeaders },
-        );
+        return {
+          result,
+          response: NextResponse.json(
+            {
+              success: false,
+              error: "Feedback could not be saved. Please retry.",
+            },
+            { status: 503, headers: corsHeaders },
+          ),
+        };
       }
-      return NextResponse.json({ success: true }, { headers: corsHeaders });
+      if (result.state === "conflict")
+        return {
+          result,
+          response: NextResponse.json(
+            {
+              success: false,
+              code: "FEEDBACK_ALREADY_RECORDED",
+              error: "Feedback was already recorded for this generation.",
+            },
+            { status: 409, headers: corsHeaders },
+          ),
+        };
+      if (result.state === "inserted")
+        log.info(
+          {
+            event: "feedback.quality",
+            generationId: record.id,
+            category: payload.category,
+            approved: payload.approved,
+            outcome: "recorded",
+          },
+          "Content-free feedback outcome",
+        );
+      return {
+        result,
+        response: NextResponse.json(
+          {
+            success: true,
+            ...(result.state === "duplicate" ? { duplicate: true } : {}),
+          },
+          { headers: corsHeaders },
+        ),
+      };
+    };
+    if ("format" in payload) {
+      const summary =
+        payload.format === "application_summary" ? payload.summary : undefined;
+      const reason =
+        payload.format === "application_summary"
+          ? payload.issueCategory
+          : payload.qualityReason;
+      const { response } = await persist({
+        id: payload.generationId,
+        comment: summary ?? null,
+        metadata: {
+          ...projectFeedbackMetadata(payload.evalMetadata),
+          generationId: payload.generationId,
+          category: payload.category,
+          feedback_format: payload.format,
+          ...(reason ? { quality_reason: reason } : {}),
+          ...(payload.format === "application_summary" && payload.issueCategory
+            ? { issue_category: payload.issueCategory }
+            : {}),
+        },
+      });
+      return response;
     }
     const {
       message,
@@ -153,38 +213,23 @@ async function handlePost(request: NextRequest, log: SafeLogger) {
       "Feedback received",
     );
 
-    // Persist eval event into user_feedback (synchronous — eval signal must
-    // not be lost if fire-and-forget worker dies after response).
-    const { error: insertErr } = await getSupabaseService()
-      .from("user_feedback")
-      .insert({
-        user_id: authResult.userId,
-        feedback_type: approved ? "approved" : "rejected",
-        rating: approved ? 5 : 1,
-        comment: rejectionReason ?? null,
-        metadata: {
-          ...(evalMetadata ?? {}),
-          category,
-          message_length: message.length,
-          has_subject: !!subjectLine,
-          extension_version: contract.extensionVersion,
-          extension_api_version: contract.apiVersion,
-          legacy_extension_client: contract.legacyClient,
-        },
-      });
-
-    if (insertErr) {
-      log.error(
-        { errorCode: "FEEDBACK_PERSIST_FAILED" },
-        "Failed to persist user_feedback row — eval signal lost",
-      );
-    }
-
-    // Return 200 immediately — style analysis runs fire-and-forget
-    const response = NextResponse.json(
-      { success: true },
-      { headers: corsHeaders },
-    );
+    const generationId = evalMetadata?.generationId;
+    const { result, response } = await persist({
+      ...(generationId ? { id: generationId } : {}),
+      comment: rejectionReason ?? null,
+      metadata: {
+        ...projectFeedbackMetadata(evalMetadata),
+        category,
+        message_length: message.length,
+        has_subject: !!subjectLine,
+        feedback_format: generationId
+          ? "identified_outreach"
+          : "legacy_unidentified",
+        legacy_extension_client: contract.legacyClient,
+        ...(rejectionReason ? { quality_reason: rejectionReason } : {}),
+      },
+    });
+    if (result.state !== "inserted") return response;
 
     // Fire-and-forget async processing
     processStyleFeedback(
