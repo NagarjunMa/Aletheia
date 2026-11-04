@@ -425,14 +425,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         });
       })
       .catch((error) => {
+        const code = getSafeErrorCode(error, "FEEDBACK_DISPATCH_FAILED");
         sendResponse({
           success: false,
+          code,
           error: "Feedback could not be saved. Please retry.",
         });
         log.warn("feedback.dispatch.complete", {
           operationId,
           outcome: "failure",
-          errorCode: getSafeErrorCode(error, "FEEDBACK_DISPATCH_FAILED"),
+          errorCode: code,
         });
       });
     return true;
@@ -619,7 +621,14 @@ async function handleFeedbackRequest(payload, requesterId, operationId) {
     body: JSON.stringify(payload),
     signal: AbortSignal.timeout(15000),
   });
-  if (!response.ok) throw new Error("Feedback persistence failed");
+  if (!response.ok) {
+    const error = new Error("Feedback persistence failed");
+    if (response.status === 409) {
+      const body = await response.json().catch(() => null);
+      if (body?.code === "FEEDBACK_ALREADY_RECORDED") error.code = body.code;
+    }
+    throw error;
+  }
 }
 
 async function handleGenerateRequest(payload, operationId, requesterId) {

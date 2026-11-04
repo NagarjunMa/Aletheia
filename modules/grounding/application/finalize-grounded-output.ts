@@ -45,10 +45,14 @@ export function finalizeGroundedOutput(input: {
   scopedFields?: readonly { text: string; scope: ClaimScope | "either" }[];
   /** Caller-scoped server identity, allowed only for the exact rendered terminal block. */
   trustedIdentity?: CandidateIdentity;
-}): void {
-  inspectGroundedText(input.body, input.platform);
+}) {
+  let fingerprintPatternCount = inspectGroundedText(input.body, input.platform)
+    .fingerprintPatterns.length;
   if (input.subject !== undefined)
-    inspectGroundedText(input.subject, input.platform);
+    fingerprintPatternCount += inspectGroundedText(
+      input.subject,
+      input.platform,
+    ).fingerprintPatterns.length;
   let body = input.body;
   if (input.trustedIdentity?.fullName) {
     const signature = [
@@ -101,4 +105,5 @@ export function finalizeGroundedOutput(input: {
       minimum: 1,
       maximum: EMAIL_SUBJECT_MAX_CHARACTERS,
     });
+  return { fingerprintPatternCount };
 }

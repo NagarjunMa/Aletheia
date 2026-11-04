@@ -37,6 +37,7 @@ let currentOutput = null;
 let currentUserId = null;
 let popupAuthenticated = false;
 let feedbackOutput = null;
+let feedbackInFlight = false;
 const BACKGROUND_UNAVAILABLE_CODE = "BACKGROUND_UNAVAILABLE";
 const DEFAULT_API_URL = "https://www.aletheia.live";
 const PROFILE_EXTRACTION_CONSENT_KEY = "profileExtractionConsent";
@@ -703,7 +704,9 @@ function enableMainContent() {
 }
 
 async function generateMessage() {
+  if (feedbackInFlight) return;
   const generationStartedAt = Date.now();
+  const profile = currentProfile;
   const category = document.getElementById("category").value;
   const contextValue = document.getElementById("jdInput").value.trim();
   const questionValue = document
@@ -711,7 +714,7 @@ async function generateMessage() {
     ?.value.trim();
   const validation = validateGenerationInput({
     category,
-    hasProfile: Boolean(currentProfile),
+    hasProfile: Boolean(profile),
     contextValue,
     questionValue,
   });
@@ -746,7 +749,17 @@ async function generateMessage() {
     const emailMode =
       document.getElementById("emailMode")?.value || "initial_outreach";
 
-    const { accepted = [] } = await chrome.storage.local.get(["accepted"]);
+    const { accepted = [], [PROFILE_EXTRACTION_CONSENT_KEY]: profileConsent } =
+      await chrome.storage.local.get([
+        "accepted",
+        PROFILE_EXTRACTION_CONSENT_KEY,
+      ]);
+    if (
+      category !== YC_APPLICATION_CATEGORY &&
+      (profileConsent !== true || !currentProfile)
+    ) {
+      return;
+    }
 
     const relevantExamples = filterOwnedAccepted(
       accepted,
@@ -755,7 +768,7 @@ async function generateMessage() {
     );
 
     const payload = buildGeneratePayload(
-      currentProfile,
+      profile,
       null,
       contextValue,
       category,
@@ -1217,77 +1230,98 @@ function showRejectReasonPicker() {
 }
 
 async function handleFeedback(type, rejectionReason, summary) {
-  if (!currentOutput || !currentUserId) return;
-  const { aletheia_auth: activeAuth } =
-    await chrome.storage.local.get("aletheia_auth");
-  if (activeAuth?.user?.id !== currentUserId) {
-    throw new Error("The connected account changed. Reopen the extension.");
-  }
+  if (
+    !currentOutput ||
+    !currentUserId ||
+    feedbackInFlight ||
+    generationInFlight
+  )
+    return;
 
-  // Hide reason picker if visible
-  document.getElementById("reject-reason")?.classList.add("hidden");
+  const output = currentOutput;
+  const requesterId = currentUserId;
+  const profile = currentProfile;
+  const inputIds = ["category", "jdInput", "intent", "emailMode"];
+  const inputs = Object.fromEntries(
+    inputIds.map((id) => [id, document.getElementById(id)?.value]),
+  );
+  const isCurrentDraft = () =>
+    popupAuthenticated &&
+    currentUserId === requesterId &&
+    currentOutput === output &&
+    !generationInFlight;
+  const controls = document.querySelectorAll(
+    "#acceptBtn, #rejectBtn, #reject-reason .reason-btn",
+  );
 
-  const category = document.getElementById("category").value;
-  if (currentOutput.category === YC_APPLICATION_CATEGORY) {
-    const payload = buildApplicationFeedback(
-      currentOutput,
-      type === "accept",
-      rejectionReason,
-      summary,
-    );
-    const response = await chrome.runtime.sendMessage({
+  feedbackInFlight = true;
+  let regenerate = false;
+  try {
+    for (const control of controls) control.disabled = true;
+    updateGenerateAvailability();
+    const { aletheia_auth: activeAuth } =
+      await chrome.storage.local.get("aletheia_auth");
+    if (activeAuth?.user?.id !== requesterId) {
+      throw new Error("The connected account changed. Reopen the extension.");
+    }
+    if (!isCurrentDraft()) return;
+
+    const category = output.category || inputs.category;
+    const application = category === YC_APPLICATION_CATEGORY;
+    const approved = type === "accept";
+    const payload = application
+      ? buildApplicationFeedback(output, approved, rejectionReason, summary)
+      : {
+          message: output.body || output.message || "",
+          category,
+          approved,
+          ...(approved && output.subject_line
+            ? { subjectLine: output.subject_line }
+            : {}),
+          ...(!approved && rejectionReason ? { rejectionReason } : {}),
+          ...(output.evalMetadata ? { evalMetadata: output.evalMetadata } : {}),
+        };
+
+    const response = await sendBackgroundMessage({
       action: "sendFeedback",
       payload,
-      requesterId: currentUserId,
+      requesterId,
     });
-    if (!response?.success)
+    if (!isCurrentDraft()) return;
+    if (response?.code === "FEEDBACK_ALREADY_RECORDED") {
+      throw new Error(
+        "Feedback was already recorded for this draft. Use Generate for a new draft.",
+      );
+    }
+    if (response?.success !== true) {
       throw new Error("Feedback could not be saved. Please retry.");
-    if (type === "accept") await saveAcceptedMessage();
-    showTemporaryFeedback(
-      document.getElementById(type === "accept" ? "acceptBtn" : "rejectBtn"),
-      "Saved!",
-    );
-    return;
-  }
-  const messageBody = currentOutput.body || currentOutput.message || "";
+    }
 
-  const evalMetadata = currentOutput.evalMetadata || undefined;
-
-  if (type === "accept") {
-    await saveAcceptedMessage();
-    showTemporaryFeedback(document.getElementById("acceptBtn"), "Saved!");
-    chrome.runtime
-      .sendMessage({
-        action: "sendFeedback",
-        requesterId: currentUserId,
-        payload: {
-          message: messageBody,
-          category,
-          approved: true,
-          subjectLine: currentOutput.subject_line || undefined,
-          ...(evalMetadata ? { evalMetadata } : {}),
-        },
-      })
-      .catch(() => {});
-  } else if (type === "reject") {
-    chrome.runtime
-      .sendMessage({
-        action: "sendFeedback",
-        requesterId: currentUserId,
-        payload: {
-          message: messageBody,
-          category,
-          approved: false,
-          ...(rejectionReason ? { rejectionReason } : {}),
-          ...(evalMetadata ? { evalMetadata } : {}),
-        },
-      })
-      .catch(() => {});
-    await generateMessage();
+    if (approved) await saveAcceptedMessage(profile, inputs.intent);
+    if (!isCurrentDraft()) return;
+    hideError();
+    document.getElementById("reject-reason")?.classList.add("hidden");
+    regenerate =
+      !application &&
+      !approved &&
+      inputs.category === category &&
+      currentProfile === profile &&
+      inputIds.every((id) => document.getElementById(id)?.value === inputs[id]);
+    if (!regenerate) {
+      showTemporaryFeedback(
+        document.getElementById(approved ? "acceptBtn" : "rejectBtn"),
+        "Saved!",
+      );
+    }
+  } finally {
+    feedbackInFlight = false;
+    for (const control of controls) control.disabled = generationInFlight;
+    updateGenerateAvailability();
   }
+  if (regenerate) await generateMessage();
 }
 
-async function saveAcceptedMessage() {
+async function saveAcceptedMessage(profile, intent) {
   if (!currentUserId) return;
   const requesterId = currentUserId;
   const feedbackData = {
@@ -1299,8 +1333,8 @@ async function saveAcceptedMessage() {
       currentOutput.category || document.getElementById("category").value,
     ...(currentOutput.category !== YC_APPLICATION_CATEGORY
       ? {
-          intent: document.getElementById("intent").value,
-          profileName: currentProfile?.name || "Unknown",
+          intent,
+          profileName: profile?.name || "Unknown",
         }
       : {}),
     timestamp: Date.now(),
@@ -1407,7 +1441,7 @@ function updateGenerateAvailability() {
     questionValue: document.getElementById("ycQuestionInput")?.value || "",
   });
 
-  button.disabled = !validation.valid;
+  button.disabled = generationInFlight || feedbackInFlight || !validation.valid;
   const applicationMode = category === "yc_application";
   const inputStatus = document.getElementById("applicationInputStatus");
   if (inputStatus)
@@ -1431,7 +1465,7 @@ function updateGenerateAvailability() {
       ),
     );
   const regenerate = document.getElementById("regenerateApplicationBtn");
-  if (regenerate) regenerate.disabled = !validation.valid;
+  if (regenerate) regenerate.disabled = button.disabled;
   if (generateText) generateText.textContent = uiState.generateLabel;
 }
 

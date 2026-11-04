@@ -1,20 +1,15 @@
 "use client";
 
+import {
+  isStyleReady,
+  MIN_STYLE_APPROVALS,
+  type StylePatterns,
+} from "@/lib/ai/style-analyzer";
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient as createBrowserClient } from "@/lib/supabase/client";
 import ShaderBackground from "@/components/ShaderBackground";
-
-interface StylePatterns {
-  avgSentenceLength: number;
-  formality: number;
-  greetingStyle: string;
-  closingStyle: string;
-  useContractions: boolean;
-  questionCount: number;
-  commonPhrases: string[];
-}
 
 interface Preferences {
   formality_level: string | null;
@@ -127,8 +122,10 @@ export default function SettingsContent() {
     );
   }
 
-  const style = prefs.style_patterns;
   const approvedCount = prefs.approved_message_count ?? 0;
+  const style = isStyleReady(approvedCount, prefs.style_patterns)
+    ? prefs.style_patterns
+    : null;
 
   return (
     <div className="landing min-h-[100dvh] px-4 py-12 sm:px-6 lg:px-8">
@@ -170,12 +167,17 @@ export default function SettingsContent() {
               </h2>
               {approvedCount > 0 && (
                 <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1">
-                  Learned from {approvedCount} approved{" "}
+                  {style
+                    ? "Learned from"
+                    : approvedCount >= MIN_STYLE_APPROVALS
+                      ? "Writing preferences unavailable ·"
+                      : `Building preferences (${approvedCount}/${MIN_STYLE_APPROVALS} approvals):`}{" "}
+                  {approvedCount} approved{" "}
                   {approvedCount === 1 ? "message" : "messages"}
                 </p>
               )}
             </div>
-            {style && (
+            {(approvedCount > 0 || prefs.style_patterns) && (
               <button
                 onClick={handleResetStyle}
                 disabled={resetting}
@@ -231,8 +233,10 @@ export default function SettingsContent() {
             </div>
           ) : (
             <p className="text-sm text-[hsl(var(--muted-foreground))]">
-              Generate and approve a message in the extension to start learning
-              your voice.
+              {approvedCount >= MIN_STYLE_APPROVALS
+                ? "Approve another message to rebuild your writing preferences."
+                : `Approve ${MIN_STYLE_APPROVALS} messages in the extension to enable writing preferences.`}{" "}
+              These are simple preferences, not a full voice model.
             </p>
           )}
         </div>
@@ -280,7 +284,7 @@ export default function SettingsContent() {
             <div>
               <p className="text-sm text-white">Share Analytics</p>
               <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">
-                Help improve Aletheia with anonymised usage data
+                Include my content-free feedback in aggregate quality reports
               </p>
             </div>
             <button

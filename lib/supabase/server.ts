@@ -144,6 +144,18 @@ export async function getUser() {
   return user;
 }
 
+/** User-data requests retain the verified Bearer JWT and table RLS. */
+export function createBearerDataClient(accessToken: string) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!supabaseUrl || !anonKey || !accessToken)
+    throw new Error("Bearer data client is not configured");
+  return createSupabaseJsClient(supabaseUrl, anonKey, {
+    global: { headers: { Authorization: `Bearer ${accessToken}` } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
 // Helper function to get user profile
 export async function getUserProfile(userId?: string) {
   const supabase = await createClient();

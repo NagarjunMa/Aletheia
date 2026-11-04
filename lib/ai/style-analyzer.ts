@@ -176,3 +176,34 @@ function mergePhraseLists(existing: string[], incoming: string[]): string[] {
     .slice(0, 8)
     .map(([phrase]) => phrase);
 }
+
+export const MIN_STYLE_APPROVALS = 3;
+export function isStyleReady(
+  approvedCount: number,
+  profile: unknown,
+): profile is StylePatterns {
+  if (
+    !Number.isSafeInteger(approvedCount) ||
+    approvedCount < MIN_STYLE_APPROVALS ||
+    !profile ||
+    typeof profile !== "object" ||
+    Array.isArray(profile)
+  )
+    return false;
+  const style = profile as Record<string, unknown>;
+  return (
+    ["avgSentenceLength", "formality", "questionCount"].every(
+      (key) =>
+        typeof style[key] === "number" &&
+        Number.isFinite(style[key]) &&
+        style[key] >= 0,
+    ) &&
+    (style.formality as number) <= 100 &&
+    typeof style.greetingStyle === "string" &&
+    typeof style.closingStyle === "string" &&
+    typeof style.useContractions === "boolean" &&
+    Array.isArray(style.commonPhrases) &&
+    style.commonPhrases.length <= 8 &&
+    style.commonPhrases.every((phrase) => typeof phrase === "string")
+  );
+}

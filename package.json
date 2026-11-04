@@ -39,6 +39,7 @@
     "validate": "tsx scripts/startup-validation.ts",
     "health-check": "tsx scripts/startup-validation.ts",
     "prepare": "husky",
+    "test:quality-feedback:db": "node scripts/test-quality-feedback-db.mjs",
     "test:generation-admission-db": "node scripts/test-generation-admission-db.mjs",
     "policy:check": "eslint scripts/validate-engineering-policy.ts scripts/validate-engineering-policy.test.ts && tsx scripts/validate-engineering-policy.ts && prettier --check AGENTS.md docs/agents/engineering-guide.md .github/pull_request_template.md scripts/validate-engineering-policy.ts scripts/validate-engineering-policy.test.ts",
     "policy:pr": "node scripts/validate-engineering-policy.ts",

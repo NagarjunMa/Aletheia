@@ -520,6 +520,15 @@ describe("generateYcApplication", () => {
 
     expect(response.status).toBe(200);
     const body = await response.json();
+    expect(body.evalMetadata.quality).toMatchObject({
+      version: 1,
+      archetype: "legacy",
+      groundingPassed: true,
+      selectedSourceCount: expect.any(Number),
+    });
+    expect(JSON.stringify(body.evalMetadata)).not.toMatch(
+      /source_id|supporting_excerpt|rp1\./u,
+    );
     expect(JSON.stringify(body)).not.toContain("selectionDiagnostics");
     expect(JSON.stringify(body)).not.toContain("consideredCount");
     expect(body).toMatchObject({

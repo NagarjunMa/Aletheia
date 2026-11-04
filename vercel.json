@@ -3,6 +3,10 @@
     {
       "path": "/api/internal/resumes/cleanup",
       "schedule": "17 3 * * *"
+    },
+    {
+      "path": "/api/internal/quality/cleanup",
+      "schedule": "37 3 * * *"
     }
   ]
 }

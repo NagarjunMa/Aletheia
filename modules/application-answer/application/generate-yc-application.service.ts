@@ -1,4 +1,8 @@
 import {
+  buildQualityMetadata,
+  type GenerationQualityHooks,
+} from "@/lib/ai/generation-quality";
+import {
   buildYcPlannedOptions,
   ycQuestionContext,
   YcPlanUnavailableError,
@@ -239,6 +243,7 @@ export async function generateYcApplication(
     corsHeaders: Record<string, string>;
     applicationBaseUrl: string;
     rhetoricalPlans?: boolean;
+    qualityHooks?: GenerationQualityHooks;
     onCreditReserved?: (_id: string) => void;
     onCreditReservationPending?: (_pending: boolean) => void;
     logger?: SafeLogger;
@@ -247,6 +252,8 @@ export async function generateYcApplication(
   dependencies: GenerateYcApplicationDependencies = defaultDependencies,
 ) {
   const rhetoricalPlans = input.rhetoricalPlans ?? rhetoricalPlansEnabled();
+  const generationId =
+    input.qualityHooks?.generationId ?? dependencies.randomUuid();
   const operationLog = input.logger ?? log;
   const timing = input.timing;
   const isBatch = "questions" in input.request;
@@ -334,6 +341,7 @@ export async function generateYcApplication(
       });
     }
 
+    input.qualityHooks?.onPrepared?.(context.atomicSources ?? []);
     const plannedOptions = rhetoricalPlans
       ? buildYcPlannedOptions(context)
       : undefined;
@@ -624,7 +632,20 @@ export async function generateYcApplication(
     }));
     const body = formatApplicationAnswers(answers);
     const claims = validatedAnswers.flatMap((answer) => answer.claims);
-    const generationId = dependencies.randomUuid();
+    const quality = buildQualityMetadata({
+      claims: parsedAnswers.flatMap((a) => a.claims),
+      sources: context.atomicSources ?? [],
+      archetypes: parsedAnswers.flatMap((a) =>
+        "rhetoricalArchetype" in a && typeof a.rhetoricalArchetype === "string"
+          ? [a.rhetoricalArchetype]
+          : [],
+      ),
+      patternCount: validatedAnswers.reduce(
+        (n, a) => n + a.fingerprintPatternCount,
+        0,
+      ),
+    });
+    input.qualityHooks?.onValidated?.(quality);
     const selectedSourceIds = [
       ...new Set(claims.flatMap((claim) => claim.sourceIds)),
     ];
@@ -646,6 +667,7 @@ export async function generateYcApplication(
         processingTime,
         evalMetadata: {
           generationId,
+          quality,
           promptVersion: rhetoricalPlans
             ? RHETORICAL_YC_PROMPT_VERSION
             : YC_APPLICATION_PROMPT_VERSION,
@@ -680,6 +702,8 @@ export async function generateYcApplication(
       },
     });
   } catch (error) {
+    if (error instanceof AtomicClaimValidationError)
+      input.qualityHooks?.onRejected?.();
     if (error instanceof YcPlanUnavailableError) {
       timing?.failure("INSUFFICIENT_GROUNDING");
       return NextResponse.json(

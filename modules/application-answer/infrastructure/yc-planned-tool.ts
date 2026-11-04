@@ -113,6 +113,7 @@ export function resolveYcPlannedTool(
     validatePlanSelection(a.rhetorical_plan, option.rhetoricalPlan);
     return {
       questionId: a.questionId,
+      rhetoricalArchetype: option.rhetoricalPlan.archetype,
       body: option.body,
       claims: option.claims.map((c) => ({ ...c, sourceIds: [c.source_id] })),
     };

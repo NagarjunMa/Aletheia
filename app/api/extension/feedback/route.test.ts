@@ -69,7 +69,7 @@ vi.mock("@supabase/supabase-js", () => ({
   createClient: vi.fn((url: string, key: string) => {
     // Return different mocks for auth vs service depending on which key is passed.
     if (key && key.includes("anon")) {
-      return { auth: { getUser: mockAuthGetUser } };
+      return { auth: { getUser: mockAuthGetUser }, from: mockServiceFrom };
     }
     return {
       from: mockServiceFrom,
@@ -88,13 +88,23 @@ vi.mock("@/lib/cors", async (importOriginal) => {
 
 // Wire chain: from("user_feedback").insert(...) or from("user_preferences").select(...).eq(...).maybeSingle() / upsert(...)
 mockServiceFrom.mockImplementation((table: string) => {
-  if (table === "user_feedback") return { insert: mockInsert };
+  if (table === "user_feedback")
+    return {
+      insert: (...args: unknown[]) => ({
+        abortSignal: () => mockInsert(...args),
+      }),
+      select: mockSelect,
+    };
   if (table === "user_preferences")
     return { select: mockSelect, upsert: mockUpsert };
   return { insert: mockInsert, upsert: mockUpsert, select: mockSelect };
 });
 mockSelect.mockReturnValue({ eq: mockEq });
-mockEq.mockReturnValue({ maybeSingle: mockMaybeSingle });
+mockEq.mockReturnValue({
+  eq: mockEq,
+  abortSignal: () => ({ maybeSingle: mockMaybeSingle }),
+  maybeSingle: mockMaybeSingle,
+});
 
 describe("feedbackSchema", () => {
   const validPayload = {
@@ -375,6 +385,63 @@ describe("POST /api/extension/feedback — dual-behavior persistence contract", 
     },
   );
 
+  it.each(["approved", "rejected", null])(
+    "does not learn again for duplicate/conflicting identified feedback (%s)",
+    async (outcome) => {
+      mockInsert.mockResolvedValueOnce({ error: { code: "23505" } });
+      mockMaybeSingle.mockResolvedValueOnce({
+        data: outcome ? { feedback_type: outcome } : null,
+        error: null,
+      });
+      const response = await POST(
+        makeRequest({
+          method: "POST",
+          headers: { authorization: "Bearer test" },
+          body: {
+            format: "quality_summary",
+            category: "linkedin_connection",
+            generationId: "33333333-3333-4333-8333-333333333333",
+            approved: true,
+          },
+        }),
+      );
+      expect(response.status).toBe(outcome === "approved" ? 200 : 409);
+      expect(mockEq).toHaveBeenCalledWith("user_id", "test-user-id");
+      expect(mockRpc).not.toHaveBeenCalled();
+      expect(mockUpsert).not.toHaveBeenCalled();
+    },
+  );
+  it("passes the verified Bearer token to the owner data client, never the service key", async () => {
+    const { createClient } = await import("@supabase/supabase-js");
+    await POST(
+      makeRequest({
+        method: "POST",
+        headers: { authorization: "Bearer owner-token" },
+        body: validBody,
+      }),
+    );
+    expect(createClient).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.stringContaining("anon"),
+      expect.objectContaining({
+        global: { headers: { Authorization: "Bearer owner-token" } },
+      }),
+    );
+  });
+  it("returns 503 on a thrown insert and does not learn or leak the provider error", async () => {
+    mockInsert.mockRejectedValueOnce(new Error("PRIVATE_PROVIDER_CANARY"));
+    const response = await POST(
+      makeRequest({
+        method: "POST",
+        headers: { authorization: "Bearer test" },
+        body: validBody,
+      }),
+    );
+    expect(response.status).toBe(503);
+    expect(await response.text()).not.toContain("PRIVATE");
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
+
   // T8 — sync user_feedback insert + 200
   it("inserts user_feedback row synchronously and returns 200", async () => {
     const res = await POST(
@@ -411,8 +478,8 @@ describe("POST /api/extension/feedback — dual-behavior persistence contract", 
     expect(mockInsert).toHaveBeenCalled();
   });
 
-  // T8 — insert error is logged but does not propagate as 5xx
-  it("returns 200 even when user_feedback insert errors (logged not propagated)", async () => {
+  // Persistence failure is retryable and never triggers learning.
+  it("returns 503 without learning when user_feedback persistence fails", async () => {
     mockInsert.mockResolvedValueOnce({
       error: { message: "constraint violation" },
     });
@@ -423,7 +490,9 @@ describe("POST /api/extension/feedback — dual-behavior persistence contract", 
         body: validBody,
       }),
     );
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(503);
+    await new Promise((r) => setImmediate(r));
+    expect(mockRpc).not.toHaveBeenCalled();
   });
 
   // T9 — approved messages fire the style-merge RPC
