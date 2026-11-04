@@ -43,6 +43,8 @@
     "test:generation-admission-db": "node scripts/test-generation-admission-db.mjs",
     "policy:check": "eslint scripts/validate-engineering-policy.ts scripts/validate-engineering-policy.test.ts && tsx scripts/validate-engineering-policy.ts && prettier --check AGENTS.md docs/agents/engineering-guide.md .github/pull_request_template.md scripts/validate-engineering-policy.ts scripts/validate-engineering-policy.test.ts",
     "policy:pr": "node scripts/validate-engineering-policy.ts",
+    "gate:grounded-response:hosted": "LOG_LEVEL=silent tsx scripts/grounded-response-hosted-gate.ts",
+    "gate:grounded-response:offline": "LOG_LEVEL=silent tsx scripts/grounded-response-production-gate.ts",
     "eval:discourse": "LOG_LEVEL=silent tsx scripts/evaluate-grounded-discourse.ts"
   },
   "dependencies": {

@@ -1,0 +1,67 @@
+name: Grounded Response Production Gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_isolated_environment:
+        description: Type "yes" after verifying both previews, Supabase, fixture accounts and the model budget
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: grounded-response-production-gate
+  cancel-in-progress: false
+
+jobs:
+  isolated-mode-comparison:
+    if: github.ref == 'refs/heads/main' && inputs.confirm_isolated_environment == 'yes'
+    runs-on: ubuntu-24.04
+    environment: grounded-response-production-gate
+    timeout-minutes: 40
+    steps:
+      - name: Checkout workflow commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24.x"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify flag-off and flag-on previews
+        run: npm run --silent gate:grounded-response:hosted > "$RUNNER_TEMP/grounded-response-gate.json"
+        env:
+          GROUNDED_GATE_CONFIRM: ${{ inputs.confirm_isolated_environment }}
+          GROUNDED_GATE_SHA: ${{ github.sha }}
+          GROUNDED_GATE_OFF_URL: ${{ vars.GROUNDED_GATE_OFF_URL }}
+          GROUNDED_GATE_ON_URL: ${{ vars.GROUNDED_GATE_ON_URL }}
+          GROUNDED_GATE_PRODUCTION_APP_URL: ${{ vars.GROUNDED_GATE_PRODUCTION_APP_URL }}
+          GROUNDED_GATE_PROJECT_ID: ${{ vars.GROUNDED_GATE_PROJECT_ID }}
+          GROUNDED_GATE_PRODUCTION_PROJECT_ID: ${{ vars.GROUNDED_GATE_PRODUCTION_PROJECT_ID }}
+          GROUNDED_GATE_SUPABASE_URL: ${{ vars.GROUNDED_GATE_SUPABASE_URL }}
+          GROUNDED_GATE_PRODUCTION_SUPABASE_URL: ${{ vars.GROUNDED_GATE_PRODUCTION_SUPABASE_URL }}
+          GROUNDED_GATE_VERCEL_BYPASS: ${{ secrets.GROUNDED_GATE_VERCEL_BYPASS }}
+          GROUNDED_GATE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.GROUNDED_GATE_SUPABASE_PUBLISHABLE_KEY }}
+          GROUNDED_GATE_OFF_USER_ID: ${{ secrets.GROUNDED_GATE_OFF_USER_ID }}
+          GROUNDED_GATE_ON_USER_ID: ${{ secrets.GROUNDED_GATE_ON_USER_ID }}
+          GROUNDED_GATE_OFF_EMAIL: ${{ secrets.GROUNDED_GATE_OFF_EMAIL }}
+          GROUNDED_GATE_ON_EMAIL: ${{ secrets.GROUNDED_GATE_ON_EMAIL }}
+          GROUNDED_GATE_OFF_PASSWORD: ${{ secrets.GROUNDED_GATE_OFF_PASSWORD }}
+          GROUNDED_GATE_ON_PASSWORD: ${{ secrets.GROUNDED_GATE_ON_PASSWORD }}
+
+      - name: Upload projected evidence
+        if: success()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: grounded-response-gate-evidence
+          path: ${{ runner.temp }}/grounded-response-gate.json
+          if-no-files-found: error
+          retention-days: 14
