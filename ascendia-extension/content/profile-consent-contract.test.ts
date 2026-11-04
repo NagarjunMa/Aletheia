@@ -51,13 +51,13 @@ describe("profile-reading consent contract", () => {
 
   it("ignores delayed profile updates unless consent is still active", () => {
     expect(popupSource).toContain(
-      "async function handleProfileUpdated(profile)",
+      "async function handleProfileUpdated(profile, sender)",
     );
     expect(popupSource).toContain(
       "if (!(await hasProfileExtractionConsent())) return;",
     );
     expect(popupSource).toContain(
-      "void handleProfileUpdated(message.profile);",
+      "void handleProfileUpdated(message.profile, sender);",
     );
   });
 });

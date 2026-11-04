@@ -678,3 +678,29 @@ it("keeps safe YC quality metadata through cache/feedback while discarding priva
   expect(feedback.evalMetadata.quality).toEqual(quality);
   expect(JSON.stringify(feedback)).not.toContain("PRIVATE");
 });
+
+it.each([
+  "linkedin_connection",
+  "linkedin_inmail",
+  "cold_email",
+  "yc_application",
+])(
+  "submits only selected story IDs in %s and omits an empty choice",
+  (category) => {
+    const storyId = "11111111-1111-4111-8111-111111111111";
+    const build = (ids: string[]) =>
+      buildGeneratePayload(
+        { profileMarkdown: "Synthetic profile" },
+        null,
+        "Context",
+        category,
+        "networking",
+        [],
+        "initial_outreach",
+        "What did you build?",
+        ids,
+      );
+    expect(build([storyId]).selectedEvidenceIds).toEqual([storyId]);
+    expect(build([])).not.toHaveProperty("selectedEvidenceIds");
+  },
+);

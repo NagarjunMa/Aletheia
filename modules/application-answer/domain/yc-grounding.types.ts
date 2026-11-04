@@ -20,6 +20,8 @@ export type YcGroundingReadiness = {
 };
 
 export type YcGroundingContext = {
+  /** Server-only roots that must be used in the result. */
+  requiredEvidenceRoots?: readonly string[];
   /** Private per-question outcomes, separate from public metadata. */
   selectionDiagnostics?: EvidenceSelectionDiagnostics[];
   question: string;

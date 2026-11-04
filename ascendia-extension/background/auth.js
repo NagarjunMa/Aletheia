@@ -52,32 +52,89 @@ async function getStoredAuth() {
   return result[AUTH_STORAGE_KEY] || null;
 }
 
-export async function storeAuth(authData) {
-  await chrome.storage.local.set({
-    [AUTH_STORAGE_KEY]: {
-      access_token: authData.access_token,
-      refresh_token: authData.refresh_token,
-      expires_at: authData.expires_at,
-      user: authData.user,
-      supabase_url: authData.supabase_url,
-      supabase_anon_key: authData.supabase_anon_key,
-      stored_at: Date.now(),
+let authMutation = Promise.resolve();
+let authRevision = 0;
+
+function queueAuthOperation(operation) {
+  const pending = authMutation.then(operation);
+  authMutation = pending.catch(() => {});
+  return pending;
+}
+
+export function getAuthSnapshot() {
+  return queueAuthOperation(async () => ({
+    auth: await getStoredAuth(),
+    revision: authRevision,
+  }));
+}
+
+export function authAccountChanged() {
+  return createAuthFailure(
+    "The connected account changed. Reopen the extension and try again.",
+    {
+      code: "AUTH_ACCOUNT_CHANGED",
+      status: 409,
     },
-  });
-  log.info("auth.storage.complete", {
-    outcome: "success",
-    hasUser: Boolean(authData.user),
+  );
+}
+
+async function assertAuthSnapshot(expected) {
+  const current = await getStoredAuth();
+  if (
+    expected.revision !== authRevision ||
+    current?.user?.id !== expected.auth?.user?.id ||
+    current?.access_token !== expected.auth?.access_token ||
+    current?.refresh_token !== expected.auth?.refresh_token ||
+    current?.stored_at !== expected.auth?.stored_at
+  ) {
+    throw authAccountChanged();
+  }
+}
+
+function mutateAuth(expected, write) {
+  return queueAuthOperation(async () => {
+    if (expected) await assertAuthSnapshot(expected);
+    authRevision++;
+    await write();
   });
 }
 
-export async function clearAuth() {
-  await chrome.storage.local.remove(AUTH_STORAGE_KEY);
-  log.info("auth.storage.cleared", { outcome: "success" });
+export function storeAuth(authData, expected) {
+  return mutateAuth(expected, async () => {
+    await chrome.storage.local.set({
+      [AUTH_STORAGE_KEY]: {
+        access_token: authData.access_token,
+        refresh_token: authData.refresh_token,
+        expires_at: authData.expires_at,
+        user: authData.user,
+        supabase_url: authData.supabase_url,
+        supabase_anon_key: authData.supabase_anon_key,
+        stored_at: Date.now(),
+      },
+    });
+    log.info("auth.storage.complete", {
+      outcome: "success",
+      hasUser: Boolean(authData.user),
+    });
+  });
+}
+
+export function clearAuth(expected) {
+  return mutateAuth(expected, async () => {
+    await chrome.storage.local.remove(
+      expected ? AUTH_STORAGE_KEY : [AUTH_STORAGE_KEY, "_loginPending"],
+    );
+    if (!expected) {
+      _loginReject?.(authAccountChanged());
+      await chrome.alarms.clear(LOGIN_KEEPALIVE_ALARM);
+    }
+    log.info("auth.storage.cleared", { outcome: "success" });
+  });
 }
 
 // ─── Token validation ───
 
-function isTokenValid(auth) {
+export function isTokenValid(auth) {
   if (!auth || !auth.access_token || !auth.expires_at) return false;
   const nowSec = Math.floor(Date.now() / 1000);
   return auth.expires_at > nowSec;
@@ -96,23 +153,24 @@ function needsRefresh(auth) {
 // (createBrowserClient may store sessions in localStorage or set cookies that the chrome.cookies
 // API cannot read due to domain/SameSite/partitioning issues).
 
-let _fetchSessionPromise = null;
+const webSessions = new Map();
 
-export async function fetchSessionFromWebApp(apiUrl, operationId) {
-  if (_fetchSessionPromise) {
+function fetchSessionFromWebApp(apiUrl, operationId, revision) {
+  const baseUrl = normalizeApiUrl(apiUrl);
+  const key = JSON.stringify([baseUrl, revision]);
+  const existing = webSessions.get(key);
+  if (existing) {
     log.info("auth.session.coalesced", { operationId });
-    return _fetchSessionPromise;
+    return existing;
   }
-  _fetchSessionPromise = _doFetchSessionFromWebApp(apiUrl, operationId).finally(
-    () => {
-      _fetchSessionPromise = null;
-    },
-  );
-  return _fetchSessionPromise;
+  const pending = requestWebSession(baseUrl, operationId).finally(() => {
+    webSessions.delete(key);
+  });
+  webSessions.set(key, pending);
+  return pending;
 }
 
-async function _doFetchSessionFromWebApp(apiUrl, operationId) {
-  const baseUrl = normalizeApiUrl(apiUrl);
+async function requestWebSession(baseUrl, operationId) {
   const complete = startExtensionTimedStage(log, "auth.session_exchange", {
     operationId,
   });
@@ -166,16 +224,6 @@ async function _doFetchSessionFromWebApp(apiUrl, operationId) {
         },
       );
       err.retryAfter = parseInt(response.headers.get("Retry-After"), 10) || 0;
-      if (
-        errorBody.code === "SESSION_REFRESH_REJECTED" ||
-        errorBody.code === "refresh_token_already_used"
-      ) {
-        log.info("auth.storage.clear_requested", {
-          operationId,
-          reason: "stale_session",
-        });
-        await clearAuth();
-      }
       throw err;
     }
   } catch (fetchError) {
@@ -322,23 +370,32 @@ async function _doFetchSessionFromWebApp(apiUrl, operationId) {
 
 // In-flight guard: Supabase rotates refresh tokens, so using the same refresh_token
 // twice will fail. This ensures only one refresh runs at a time.
-let _refreshPromise = null;
+const refreshes = new Map();
 
-async function refreshToken(auth, operationId) {
-  // If a refresh is already in flight, reuse its result
-  if (_refreshPromise) {
+async function refreshToken(expected, operationId) {
+  const { auth, revision } = expected;
+  const key = auth.refresh_token;
+  const existing = refreshes.get(key);
+  if (existing?.revision === revision) {
     log.info("auth.refresh.coalesced", { operationId });
-    return _refreshPromise;
+    return existing.pending;
   }
 
-  _refreshPromise = _doRefreshToken(auth, operationId).finally(() => {
-    _refreshPromise = null;
-  });
-
-  return _refreshPromise;
+  // Share the successful rotation. A rejection leaves cleanup to each caller.
+  const pending = requestTokenRefresh({ ...auth }, operationId)
+    .then(async (updatedAuth) => {
+      if (updatedAuth.user?.id !== auth.user?.id) throw authAccountChanged();
+      await storeAuth(updatedAuth, expected);
+      return updatedAuth;
+    })
+    .finally(() => {
+      if (refreshes.get(key)?.pending === pending) refreshes.delete(key);
+    });
+  refreshes.set(key, { revision, pending });
+  return pending;
 }
 
-async function _doRefreshToken(auth, operationId) {
+async function requestTokenRefresh(auth, operationId) {
   const complete = startExtensionTimedStage(log, "auth.token_refresh", {
     operationId,
   });
@@ -404,10 +461,6 @@ async function _doRefreshToken(auth, operationId) {
 
   if (!response.ok) {
     await response.text().catch(() => "");
-    // If refresh token is consumed/expired, clear auth so user gets prompted to re-login
-    if (response.status === 400 || response.status === 401) {
-      await clearAuth();
-    }
     const error = createAuthFailure("Token refresh failed", {
       code: "TOKEN_REFRESH_FAILED",
       status: response.status,
@@ -434,22 +487,50 @@ async function _doRefreshToken(auth, operationId) {
       : auth.user,
   };
 
-  await storeAuth(updatedAuth);
   complete("success");
   return updatedAuth;
+}
+
+const webSessionWrites = new WeakMap();
+
+export async function recoverWebSession(
+  apiUrl,
+  operationId,
+  expected,
+  { ownerId = expected.auth?.user?.id, requireValid = false } = {},
+) {
+  const session = await fetchSessionFromWebApp(
+    apiUrl,
+    operationId,
+    expected.revision,
+  );
+  if (ownerId && session.user?.id !== ownerId) throw authAccountChanged();
+  if (requireValid && !isTokenValid(session)) {
+    throw createAuthFailure("No active web session found.", {
+      code: "SESSION_UNAVAILABLE",
+    });
+  }
+  let write = webSessionWrites.get(session);
+  if (!write) {
+    write = storeAuth(session, expected);
+    webSessionWrites.set(session, write);
+  }
+  await write;
+  return session;
 }
 
 // ─── Main entry point ───
 
 export async function getValidAccessToken(
   apiUrl,
-  { allowSessionFetch = true, operationId } = {},
+  { allowSessionFetch = true, operationId, expected, webOwnerId } = {},
 ) {
   apiUrl = normalizeApiUrl(apiUrl);
   const complete = startExtensionTimedStage(log, "auth.access_token", {
     operationId,
   });
-  let auth = await getStoredAuth();
+  expected ??= await getAuthSnapshot();
+  const { auth } = expected;
 
   // If we have a valid, non-expiring-soon token, return it
   if (auth && isTokenValid(auth) && !needsRefresh(auth)) {
@@ -460,10 +541,11 @@ export async function getValidAccessToken(
   // Try to refresh if we have a refresh token
   if (auth && auth.refresh_token) {
     try {
-      auth = await refreshToken(auth, operationId);
+      const refreshed = await refreshToken(expected, operationId);
       complete("success", { authSource: "refreshed_token" });
-      return auth.access_token;
+      return refreshed.access_token;
     } catch (refreshError) {
+      if (refreshError.code === "AUTH_ACCOUNT_CHANGED") throw refreshError;
       log.info("auth.refresh.complete", {
         operationId,
         outcome: "fallback",
@@ -473,7 +555,6 @@ export async function getValidAccessToken(
   }
 
   if (!allowSessionFetch) {
-    await clearAuth();
     complete("failure", { errorCode: "STORED_AUTH_UNAVAILABLE" });
     throw createAuthFailure(
       "Not authenticated. Please reconnect the extension.",
@@ -483,13 +564,14 @@ export async function getValidAccessToken(
 
   // Fall back to fetching a new session from the web app
   try {
-    const sessionData = await fetchSessionFromWebApp(apiUrl, operationId);
-    await storeAuth(sessionData);
+    const sessionData = await recoverWebSession(apiUrl, operationId, expected, {
+      ownerId: webOwnerId,
+    });
     complete("success", { authSource: "web_session" });
     return sessionData.access_token;
   } catch (fetchError) {
-    // Clear stale auth
-    await clearAuth();
+    if (fetchError.code === "AUTH_ACCOUNT_CHANGED") throw fetchError;
+    await clearAuth(expected);
     complete("failure", {
       errorCode: getSafeErrorCode(fetchError, "AUTH_REQUIRED"),
       status: typeof fetchError.status === "number" ? fetchError.status : 401,
@@ -508,7 +590,7 @@ export async function getValidAccessToken(
 // ─── Auth status helper ───
 
 export async function getAuthStatus() {
-  const auth = await getStoredAuth();
+  const { auth } = await getAuthSnapshot();
   if (!auth || !auth.access_token) {
     log.info("auth.status.complete", { authenticated: false });
     return { authenticated: false };
@@ -533,12 +615,15 @@ const LOGIN_KEEPALIVE_ALARM = "aletheia-login-keepalive";
 let _loginResolve = null;
 let _loginReject = null;
 
-export async function waitForLogin(apiUrl, operationId) {
+export async function waitForLogin(apiUrl, operationId, ownerId) {
   apiUrl = normalizeApiUrl(apiUrl);
   const LOGIN_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
   const complete = startExtensionTimedStage(log, "auth.login_wait", {
     operationId,
   });
+
+  const expected = await getAuthSnapshot();
+  ownerId ??= expected.auth?.user?.id;
 
   // Tab deduplication
   const loginUrl = `${apiUrl}/auth/login?source=extension`;
@@ -556,26 +641,34 @@ export async function waitForLogin(apiUrl, operationId) {
   }
 
   // Persist login state (survives service worker restart)
-  await chrome.storage.local.set({
-    _loginPending: {
-      apiUrl,
-      tabId: tab.id,
-      startedAt: Date.now(),
-      timeoutAt: Date.now() + LOGIN_TIMEOUT_MS,
-    },
-  });
-
-  // Set keepalive alarm to prevent service worker termination during login
-  chrome.alarms.create(LOGIN_KEEPALIVE_ALARM, { periodInMinutes: 0.5 }); // 30s — Chrome minimum
-
-  // Start polling for session
-  return pollUntilSession(
-    apiUrl,
-    tab.id,
-    Date.now() + LOGIN_TIMEOUT_MS,
-    operationId,
-    complete,
-  );
+  return queueAuthOperation(async () => {
+    await assertAuthSnapshot(expected);
+    const timeoutAt = Date.now() + LOGIN_TIMEOUT_MS;
+    await chrome.storage.local.set({
+      _loginPending: {
+        apiUrl,
+        tabId: tab.id,
+        startedAt: Date.now(),
+        timeoutAt,
+        ownerId,
+        initialOwnerId: expected.auth?.user?.id,
+        initialStoredAt: expected.auth?.stored_at,
+      },
+    });
+    chrome.alarms.create(LOGIN_KEEPALIVE_ALARM, { periodInMinutes: 0.5 });
+    // Start the poll before releasing the queue so logout can always cancel it.
+    return {
+      login: pollUntilSession(
+        apiUrl,
+        tab.id,
+        timeoutAt,
+        operationId,
+        complete,
+        expected,
+        ownerId,
+      ),
+    };
+  }).then(({ login }) => login);
 }
 
 // Inject auth-bridge content script into the login tab
@@ -595,57 +688,94 @@ async function injectAuthBridge(tabId) {
 }
 
 // Handle session data sent from auth-bridge content script
-export function handleAuthBridgeSession(sessionData, operationId) {
+export function matchesPendingLogin(pending, expected) {
+  return (
+    (pending.initialOwnerId ?? null) === (expected.auth?.user?.id ?? null) &&
+    (pending.initialStoredAt ?? null) === (expected.auth?.stored_at ?? null)
+  );
+}
+
+export function handleAuthBridgeSession(sessionData, operationId, tabId) {
   if (!sessionData || !sessionData.access_token) return;
   log.info("auth.bridge.session_received", { operationId });
 
   // Fetch Supabase config and store
-  Promise.all([
-    chrome.storage.sync.get("apiBaseUrl"),
-    chrome.storage.local.get("apiUrl"),
-  ]).then(async ([{ apiBaseUrl }, { apiUrl }]) => {
-    const url = normalizeApiUrl(
-      apiBaseUrl || apiUrl || "https://www.aletheia.live",
-    );
-    let supabaseUrl, supabaseAnonKey;
-    try {
-      const configResp = await fetch(`${url}/api/extension/config`, {
-        headers: getAletheiaRequestHeaders(),
-      });
-      if (configResp.ok) {
-        const config = await configResp.json();
-        supabaseUrl = config.supabase_url;
-        supabaseAnonKey = config.supabase_anon_key;
+  getAuthSnapshot()
+    .then(async (expected) => {
+      const [{ apiBaseUrl }, { apiUrl, _loginPending }] = await Promise.all([
+        chrome.storage.sync.get("apiBaseUrl"),
+        chrome.storage.local.get(["apiUrl", "_loginPending"]),
+      ]);
+      if (
+        tabId === undefined ||
+        _loginPending?.tabId !== tabId ||
+        _loginPending.timeoutAt <= Date.now() ||
+        !matchesPendingLogin(_loginPending, expected) ||
+        isTokenValid(expected.auth)
+      )
+        return;
+      const url = normalizeApiUrl(
+        apiBaseUrl || apiUrl || "https://www.aletheia.live",
+      );
+      let supabaseUrl, supabaseAnonKey;
+      try {
+        const configResp = await fetch(`${url}/api/extension/config`, {
+          headers: getAletheiaRequestHeaders(),
+        });
+        if (configResp.ok) {
+          const config = await configResp.json();
+          supabaseUrl = config.supabase_url;
+          supabaseAnonKey = config.supabase_anon_key;
+        }
+      } catch (e) {
+        log.info("auth.configuration.complete", {
+          operationId,
+          outcome: "failure",
+          errorCode: "CONFIGURATION_UNAVAILABLE",
+        });
       }
-    } catch (e) {
-      log.info("auth.configuration.complete", {
-        operationId,
+
+      const authData = {
+        ...sessionData,
+        supabase_url: supabaseUrl,
+        supabase_anon_key: supabaseAnonKey,
+      };
+
+      if (
+        _loginPending.ownerId &&
+        authData.user?.id !== _loginPending.ownerId
+      ) {
+        throw authAccountChanged();
+      }
+      await storeAuth(authData, expected);
+
+      // Resolve the pending login promise
+      if (_loginResolve) {
+        _loginResolve(authData);
+        _loginResolve = null;
+        _loginReject = null;
+      }
+    })
+    .catch((error) => {
+      log.info("auth.bridge.complete", {
         outcome: "failure",
-        errorCode: "CONFIGURATION_UNAVAILABLE",
+        errorCode: getSafeErrorCode(error, "AUTHENTICATION_FAILED"),
       });
-    }
-
-    const authData = {
-      ...sessionData,
-      supabase_url: supabaseUrl,
-      supabase_anon_key: supabaseAnonKey,
-    };
-
-    await storeAuth(authData);
-
-    // Resolve the pending login promise
-    if (_loginResolve) {
-      _loginResolve(authData);
-      _loginResolve = null;
-      _loginReject = null;
-    }
-  });
+    });
 }
 
 // Uses setTimeout loop + content script bridge + cookie/tab listeners
 const POLL_INTERVALS = [3000, 5000, 8000, 13000, 15000];
 
-function pollUntilSession(apiUrl, tabId, timeoutAt, operationId, complete) {
+function pollUntilSession(
+  apiUrl,
+  tabId,
+  timeoutAt,
+  operationId,
+  complete,
+  expected,
+  ownerId,
+) {
   return new Promise((resolve, reject) => {
     let settled = false;
     let pollTimer = null;
@@ -694,15 +824,21 @@ function pollUntilSession(apiUrl, tabId, timeoutAt, operationId, complete) {
     }
 
     async function tryFetchSession() {
-      if (fetchInFlight) return;
+      if (settled || fetchInFlight) return;
       fetchInFlight = true;
       try {
-        const sessionData = await fetchSessionFromWebApp(apiUrl, operationId);
-        await storeAuth(sessionData);
+        const sessionData = await recoverWebSession(
+          apiUrl,
+          operationId,
+          expected,
+          { ownerId },
+        );
         complete("success");
         settle(() => resolve(sessionData), true);
       } catch (e) {
-        if (e.status === 401) {
+        if (e.code === "AUTH_ACCOUNT_CHANGED") {
+          settle(() => reject(e), false);
+        } else if (e.status === 401) {
           log.info("auth.login_poll.complete", {
             operationId,
             outcome: "pending",
@@ -785,23 +921,19 @@ function pollUntilSession(apiUrl, tabId, timeoutAt, operationId, complete) {
   });
 }
 
-// ─── Clear auth and fetch fresh session ───
+// ─── Recover the session for a generation ───
 
-export async function clearAuthAndFetchFresh(apiUrl, operationId) {
-  apiUrl = normalizeApiUrl(apiUrl);
-  const complete = startExtensionTimedStage(log, "auth.session_recovery", {
-    operationId,
-  });
-  await clearAuth();
+export async function recoverGenerationSession(
+  apiUrl,
+  operationId,
+  expected,
+  ownerId,
+) {
+  expected ??= await getAuthSnapshot();
   try {
-    const sessionData = await fetchSessionFromWebApp(apiUrl, operationId);
-    await storeAuth(sessionData);
-    complete("success");
-    return sessionData;
+    return await recoverWebSession(apiUrl, operationId, expected, { ownerId });
   } catch (error) {
-    complete("failure", {
-      errorCode: getSafeErrorCode(error, "SESSION_RECOVERY_FAILED"),
-    });
+    if (error.code !== "AUTH_ACCOUNT_CHANGED") await clearAuth(expected);
     throw error;
   }
 }
@@ -809,40 +941,59 @@ export async function clearAuthAndFetchFresh(apiUrl, operationId) {
 // ─── Proactive refresh (called by alarm) ───
 
 export async function proactiveRefresh(apiUrl, operationId) {
-  apiUrl = normalizeApiUrl(apiUrl);
-  const auth = await getStoredAuth();
-  if (!auth) return;
+  const expected = await getAuthSnapshot();
+  const { auth } = expected;
+  if (!needsRefresh(auth) || !auth?.refresh_token) return;
 
-  if (needsRefresh(auth) && auth.refresh_token) {
+  try {
+    await refreshToken(expected, operationId);
+    log.info("auth.proactive_refresh.complete", {
+      operationId,
+      outcome: "success",
+      authSource: "refresh_token",
+    });
+  } catch (error) {
+    if (error.code === "AUTH_ACCOUNT_CHANGED") return;
     try {
-      await refreshToken(auth, operationId);
+      await recoverWebSession(apiUrl, operationId, expected);
       log.info("auth.proactive_refresh.complete", {
         operationId,
         outcome: "success",
-        authSource: "refresh_token",
+        authSource: "web_session",
       });
-    } catch (error) {
-      log.info("auth.proactive_refresh.complete", {
-        operationId,
-        outcome: "fallback",
-        errorCode: getSafeErrorCode(error, "TOKEN_REFRESH_FAILED"),
-      });
-      // Try fetching from web app as fallback
-      try {
-        const sessionData = await fetchSessionFromWebApp(apiUrl, operationId);
-        await storeAuth(sessionData);
-        log.info("auth.proactive_refresh.complete", {
-          operationId,
-          outcome: "success",
-          authSource: "web_session",
-        });
-      } catch (fetchError) {
-        log.warn("auth.proactive_refresh.complete", {
-          operationId,
-          outcome: "failure",
-          errorCode: getSafeErrorCode(fetchError, "SESSION_UNAVAILABLE"),
+    } catch (fetchError) {
+      if (fetchError.code === "AUTH_ACCOUNT_CHANGED") return;
+      if (
+        [400, 401].includes(error.status) ||
+        ["SESSION_REFRESH_REJECTED", "refresh_token_already_used"].includes(
+          fetchError.code,
+        )
+      ) {
+        await clearAuth(expected).catch((clearError) => {
+          if (clearError.code !== "AUTH_ACCOUNT_CHANGED") throw clearError;
         });
       }
+      log.warn("auth.proactive_refresh.complete", {
+        operationId,
+        outcome: "failure",
+        errorCode: getSafeErrorCode(fetchError, "SESSION_UNAVAILABLE"),
+      });
     }
   }
+}
+
+export async function restorePopupSession(apiUrl, operationId, expected) {
+  const { auth } = expected;
+  if (isTokenValid(auth)) return;
+  if (auth?.refresh_token) {
+    try {
+      await refreshToken(expected, operationId);
+      return;
+    } catch (error) {
+      if (error.code === "AUTH_ACCOUNT_CHANGED") return;
+    }
+  }
+  await recoverWebSession(apiUrl, operationId, expected, {
+    requireValid: true,
+  });
 }

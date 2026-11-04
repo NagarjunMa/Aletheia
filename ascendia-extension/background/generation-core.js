@@ -70,3 +70,36 @@ export function serializeGenerationError(error) {
       : {}),
   };
 }
+
+export const EVIDENCE_ENDPOINT = "/api/extension/evidence";
+const storyId = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
+
+export function generationEndpoint(payload) {
+  return payload.selectedEvidenceIds?.length
+    ? EVIDENCE_ENDPOINT
+    : "/api/extension/generate";
+}
+
+export function parseEvidenceChoices(evidence) {
+  if (!Array.isArray(evidence) || evidence.length > 50) return null;
+  const ids = new Set();
+  const stories = [];
+  for (const story of evidence) {
+    if (
+      !story ||
+      typeof story.id !== "string" ||
+      !storyId.test(story.id) ||
+      ids.has(story.id.toLowerCase()) ||
+      typeof story.title !== "string" ||
+      !story.title.trim() ||
+      story.title.length > 160 ||
+      typeof story.kind !== "string" ||
+      !/^[a-z_]{1,40}$/.test(story.kind)
+    )
+      return null;
+    const id = story.id.toLowerCase();
+    ids.add(id);
+    stories.push({ id, title: story.title, kind: story.kind });
+  }
+  return stories;
+}

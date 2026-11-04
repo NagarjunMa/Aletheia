@@ -7,11 +7,19 @@ import {
   APPLICATION_ANSWER_MIN_WORDS,
 } from "@/lib/ai/output-constraints";
 
+const selectedEvidenceIds = z
+  .array(z.uuid().toLowerCase())
+  .max(2)
+  .refine((ids) => new Set(ids).size === ids.length, "Choose distinct stories")
+  .transform((ids) => (ids.length ? ids : undefined))
+  .optional();
+
 const legacyGenerateRequestFields = {
   profileMarkdown: z.string().trim().min(10).max(10000),
   resume: z.string().max(50000).nullish().default(""),
   jd: z.string().max(20000).nullish().default(""),
   messageFocus: messageFocusSchema,
+  selectedEvidenceIds,
   conversationContext: z.string().max(12000).nullish().default(""),
   intent: z
     .enum(["networking", "referral", "mentorship", "job_inquiry"])
@@ -93,6 +101,7 @@ function normalizedBoundedString(minimum: number, maximum: number) {
 const legacyYcApplicationRequestSchema = z
   .object({
     category: z.literal("yc_application"),
+    selectedEvidenceIds,
     jd: normalizedBoundedString(
       YC_APPLICATION_JOB_DESCRIPTION_MIN_CHARS,
       YC_APPLICATION_JOB_DESCRIPTION_MAX_CHARS,
@@ -109,6 +118,7 @@ const legacyYcApplicationRequestSchema = z
 const canonicalYcApplicationRequestSchema = z
   .object({
     category: z.literal("yc_application"),
+    selectedEvidenceIds,
     jd: normalizedBoundedString(80, 20_000),
     questions: z
       .array(
@@ -356,6 +366,7 @@ export const YC_APPLICATION_ERROR_CONTRACTS = {
   INVALID_EXTENSION_VERSION: { status: 400, billing: "none" },
   UNAUTHORIZED: { status: 401, billing: "none" },
   INSUFFICIENT_CREDITS: { status: 402, billing: "none" },
+  EVIDENCE_SELECTION_UNAVAILABLE: { status: 422, billing: "none" },
   GROUNDING_PROFILE_INCOMPLETE: { status: 422, billing: "none" },
   API_VERSION_UNSUPPORTED: { status: 426, billing: "none" },
   EXTENSION_UPDATE_REQUIRED: { status: 426, billing: "none" },

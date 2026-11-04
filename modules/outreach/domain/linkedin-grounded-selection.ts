@@ -21,6 +21,7 @@ import {
 import {
   linkedinConnectionDraftSchema,
   LINKEDIN_CONNECTION_MAX_CHARACTERS,
+  type LinkedinConnectionDraft,
 } from "./outreach-draft.types";
 
 export class LinkedinGroundingUnavailableError extends Error {
@@ -162,6 +163,7 @@ export function buildLinkedinCompositions(
   sources: readonly AtomicSource[],
   intent: LinkedinIntent,
   rhetoricalPlans = false,
+  finalizeBody?: (_draft: LinkedinConnectionDraft) => string | undefined,
 ) {
   const targets = sources.filter(
     (source) => linkedinTargetFits(source) && linkedinTargetWording(source),
@@ -256,12 +258,22 @@ export function buildLinkedinCompositions(
     for (const cta of invitations(target)) {
       const option = make(target, candidate, cta);
       if (option.body.length > LINKEDIN_CONNECTION_MAX_CHARACTERS) continue;
-      options.push({ id: `note.${prefix}.${options.length + 1}`, ...option });
+      const body = finalizeBody ? finalizeBody(option.draft) : option.body;
+      if (!body) continue;
+      options.push({
+        id: `note.${prefix}.${options.length + 1}`,
+        ...option,
+        body,
+      });
       if (options.length === MAX_OPTIONS) return options;
     }
   }
   return options;
 }
+
+export type LinkedinCompositions = Readonly<
+  ReturnType<typeof buildLinkedinCompositions>
+>;
 
 /** Single-call selection of complete server-owned introductions, never editable facts. */
 export function buildLinkedinSelectionTool(
@@ -269,8 +281,12 @@ export function buildLinkedinSelectionTool(
   diagnostics?: OutreachGroundingContext["targetDiagnostics"],
   intent: LinkedinIntent = "networking",
   rhetoricalPlans = false,
+  options: LinkedinCompositions = buildLinkedinCompositions(
+    sources,
+    intent,
+    rhetoricalPlans,
+  ),
 ) {
-  const options = buildLinkedinCompositions(sources, intent, rhetoricalPlans);
   if (!options.length)
     throw new LinkedinGroundingUnavailableError(
       diagnostics,
@@ -301,6 +317,11 @@ export function resolveLinkedinSelection(
   candidateSources: CandidateGroundingSource[],
   intent: LinkedinIntent = "networking",
   rhetoricalPlans = false,
+  options: LinkedinCompositions = buildLinkedinCompositions(
+    sources,
+    intent,
+    rhetoricalPlans,
+  ),
 ) {
   const parsed = (
     rhetoricalPlans
@@ -308,11 +329,7 @@ export function resolveLinkedinSelection(
       : selectionSchema
   ).parse(input);
   const { option_id } = parsed;
-  const option = buildLinkedinCompositions(
-    sources,
-    intent,
-    rhetoricalPlans,
-  ).find((option) => option.id === option_id);
+  const option = options.find((option) => option.id === option_id);
   if (!option)
     throw new z.ZodError([
       {

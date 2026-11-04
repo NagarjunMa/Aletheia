@@ -1,3 +1,4 @@
+import { SelectedEvidenceUnavailableError } from "@/modules/candidate-context/application/selected-evidence";
 import { createLogger, type SafeLogger } from "@/lib/logger";
 import type { GenerationTiming } from "@/lib/generation-timing";
 import type { AuthenticatedExtensionUser } from "../domain/extension-generate.types";
@@ -26,6 +27,7 @@ export async function prepareOutreachGroundingContext(
   input: {
     caller: AuthenticatedExtensionUser;
     target: OutreachGroundingInput;
+    selectedEvidenceIds?: readonly string[];
     timing?: GenerationTiming;
     logger?: SafeLogger;
   },
@@ -49,6 +51,9 @@ export async function prepareOutreachGroundingContext(
     )({
       candidate,
       target: input.target,
+      ...(input.selectedEvidenceIds
+        ? { selectedEvidenceIds: input.selectedEvidenceIds }
+        : {}),
     });
     if (dependencies.recordGrounding)
       dependencies.recordGrounding(context.metadata);
@@ -62,7 +67,8 @@ export async function prepareOutreachGroundingContext(
         "Outreach grounding context prepared",
       );
     return context;
-  } catch {
+  } catch (error) {
+    if (error instanceof SelectedEvidenceUnavailableError) throw error;
     throw new OutreachGroundingUnavailableError();
   }
 }

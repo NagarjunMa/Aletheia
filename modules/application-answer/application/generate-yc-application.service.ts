@@ -1,8 +1,11 @@
+import { SelectedEvidenceUnavailableError } from "@/modules/candidate-context/application/selected-evidence";
+import { evidenceSelectionUnavailableResponse } from "@/modules/outreach/api/extension-generate.mapper";
 import {
   buildQualityMetadata,
   type GenerationQualityHooks,
 } from "@/lib/ai/generation-quality";
 import {
+  assertYcSelectionFeasible,
   buildYcPlannedOptions,
   ycQuestionContext,
   YcPlanUnavailableError,
@@ -85,6 +88,7 @@ export type GenerateYcApplicationDependencies = {
     caller: { accessToken: string; userId: string };
     question: string;
     questions?: string[];
+    selectedEvidenceIds?: readonly string[];
     jobDescription: string;
     timing?: GenerationTiming;
     logger?: SafeLogger;
@@ -306,12 +310,20 @@ export async function generateYcApplication(
         },
         question: firstQuestion,
         ...(isBatch ? { questions } : {}),
+        ...(input.request.selectedEvidenceIds
+          ? { selectedEvidenceIds: input.request.selectedEvidenceIds }
+          : {}),
         jobDescription: input.request.jd,
         ...(timing ? { timing } : {}),
         logger: operationLog,
       });
     } catch (error) {
-      completeGrounding("failure", { errorCode: "YC_GROUNDING_UNAVAILABLE" });
+      completeGrounding("failure", {
+        errorCode:
+          error instanceof SelectedEvidenceUnavailableError
+            ? "EVIDENCE_SELECTION_UNAVAILABLE"
+            : "YC_GROUNDING_UNAVAILABLE",
+      });
       throw error;
     }
     completeGrounding("success", { ready: context.readiness.ready });
@@ -345,6 +357,7 @@ export async function generateYcApplication(
     const plannedOptions = rhetoricalPlans
       ? buildYcPlannedOptions(context)
       : undefined;
+    if (!rhetoricalPlans) assertYcSelectionFeasible(context);
     timing?.enter("rateLimit");
     const completeRateLimit = startTimedStage(
       operationLog,
@@ -704,6 +717,15 @@ export async function generateYcApplication(
   } catch (error) {
     if (error instanceof AtomicClaimValidationError)
       input.qualityHooks?.onRejected?.();
+    if (
+      error instanceof SelectedEvidenceUnavailableError ||
+      (error instanceof YcPlanUnavailableError &&
+        input.request.selectedEvidenceIds &&
+        !modelRequested)
+    ) {
+      timing?.failure("EVIDENCE_SELECTION_UNAVAILABLE");
+      return evidenceSelectionUnavailableResponse(input.corsHeaders);
+    }
     if (error instanceof YcPlanUnavailableError) {
       timing?.failure("INSUFFICIENT_GROUNDING");
       return NextResponse.json(

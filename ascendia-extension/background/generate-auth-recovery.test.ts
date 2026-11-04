@@ -71,6 +71,22 @@ describe("generateWithAuthRecovery", () => {
     expect(deps.generate).toHaveBeenCalledTimes(3);
   });
 
+  it.each(["getAccessToken", "recoverSilently", "clearAuth"] as const)(
+    "stops on account change from %s without starting another recovery",
+    async (stage) => {
+      const switched = authenticationError("AUTH_ACCOUNT_CHANGED");
+      const deps = dependencies({
+        generate: vi.fn().mockRejectedValue(authenticationError()),
+        [stage]: vi.fn().mockRejectedValue(switched),
+      });
+      await expect(generateWithAuthRecovery(deps)).rejects.toBe(switched);
+      expect(deps.authenticateInteractively).not.toHaveBeenCalled();
+      if (stage === "getAccessToken")
+        expect(deps.recoverSilently).not.toHaveBeenCalled();
+      if (stage !== "clearAuth") expect(deps.clearAuth).not.toHaveBeenCalled();
+    },
+  );
+
   it("returns a stable auth-required error after the final generation retry", async () => {
     const deps = dependencies({
       generate: vi.fn().mockRejectedValue(authenticationError()),

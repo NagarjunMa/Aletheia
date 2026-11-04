@@ -55,6 +55,19 @@ export function buildYcApplicationPrompt(
   const injectionScan = scanForInjection(
     `${context.questions?.map((entry) => entry.question).join("\n") ?? context.question}\n${context.jobDescription}`,
   );
+  const atomicSources = context.atomicSources ?? [];
+  const selectedStories = rhetoricalPlans
+    ? []
+    : (context.requiredEvidenceRoots ?? []).map(
+        (root) =>
+          `<selected_evidence_story source_ids="${atomicSources
+            .filter(
+              (source) =>
+                source.scope === "candidate" && source.rootId === root,
+            )
+            .map((source) => source.id)
+            .join(" ")}" />`,
+      );
   const sources = context.sources.map(renderSource).join("\n");
   const excludedClaims = context.excludedClaims
     .map((claim) => `<excluded_claim>${claim}</excluded_claim>`)
@@ -70,9 +83,13 @@ export function buildYcApplicationPrompt(
             )
           : YC_APPLICATION_SYSTEM_PROMPT) +
         "\n\n" +
-        ATOMIC_PROVENANCE_INSTRUCTIONS,
+        ATOMIC_PROVENANCE_INSTRUCTIONS +
+        (selectedStories.length
+          ? "\nEvery answer must include at least one claim from each selected evidence story. Each selected_evidence_story lists the approved atomic source IDs for that story."
+          : ""),
     userPrompt: [
-      buildAtomicProvenancePrompt(context.atomicSources ?? []),
+      buildAtomicProvenancePrompt(atomicSources),
+      ...selectedStories,
       "<target_context>",
       ...(context.questions
         ? context.questions.map(

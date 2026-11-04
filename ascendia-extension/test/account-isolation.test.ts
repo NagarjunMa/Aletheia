@@ -7,7 +7,11 @@ import {
   isMatchingAccountToken,
   isOwnedRecord,
 } from "../lib/account-owned-cache.js";
-import { buildGenerationRequestData } from "../background/generation-core.js";
+import {
+  buildGenerationRequestData,
+  EVIDENCE_ENDPOINT,
+  generationEndpoint,
+} from "../background/generation-core.js";
 
 const popupSource = readFileSync(
   new URL("../popup/popup.js", import.meta.url),
@@ -363,13 +367,17 @@ describe("extension account isolation", () => {
       }: {
         generate: (token: string) => Promise<unknown>;
       }) => generate("token-b"),
+      getAuthSnapshot: async () => ({ auth: { user: { id: "user-b" } } }),
+      authAccountChanged: () => new Error("The connected account changed."),
       getValidAccessToken: async () => "token-b",
-      clearAuthAndFetchFresh: vi.fn(),
+      recoverGenerationSession: vi.fn(),
       clearAuth: vi.fn(),
       handleAuthenticate: vi.fn(),
       filterOwnedAccepted,
       isMatchingAccountToken,
       buildGenerationRequestData,
+      EVIDENCE_ENDPOINT,
+      generationEndpoint,
       makeAPIRequest,
       logUsage: vi.fn(),
       getSafeErrorCode: () => "AUTH_ACCOUNT_CHANGED",
@@ -428,7 +436,7 @@ describe("extension account isolation", () => {
     const feedback = section(
       workerSource,
       "async function handleFeedbackRequest(payload, requesterId, operationId)",
-      "\nasync function handleGenerateRequest(",
+      "\nfunction isStoryPickerSender(",
     );
     const sandbox = {
       getEffectiveApiUrl: async () => "https://example.test",
@@ -482,7 +490,7 @@ describe("extension account isolation", () => {
       "async (changes, area) => {",
       popupSource.indexOf("chrome.storage.onChanged.addListener"),
     );
-    const end = popupSource.indexOf("\n  });\n});", start);
+    const end = popupSource.indexOf("\n  });", start);
     const callback = `${popupSource.slice(start, end)}\n}`;
     const reload = vi.fn();
     const hide = vi.fn();
@@ -490,6 +498,8 @@ describe("extension account isolation", () => {
     let storedAuth: { user: { id: string } } | null = null;
     const sandbox = {
       PROFILE_EXTRACTION_CONSENT_KEY: "profileExtractionConsent",
+      storyPicker: { resetAccount: vi.fn() },
+      invalidateProfile: vi.fn(),
       generationInFlight: true,
       generationRequesterId: "user-a",
       currentUserId: "user-a",
@@ -552,6 +562,7 @@ describe("extension account isolation", () => {
     );
     expect(reload).toHaveBeenCalledTimes(1);
     expect(sandbox.currentUserId).toBeNull();
+    expect(sandbox.storyPicker.resetAccount).toHaveBeenCalled();
   });
 
   it("does not export another account's accepted drafts or usage", async () => {

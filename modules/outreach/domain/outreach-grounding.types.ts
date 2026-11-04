@@ -84,6 +84,8 @@ export type OutreachGroundingMetadata = {
 };
 
 export type OutreachGroundingContext = {
+  /** Server-only roots that must be used in the result. */
+  requiredEvidenceRoots?: readonly string[];
   /** Private selection status; never included in public eval metadata. */
   selectionDiagnostics?: EvidenceSelectionDiagnostics;
   /** Server-only; never return this field in the public generation response. */

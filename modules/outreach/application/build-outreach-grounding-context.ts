@@ -1,4 +1,12 @@
 import {
+  assertSafeSelectionText,
+  budgetReviewedStory,
+  includesSelectedEvidence,
+  prepareSelectedStoryFacts,
+  resolveSelectedEvidence,
+  SelectedEvidenceUnavailableError,
+} from "@/modules/candidate-context/application/selected-evidence";
+import {
   normalizeClaimText,
   isFirstPersonAssertion,
 } from "@/modules/grounding/domain/atomic-claim";
@@ -168,6 +176,7 @@ function applyBudget(
   drafts: DraftSource[],
   input: OutreachGroundingInput,
   claims: string[],
+  distinctStories: boolean,
 ): CandidateGroundingSource[] {
   const budget = OUTREACH_GROUNDING_BUDGETS[input.category];
   const result: CandidateGroundingSource[] = [];
@@ -183,8 +192,10 @@ function applyBudget(
       Math.min(budget.maxSourceChars, remaining),
     );
     const signature = normalizeForMatching(content);
-    if (!content || !signature || seen.has(signature)) continue;
-    seen.add(signature);
+    const key =
+      distinctStories && draft.type === "evidence" ? draft.id : signature;
+    if (!content || !signature || seen.has(key)) continue;
+    seen.add(key);
     result.push({
       id: draft.id,
       type: draft.type,
@@ -207,6 +218,7 @@ function applyBudget(
 export function buildOutreachGroundingContext(input: {
   target: OutreachGroundingInput;
   candidate: CandidateGroundingData;
+  selectedEvidenceIds?: readonly string[];
 }): OutreachGroundingContext {
   const target = {
     ...input.target,
@@ -214,30 +226,55 @@ export function buildOutreachGroundingContext(input: {
     jobDescription: normalizeText(input.target.jobDescription),
     conversationContext: normalizeText(input.target.conversationContext),
   };
+  if (input.selectedEvidenceIds?.length) {
+    assertSafeSelectionText(
+      [
+        target.profileMarkdown,
+        target.jobDescription,
+        target.conversationContext,
+      ].join("\n"),
+    );
+  }
   const claims = excludedClaims(input.candidate.profile.excludedClaims);
   const injectionScan = scanForInjection(target.profileMarkdown);
   const injectionSafeMode = injectionScan.triggered;
-  const selection = injectionSafeMode
-    ? undefined
-    : createEvidenceRanker(
-        input.candidate.confirmedEvidence.filter(
-          (entry) =>
-            entry.confirmed &&
-            !containsExcludedClaim(renderEvidence(entry), claims),
-        ),
-        target.category === "linkedin_connection"
-          ? (entry) =>
-              readFactReview(entry, entry.factReview)
-                .map((fact) => fact.excerpt)
-                .join("\n")
-          : undefined,
-      )({
-        primary:
-          target.jobDescription ||
-          target.conversationContext ||
-          target.profileMarkdown,
-        secondary: `${target.profileMarkdown} ${target.conversationContext}`,
-      });
+  const allowedEvidence = injectionSafeMode
+    ? []
+    : input.candidate.confirmedEvidence.filter(
+        (entry) =>
+          entry.confirmed &&
+          !containsExcludedClaim(renderEvidence(entry), claims),
+      );
+  const explicit = input.selectedEvidenceIds?.length
+    ? resolveSelectedEvidence(
+        input.selectedEvidenceIds,
+        allowedEvidence,
+        OUTREACH_GROUNDING_BUDGETS[target.category].maxEvidence,
+        claims,
+      )
+    : undefined;
+  const requiredEvidenceRoots = explicit?.map(
+    (entry) => `evidence:${entry.id}`,
+  );
+  const selection =
+    injectionSafeMode || explicit
+      ? undefined
+      : createEvidenceRanker(
+          allowedEvidence,
+          target.category === "linkedin_connection"
+            ? (entry) =>
+                readFactReview(entry, entry.factReview)
+                  .map((fact) => fact.excerpt)
+                  .join("\n")
+            : undefined,
+        )({
+          primary:
+            target.jobDescription ||
+            target.conversationContext ||
+            target.profileMarkdown,
+          secondary: `${target.profileMarkdown} ${target.conversationContext}`,
+        });
+  const selectedEvidence = explicit ?? selection?.evidence ?? [];
   let preferredEvidenceId: string | undefined;
   const targets = buildAtomicTargetSources(
     injectionSafeMode
@@ -257,7 +294,7 @@ export function buildOutreachGroundingContext(input: {
           const matchTargets = createLinkedinTargetMatcher(pool);
           let fallback:
             { entryId: string; targets: AtomicSource[] } | undefined;
-          for (const entry of selection?.evidence ?? []) {
+          for (const entry of selectedEvidence) {
             const matched = new Map<string, AtomicSource>();
             for (const fact of readFactReview(entry, entry.factReview)) {
               const content = normalizeAtomicSourceText(fact.excerpt);
@@ -299,8 +336,8 @@ export function buildOutreachGroundingContext(input: {
   if (injectionSafeMode) {
     drafts = safeSummaryDraft(input.candidate);
   } else {
-    selectionDiagnostics = selection!.diagnostics;
-    const evidence = [...selection!.evidence]
+    selectionDiagnostics = selection?.diagnostics;
+    const evidence = [...selectedEvidence]
       .sort(
         (a, b) =>
           Number(b.id === preferredEvidenceId) -
@@ -312,7 +349,13 @@ export function buildOutreachGroundingContext(input: {
         content:
           target.category === "linkedin_connection"
             ? reviewedLinkedinEvidence(entry, targets.sources)
-            : renderEvidence(entry),
+            : explicit
+              ? budgetReviewedStory(
+                  entry,
+                  target.category === "cold_email" ? "email" : "linkedin",
+                  OUTREACH_GROUNDING_BUDGETS[target.category].maxSourceChars,
+                )
+              : renderEvidence(entry),
         rawContent: renderEvidence(entry),
         type: "evidence" as const,
         priority: 1 as const,
@@ -337,7 +380,28 @@ export function buildOutreachGroundingContext(input: {
     ];
   }
 
-  const sources = applyBudget(drafts, target, claims);
+  const budgetedSources = applyBudget(
+    drafts,
+    target,
+    claims,
+    Boolean(explicit),
+  );
+  const candidateAtoms = buildAtomicCandidateSources(
+    input.candidate,
+    budgetedSources,
+  ).filter(
+    (source) =>
+      target.category !== "linkedin_connection" ||
+      linkedinCandidateFits(source, targets.sources),
+  );
+  const prepared = requiredEvidenceRoots
+    ? prepareSelectedStoryFacts(
+        budgetedSources,
+        candidateAtoms,
+        target.category === "cold_email" ? "email" : "linkedin",
+      )
+    : { sources: budgetedSources, safeAtoms: candidateAtoms };
+  const { sources } = prepared;
   const evidenceCount = sources.filter(
     (source) => source.type === "evidence",
   ).length;
@@ -364,18 +428,22 @@ export function buildOutreachGroundingContext(input: {
           ? "no_profile_context"
           : "no_resume_context";
 
+  const atomicSources = [...prepared.safeAtoms, ...targets.sources];
+  if (
+    requiredEvidenceRoots &&
+    !includesSelectedEvidence(
+      requiredEvidenceRoots,
+      atomicSources.map((source) => source.rootId),
+    )
+  )
+    throw new SelectedEvidenceUnavailableError();
+
   return {
     identity: input.candidate.identity,
     ...(selectionDiagnostics ? { selectionDiagnostics } : {}),
+    ...(requiredEvidenceRoots ? { requiredEvidenceRoots } : {}),
     sources,
-    atomicSources: [
-      ...buildAtomicCandidateSources(input.candidate, sources).filter(
-        (source) =>
-          target.category !== "linkedin_connection" ||
-          linkedinCandidateFits(source, targets.sources),
-      ),
-      ...targets.sources,
-    ],
+    atomicSources,
     targetDiagnostics: {
       ...targets.diagnostics,
       injectionReasons: injectionScan.reasons,
