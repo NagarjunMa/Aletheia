@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { loadCandidateGroundingData } from "./candidate-context.repository";
+import {
+  listConfirmedEvidence,
+  loadCandidateGroundingData,
+} from "./candidate-context.repository";
 
 const userId = "77777777-7777-4777-8777-777777777777";
 
@@ -136,4 +139,55 @@ describe("shared candidate-context repository", () => {
       source: "user_resumes",
     });
   });
+});
+
+it("lists bounded, confirmed summaries under each caller's JWT and discards other rows", async () => {
+  const run = (owner: string) => {
+    const own = {
+      id: owner,
+      title: owner,
+      kind: "technical_project",
+      user_id: owner,
+      confirmed_at: "confirmed",
+      context: "private",
+    };
+    const query = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      not: vi.fn().mockReturnThis(),
+      order: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockResolvedValue({
+        data: [
+          own,
+          { ...own, user_id: "foreign" },
+          { ...own, confirmed_at: null },
+        ],
+        error: null,
+      }),
+    };
+    const from = vi.fn().mockReturnValue(query);
+    const createCallerClient = vi.fn(() => ({ from }) as never);
+    const result = listConfirmedEvidence(
+      { userId: owner, accessToken: `token-${owner}` },
+      { createCallerClient },
+    );
+    return { result, from, query, createCallerClient, owner };
+  };
+  const calls = [run("a"), run("b")];
+  const results = await Promise.all(calls.map(({ result }) => result));
+  for (const [{ owner, from, query, createCallerClient }, result] of calls.map(
+    (call, index) => [call, results[index]] as const,
+  )) {
+    expect(createCallerClient).toHaveBeenCalledWith(`token-${owner}`);
+    expect(from).toHaveBeenCalledWith("candidate_evidence");
+    expect(query.select).toHaveBeenCalledWith(
+      "id,user_id,title,kind,confirmed_at",
+    );
+    expect(query.eq).toHaveBeenCalledWith("user_id", owner);
+    expect(query.not).toHaveBeenCalledWith("confirmed_at", "is", null);
+    expect(query.limit).toHaveBeenCalledWith(50);
+    expect(result).toEqual([
+      { id: owner, title: owner, kind: "technical_project" },
+    ]);
+  }
 });

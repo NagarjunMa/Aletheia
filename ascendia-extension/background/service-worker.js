@@ -13,19 +13,26 @@ import {
 // Handles API communication with the Aletheia backend
 
 import {
+  authAccountChanged,
   clearAuth,
-  clearAuthAndFetchFresh,
-  fetchSessionFromWebApp,
+  recoverGenerationSession,
+  getAuthSnapshot,
   getAletheiaRequestHeaders,
   getAuthStatus,
   getValidAccessToken,
   handleAuthBridgeSession,
+  isTokenValid,
+  matchesPendingLogin,
   proactiveRefresh,
-  storeAuth,
+  recoverWebSession,
+  restorePopupSession,
   waitForLogin,
 } from "./auth.js";
 import {
   buildGenerationRequestData,
+  EVIDENCE_ENDPOINT,
+  generationEndpoint,
+  parseEvidenceChoices,
   serializeGenerationError,
 } from "./generation-core.js";
 import { generateWithAuthRecovery } from "./generate-auth-recovery.js";
@@ -64,11 +71,12 @@ let logoutInProgress = false;
 
 // Recover from service worker restart during login
 (async function recoverPendingLogin() {
+  const expected = await getAuthSnapshot();
   const { _loginPending } = await chrome.storage.local.get("_loginPending");
   if (!_loginPending) return;
 
   const { apiUrl, tabId, timeoutAt } = _loginPending;
-  if (Date.now() > timeoutAt) {
+  if (Date.now() > timeoutAt || !matchesPendingLogin(_loginPending, expected)) {
     log.info("auth.recovery.complete", {
       outcome: "expired",
       stage: "auth.recovery",
@@ -80,8 +88,9 @@ let logoutInProgress = false;
   const completeRecovery = startExtensionTimedStage(log, "auth.recovery");
   // Try to fetch the session immediately (user may have already logged in)
   try {
-    const sessionData = await fetchSessionFromWebApp(apiUrl);
-    await storeAuth(sessionData);
+    await recoverWebSession(apiUrl, undefined, expected, {
+      ownerId: _loginPending.ownerId,
+    });
     await chrome.storage.local.remove("_loginPending");
     try {
       chrome.tabs.remove(tabId);
@@ -196,10 +205,14 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   }
 
   if (alarm.name === "aletheia-login-keepalive") {
+    const expected = await getAuthSnapshot();
     const { _loginPending } = await chrome.storage.local.get("_loginPending");
     if (!_loginPending) return;
 
-    if (Date.now() > _loginPending.timeoutAt) {
+    if (
+      Date.now() > _loginPending.timeoutAt ||
+      !matchesPendingLogin(_loginPending, expected)
+    ) {
       log.info("auth.keepalive.complete", {
         stage: "auth.keepalive",
         outcome: "expired",
@@ -210,8 +223,9 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     }
 
     try {
-      const sessionData = await fetchSessionFromWebApp(_loginPending.apiUrl);
-      await storeAuth(sessionData);
+      await recoverWebSession(_loginPending.apiUrl, undefined, expected, {
+        ownerId: _loginPending.ownerId,
+      });
       await chrome.storage.local.remove("_loginPending");
       try {
         chrome.tabs.remove(_loginPending.tabId);
@@ -268,7 +282,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
 
+  if (message.action === "listEvidence") {
+    if (!isStoryPickerSender(sender)) {
+      sendResponse({ success: false, code: "EVIDENCE_LIST_UNAVAILABLE" });
+      return false;
+    }
+    handleEvidenceList(message.requesterId, operationId).then(sendResponse);
+    return true;
+  }
+
   if (message.action === "generate") {
+    if (
+      message.payload?.selectedEvidenceIds?.length &&
+      !isStoryPickerSender(sender)
+    ) {
+      sendResponse({ success: false, code: "EVIDENCE_SELECTION_UNAVAILABLE" });
+      return false;
+    }
     handleGenerateRequest(message.payload, operationId, message.requesterId)
       .then((result) => {
         log.info("runtime.message.complete", {
@@ -384,32 +414,37 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // Silent auth check: try to detect an existing web session without opening any tabs.
   // Used by popup on initialization to auto-detect if user is already logged in.
   if (message.action === "silentAuthCheck") {
+    const epoch = usageEpoch;
     (async () => {
       try {
-        const url = await getEffectiveApiUrl();
-        await getValidAccessToken(url, { operationId });
-        const status = await getAuthStatus();
+        const expected = await getAuthSnapshot();
+        if (!logoutInProgress && epoch === usageEpoch) {
+          await restorePopupSession(
+            await getEffectiveApiUrl(),
+            operationId,
+            expected,
+          );
+        }
         log.info("auth.silent_check.complete", {
           operationId,
           outcome: "success",
         });
-        sendResponse(status);
       } catch (error) {
         log.info("auth.silent_check.complete", {
           operationId,
           outcome: "failure",
           errorCode: getSafeErrorCode(error, "AUTH_REQUIRED"),
         });
-        sendResponse({ authenticated: false });
       }
-    })();
+      return getAuthStatus();
+    })().then(sendResponse, () => sendResponse({ authenticated: false }));
     return true;
   }
 
   // Auth bridge: content script on login page found the Supabase session
   if (message.action === "authBridgeSession") {
     log.info("auth.bridge.received", { operationId });
-    handleAuthBridgeSession(message.session, operationId);
+    handleAuthBridgeSession(message.session, operationId, sender.tab?.id);
     sendResponse({ success: true });
     return true;
   }
@@ -501,29 +536,39 @@ async function initializeDefaultSettings() {
   log.info("settings.initialized", { outcome: "success" });
 }
 
-async function handleAuthenticate(operationId) {
+async function handleAuthenticate(
+  operationId,
+  webOwnerId = null,
+  expected,
+  epoch = usageEpoch,
+) {
   const url = await getEffectiveApiUrl();
+  if (logoutInProgress || epoch !== usageEpoch) throw authAccountChanged();
+  expected ??= await getAuthSnapshot();
   const complete = startExtensionTimedStage(log, "auth.interactive", {
     operationId,
   });
 
   // First try: maybe the user is already logged in (cookies exist)
   try {
-    await getValidAccessToken(url, { operationId });
+    await getValidAccessToken(url, { operationId, webOwnerId, expected });
     const status = await getAuthStatus();
+    if (logoutInProgress || epoch !== usageEpoch) throw authAccountChanged();
     complete("success", { authSource: "stored_session" });
     return {
       success: true,
       user: status.user,
       message: "Connected to Aletheia",
     };
-  } catch {
+  } catch (error) {
+    if (error.code === "AUTH_ACCOUNT_CHANGED") throw error;
+    if (logoutInProgress || epoch !== usageEpoch) throw authAccountChanged();
     // No existing session — open login tab and wait for cookies
   }
 
   // Second try: open login page and wait for the user to authenticate
   try {
-    const sessionData = await waitForLogin(url, operationId);
+    const sessionData = await waitForLogin(url, operationId, webOwnerId);
     complete("success", { authSource: "interactive_login" });
     return {
       success: true,
@@ -536,6 +581,7 @@ async function handleAuthenticate(operationId) {
     complete("failure", {
       errorCode: getSafeErrorCode(waitError, "AUTHENTICATION_FAILED"),
     });
+    if (waitError.code === "AUTH_ACCOUNT_CHANGED") throw waitError;
     throw new Error(waitError.message || "Login failed. Please try again.");
   }
 }
@@ -631,6 +677,75 @@ async function handleFeedbackRequest(payload, requesterId, operationId) {
   }
 }
 
+function isStoryPickerSender(sender) {
+  return (
+    sender.id === chrome.runtime.id &&
+    sender.url === chrome.runtime.getURL("popup/popup.html")
+  );
+}
+
+async function readStoryAccount(requesterId, epoch) {
+  const { aletheia_auth: auth } =
+    await chrome.storage.local.get("aletheia_auth");
+  if (
+    !requesterId ||
+    auth?.user?.id !== requesterId ||
+    logoutInProgress ||
+    epoch !== usageEpoch
+  ) {
+    const error = new Error(
+      "The connected account changed. Reopen the extension and try again.",
+    );
+    error.code = "AUTH_ACCOUNT_CHANGED";
+    throw error;
+  }
+  return auth;
+}
+
+async function readStoryAccessToken(requesterId, epoch) {
+  const auth = await readStoryAccount(requesterId, epoch);
+  // These new paths only read auth. An asynchronous refresh could replace a
+  // different account's session while a story request is in progress.
+  if (!isTokenValid(auth)) {
+    const error = new Error(
+      "Please reconnect the extension to use selected stories.",
+    );
+    error.code = "AUTH_REQUIRED";
+    error.status = 401;
+    throw error;
+  }
+  return auth.access_token;
+}
+
+async function handleEvidenceList(requesterId, operationId) {
+  const epoch = usageEpoch;
+  try {
+    const url = await getEffectiveApiUrl();
+    const accessToken = await readStoryAccessToken(requesterId, epoch);
+    const assertOwner = () => readStoryAccount(requesterId, epoch);
+    const data = await makeAPIRequest(
+      EVIDENCE_ENDPOINT,
+      {
+        method: "GET",
+        cache: "no-store",
+        redirect: "error",
+        headers: { Authorization: `Bearer ${accessToken}` },
+      },
+      url,
+      operationId,
+      { maxAttempts: 1, timeoutMs: 10000, assertBeforeAttempt: assertOwner },
+    );
+    await assertOwner();
+    const evidence = parseEvidenceChoices(data.evidence);
+    if (evidence) return { success: true, evidence };
+  } catch (error) {
+    if ([404, 405].includes(error.status))
+      return { success: false, code: "EVIDENCE_SELECTION_UNSUPPORTED" };
+    if (error.status === 401) return { success: false, code: "AUTH_REQUIRED" };
+  }
+  return { success: false, code: "EVIDENCE_LIST_UNAVAILABLE" };
+}
+
 async function handleGenerateRequest(payload, operationId, requesterId) {
   const generationUsageEpoch = usageEpoch;
   const complete = startExtensionTimedStage(log, "generation.workflow", {
@@ -640,15 +755,38 @@ async function handleGenerateRequest(payload, operationId, requesterId) {
     const url = await getEffectiveApiUrl();
     const { aletheia_auth } = await chrome.storage.local.get("aletheia_auth");
 
-    const response = await generateWithAuthRecovery({
+    const explicit = payload.selectedEvidenceIds?.length > 0;
+    const getGenerationAuth = async () => {
+      const expected = await getAuthSnapshot();
+      if (
+        logoutInProgress ||
+        generationUsageEpoch !== usageEpoch ||
+        (expected.auth?.user?.id && expected.auth.user.id !== requesterId)
+      ) {
+        throw authAccountChanged();
+      }
+      return expected;
+    };
+    const workflow = {
       resumeAfterInteractive: payload.category !== "yc_application",
       // Keep session exchange in the recovery state machine: a generation has
       // one silent exchange, rather than an implicit fetch on every token read.
-      getAccessToken: () =>
-        getValidAccessToken(url, { allowSessionFetch: false, operationId }),
-      recoverSilently: () => clearAuthAndFetchFresh(url, operationId),
-      clearAuth,
+      getAccessToken: async () =>
+        getValidAccessToken(url, {
+          allowSessionFetch: false,
+          operationId,
+          expected: await getGenerationAuth(),
+        }),
+      recoverSilently: async () =>
+        recoverGenerationSession(
+          url,
+          operationId,
+          await getGenerationAuth(),
+          requesterId,
+        ),
+      clearAuth: async () => clearAuth(await getGenerationAuth()),
       authenticateInteractively: async () => {
+        const expected = await getGenerationAuth();
         if (payload.category === "yc_application") {
           await saveApplicationAuthDraft(
             buildApplicationAuthDraft({
@@ -663,7 +801,12 @@ async function handleGenerateRequest(payload, operationId, requesterId) {
             chrome.alarms,
           );
         }
-        return handleAuthenticate(operationId);
+        return handleAuthenticate(
+          operationId,
+          requesterId,
+          expected,
+          generationUsageEpoch,
+        );
       },
       generate: async (accessToken) => {
         const { accepted = [], aletheia_auth: requestAuth } =
@@ -684,10 +827,12 @@ async function handleGenerateRequest(payload, operationId, requesterId) {
           payload,
           relevantExamples,
         );
+        const endpoint = generationEndpoint(requestData);
         const result = await makeAPIRequest(
-          "/api/extension/generate",
+          endpoint,
           {
             method: "POST",
+            ...(endpoint === EVIDENCE_ENDPOINT ? { redirect: "error" } : {}),
             headers: {
               "Content-Type": "application/json",
               Authorization: `Bearer ${accessToken}`,
@@ -704,8 +849,10 @@ async function handleGenerateRequest(payload, operationId, requesterId) {
               ? { timeoutMs: 120000 }
               : {}),
             assertBeforeAttempt: async () => {
-              const { aletheia_auth: activeAuth } =
-                await chrome.storage.local.get("aletheia_auth");
+              const activeAuth = explicit
+                ? await readStoryAccount(requesterId, generationUsageEpoch)
+                : (await chrome.storage.local.get("aletheia_auth"))
+                    .aletheia_auth;
               if (
                 !isMatchingAccountToken(requesterId, accessToken, activeAuth)
               ) {
@@ -717,7 +864,19 @@ async function handleGenerateRequest(payload, operationId, requesterId) {
               }
             },
           },
-        );
+        ).catch((error) => {
+          if (
+            endpoint === EVIDENCE_ENDPOINT &&
+            [404, 405].includes(error.status)
+          ) {
+            const unavailable = new Error(
+              "This server cannot generate with selected stories. Clear your selection to generate automatically.",
+            );
+            unavailable.code = "EVIDENCE_SELECTION_UNSUPPORTED";
+            throw unavailable;
+          }
+          throw error;
+        });
 
         if (!result.success) {
           const responseError = new Error(
@@ -732,7 +891,14 @@ async function handleGenerateRequest(payload, operationId, requesterId) {
 
         return result;
       },
-    });
+    };
+    // A reconnect can invalidate an explicit selection in the side panel.
+    const response = explicit
+      ? await workflow.generate(
+          await readStoryAccessToken(requesterId, generationUsageEpoch),
+        )
+      : await generateWithAuthRecovery(workflow);
+    if (explicit) await readStoryAccount(requesterId, generationUsageEpoch);
 
     if (!response.success) {
       complete("failure", {

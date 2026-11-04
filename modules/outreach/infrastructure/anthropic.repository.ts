@@ -10,6 +10,7 @@ import type { CandidateGroundingSource } from "@/modules/candidate-context/domai
 import {
   buildLinkedinSelectionTool,
   resolveLinkedinSelection,
+  type LinkedinCompositions,
   type LinkedinIntent,
 } from "../domain/linkedin-grounded-selection";
 import { GENERATION_MODEL_TIMEOUT_MS } from "../domain/generation-admission";
@@ -257,6 +258,7 @@ export async function createOutreachDraftMessage(input: {
   emailMode: EmailMode;
   atomicSources?: readonly AtomicSource[];
   proseCompositions?: ProseCompositions;
+  linkedinCompositions?: LinkedinCompositions;
   intent?: LinkedinIntent;
   rhetoricalPlans?: boolean;
   logger?: SafeLogger;
@@ -279,6 +281,7 @@ export async function createOutreachDraftMessage(input: {
             undefined,
             input.intent,
             input.rhetoricalPlans,
+            input.linkedinCompositions,
           )
         : buildProseSelectionTool("linkedin_inmail", input.proseCompositions!);
   const toolName = tool.name;
@@ -359,6 +362,7 @@ export function getLinkedinConnectionDraftToolInput(
   grounding?: {
     atomicSources: readonly AtomicSource[];
     candidateSources: CandidateGroundingSource[];
+    linkedinCompositions?: LinkedinCompositions;
     intent?: LinkedinIntent;
     rhetoricalPlans?: boolean;
   },
@@ -378,6 +382,7 @@ export function getLinkedinConnectionDraftToolInput(
       grounding.candidateSources,
       grounding.intent,
       grounding.rhetoricalPlans,
+      grounding.linkedinCompositions,
     );
   }
   // Standalone legacy parsing is retained for tooling; live requests always supply grounding.

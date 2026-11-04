@@ -34,6 +34,7 @@ type PrepareYcGroundingContextInput = {
   question: string;
   questions?: string[];
   jobDescription: string;
+  selectedEvidenceIds?: readonly string[];
   timing?: GenerationTiming;
   logger?: SafeLogger;
 };
@@ -69,6 +70,9 @@ export async function prepareYcGroundingContext(
       ...(input.questions ? { questions: input.questions } : {}),
       jobDescription: input.jobDescription,
       candidate,
+      ...(input.selectedEvidenceIds
+        ? { selectedEvidenceIds: input.selectedEvidenceIds }
+        : {}),
     });
   } catch (error) {
     complete("failure", { errorCode: "YC_GROUNDING_UNAVAILABLE" });

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { SelectedEvidenceUnavailableError } from "@/modules/candidate-context/application/selected-evidence";
 import Anthropic from "@anthropic-ai/sdk";
 import type { YcGroundingContext } from "../domain/yc-grounding.types";
 import { YcApplicationStructuredOutputError } from "../infrastructure/anthropic-yc.repository";
@@ -1455,4 +1456,417 @@ it("ALE-49 rejects insufficient complete YC evidence before quota or model admis
   expect(deps.checkRateLimit).not.toHaveBeenCalled();
   expect(deps.reserveCredits).not.toHaveBeenCalled();
   expect(deps.createMessage).not.toHaveBeenCalled();
+});
+
+describe("ALE-55 application selection", () => {
+  const selected = "11111111-1111-4111-8111-111111111111";
+  const second = "ae550000-2222-4222-8222-222222222222";
+  const selectedRequest = { ...request, selectedEvidenceIds: [selected] };
+  const selectedInput = {
+    caller,
+    request: selectedRequest,
+    corsHeaders: {},
+    applicationBaseUrl: "https://aletheia.live",
+    rhetoricalPlans: false,
+  };
+
+  it("stops a stale selection before quota, credit, admission or model work", async () => {
+    const deps = dependencies({
+      prepareGrounding: vi
+        .fn()
+        .mockRejectedValue(new SelectedEvidenceUnavailableError()),
+    });
+    const response = await generateYcApplication(selectedInput, deps);
+    expect(response.status).toBe(422);
+    expect(await response.json()).toMatchObject({
+      code: "EVIDENCE_SELECTION_UNAVAILABLE",
+      billing: "none",
+    });
+    expect(deps.prepareGrounding).toHaveBeenCalledWith(
+      expect.objectContaining({
+        caller: { userId: caller.userId, accessToken: caller.accessToken },
+        selectedEvidenceIds: [selected],
+      }),
+    );
+    expect(deps.checkRateLimit).not.toHaveBeenCalled();
+    expect(deps.reserveCredits).not.toHaveBeenCalled();
+    expect(deps.startAttempt).not.toHaveBeenCalled();
+    expect(deps.createMessage).not.toHaveBeenCalled();
+  });
+
+  it("proves every explicit batch answer is feasible before quota even with plans off", async () => {
+    const base = grounding();
+    const context: YcGroundingContext = {
+      ...base,
+      requiredEvidenceRoots: [`evidence:${selected}`],
+      questions: [
+        {
+          questionId: "q1",
+          question: request.question,
+          sourceIds: [`evidence:${selected}`],
+        },
+        { questionId: "q2", question: "What did you deliver?", sourceIds: [] },
+      ],
+    };
+    const deps = dependencies({
+      prepareGrounding: vi.fn().mockResolvedValue(context),
+    });
+    const response = await generateYcApplication(
+      {
+        ...selectedInput,
+        request: {
+          category: request.category,
+          jd: request.jd,
+          questions: context.questions!.map(({ question }) => question),
+          selectedEvidenceIds: [selected],
+        },
+      },
+      deps,
+    );
+    expect(response.status).toBe(422);
+    expect(await response.json()).toMatchObject({
+      code: "EVIDENCE_SELECTION_UNAVAILABLE",
+    });
+    expect(deps.checkRateLimit).not.toHaveBeenCalled();
+    expect(deps.createMessage).not.toHaveBeenCalled();
+  });
+
+  it("returns a legacy answer that uses the selected story", async () => {
+    const context = {
+      ...grounding(),
+      requiredEvidenceRoots: [`evidence:${selected}`],
+    };
+    const deps = dependencies({
+      prepareGrounding: vi.fn().mockResolvedValue(context),
+    });
+    const response = await generateYcApplication(selectedInput, deps);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ body: answer });
+    expect(deps.createMessage).toHaveBeenCalledTimes(1);
+    expect(deps.refundCredits).not.toHaveBeenCalled();
+  });
+
+  it("refunds a legacy answer that drops a feasible selected story after generation", async () => {
+    const base = grounding();
+    const root = `evidence:${second}`;
+    const fact = "I wrote a separate reliability guide for engineers.";
+    const context: YcGroundingContext = {
+      ...base,
+      requiredEvidenceRoots: [`evidence:${selected}`, root],
+      sources: [
+        ...base.sources,
+        {
+          id: root,
+          type: "evidence",
+          label: "Reliability guide",
+          content: fact,
+          priority: 1,
+        },
+      ],
+      atomicSources: [
+        ...base.atomicSources!,
+        {
+          id: root,
+          rootId: root,
+          scope: "candidate",
+          kind: "action",
+          content: fact,
+        },
+      ],
+    };
+    const deps = dependencies({
+      prepareGrounding: vi.fn().mockResolvedValue(context),
+    });
+    const response = await generateYcApplication(
+      {
+        ...selectedInput,
+        request: {
+          ...selectedRequest,
+          selectedEvidenceIds: [selected, second],
+        },
+      },
+      deps,
+    );
+    expect(response.status).toBe(502);
+    expect(await response.json()).toMatchObject({ code: "YC_OUTPUT_INVALID" });
+    expect(deps.createMessage).toHaveBeenCalledTimes(1);
+    expect(deps.refundCredits).toHaveBeenCalledTimes(1);
+    expect(deps.releaseRateLimit).toHaveBeenCalledTimes(1);
+  });
+});
+
+it("allows a free-form answer requiring four complete facts from two selected stories", async () => {
+  const facts = [
+    "I designed an evaluation pipeline that measured customer response times during nightly runs.",
+    "I investigated latency outliers by comparing dashboard traces against a representative traffic sample.",
+    "I wrote integration tests that verified retry behavior during a brief production outage.",
+    "I presented the findings to engineers and documented each actionable improvement for rollout.",
+  ];
+  const ids = [
+    "11111111-1111-4111-8111-111111111111",
+    "22222222-2222-4222-8222-222222222222",
+  ];
+  const context = buildYcGroundingContext({
+    question: request.question,
+    jobDescription: request.jd,
+    selectedEvidenceIds: ids,
+    candidate: {
+      identity: { fullName: "", linkedinUrl: "" },
+      profile: candidateProfileInputSchema.parse({ currentRole: "Engineer" }),
+      resume: { text: "", source: "none" },
+      confirmedEvidence: ids.map((id, index) => {
+        const pair = facts.slice(index * 2, (index + 1) * 2);
+        const story = {
+          id,
+          kind: "technical_project" as const,
+          title: "Project " + index,
+          context: "",
+          actions: pair.join(" "),
+          outcome: "",
+          metrics: [],
+          skills: [],
+          links: [],
+          confirmed: true,
+          sortOrder: 0,
+        };
+        return {
+          ...story,
+          factReview: prepareFactReview(
+            story,
+            pair.map((excerpt, i) => ({
+              id: i
+                ? "33333333-3333-4333-8333-333333333333"
+                : "44444444-4444-4444-8444-444444444444",
+              kind: "action",
+              confirmed: true,
+              excerpt,
+            })),
+          ),
+        };
+      }),
+    },
+  });
+  const output = {
+    body: facts.join(" "),
+    claims: context
+      .atomicSources!.filter((s) => s.scope === "candidate")
+      .map((s) => ({
+        text: s.content,
+        kind: s.kind,
+        source_id: s.id,
+        supporting_excerpt: s.content,
+        sourceIds: [s.id],
+      })),
+  };
+  const deps = dependencies({
+    prepareGrounding: vi.fn().mockResolvedValue(context),
+    parseMessage: vi.fn().mockReturnValue(output),
+  });
+  const response = await generateYcApplication(
+    {
+      caller,
+      request: { ...request, selectedEvidenceIds: ids },
+      corsHeaders: {},
+      applicationBaseUrl: "https://example.test",
+      rhetoricalPlans: false,
+    },
+    deps,
+  );
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ body: output.body });
+  expect(deps.createMessage).toHaveBeenCalledTimes(1);
+});
+
+it("allows an approved target fact to complete a free-form selected-story answer", async () => {
+  const base = grounding();
+  const root = base.sources[0]!.id;
+  const evidence = "I built evaluation tools and documented their limits.";
+  const target =
+    "The team builds a platform for monitoring how production requests move between independent services, with a focus on finding failures in test environments and documenting what the operators can safely infer from the recorded behavior before making deployment decisions.";
+  const targetText = `The supplied context says: "${target}"`;
+  const context: YcGroundingContext = {
+    ...base,
+    requiredEvidenceRoots: [root],
+    sources: [{ ...base.sources[0]!, content: evidence }],
+    atomicSources: [
+      {
+        id: root,
+        rootId: root,
+        scope: "candidate",
+        kind: "action",
+        content: evidence,
+      },
+      {
+        id: "target.jobDescription.0",
+        scope: "target",
+        kind: "target_observation",
+        content: target,
+      },
+    ],
+  };
+  const output = {
+    body: `${evidence} ${targetText}`,
+    claims: context.atomicSources!.map((source) => ({
+      text: source.scope === "candidate" ? evidence : targetText,
+      kind: source.kind,
+      source_id: source.id,
+      supporting_excerpt: source.content,
+      sourceIds: [source.id],
+    })),
+  };
+  const deps = dependencies({
+    prepareGrounding: vi.fn().mockResolvedValue(context),
+    parseMessage: vi.fn().mockReturnValue(output),
+  });
+  const response = await generateYcApplication(
+    {
+      caller,
+      request: {
+        ...request,
+        selectedEvidenceIds: [root.slice("evidence:".length)],
+      },
+      corsHeaders: {},
+      applicationBaseUrl: "https://example.test",
+      rhetoricalPlans: false,
+    },
+    deps,
+  );
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ body: output.body });
+  expect(deps.createMessage).toHaveBeenCalledWith(
+    expect.objectContaining({
+      systemPrompt: expect.stringContaining("each selected evidence story"),
+      userPrompt: expect.stringContaining(
+        `<selected_evidence_story source_ids="${root}" />`,
+      ),
+    }),
+  );
+});
+
+it("keeps unsafe reviewed and unreviewed story details out of the provider prompt", async () => {
+  const id = "11111111-1111-4111-8111-111111111111";
+  const unsafe = "I verified the synthetic field containing 123-45-6789.";
+  const story = {
+    id,
+    kind: "technical_project" as const,
+    title: "Evaluation pipeline",
+    context: "PRIVATE_UNREVIEWED_STORY_DETAIL",
+    actions: answer + " " + unsafe,
+    outcome: "",
+    metrics: [],
+    skills: [],
+    links: [],
+    confirmed: true,
+    sortOrder: 0,
+  };
+  const context = buildYcGroundingContext({
+    question: request.question,
+    jobDescription: request.jd,
+    selectedEvidenceIds: [id],
+    candidate: {
+      identity: { fullName: "", linkedinUrl: "" },
+      profile: candidateProfileInputSchema.parse({ currentRole: "Engineer" }),
+      resume: { text: "", source: "none" },
+      confirmedEvidence: [
+        {
+          ...story,
+          factReview: prepareFactReview(
+            story,
+            [answer, unsafe].map((excerpt, index) => ({
+              id: index
+                ? "33333333-3333-4333-8333-333333333333"
+                : "44444444-4444-4444-8444-444444444444",
+              kind: "action",
+              confirmed: true,
+              excerpt,
+            })),
+          ),
+        },
+      ],
+    },
+  });
+  const approved = context.atomicSources!.find((s) => s.content === answer)!;
+  const output = {
+    body: answer,
+    claims: [
+      {
+        text: approved.content,
+        kind: approved.kind,
+        source_id: approved.id,
+        supporting_excerpt: approved.content,
+        sourceIds: [approved.id],
+      },
+    ],
+  };
+  const deps = dependencies({
+    prepareGrounding: vi.fn().mockResolvedValue(context),
+    parseMessage: vi.fn().mockReturnValue(output),
+  });
+  const response = await generateYcApplication(
+    {
+      caller,
+      request: { ...request, selectedEvidenceIds: [id] },
+      corsHeaders: {},
+      applicationBaseUrl: "https://example.test",
+      rhetoricalPlans: false,
+    },
+    deps,
+  );
+  expect(response.status).toBe(200);
+  expect(deps.createMessage).toHaveBeenCalledTimes(1);
+  const { userPrompt } = vi.mocked(deps.createMessage).mock.calls[0]![0];
+  expect(userPrompt).toContain(answer);
+  expect(userPrompt).not.toMatch(/123-45-6789|PRIVATE_UNREVIEWED_STORY_DETAIL/);
+});
+
+it("accepts a complete approved quote when the direct wording falls below the word minimum", async () => {
+  const base = grounding();
+  const root = base.sources[0]!.id;
+  const fact =
+    "I built an evaluation service that captured synthetic request outcomes, compared those outcomes with documented policy expectations, and stored the disagreements for engineers to investigate before rollout, with the goal of making test cases reproducible without collecting any real customer records or including any confidential project names.";
+  expect(fact.split(" ")).toHaveLength(47);
+  const text = `My background includes: "${fact}"`;
+  const context: YcGroundingContext = {
+    ...base,
+    requiredEvidenceRoots: [root],
+    atomicSources: [
+      {
+        id: root,
+        rootId: root,
+        scope: "candidate",
+        kind: "action",
+        content: fact,
+      },
+    ],
+  };
+  const deps = dependencies({
+    prepareGrounding: vi.fn().mockResolvedValue(context),
+    parseMessage: vi.fn().mockReturnValue({
+      body: text,
+      claims: [
+        {
+          text,
+          kind: "action",
+          source_id: root,
+          supporting_excerpt: fact,
+          sourceIds: [root],
+        },
+      ],
+    }),
+  });
+  const response = await generateYcApplication(
+    {
+      caller,
+      request: {
+        ...request,
+        selectedEvidenceIds: [root.slice("evidence:".length)],
+      },
+      corsHeaders: {},
+      applicationBaseUrl: "https://example.test",
+      rhetoricalPlans: false,
+    },
+    deps,
+  );
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ body: text });
 });

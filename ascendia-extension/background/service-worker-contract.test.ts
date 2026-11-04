@@ -27,7 +27,9 @@ describe("background service worker startup contract", () => {
 
     for (const exportedFunction of [
       "clearAuth",
-      "fetchSessionFromWebApp",
+      "getAuthSnapshot",
+      "recoverWebSession",
+      "restorePopupSession",
       "getAuthStatus",
       "getValidAccessToken",
       "storeAuth",

@@ -1547,3 +1547,50 @@ textarea:focus-visible {
 #feedbackError {
   color: #ffb4ab;
 }
+
+.evidence-picker summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+#evidenceChoices {
+  display: grid;
+  gap: 8px;
+  border: 0;
+  padding: 0;
+  min-inline-size: 0;
+  max-block-size: 14rem;
+  overflow: auto;
+}
+
+#evidenceChoices label {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+
+.evidence-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-block-start: 8px;
+}
+
+.evidence-actions button {
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  padding: 6px 8px;
+  cursor: pointer;
+}
+
+.evidence-actions button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.evidence-picker :focus-visible {
+  outline: 2px solid var(--accent-500);
+  outline-offset: 2px;
+}

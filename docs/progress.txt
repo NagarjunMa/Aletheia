@@ -1849,3 +1849,20 @@ No new cost, model judge, acceptance waiver or release approved.
 - Return review reproduced ALE50-HOSTED-05: a 422 could pass despite returning a draft or reporting a refund. Both cases failed red first. The strict refusal now requires the canonical no-draft response and billing none. Third independent review reproduced the expected pre-admission route shape and found no material issue in that correction.
 - Local evidence: 1,892 tests with coverage, 15 guardrails, offline baseline reproduction, type-check, production build with placeholders, engineering policy and high-threshold audit passed. Root lint retains the inherited refund-admin warning and audit retains 20 inherited moderate notices.
 - Hosted execution, configured GitHub reviewer protection, refunds, exported-log audit, hosted browser behavior and statistical/human rollout evidence remain pending. No deployment, provider calls, production settings changes or completion status change.
+
+2026-11-04 — ALE-55 Phase 1 on feat/ale-55-confirmed-evidence-selection from 41fb71d. Critical request boundary. Initial red run reproduced silent outreach field stripping and unknown-field application rejection. Added one shared bounded selectedEvidenceIds contract for all outreach and both application forms. Explicit choices return a recoverable 409 before private reads or paid work while selection is unavailable. Empty and omitted values retain automatic ranking. Final coverage 1,939 tests, 15 guardrails, types, placeholder build, lint, policy and formatting pass. Independent review found no material issue and passed 407 focused tests. Details and pending ownership, eligibility, picker and rollout checks are in docs/operations/ale-55-confirmed-evidence-selection.md.
+
+2026-11-04 ALE-55 Phase 2
+- Implemented authenticated, uncached confirmed-story summaries and caller-scoped generation revalidation on the existing ALE-55 branch.
+- Kept channel budgets and grounding checks. Invalid selections stop before quota, billing or provider calls; application output that drops selected evidence follows the existing refund path.
+- Critical risk due to private candidate data and authorization. Hosted account isolation and the Phase 3 extension picker remain pending.
+
+2026-11-04 ALE-55 Phase 3 and review corrections
+- Added the in-memory Chrome side-panel story picker, account/context resets and stale-selection recovery. The worker uses the story endpoint for explicit requests to prevent silent fallback against older deployments.
+- Budgeted safe, complete reviewed facts before raw story text can displace them. Added a long-story regression across cold email, InMail and application answers.
+- Built extension 1.0.22 and added Chromium smoke coverage using the actual packaged worker/panel with a mocked API. Critical risk remains. Hosted two-account and live-provider checks are separate release gates.
+
+2026-11-04 ALE-55 auth recovery follow-up
+- Serialized session writes and clears with a snapshot check in the extension worker. Automatic recovery ends on account change. Shared refreshes separate the network outcome from caller cleanup.
+- Reproduced stale refresh and web fallback overwrites, stale clearing, and the storage check/write race before correction. Added mocked concurrency tests and a packaged Chromium regression for a late generation 401.
+- Critical risk. Hosted two-account and live provider checks remain pending. The branch is local.

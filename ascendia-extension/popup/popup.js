@@ -1,3 +1,4 @@
+import { createEvidencePicker } from "./evidence-picker.js";
 import { saveApplicationAuthDraft } from "../lib/application-auth-draft.js";
 import { isValidOperationId } from "../lib/logger-core.js";
 // Aletheia Extension Popup JavaScript
@@ -50,6 +51,10 @@ let generationOrb = null;
 let generationOrbRun = 0;
 let generationInFlight = false;
 let generationRequesterId = null;
+let storyPicker;
+let profileRead = 0;
+let profileWindowId;
+let profileTab = null;
 
 function normalizeApiUrl(apiUrl) {
   let value = String(apiUrl || "").trim();
@@ -122,19 +127,14 @@ function sendBackgroundMessage(message) {
 // Initialize popup when DOM is loaded
 document.addEventListener("DOMContentLoaded", async () => {
   setupEventListeners();
-  if (await hasProfileExtractionConsent()) {
-    await startProfileWorkflow();
-  } else {
-    showProfileConsent();
-  }
-
   // React to auth state changes (e.g., auth-bridge stores session while popup is open).
   // Full reload is the safest path: showAuthRequired() may have wiped #mainContent
   // contents, so a fresh DOM is needed to restore #jdInput, #category, etc.
   chrome.storage.onChanged.addListener(async (changes, area) => {
     if (area === "local" && changes[PROFILE_EXTRACTION_CONSENT_KEY]) {
       if (changes[PROFILE_EXTRACTION_CONSENT_KEY].newValue !== true) {
-        currentProfile = null;
+        invalidateProfile();
+        storyPicker.resetAccount();
         showProfileConsent(
           "Profile reading is off. You can re-enable it from here at any time.",
         );
@@ -146,6 +146,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       const after = changes.aletheia_auth.newValue;
       // A visible draft belongs to the authenticated account that created it.
       if (before?.user?.id !== after?.user?.id) {
+        storyPicker.resetAccount();
         // Storage events can arrive after a refresh has already restored the
         // same account, so decide using the latest stored auth state.
         const { aletheia_auth: latestAuth } =
@@ -158,6 +159,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         ) {
           currentUserId = latestId;
           popupAuthenticated = true;
+          document.getElementById("evidencePicker")?.classList.remove("hidden");
           if (currentOutput) {
             document.getElementById("output")?.classList.remove("hidden");
           }
@@ -165,6 +167,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
         if (!latestId) {
           popupAuthenticated = false;
+          document.getElementById("evidencePicker")?.classList.add("hidden");
           document.getElementById("output")?.classList.add("hidden");
           document.getElementById("applicationFeedbackDialog")?.close?.();
           return;
@@ -173,12 +176,18 @@ document.addEventListener("DOMContentLoaded", async () => {
         feedbackOutput = null;
         popupAuthenticated = false;
         document.getElementById("output")?.classList.add("hidden");
-        currentProfile = null;
+        invalidateProfile();
         currentUserId = null;
         window.location.reload();
       }
     }
   });
+
+  if (await hasProfileExtractionConsent()) {
+    await startProfileWorkflow();
+  } else {
+    showProfileConsent();
+  }
 });
 
 async function hasProfileExtractionConsent() {
@@ -198,18 +207,34 @@ function showProfileConsent(statusMessage = "") {
 async function startProfileWorkflow() {
   document.getElementById("profileConsent")?.classList.add("hidden");
   await initializePopup();
-  await checkLinkedInProfile();
   startProfileMonitoring();
+  await checkLinkedInProfile();
 }
 
 function startProfileMonitoring() {
   if (profileMonitoringStarted) return;
   profileMonitoringStarted = true;
 
-  chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
-    if (changeInfo.status === "complete") checkLinkedInProfile();
+  chrome.tabs.onUpdated.addListener((_tabId, changeInfo, tab) => {
+    if (
+      !tab.active ||
+      (profileWindowId !== undefined && tab.windowId !== profileWindowId) ||
+      document.getElementById("category")?.value === YC_APPLICATION_CATEGORY
+    )
+      return;
+    if (changeInfo.url) invalidateProfile();
+    if (changeInfo.url || changeInfo.status === "complete")
+      void checkLinkedInProfile();
   });
-  chrome.tabs.onActivated.addListener(() => checkLinkedInProfile());
+  chrome.tabs.onActivated.addListener(({ windowId }) => {
+    if (
+      (profileWindowId !== undefined && windowId !== profileWindowId) ||
+      document.getElementById("category")?.value === YC_APPLICATION_CATEGORY
+    )
+      return;
+    invalidateProfile();
+    void checkLinkedInProfile();
+  });
 }
 
 async function initializePopup() {
@@ -247,8 +272,15 @@ async function initializePopup() {
     return;
   }
 
+  const { aletheia_auth: activeAuth } =
+    await chrome.storage.local.get("aletheia_auth");
+  if (!authStatus.user?.id || authStatus.user.id !== activeAuth?.user?.id) {
+    showAuthRequired();
+    return;
+  }
   popupAuthenticated = true;
-  currentUserId = authStatus.user?.id ?? null;
+  currentUserId = authStatus.user.id;
+  document.getElementById("evidencePicker")?.classList.remove("hidden");
   // Show connected user badge
   showUserBadge(authStatus.user);
 
@@ -266,6 +298,16 @@ async function initializePopup() {
 }
 
 function setupEventListeners() {
+  storyPicker = createEvidencePicker({
+    getOwner: () => (popupAuthenticated ? currentUserId : null),
+    async readOwner() {
+      const { aletheia_auth: auth } =
+        await chrome.storage.local.get("aletheia_auth");
+      return auth?.user?.id;
+    },
+    getCategory: () => document.getElementById("category")?.value,
+    send: sendBackgroundMessage,
+  });
   // Settings button
   document
     .getElementById("settingsBtn")
@@ -369,19 +411,26 @@ function setupEventListeners() {
 
   // Category change handler
   document.getElementById("category")?.addEventListener("change", async () => {
+    storyPicker.resetContext();
     updateUIForCategory();
     await checkLinkedInProfile();
   });
+  document.getElementById("emailMode")?.addEventListener("change", () => {
+    storyPicker.resetContext();
+    updateUIForCategory();
+  });
   document
-    .getElementById("emailMode")
-    ?.addEventListener("change", updateUIForCategory);
+    .getElementById("intent")
+    ?.addEventListener("change", storyPicker.resetContext);
 
   // JD input change handler
   document.getElementById("jdInput")?.addEventListener("input", () => {
+    storyPicker.resetContext();
     updateCharacterCount();
     updateGenerateAvailability();
   });
   document.getElementById("ycQuestionInput")?.addEventListener("input", () => {
+    storyPicker.resetContext();
     updateQuestionCharacterCount();
     updateGenerateAvailability();
   });
@@ -445,6 +494,8 @@ function showUserBadge(user) {
 }
 
 function showAuthRequired(authStatus) {
+  storyPicker?.resetAccount();
+  document.getElementById("evidencePicker")?.classList.add("hidden");
   // Show auth prompt instead of main content
   const mainContent = document.getElementById("mainContent");
   const setup = document.createElement("div");
@@ -593,13 +644,33 @@ function showAuthRequired(authStatus) {
     .addEventListener("click", openSettings);
 }
 
+function setCurrentProfile(profile, tab = null) {
+  if (
+    profile?.profileMarkdown !== currentProfile?.profileMarkdown ||
+    tab?.id !== profileTab?.id ||
+    tab?.url !== profileTab?.url
+  )
+    storyPicker?.resetContext();
+  currentProfile = profile;
+  profileTab = profile && tab ? { id: tab.id, url: tab.url } : null;
+}
+
+function invalidateProfile() {
+  profileRead++;
+  setCurrentProfile(null);
+  updateGenerateAvailability();
+}
+
 async function checkLinkedInProfile(forceRefresh = false) {
+  const read = ++profileRead;
   const readingBanner = document.getElementById("readingProfile");
   const refreshIcon = document.querySelector("#refreshBtn .refresh-icon");
   const category = document.getElementById("category")?.value;
 
-  if (!(await hasProfileExtractionConsent())) {
-    currentProfile = null;
+  const consent = await hasProfileExtractionConsent();
+  if (read !== profileRead) return;
+  if (!consent) {
+    invalidateProfile();
     showProfileConsent();
     return;
   }
@@ -626,7 +697,9 @@ async function checkLinkedInProfile(forceRefresh = false) {
       currentWindow: true,
     });
 
-    if (!tab.url?.includes("linkedin.com/in/")) {
+    if (read !== profileRead) return;
+    profileWindowId = tab?.windowId;
+    if (!tab?.url?.includes("linkedin.com/in/")) {
       readingBanner.style.display = "none";
       refreshIcon?.classList.remove("spinning");
       showNoProfile();
@@ -660,17 +733,27 @@ async function checkLinkedInProfile(forceRefresh = false) {
       }
     }
 
+    const [activeTab] = await chrome.tabs.query({
+      active: true,
+      currentWindow: true,
+    });
+    if (read !== profileRead) return;
+    if (activeTab?.id !== tab.id || activeTab?.url !== tab.url) {
+      await checkLinkedInProfile();
+      return;
+    }
     readingBanner.style.display = "none";
     refreshIcon?.classList.remove("spinning");
 
     if (response?.success && response.profile?.name) {
-      currentProfile = response.profile;
+      setCurrentProfile(response.profile, tab);
       showProfileDetected(response.profile);
       enableMainContent();
     } else {
       showNoProfile();
     }
   } catch (error) {
+    if (read !== profileRead) return;
     console.error("Error checking LinkedIn profile:", error);
     readingBanner.style.display = "none";
     refreshIcon?.classList.remove("spinning");
@@ -691,7 +774,7 @@ function showProfileDetected(profile) {
 }
 
 function showNoProfile() {
-  currentProfile = null;
+  setCurrentProfile(null);
   document.getElementById("noProfile").classList.remove("hidden");
   document.getElementById("profileBanner").classList.add("hidden");
   document.getElementById("mainContent")?.classList.remove("hidden");
@@ -704,7 +787,7 @@ function enableMainContent() {
 }
 
 async function generateMessage() {
-  if (feedbackInFlight) return;
+  if (generationInFlight || feedbackInFlight) return;
   const generationStartedAt = Date.now();
   const profile = currentProfile;
   const category = document.getElementById("category").value;
@@ -730,6 +813,8 @@ async function generateMessage() {
   }
   const operationId = createOperationId();
   const requesterId = currentUserId;
+  const storySelection = storyPicker.snapshot();
+  const selected = storySelection.ids.length > 0;
   generationInFlight = true;
   generationRequesterId = requesterId;
   let generationCompleted = false;
@@ -761,6 +846,26 @@ async function generateMessage() {
       return;
     }
 
+    if (selected && category !== YC_APPLICATION_CATEGORY) {
+      const [activeTab] = await chrome.tabs.query({
+        active: true,
+        currentWindow: true,
+      });
+      if (
+        !profileTab ||
+        activeTab?.id !== profileTab.id ||
+        activeTab?.url !== profileTab.url
+      ) {
+        invalidateProfile();
+        void checkLinkedInProfile();
+        showError(
+          "The active profile changed. Choose a story for the current profile.",
+        );
+        return;
+      }
+    }
+    if (selected && !storyPicker.isCurrent(storySelection)) return;
+
     const relevantExamples = filterOwnedAccepted(
       accepted,
       category,
@@ -776,6 +881,7 @@ async function generateMessage() {
       relevantExamples,
       emailMode,
       questionValue,
+      storySelection.ids,
     );
 
     setGenerationPhase("generating");
@@ -785,6 +891,13 @@ async function generateMessage() {
       requesterId,
       operationId,
     });
+
+    if (selected && !storyPicker.isCurrent(storySelection)) {
+      showError(
+        "Draft context changed. Generate again for the current context.",
+      );
+      return;
+    }
 
     if (response.success) {
       const { aletheia_auth: activeAuth } =
@@ -796,6 +909,7 @@ async function generateMessage() {
       ) {
         throw new Error("The connected account changed during generation.");
       }
+      if (selected && !storyPicker.isCurrent(storySelection)) return;
       const validatedResponse = parseGenerationResponse(
         response,
         payload.questions,
@@ -813,7 +927,7 @@ async function generateMessage() {
         requestId: response.requestId,
         clientVersion,
       });
-      await storeGeneration(validatedResponse);
+      if (!selected) await storeGeneration(validatedResponse);
       await updateUsageStats();
       generationOutcome = "success";
     } else {
@@ -826,9 +940,18 @@ async function generateMessage() {
         errorCode: response.code,
         status: response.status,
       });
+      if (
+        selected &&
+        [
+          "EVIDENCE_SELECTION_UNAVAILABLE",
+          "EVIDENCE_SELECTION_UNSUPPORTED",
+        ].includes(response.code)
+      ) {
+        storyPicker.rejectSelection();
+      }
       const presentation = getGenerationErrorPresentation(response);
       const errMsg = presentation.message;
-      if (isAuthError(errMsg)) {
+      if (isAuthError(response.code) || isAuthError(errMsg)) {
         await persistAuthenticationDraft();
         showAuthRequired();
         showAuthError(errMsg);
@@ -968,6 +1091,7 @@ function updateCharacterCountDisplay(text, category) {
 }
 
 function setGeneratingState(isGenerating) {
+  storyPicker.setBusy(isGenerating);
   const generateBtn = document.getElementById("generateBtn");
   const generateText = document.getElementById("generateText");
   const progress = document.getElementById("generationProgress");
@@ -1970,10 +2094,20 @@ function showTemporaryMessage(message, type = "info") {
   }, 3000);
 }
 
-async function handleProfileUpdated(profile) {
+async function handleProfileUpdated(profile, sender) {
+  const read = profileRead;
   if (!(await hasProfileExtractionConsent())) return;
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (
+    read !== profileRead ||
+    !tab ||
+    sender.tab?.id !== tab.id ||
+    sender.url !== tab.url ||
+    document.getElementById("category")?.value === YC_APPLICATION_CATEGORY
+  )
+    return;
 
-  currentProfile = profile;
+  setCurrentProfile(profile, tab);
   if (profile) {
     showProfileDetected(profile);
     enableMainContent();
@@ -1983,9 +2117,9 @@ async function handleProfileUpdated(profile) {
 }
 
 // Handle messages from content scripts.
-chrome.runtime.onMessage.addListener((message) => {
+chrome.runtime.onMessage.addListener((message, sender) => {
   if (message.action === "profileUpdated") {
-    void handleProfileUpdated(message.profile);
+    void handleProfileUpdated(message.profile, sender);
   }
 });
 

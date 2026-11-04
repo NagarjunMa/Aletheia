@@ -6,7 +6,7 @@ export const AUTH_REQUIRED_CODE = "AUTH_REQUIRED";
 export const AUTH_TIMEOUT_CODE = "AUTH_TIMEOUT";
 
 export function isAuthenticationFailure(error) {
-  if (!error) return false;
+  if (!error || error.code === "AUTH_ACCOUNT_CHANGED") return false;
 
   if (error.status === 401) return true;
 
@@ -64,7 +64,8 @@ export async function generateWithAuthRecovery({
 
   try {
     await recoverSilently();
-  } catch (_silentRecoveryError) {
+  } catch (error) {
+    if (error.code === "AUTH_ACCOUNT_CHANGED") throw error;
     // A fresh web-app session is optional at this point. The next bounded
     // transition is the user-directed sign-in flow below.
   }
@@ -87,6 +88,7 @@ export async function generateWithAuthRecovery({
       };
     return await generateOnce();
   } catch (error) {
+    if (error.code === "AUTH_ACCOUNT_CHANGED") throw error;
     throw recoveryError(error, "INTERACTIVE_AUTH_REJECTED");
   }
 }

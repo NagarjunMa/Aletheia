@@ -168,12 +168,15 @@ export function buildGeneratePayload(
   acceptedExamples,
   emailMode = "initial_outreach",
   questionValue = "",
+  selectedEvidenceIds = [],
 ) {
+  const selection = selectedEvidenceIds.length ? { selectedEvidenceIds } : {};
   if (category === YC_APPLICATION_CATEGORY) {
     return {
       category: YC_APPLICATION_CATEGORY,
       jd: normalizeApplicationInput(contextValue),
       questions: parseApplicationQuestions(questionValue),
+      ...selection,
     };
   }
 
@@ -186,6 +189,7 @@ export function buildGeneratePayload(
     intent,
     emailMode,
     acceptedExamples: acceptedExamples || [],
+    ...selection,
   };
 }
 

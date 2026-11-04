@@ -73,3 +73,19 @@ export function messageFocusUnavailableResponse(
     { status: 409, headers },
   );
 }
+
+export function evidenceSelectionUnavailableResponse(
+  headers: Record<string, string>,
+) {
+  return NextResponse.json(
+    {
+      success: false,
+      error: "Selected stories are unavailable for this draft",
+      code: "EVIDENCE_SELECTION_UNAVAILABLE",
+      message:
+        "Choose eligible confirmed stories for this draft, or clear your selection to use automatic generation.",
+      billing: "none",
+    },
+    { status: 422, headers },
+  );
+}

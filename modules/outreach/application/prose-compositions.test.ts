@@ -207,3 +207,49 @@ it.each(["cold_email", "linkedin_inmail"] as const)(
     }
   },
 );
+
+it("offers email drafts using both selected stories and rejects a missing root", () => {
+  const { context, outcome } = proseFixture("cold_email", "initial_outreach");
+  const actionSource = context.atomicSources!.find((s) => s.kind === "action")!;
+  const outcomeSource = context.atomicSources!.find(
+    (s) => s.kind === "outcome",
+  )!;
+  const secondRoot = "evidence:ae550000-2222-4222-8222-222222222222";
+  outcomeSource.rootId = secondRoot;
+  outcomeSource.id = secondRoot + ".fact.synthetic";
+  context.sources.push({
+    id: secondRoot,
+    type: "evidence",
+    label: "Review guide",
+    content: outcome,
+    priority: 1,
+  });
+  // Both stories contain this outcome, but only the second depends on it.
+  const duplicate = {
+    ...outcomeSource,
+    rootId: actionSource.rootId!,
+    id: actionSource.rootId + ".fact.duplicate",
+  };
+  context.atomicSources!.unshift(duplicate);
+  context.requiredEvidenceRoots = [actionSource.rootId!, secondRoot];
+  const input = {
+    category: "cold_email",
+    emailMode: "initial_outreach",
+    context,
+  } as const;
+
+  const options = buildProseCompositions(input);
+  expect(options.length).toBeGreaterThan(0);
+  for (const option of options) {
+    expect(option.claims.map((claim) => claim.source_id)).toEqual(
+      expect.arrayContaining([actionSource.id, outcomeSource.id]),
+    );
+  }
+
+  context.atomicSources = context.atomicSources!.filter(
+    (source) => source !== outcomeSource,
+  );
+  expect(() => buildProseCompositions(input)).toThrow(
+    ProseGroundingUnavailableError,
+  );
+});

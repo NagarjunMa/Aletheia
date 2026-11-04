@@ -1,4 +1,8 @@
 import {
+  includesSelectedEvidence,
+  SelectedEvidenceUnavailableError,
+} from "@/modules/candidate-context/application/selected-evidence";
+import {
   buildQualityMetadata,
   sourceQualitySummary,
   type QualityMetadata,
@@ -16,6 +20,8 @@ import {
   prepareGroundedText,
 } from "@/modules/grounding/application/finalize-grounded-output";
 import {
+  buildLinkedinCompositions,
+  type LinkedinCompositions,
   buildLinkedinSelectionTool,
   LinkedinGroundingUnavailableError,
   linkedinTargetFits,
@@ -79,6 +85,7 @@ import {
 } from "@/app/api/extension/generate/schema";
 import {
   candidateContextUnavailableResponse,
+  evidenceSelectionUnavailableResponse,
   messageFocusUnavailableResponse,
   contractFailureResponse,
   createGenerateCorsHeaders,
@@ -90,6 +97,7 @@ import type {
   ResumeSource,
 } from "@/modules/outreach/domain/extension-generate.types";
 import type { OutreachGroundingContext } from "@/modules/outreach/domain/outreach-grounding.types";
+import type { LinkedinConnectionDraft } from "../domain/outreach-draft.types";
 import { MESSAGE_FOCUS_SUPPORTED } from "../domain/message-focus";
 import {
   outputWorkUnits,
@@ -278,6 +286,69 @@ export async function POST(request: NextRequest) {
   });
 }
 
+function validateLinkedinComposition(
+  draft: LinkedinConnectionDraft,
+  preparedGrounding: OutreachGroundingContext,
+) {
+  const prepareComponent = (
+    content: string,
+    failureCode: LinkedinConnectionValidationCode,
+  ) => {
+    const prepared = prepareGroundedText(content);
+    if (!prepared) throw new LinkedinConnectionValidationError(failureCode);
+    return prepared;
+  };
+  const targetObservation = prepareComponent(
+    draft.target_observation,
+    "CONNECTION_EMPTY_SECTION",
+  );
+  const candidateRelevance = draft.candidate_relevance
+    ? prepareComponent(
+        draft.candidate_relevance.text,
+        "CONNECTION_EMPTY_SECTION",
+      )
+    : null;
+  const sanitizedCta = prepareComponent(
+    draft.cta,
+    "CONNECTION_CTA_INVALIDATED",
+  );
+  const rendered = renderLinkedinConnection({
+    draft: {
+      ...draft,
+      target_observation: targetObservation,
+      candidate_relevance: draft.candidate_relevance
+        ? {
+            ...draft.candidate_relevance,
+            text: candidateRelevance ?? "",
+          }
+        : null,
+      cta: sanitizedCta,
+    },
+    sources: preparedGrounding.sources,
+  });
+  const body = rendered.body;
+
+  const finalization = finalizeGroundedOutput({
+    body,
+    bodyConstraint: resolveOutputConstraint({
+      category: "linkedin_connection",
+    }),
+    requiredEnding: sanitizedCta,
+    platform: "linkedin",
+    claims: draft.claims,
+    sources: preparedGrounding.atomicSources ?? [],
+    excludedClaims: preparedGrounding.excludedClaims ?? [],
+    scopedFields: [
+      { text: targetObservation, scope: "target" },
+      ...(candidateRelevance
+        ? [{ text: candidateRelevance, scope: "candidate" as const }]
+        : []),
+      { text: sanitizedCta, scope: "either" },
+    ],
+  });
+  return { rendered, finalization };
+}
+
 async function handlePost(
   request: NextRequest,
   log: SafeLogger,
@@ -368,7 +439,6 @@ async function handlePost(
 
     // Validate bounded legacy input before reading private candidate context,
     // then prepare the caller-scoped context before quota or credit mutation.
-    // Phase 1 deliberately does not yet inject these sources into prompts.
     const validatedData = generateRequestSchema.parse(dispatchBody);
     timing.category(validatedData.category);
     if (validatedData.messageFocus && !MESSAGE_FOCUS_SUPPORTED) {
@@ -396,6 +466,9 @@ async function handlePost(
     try {
       preparedGrounding = await prepareOutreachGroundingContext({
         caller: authResult,
+        ...(validatedData.selectedEvidenceIds
+          ? { selectedEvidenceIds: validatedData.selectedEvidenceIds }
+          : {}),
         timing,
         logger: log,
         target: {
@@ -406,7 +479,14 @@ async function handlePost(
         },
       });
       completeGrounding("success");
-    } catch {
+    } catch (error) {
+      if (error instanceof SelectedEvidenceUnavailableError) {
+        completeGrounding("failure", {
+          errorCode: "EVIDENCE_SELECTION_UNAVAILABLE",
+        });
+        timing.failure("EVIDENCE_SELECTION_UNAVAILABLE");
+        return evidenceSelectionUnavailableResponse(corsHeaders);
+      }
       completeGrounding("failure", {
         errorCode: "CANDIDATE_CONTEXT_UNAVAILABLE",
       });
@@ -418,18 +498,55 @@ async function handlePost(
 
     qualityHooks.onPrepared?.(preparedGrounding.atomicSources ?? []);
     let proseCompositions: ProseCompositions | undefined;
+    let linkedinCompositions: LinkedinCompositions | undefined;
     if (validatedData.category === "linkedin_connection") {
       const eligibleTargetCount = (
         preparedGrounding.atomicSources ?? []
       ).filter(linkedinTargetFits).length;
       let eligibleOptionCount = 0;
       try {
-        eligibleOptionCount = buildLinkedinSelectionTool(
-          preparedGrounding.atomicSources ?? [],
-          preparedGrounding.targetDiagnostics,
-          validatedData.intent ?? "networking",
-          rhetoricalPlans,
-        ).input_schema.properties.option_id.enum.length;
+        if (preparedGrounding.requiredEvidenceRoots) {
+          const required = preparedGrounding.requiredEvidenceRoots;
+          linkedinCompositions = buildLinkedinCompositions(
+            preparedGrounding.atomicSources ?? [],
+            validatedData.intent ?? "networking",
+            rhetoricalPlans,
+            (draft) => {
+              if (
+                !includesSelectedEvidence(
+                  required,
+                  draft.candidate_relevance?.source_ids ?? [],
+                )
+              )
+                return undefined;
+              try {
+                return validateLinkedinComposition(draft, preparedGrounding)
+                  .rendered.body;
+              } catch (error) {
+                if (
+                  error instanceof LinkedinConnectionValidationError ||
+                  error instanceof AtomicClaimValidationError ||
+                  error instanceof GroundedTextSanitizationError ||
+                  error instanceof GroundedOutputLimitError
+                )
+                  return undefined;
+                throw error;
+              }
+            },
+          );
+          eligibleOptionCount = linkedinCompositions.length;
+          if (!eligibleOptionCount) {
+            timing.failure("EVIDENCE_SELECTION_UNAVAILABLE");
+            return evidenceSelectionUnavailableResponse(corsHeaders);
+          }
+        } else {
+          eligibleOptionCount = buildLinkedinSelectionTool(
+            preparedGrounding.atomicSources ?? [],
+            preparedGrounding.targetDiagnostics,
+            validatedData.intent ?? "networking",
+            rhetoricalPlans,
+          ).input_schema.properties.option_id.enum.length;
+        }
       } finally {
         log.info(
           {
@@ -455,6 +572,10 @@ async function handlePost(
         });
       } catch (error) {
         if (!(error instanceof ProseGroundingUnavailableError)) throw error;
+        if (preparedGrounding.requiredEvidenceRoots) {
+          timing.failure("EVIDENCE_SELECTION_UNAVAILABLE");
+          return evidenceSelectionUnavailableResponse(corsHeaders);
+        }
         timing.failure("INSUFFICIENT_GROUNDING");
         return NextResponse.json(
           {
@@ -654,7 +775,7 @@ async function handlePost(
       );
     }
 
-    if (!jdFromBody.trim()) {
+    if (!jdFromBody.trim() && !preparedGrounding.requiredEvidenceRoots) {
       try {
         const targetJobDescription = await getProfileTargetJobDescription(
           authResult.userId,
@@ -751,13 +872,40 @@ async function handlePost(
       emailMode,
       acceptedExamples: sanitizedExamples || [],
     };
-    if (category === "cold_email" || category === "linkedin_connection") {
+    let promptAtomicSources = preparedGrounding.atomicSources ?? [];
+    if (linkedinCompositions) {
+      const offered = new Set(
+        linkedinCompositions.flatMap(
+          ({ draft }) => draft.claims?.map(({ source_id }) => source_id) ?? [],
+        ),
+      );
+      promptAtomicSources = promptAtomicSources.filter(({ id }) =>
+        offered.has(id),
+      );
+      promptInput.candidateSources = preparedGrounding.sources.flatMap(
+        (source) => {
+          const content = promptAtomicSources
+            .filter(
+              ({ rootId, scope }) =>
+                scope === "candidate" && rootId === source.id,
+            )
+            .map((fact) => fact.content)
+            .join("\n");
+          return content
+            ? [{ ...source, label: "Selected reviewed story", content }]
+            : [];
+        },
+      );
+    } else if (
+      category === "cold_email" ||
+      category === "linkedin_connection"
+    ) {
       promptInput.candidateSources = preparedGrounding.sources;
     }
     if (styleProfile) {
       promptInput.styleProfile = styleProfile;
     }
-    const userPrompt = `${buildPrompt(promptInput)}\n\n${buildAtomicProvenancePrompt(preparedGrounding.atomicSources ?? [])}`;
+    const userPrompt = `${buildPrompt(promptInput)}\n\n${buildAtomicProvenancePrompt(promptAtomicSources)}`;
     timing.metrics({ inputChars: systemPrompt.length + userPrompt.length });
     const admission = await startGenerationAttempt(
       authResult.userId,
@@ -816,6 +964,7 @@ async function handlePost(
       emailMode,
       atomicSources: preparedGrounding.atomicSources ?? [],
       ...(proseCompositions ? { proseCompositions } : {}),
+      ...(linkedinCompositions ? { linkedinCompositions } : {}),
       rhetoricalPlans,
       intent: validatedData.intent ?? "networking",
       logger: log,
@@ -1131,6 +1280,7 @@ async function handlePost(
         draft = getLinkedinConnectionDraftToolInput(response, {
           atomicSources: preparedGrounding.atomicSources ?? [],
           candidateSources: preparedGrounding.sources,
+          ...(linkedinCompositions ? { linkedinCompositions } : {}),
           intent: validatedData.intent ?? "networking",
           rhetoricalPlans,
         });
@@ -1141,62 +1291,11 @@ async function handlePost(
         );
       }
 
-      const prepareComponent = (
-        content: string,
-        failureCode: LinkedinConnectionValidationCode,
-      ) => {
-        const prepared = prepareGroundedText(content);
-        if (!prepared) throw new LinkedinConnectionValidationError(failureCode);
-        return prepared;
-      };
-      const targetObservation = prepareComponent(
-        draft.target_observation,
-        "CONNECTION_EMPTY_SECTION",
+      const { rendered, finalization } = validateLinkedinComposition(
+        draft,
+        preparedGrounding,
       );
-      const candidateRelevance = draft.candidate_relevance
-        ? prepareComponent(
-            draft.candidate_relevance.text,
-            "CONNECTION_EMPTY_SECTION",
-          )
-        : null;
-      const sanitizedCta = prepareComponent(
-        draft.cta,
-        "CONNECTION_CTA_INVALIDATED",
-      );
-      const rendered = renderLinkedinConnection({
-        draft: {
-          ...draft,
-          target_observation: targetObservation,
-          candidate_relevance: draft.candidate_relevance
-            ? {
-                ...draft.candidate_relevance,
-                text: candidateRelevance ?? "",
-              }
-            : null,
-          cta: sanitizedCta,
-        },
-        sources: preparedGrounding.sources,
-      });
-      const body = rendered.body;
-
-      const finalization = finalizeGroundedOutput({
-        body,
-        bodyConstraint: resolveOutputConstraint({
-          category: "linkedin_connection",
-        }),
-        requiredEnding: sanitizedCta,
-        platform: "linkedin",
-        claims: draft.claims,
-        sources: preparedGrounding.atomicSources ?? [],
-        excludedClaims: preparedGrounding.excludedClaims ?? [],
-        scopedFields: [
-          { text: targetObservation, scope: "target" },
-          ...(candidateRelevance
-            ? [{ text: candidateRelevance, scope: "candidate" as const }]
-            : []),
-          { text: sanitizedCta, scope: "either" },
-        ],
-      });
+      const { body } = rendered;
 
       const quality = buildQualityMetadata({
         claims: draft.claims ?? [],

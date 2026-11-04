@@ -252,6 +252,19 @@ Why are you a strong candidate for this role?</textarea>
           <p id="applicationInputStatus" class="input-help" role="status"></p>
         </div>
 
+        <details id="evidencePicker" class="input-group evidence-picker hidden">
+          <summary id="evidenceSummary">Story focus · Automatic</summary>
+          <p id="evidenceStatus" class="input-help" role="status"></p>
+          <fieldset
+            id="evidenceChoices"
+            aria-label="Confirmed stories"
+          ></fieldset>
+          <div class="evidence-actions">
+            <button type="button" id="evidenceClear">Clear selection</button>
+            <button type="button" id="evidenceReload">Reload stories</button>
+          </div>
+        </details>
+
         <!-- Generate Button -->
         <button id="generateBtn" class="generate-btn" disabled>
           <span id="generateText">Generate Message</span>

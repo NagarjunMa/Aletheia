@@ -1,3 +1,11 @@
+import {
+  assertSafeSelectionText,
+  budgetReviewedStory,
+  includesSelectedEvidence,
+  prepareSelectedStoryFacts,
+  resolveSelectedEvidence,
+  SelectedEvidenceUnavailableError,
+} from "@/modules/candidate-context/application/selected-evidence";
 import { normalizeClaimText } from "@/modules/grounding/domain/atomic-claim";
 import { createEvidenceRanker } from "@/modules/candidate-context/application/rank-evidence";
 import {
@@ -139,6 +147,7 @@ function profileDraftSources(candidate: CandidateGroundingData): DraftSource[] {
 function applySafetyAndBudget(
   drafts: DraftSource[],
   excludedClaims: string[],
+  distinctStories: boolean,
 ): YcGroundingSource[] {
   const result: YcGroundingSource[] = [];
   const seen = new Set<string>();
@@ -156,9 +165,11 @@ function applySafetyAndBudget(
       continue;
     }
     const signature = normalizeForMatching(bounded);
-    if (!signature || seen.has(signature)) continue;
+    const key =
+      distinctStories && draft.type === "evidence" ? draft.id : signature;
+    if (!signature || seen.has(key)) continue;
 
-    seen.add(signature);
+    seen.add(key);
     result.push({
       id: draft.id,
       type: draft.type,
@@ -217,6 +228,7 @@ export function buildYcGroundingContext(input: {
   questions?: string[];
   jobDescription: string;
   candidate: CandidateGroundingData;
+  selectedEvidenceIds?: readonly string[];
 }): YcGroundingContext {
   const normalizedQuestion = normalizeText(input.question);
   const normalizedJobDescription = normalizeText(input.jobDescription);
@@ -239,16 +251,38 @@ export function buildYcGroundingContext(input: {
         excludedClaims,
       ),
   );
-  const rankEvidence = createEvidenceRanker(allowedEvidence);
-  const selections = (input.questions ?? [normalizedQuestion]).map((question) =>
-    rankEvidence({
-      primary: normalizeText(question),
-      secondary: normalizedJobDescription,
-    }),
+  const explicit = input.selectedEvidenceIds?.length
+    ? resolveSelectedEvidence(
+        input.selectedEvidenceIds,
+        allowedEvidence,
+        YC_GROUNDING_MAX_EVIDENCE,
+        excludedClaims,
+      )
+    : undefined;
+  const requiredEvidenceRoots = explicit?.map(
+    (entry) => `evidence:${entry.id}`,
   );
-  const rankedByQuestion = selections.map((selection) =>
-    selection.evidence.slice(0, YC_GROUNDING_MAX_EVIDENCE),
-  );
+  const questions = input.questions ?? [normalizedQuestion];
+  if (explicit)
+    assertSafeSelectionText(
+      [...questions, normalizedJobDescription].join("\n"),
+    );
+  const rankEvidence = explicit
+    ? undefined
+    : createEvidenceRanker(allowedEvidence);
+  const selections = rankEvidence
+    ? questions.map((question) =>
+        rankEvidence({
+          primary: normalizeText(question),
+          secondary: normalizedJobDescription,
+        }),
+      )
+    : [];
+  const rankedByQuestion = explicit
+    ? questions.map(() => explicit)
+    : selections.map((selection) =>
+        selection.evidence.slice(0, YC_GROUNDING_MAX_EVIDENCE),
+      );
   // Round-robin selection reserves an opportunity for each question's best source
   // without multiplying the existing six-source / 16k-character prompt budget.
   const selectedEvidence: CandidateEvidenceRecord[] = [];
@@ -268,7 +302,9 @@ export function buildYcGroundingContext(input: {
     id: `evidence:${entry.id}`,
     type: "evidence",
     label: entry.title,
-    content: renderEvidence(entry),
+    content: explicit
+      ? budgetReviewedStory(entry, "general", MAX_EVIDENCE_SOURCE_CHARS)
+      : renderEvidence(entry),
     rawContent: [
       entry.title,
       entry.context,
@@ -293,16 +329,25 @@ export function buildYcGroundingContext(input: {
       ]
     : [];
 
-  const sources = applySafetyAndBudget(
+  const budgetedSources = applySafetyAndBudget(
     [
       ...evidenceDrafts,
       ...profileDraftSources(input.candidate),
       ...resumeDrafts,
     ],
     excludedClaims,
+    Boolean(explicit),
   );
+  const candidateAtoms = buildAtomicCandidateSources(
+    input.candidate,
+    budgetedSources,
+  );
+  const prepared = requiredEvidenceRoots
+    ? prepareSelectedStoryFacts(budgetedSources, candidateAtoms, "general")
+    : { sources: budgetedSources, safeAtoms: candidateAtoms };
+  const { sources } = prepared;
   const atomicSources = [
-    ...buildAtomicCandidateSources(input.candidate, sources),
+    ...prepared.safeAtoms,
     ...buildAtomicTargetSources(
       { jobDescription: normalizedJobDescription },
       excludedClaims,
@@ -313,6 +358,11 @@ export function buildYcGroundingContext(input: {
       .filter((source) => source.scope === "candidate")
       .map((source) => source.rootId),
   );
+  if (
+    requiredEvidenceRoots &&
+    !includesSelectedEvidence(requiredEvidenceRoots, usableRoots)
+  )
+    throw new SelectedEvidenceUnavailableError();
   const usableSources = sources.filter((source) => usableRoots.has(source.id));
   const readiness = buildReadiness(
     sources,
@@ -344,7 +394,13 @@ export function buildYcGroundingContext(input: {
     : "none";
 
   return {
-    selectionDiagnostics: selections.map((selection) => selection.diagnostics),
+    ...(requiredEvidenceRoots
+      ? { requiredEvidenceRoots }
+      : {
+          selectionDiagnostics: selections.map(
+            (selection) => selection.diagnostics,
+          ),
+        }),
     question: escapeForXmlTag(normalizedQuestion),
     ...(input.questions
       ? {

@@ -272,6 +272,7 @@ describe("outreach feedback acknowledgement", () => {
     const getElementById = vi.fn();
     await runInNewContext(`(${source})()`, {
       feedbackInFlight: true,
+      generationInFlight: false,
       document: { getElementById },
     });
     expect(getElementById).not.toHaveBeenCalled();
@@ -360,6 +361,8 @@ it.each([
       .mockRejectedValue(new Error("Unexpected dispatch"));
     const context = {
       feedbackInFlight: false,
+      generationInFlight: false,
+      storyPicker: { snapshot: () => ({ ids: [] }) },
       popupAuthenticated: true,
       currentUserId: "user-1",
       currentProfile: { name: "Original recipient" },
@@ -409,6 +412,8 @@ describe("ALE-38 popup elapsed time", () => {
         parseGenerationResponse,
         popupAuthenticated: true,
         feedbackInFlight: false,
+        generationInFlight: false,
+        storyPicker: { snapshot: () => ({ ids: [] }) },
         YC_APPLICATION_CATEGORY: "yc_application",
         PROFILE_EXTRACTION_CONSENT_KEY: "profileExtractionConsent",
         document: { getElementById: () => ({ value: "yc_application" }) },

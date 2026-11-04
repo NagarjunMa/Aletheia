@@ -1,3 +1,4 @@
+import { includesSelectedEvidence } from "@/modules/candidate-context/application/selected-evidence";
 import {
   finalizeGroundedOutput,
   prepareGroundedText,
@@ -19,6 +20,7 @@ export class YcApplicationOutputValidationError extends Error {
     | "YC_FORBIDDEN_FRAMING"
     | "CLAIM_EXCLUDED"
     | "YC_LEDGER_REQUIRED"
+    | "YC_SELECTED_EVIDENCE_MISSING"
     | "YC_CHARACTER_LIMIT";
   constructor(
     message: string,
@@ -93,6 +95,19 @@ export function validateYcApplicationOutput(input: {
     sources: input.context.atomicSources ?? [],
     excludedClaims: input.context.excludedClaims,
   });
+
+  if (input.context.requiredEvidenceRoots) {
+    const cited = new Set(input.output.claims.map((claim) => claim.source_id));
+    const roots = (input.context.atomicSources ?? [])
+      .filter((source) => source.scope === "candidate" && cited.has(source.id))
+      .map((source) => source.rootId);
+    if (!includesSelectedEvidence(input.context.requiredEvidenceRoots, roots)) {
+      throw new YcApplicationOutputValidationError(
+        "Answer omits selected evidence",
+        "YC_SELECTED_EVIDENCE_MISSING",
+      );
+    }
+  }
 
   if (body.length > 3000) {
     throw new YcApplicationOutputValidationError(

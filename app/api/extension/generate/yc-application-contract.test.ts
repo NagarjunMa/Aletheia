@@ -490,6 +490,7 @@ describe("YC application stable error contract", () => {
       INVALID_EXTENSION_VERSION: { status: 400, billing: "none" },
       UNAUTHORIZED: { status: 401, billing: "none" },
       INSUFFICIENT_CREDITS: { status: 402, billing: "none" },
+      EVIDENCE_SELECTION_UNAVAILABLE: { status: 422, billing: "none" },
       GROUNDING_PROFILE_INCOMPLETE: { status: 422, billing: "none" },
       API_VERSION_UNSUPPORTED: { status: 426, billing: "none" },
       EXTENSION_UPDATE_REQUIRED: { status: 426, billing: "none" },

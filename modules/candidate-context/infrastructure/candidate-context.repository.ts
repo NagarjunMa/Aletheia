@@ -143,3 +143,26 @@ export async function loadCandidateGroundingData(
     throw new CandidateContextRepositoryError();
   }
 }
+
+export async function listConfirmedEvidence(
+  caller: CandidateContextCaller,
+  dependencies: CandidateContextRepositoryDependencies = {},
+) {
+  const supabase = (dependencies.createCallerClient ?? createBearerUserClient)(
+    caller.accessToken,
+  );
+  const { data, error } = await supabase
+    .from("candidate_evidence")
+    .select("id,user_id,title,kind,confirmed_at")
+    .eq("user_id", caller.userId)
+    .not("confirmed_at", "is", null)
+    .order("sort_order")
+    .order("created_at")
+    .order("id")
+    .limit(50);
+  if (error) throw new CandidateContextRepositoryError();
+
+  return (data ?? [])
+    .filter((row) => row.user_id === caller.userId && Boolean(row.confirmed_at))
+    .map(({ id, title, kind }) => ({ id, title, kind }));
+}

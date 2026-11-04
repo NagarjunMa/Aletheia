@@ -1,3 +1,4 @@
+import { includesSelectedEvidence } from "@/modules/candidate-context/application/selected-evidence";
 import {
   buildRhetoricalPlan,
   orderedPlanClaims,
@@ -78,8 +79,12 @@ export function buildProseCompositions(input: {
     )
     .flatMap((source) => {
       const text = allowedClaimTexts(source).at(-1)!;
-      if (seen.has(text)) return [];
-      seen.add(text);
+      // An identical excerpt can belong to distinct selected stories.
+      const key = context.requiredEvidenceRoots
+        ? `${source.rootId}\0${text}`
+        : text;
+      if (seen.has(key)) return [];
+      seen.add(key);
       return [{ source, text, words: countOutputUnits(text, "words") }];
     });
   const targets = sources
@@ -151,6 +156,15 @@ export function buildProseCompositions(input: {
       if (!target && options.length) break;
       for (const facts of combinations(candidates)) {
         if (Boolean(facts.length) !== includeCandidate) continue;
+        if (
+          context.requiredEvidenceRoots &&
+          (!includesSelectedEvidence(
+            context.requiredEvidenceRoots,
+            facts.map(({ source }) => source.rootId),
+          ) ||
+            new Set(facts.map(({ text }) => text)).size !== facts.length)
+        )
+          continue;
         for (const cta of CTAS) {
           const factualWords =
             facts.reduce((n, f) => n + f.words, 0) + (target?.words ?? 0);
