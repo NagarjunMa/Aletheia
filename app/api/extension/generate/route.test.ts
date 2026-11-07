@@ -183,6 +183,194 @@ describe("LinkedIn real target preparation through the HTTP boundary", () => {
     expect(JSON.stringify(request)).not.toContain("qa@example.com");
   });
 
+  it("uses a safe target-only Basic note when the fitting reviewed pair fails final validation", async () => {
+    const fact = "I build evaluation tools and use contact qa@example.com.";
+    const record = {
+      id: "ae550000-1111-4111-8111-111111111111",
+      kind: "technical_project" as const,
+      title: "Evaluation",
+      context: "",
+      actions: fact,
+      outcome: "",
+      metrics: [],
+      skills: [],
+      links: [],
+      confirmed: true,
+      sortOrder: 0,
+    };
+    await useRealPreparation(
+      [],
+      [
+        {
+          ...record,
+          factReview: prepareFactReview(record, [
+            {
+              id: "11111111-1111-4111-8111-111111111111",
+              kind: "action",
+              excerpt: fact,
+              confirmed: true,
+            },
+          ]),
+        },
+      ],
+    );
+    const response = await POST(
+      makeRequest({
+        method: "POST",
+        headers: { authorization: "Bearer test" },
+        body: {
+          category: "linkedin_connection",
+          profileMarkdown: "Engineering Manager at Example | AI Evaluation",
+          connectionNoteLimit: 200,
+        },
+      }),
+    );
+    expect(response.status).toBe(200);
+    const result = await response.json();
+    expect(result.evalMetadata.hasCandidateRelevance).toBe(false);
+    expect(result.body).toContain("Engineering Manager role at Example");
+    expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(mockAnthropicCreate.mock.calls)).not.toContain(
+      "qa@example.com",
+    );
+  });
+
+  it.each([undefined, 200, 300, 201] as const)(
+    "uses the requested LinkedIn composer budget without shortening evidence (%s)",
+    async (connectionNoteLimit) => {
+      const fact =
+        "I’ll build data platform tools for local policy audits; I have not started.";
+      const record = {
+        id: "ae550000-1111-4111-8111-111111111111",
+        kind: "technical_project" as const,
+        title: "Data platform",
+        context: "",
+        actions: fact,
+        outcome: "",
+        metrics: [],
+        skills: [],
+        links: [],
+        confirmed: true,
+        sortOrder: 0,
+      };
+      await useRealPreparation(
+        [],
+        [
+          {
+            ...record,
+            factReview: prepareFactReview(record, [
+              {
+                id: "11111111-1111-4111-8111-111111111111",
+                kind: "action",
+                excerpt: fact,
+                confirmed: true,
+              },
+            ]),
+          },
+        ],
+      );
+      const response = await POST(
+        makeRequest({
+          method: "POST",
+          headers: { authorization: "Bearer test" },
+          body: {
+            category: "linkedin_connection",
+            intent: "job_inquiry",
+            profileMarkdown: "Engineering Manager at Example | Data Platform",
+            jd: "The Data Platform team at Example is hiring Engineers!",
+            connectionNoteLimit,
+          },
+        }),
+      );
+      if (connectionNoteLimit === 201) {
+        expect(response.status).toBe(400);
+        expect(mockAnthropicCreate).not.toHaveBeenCalled();
+        expect(mockRpc).not.toHaveBeenCalled();
+        return;
+      }
+      expect(response.status).toBe(200);
+      const result = await response.json();
+      expect(result.character_count).toBe(result.body.length);
+      if (connectionNoteLimit === 200) {
+        expect(result.body.length).toBeLessThanOrEqual(200);
+        expect(result.body).toContain(fact);
+        expect(result.body).toContain("Engineering Manager role at Example");
+        expect(result.evalMetadata.hasCandidateRelevance).toBe(true);
+      } else {
+        expect(result.body).toContain(fact);
+        expect(result.body.length).toBeGreaterThan(200);
+      }
+      expect(result.body).toMatch(/Thank you\.$/);
+      expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each([false, true])(
+    "preserves fallback without shortening a reviewed fact that does not fit (explicit: %s)",
+    async (explicit) => {
+      const fact =
+        "I’ll build data platform tools for local policy audits and for comparing documented exceptions across customer support workflows; I have not started.";
+      const record = {
+        id: "ae550000-1111-4111-8111-111111111111",
+        kind: "technical_project" as const,
+        title: "Data platform",
+        context: "",
+        actions: fact,
+        outcome: "",
+        metrics: [],
+        skills: [],
+        links: [],
+        confirmed: true,
+        sortOrder: 0,
+      };
+      await useRealPreparation(
+        [],
+        [
+          {
+            ...record,
+            factReview: prepareFactReview(record, [
+              {
+                id: "11111111-1111-4111-8111-111111111111",
+                kind: "action",
+                excerpt: fact,
+                confirmed: true,
+              },
+            ]),
+          },
+        ],
+      );
+      const response = await POST(
+        makeRequest({
+          method: "POST",
+          headers: { authorization: "Bearer test" },
+          body: {
+            category: "linkedin_connection",
+            profileMarkdown: "Engineering Manager at Example | Data Platform",
+            jd: " \n ",
+            connectionNoteLimit: 200,
+            ...(explicit ? { selectedEvidenceIds: [record.id] } : {}),
+          },
+        }),
+      );
+      const result = await response.json();
+      if (explicit) {
+        expect(response.status).toBe(422);
+        expect(result.code).toBe("EVIDENCE_SELECTION_UNAVAILABLE");
+        expect(mockRpc).not.toHaveBeenCalled();
+        expect(mockAnthropicCreate).not.toHaveBeenCalled();
+      } else {
+        expect(response.status).toBe(200);
+        expect(result.body).toMatch(
+          /^Hi there, I'm interested in Data Platform/,
+        );
+        expect(result.body).not.toContain("I’ll build");
+        expect(result.body.length).toBeLessThanOrEqual(200);
+        expect(result.evalMetadata.hasCandidateRelevance).toBe(false);
+        expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
+      }
+    },
+  );
+
   it.each([
     [true, false],
     [false, false],
@@ -306,6 +494,7 @@ describe("LinkedIn real target preparation through the HTTP boundary", () => {
           headers: { Authorization: "Bearer test" },
           body: {
             category: "linkedin_connection",
+            connectionNoteLimit: 200,
             profileMarkdown:
               "Engineering Manager at Apple | Applied AI & Data Platform",
             jd: withJd
@@ -322,7 +511,7 @@ describe("LinkedIn real target preparation through the HTTP boundary", () => {
           : `Hi there, ${experience} I'm interested in Applied AI & Data Platform and your Engineering Manager role at Apple. Open to connecting? Thank you.`,
       );
       expect(body.character_count).toBe(body.body.length);
-      expect(body.character_count).toBeLessThanOrEqual(300);
+      expect(body.character_count).toBeLessThanOrEqual(200);
       expect(body.evalMetadata.hasCandidateRelevance).toBe(true);
       expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
       expect(JSON.stringify(body)).not.toMatch(
@@ -397,6 +586,28 @@ describe("LinkedIn real target preparation through the HTTP boundary", () => {
     expect(res.status).toBe(200);
     expect((await res.json()).body).toContain("Evaluation team at Example");
   });
+  it("explains an unusable target against the 200-character budget before paid work", async () => {
+    await useRealPreparation();
+    const response = await POST(
+      makeRequest({
+        method: "POST",
+        headers: { Authorization: "Bearer test" },
+        body: {
+          category: "linkedin_connection",
+          profileMarkdown: long,
+          connectionNoteLimit: 200,
+        },
+      }),
+    );
+    expect(response.status).toBe(422);
+    expect(await response.json()).toMatchObject({
+      error: expect.stringContaining("200-character note"),
+      reasonCodes: ["TARGET_FACT_TOO_LONG"],
+    });
+    expect(mockRpc).not.toHaveBeenCalled();
+    expect(mockAnthropicCreate).not.toHaveBeenCalled();
+  });
+
   it.each([
     { profileMarkdown: long, excluded: [], reason: "TARGET_FACT_TOO_LONG" },
     {

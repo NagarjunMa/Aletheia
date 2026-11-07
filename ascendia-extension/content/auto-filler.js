@@ -1,3 +1,5 @@
+import { LINKEDIN_CONNECTION_NOTE_LIMIT } from "../lib/linkedin-connection-limit.js";
+
 // Apollo and LinkedIn Auto-fill Content Script
 // Automatically fills generated messages into various platforms
 
@@ -11,6 +13,37 @@
     } catch {
       // Diagnostics are optional and must not interfere with filling fields.
     }
+  }
+
+  const LINKEDIN_NOTE_PLACEHOLDER = 'textarea[placeholder="Add a note" i]';
+  const LINKEDIN_NOTE_SELECTOR = `${LINKEDIN_NOTE_PLACEHOLDER}, :is([role="dialog"], dialog[open]) textarea[name="message"]`;
+
+  function isVisibleInvitationField(field) {
+    if (
+      field.matches(":disabled, [readonly]") ||
+      !field.getClientRects().length ||
+      getComputedStyle(field).visibility !== "visible" ||
+      field.closest('[aria-hidden="true"], [aria-disabled="true"], [inert]')
+    )
+      return false;
+    for (let node = field; node; node = node.parentElement) {
+      if (getComputedStyle(node).opacity === "0") return false;
+    }
+    if (field.matches(LINKEDIN_NOTE_PLACEHOLDER)) return true;
+    const dialog = field.closest('[role="dialog"], dialog[open]');
+    if (!dialog) return false;
+    const labelledBy = (dialog.getAttribute("aria-labelledby") ?? "")
+      .split(/\s+/u)
+      .map((id) => document.getElementById(id)?.textContent ?? "")
+      .join(" ");
+    const label =
+      labelledBy.trim() ||
+      dialog.getAttribute("aria-label") ||
+      dialog.querySelector('h1, h2, h3, [role="heading"]')?.textContent ||
+      "";
+    return /^(?:add a note|personalize your invitation|invite .+ to connect|send (?:an? )?invitation)\b/iu.test(
+      label.trim().replace(/\s+/gu, " "),
+    );
   }
 
   // Auto-fill configuration for different platforms
@@ -113,14 +146,23 @@
     }
 
     // Detect current context (compose, sequence, messaging, etc.)
-    const context = detectContext(platform.config);
+    const connectionNote =
+      platform.key === "linkedin" && data.category === "linkedin_connection";
+    const context = connectionNote
+      ? { name: "connection", selectors: { message: LINKEDIN_NOTE_SELECTOR } }
+      : detectContext(platform.config);
     if (!context) {
       throw new Error("Could not detect message composition area");
     }
 
     // Perform the actual filling
-    const result = fillFields(context, data);
+    const result = fillFields(context, data, connectionNote);
 
+    if (!result.filled.length) {
+      throw new Error(
+        result.failed[0]?.error || "Could not fill the composer.",
+      );
+    }
     // Show visual confirmation
     showFillConfirmation(result);
 
@@ -144,7 +186,7 @@
     return null;
   }
 
-  function fillFields(context, data) {
+  function fillFields(context, data, connectionNote) {
     const results = {
       filled: [],
       failed: [],
@@ -170,7 +212,12 @@
     const bodyContent = data.body || data.message;
 
     if (bodySelector && bodyContent) {
-      const bodyResult = fillField(bodySelector, bodyContent, "Message Body");
+      const bodyResult = fillField(
+        bodySelector,
+        bodyContent,
+        "Message Body",
+        connectionNote,
+      );
       if (bodyResult.success) {
         results.filled.push(bodyResult);
       } else {
@@ -181,17 +228,40 @@
     return results;
   }
 
-  function fillField(selector, content, fieldName) {
+  function fillField(selector, content, fieldName, connectionNote = false) {
     try {
-      const element = document.querySelector(selector);
+      const visibleFields = connectionNote
+        ? Array.from(document.querySelectorAll(selector)).filter(
+            isVisibleInvitationField,
+          )
+        : [];
+      const element = connectionNote
+        ? visibleFields.length === 1 && visibleFields[0]
+        : document.querySelector(selector);
 
       if (!element) {
         return {
           success: false,
           field: fieldName,
-          error: "Element not found",
+          error: connectionNote
+            ? "Open a single LinkedIn invitation note composer before using autofill."
+            : "Element not found",
           selector,
         };
+      }
+
+      if (connectionNote) {
+        const limit =
+          element.maxLength >= 0
+            ? element.maxLength
+            : LINKEDIN_CONNECTION_NOTE_LIMIT;
+        if (content.length > limit) {
+          return {
+            success: false,
+            field: fieldName,
+            error: `This composer allows ${limit} characters. Generate a shorter note or edit the draft before pasting.`,
+          };
+        }
       }
 
       // Handle different input types

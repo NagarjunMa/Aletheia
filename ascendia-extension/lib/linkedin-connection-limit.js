@@ -1,0 +1,1 @@
+export const LINKEDIN_CONNECTION_NOTE_LIMIT = 200;

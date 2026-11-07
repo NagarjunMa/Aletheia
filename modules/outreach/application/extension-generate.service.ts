@@ -22,9 +22,9 @@ import {
 import {
   buildLinkedinCompositions,
   type LinkedinCompositions,
-  buildLinkedinSelectionTool,
   LinkedinGroundingUnavailableError,
   linkedinTargetFits,
+  linkedinTargetWording,
 } from "../domain/linkedin-grounded-selection";
 import {
   createFailureContext,
@@ -55,6 +55,9 @@ import { scanForInjection } from "@/lib/ai/prompts/injection-heuristic";
 import { deriveSafeCandidateSummary } from "@/lib/ai/candidate-summary";
 import {
   countOutputUnits,
+  LINKEDIN_BASIC_CONNECTION_MAX_CHARACTERS,
+  LINKEDIN_CONNECTION_MAX_CHARACTERS,
+  type LinkedinConnectionNoteLimit,
   resolveOutputConstraint,
 } from "@/lib/ai/output-constraints";
 import {
@@ -289,6 +292,7 @@ export async function POST(request: NextRequest) {
 function validateLinkedinComposition(
   draft: LinkedinConnectionDraft,
   preparedGrounding: OutreachGroundingContext,
+  connectionNoteLimit: LinkedinConnectionNoteLimit,
 ) {
   const prepareComponent = (
     content: string,
@@ -332,6 +336,7 @@ function validateLinkedinComposition(
     body,
     bodyConstraint: resolveOutputConstraint({
       category: "linkedin_connection",
+      connectionNoteLimit,
     }),
     requiredEnding: sanitizedCta,
     platform: "linkedin",
@@ -440,6 +445,10 @@ async function handlePost(
     // Validate bounded legacy input before reading private candidate context,
     // then prepare the caller-scoped context before quota or credit mutation.
     const validatedData = generateRequestSchema.parse(dispatchBody);
+    const connectionNoteLimit =
+      validatedData.connectionNoteLimit ?? LINKEDIN_CONNECTION_MAX_CHARACTERS;
+    const basicConnectionNote =
+      connectionNoteLimit === LINKEDIN_BASIC_CONNECTION_MAX_CHARACTERS;
     timing.category(validatedData.category);
     if (validatedData.messageFocus && !MESSAGE_FOCUS_SUPPORTED) {
       timing.failure("MESSAGE_FOCUS_UNAVAILABLE");
@@ -475,6 +484,7 @@ async function handlePost(
           category: validatedData.category,
           profileMarkdown: validatedData.profileMarkdown,
           jobDescription: validatedData.jd ?? "",
+          connectionNoteLimit,
           conversationContext: validatedData.conversationContext ?? "",
         },
       });
@@ -500,59 +510,66 @@ async function handlePost(
     let proseCompositions: ProseCompositions | undefined;
     let linkedinCompositions: LinkedinCompositions | undefined;
     if (validatedData.category === "linkedin_connection") {
-      const eligibleTargetCount = (
-        preparedGrounding.atomicSources ?? []
-      ).filter(linkedinTargetFits).length;
+      const atoms = preparedGrounding.atomicSources ?? [];
+      const eligibleTargets = atoms.filter((source) =>
+        linkedinTargetFits(source, connectionNoteLimit),
+      );
       let eligibleOptionCount = 0;
       try {
-        if (preparedGrounding.requiredEvidenceRoots) {
-          const required = preparedGrounding.requiredEvidenceRoots;
-          linkedinCompositions = buildLinkedinCompositions(
-            preparedGrounding.atomicSources ?? [],
-            validatedData.intent ?? "networking",
-            rhetoricalPlans,
-            (draft) => {
-              if (
-                !includesSelectedEvidence(
-                  required,
-                  draft.candidate_relevance?.source_ids ?? [],
-                )
-              )
-                return undefined;
-              try {
-                return validateLinkedinComposition(draft, preparedGrounding)
-                  .rendered.body;
-              } catch (error) {
+        const required = preparedGrounding.requiredEvidenceRoots;
+        linkedinCompositions = buildLinkedinCompositions(
+          atoms,
+          validatedData.intent ?? "networking",
+          rhetoricalPlans,
+          required || basicConnectionNote
+            ? (draft) => {
                 if (
-                  error instanceof LinkedinConnectionValidationError ||
-                  error instanceof AtomicClaimValidationError ||
-                  error instanceof GroundedTextSanitizationError ||
-                  error instanceof GroundedOutputLimitError
+                  required &&
+                  !includesSelectedEvidence(
+                    required,
+                    draft.candidate_relevance?.source_ids ?? [],
+                  )
                 )
                   return undefined;
-                throw error;
+                try {
+                  return validateLinkedinComposition(
+                    draft,
+                    preparedGrounding,
+                    connectionNoteLimit,
+                  ).rendered.body;
+                } catch (error) {
+                  if (
+                    error instanceof LinkedinConnectionValidationError ||
+                    error instanceof AtomicClaimValidationError ||
+                    error instanceof GroundedTextSanitizationError ||
+                    error instanceof GroundedOutputLimitError
+                  )
+                    return undefined;
+                  throw error;
+                }
               }
-            },
-          );
-          eligibleOptionCount = linkedinCompositions.length;
-          if (!eligibleOptionCount) {
+            : undefined,
+          connectionNoteLimit,
+        );
+        eligibleOptionCount = linkedinCompositions.length;
+        if (!eligibleOptionCount) {
+          if (required) {
             timing.failure("EVIDENCE_SELECTION_UNAVAILABLE");
             return evidenceSelectionUnavailableResponse(corsHeaders);
           }
-        } else {
-          eligibleOptionCount = buildLinkedinSelectionTool(
-            preparedGrounding.atomicSources ?? [],
+          throw new LinkedinGroundingUnavailableError(
             preparedGrounding.targetDiagnostics,
-            validatedData.intent ?? "networking",
-            rhetoricalPlans,
-          ).input_schema.properties.option_id.enum.length;
+            eligibleTargets.length > 0 &&
+              !eligibleTargets.some(linkedinTargetWording),
+            connectionNoteLimit,
+          );
         }
       } finally {
         log.info(
           {
             event: "outreach.target_eligibility",
             outcome: eligibleOptionCount ? "success" : "failure",
-            eligibleTargetCount,
+            eligibleTargetCount: eligibleTargets.length,
             eligibleOptionCount,
             ...preparedGrounding.targetDiagnostics,
           },
@@ -873,7 +890,10 @@ async function handlePost(
       acceptedExamples: sanitizedExamples || [],
     };
     let promptAtomicSources = preparedGrounding.atomicSources ?? [];
-    if (linkedinCompositions) {
+    if (
+      linkedinCompositions &&
+      (preparedGrounding.requiredEvidenceRoots || basicConnectionNote)
+    ) {
       const offered = new Set(
         linkedinCompositions.flatMap(
           ({ draft }) => draft.claims?.map(({ source_id }) => source_id) ?? [],
@@ -1294,6 +1314,7 @@ async function handlePost(
       const { rendered, finalization } = validateLinkedinComposition(
         draft,
         preparedGrounding,
+        connectionNoteLimit,
       );
       const { body } = rendered;
 

@@ -6,6 +6,8 @@ import {
   APPLICATION_ANSWER_MAX_CHARACTERS,
   APPLICATION_ANSWER_MAX_WORDS,
   APPLICATION_ANSWER_MIN_WORDS,
+  LINKEDIN_BASIC_CONNECTION_MAX_CHARACTERS,
+  LINKEDIN_CONNECTION_MAX_CHARACTERS,
 } from "@/lib/ai/output-constraints";
 
 const selectedEvidenceIds = z
@@ -39,6 +41,13 @@ const legacyCategories = [
   "linkedin_inmail",
 ] as const;
 
+const connectionNoteLimit = z
+  .literal([
+    LINKEDIN_BASIC_CONNECTION_MAX_CHARACTERS,
+    LINKEDIN_CONNECTION_MAX_CHARACTERS,
+  ])
+  .optional();
+
 /**
  * Active production request parser. Keep this legacy-only until the YC
  * generation service and billing lifecycle are implemented together.
@@ -46,6 +55,7 @@ const legacyCategories = [
 const legacyGenerateBaseSchema = z.object({
   ...legacyGenerateRequestFields,
   category: z.enum(legacyCategories),
+  connectionNoteLimit,
 });
 const serverOwnedRequestFields = new Set([
   "workUnits",
@@ -61,6 +71,16 @@ const serverOwnedRequestFields = new Set([
 export const generateRequestSchema = legacyGenerateBaseSchema
   .passthrough()
   .superRefine((request, context) => {
+    if (
+      request.category !== "linkedin_connection" &&
+      request.connectionNoteLimit !== undefined
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["connectionNoteLimit"],
+        message: "Only supported for LinkedIn connection notes",
+      });
+    }
     for (const key of Object.keys(request)) {
       if (serverOwnedRequestFields.has(key)) {
         context.addIssue({
@@ -186,14 +206,17 @@ const applicationAnswerSchema = z
 const linkedinConnectionRequestContractSchema = z.object({
   ...legacyGenerateRequestFields,
   category: z.literal("linkedin_connection"),
+  connectionNoteLimit,
 });
 const coldEmailRequestContractSchema = z.object({
   ...legacyGenerateRequestFields,
   category: z.literal("cold_email"),
+  connectionNoteLimit: z.never().optional(),
 });
 const linkedInInmailRequestContractSchema = z.object({
   ...legacyGenerateRequestFields,
   category: z.literal("linkedin_inmail"),
+  connectionNoteLimit: z.never().optional(),
 });
 
 /** Combined compatibility contract; the route dispatches by category first. */

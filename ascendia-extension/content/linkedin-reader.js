@@ -321,6 +321,12 @@
   }
 
   function handleMessage(message, sender, sendResponse) {
+    if (
+      message.action !== "getProfile" &&
+      message.action !== "reextractProfile"
+    ) {
+      return false;
+    }
     try {
       if (!profileExtractionConsent || !profileReaderActive) {
         sendResponse({
@@ -339,8 +345,6 @@
           extractAndNotifyProfile();
           sendResponse({ success: true });
           break;
-        default:
-          sendResponse({ success: false, error: "Unknown action" });
       }
     } catch (error) {
       reportDiagnostic("profile_reader.message_failed", {

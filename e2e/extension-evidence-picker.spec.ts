@@ -31,6 +31,10 @@ const answer = Array.from({ length: 50 }, (_, index) => `word${index}`).join(
 );
 
 declare const chrome: {
+  tabs: {
+    query: (_query: { url: string }) => Promise<Array<{ id: number }>>;
+    sendMessage: (_tabId: number, _message: unknown) => Promise<unknown>;
+  };
   storage: {
     session: { get: (_key: string) => Promise<Record<string, unknown>> };
     local: {
@@ -117,6 +121,89 @@ async function openPanel(worker: Worker) {
   await expect(page.locator("#userBadge")).toBeVisible();
   return page;
 }
+
+test("the packaged extension leaves a LinkedIn composer untouched when the draft exceeds its limit", async () => {
+  const url = "https://www.linkedin.com/in/composer-fixture";
+  await browser.route(url, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<textarea hidden name="message" maxlength="300">Unrelated draft</textarea>
+      <div role="dialog" aria-label="Add a note">
+        <textarea name="message" maxlength="200">Existing text</textarea>
+      </div>
+      <div style="opacity: 0">
+        <textarea placeholder="Add a note" maxlength="300">Fading draft</textarea>
+      </div>
+      <textarea placeholder="Add a note for yourself">Personal note</textarea>
+      <div role="dialog" aria-label="New message">
+        <textarea name="message" maxlength="300">InMail draft</textarea>
+      </div>`,
+    }),
+  );
+  const worker =
+    browser.serviceWorkers()[0] ??
+    (await browser.waitForEvent("serviceworker"));
+  const page = await browser.newPage();
+  await page.goto(url);
+  const invitation = page.locator('[aria-label="Add a note"]');
+  const fading = page.locator('textarea[placeholder="Add a note"]');
+  const personal = page.getByPlaceholder("Add a note for yourself", {
+    exact: true,
+  });
+  const textarea = invitation.locator("textarea");
+  const inmail = page
+    .getByRole("dialog", { name: "New message" })
+    .getByRole("textbox");
+  const unrelated = page.locator("textarea[hidden]");
+  const fill = (length: number) =>
+    worker.evaluate(
+      async ({ url, length }) => {
+        const [tab] = await chrome.tabs.query({ url });
+        return chrome.tabs.sendMessage(tab!.id, {
+          action: "autoFill",
+          data: { category: "linkedin_connection", body: "x".repeat(length) },
+        });
+      },
+      { url, length },
+    );
+
+  await expect
+    .poll(async () => fill(201))
+    .toMatchObject({
+      success: false,
+      error: expect.stringContaining("200 characters"),
+    });
+  await expect(textarea).toHaveValue("Existing text");
+  await expect(unrelated).toHaveValue("Unrelated draft");
+  await expect(page.getByText("Message Filled!")).toHaveCount(0);
+  await textarea.evaluate((element) => element.removeAttribute("maxlength"));
+  expect(await fill(201)).toMatchObject({ success: false });
+  await expect(textarea).toHaveValue("Existing text");
+  expect(await fill(200)).toMatchObject({ success: true });
+  await expect(textarea).toHaveValue("x".repeat(200));
+  await textarea.evaluate((element) =>
+    element.setAttribute("maxlength", "300"),
+  );
+  expect(await fill(201)).toMatchObject({ success: true });
+  await expect(textarea).toHaveValue("x".repeat(201));
+  await expect(unrelated).toHaveValue("Unrelated draft");
+  await expect(inmail).toHaveValue("InMail draft");
+  await invitation.evaluate((element) => element.setAttribute("hidden", ""));
+  expect(await fill(200)).toMatchObject({ success: false });
+  await expect(inmail).toHaveValue("InMail draft");
+  await expect(fading).toHaveValue("Fading draft");
+  await expect(personal).toHaveValue("Personal note");
+  await invitation.evaluate((element) => element.removeAttribute("hidden"));
+  await textarea.evaluate((element) => element.setAttribute("readonly", ""));
+  expect(await fill(200)).toMatchObject({ success: false });
+  await expect(textarea).toHaveValue("x".repeat(201));
+  await textarea.evaluate((element) => {
+    element.removeAttribute("readonly");
+    element.setAttribute("disabled", "");
+  });
+  expect(await fill(200)).toMatchObject({ success: false });
+  await expect(textarea).toHaveValue("x".repeat(201));
+});
 
 test("uses the selected endpoint, recovers from stale stories and clears before automatic generation", async () => {
   const posts: Array<{ path: string; body: Record<string, unknown> }> = [];

@@ -11,7 +11,11 @@ export interface OutputConstraint {
   maximum: number;
 }
 
+export const LINKEDIN_BASIC_CONNECTION_MAX_CHARACTERS = 200;
 export const LINKEDIN_CONNECTION_MAX_CHARACTERS = 300;
+export type LinkedinConnectionNoteLimit =
+  | typeof LINKEDIN_BASIC_CONNECTION_MAX_CHARACTERS
+  | typeof LINKEDIN_CONNECTION_MAX_CHARACTERS;
 export const EMAIL_SUBJECT_MAX_CHARACTERS = 160;
 export const APPLICATION_ANSWER_MIN_WORDS = 50;
 export const APPLICATION_ANSWER_MAX_WORDS = 150;
@@ -20,13 +24,14 @@ export const APPLICATION_ANSWER_MAX_CHARACTERS = 3_000;
 export function resolveOutputConstraint(input: {
   category: OutputConstraintCategory;
   emailMode?: EmailMode;
+  connectionNoteLimit?: LinkedinConnectionNoteLimit;
 }): OutputConstraint {
   if (input.category === "linkedin_connection") {
     return {
       category: input.category,
       unit: "characters",
       minimum: 1,
-      maximum: LINKEDIN_CONNECTION_MAX_CHARACTERS,
+      maximum: input.connectionNoteLimit ?? LINKEDIN_CONNECTION_MAX_CHARACTERS,
     };
   }
 
