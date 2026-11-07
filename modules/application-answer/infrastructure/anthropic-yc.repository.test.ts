@@ -6,6 +6,7 @@ import {
   getApplicationBatchToolInput,
   YcApplicationStructuredOutputError,
   ycApplicationTool,
+  applicationBatchTool,
 } from "./anthropic-yc.repository";
 
 function response(input: unknown, name = "return_yc_application_answer") {
@@ -22,12 +23,10 @@ function response(input: unknown, name = "return_yc_application_answer") {
 }
 
 describe("getYcApplicationToolInput", () => {
-  it("parses the required structured body and claim ledger", () => {
+  it("constructs the body from the required claim ledger", () => {
     expect(
       getYcApplicationToolInput(
         response({
-          body: "I build and operate customer-facing TypeScript services.",
-          word_count: 50,
           claims: [
             {
               text: "I build and operate customer-facing TypeScript services.",
@@ -54,26 +53,64 @@ describe("getYcApplicationToolInput", () => {
     });
   });
 
+  it.each([2_900, 2_980])(
+    "only adds the sparse fallback if the %i-character draft has room",
+    (length) => {
+      const quote = (excerpt: string) => `My background includes: "${excerpt}"`;
+      const excerpts = Array.from(
+        { length: 6 },
+        (_, i) => `Team ${i} tested the${" ".repeat(430)}rollout.`,
+      );
+      const padding = length - excerpts.map(quote).join("\n").length;
+      excerpts[0] = excerpts[0]!.replace(
+        "rollout",
+        `${" ".repeat(padding)}rollout`,
+      );
+      const claims = excerpts.map((excerpt, index) => ({
+        text: quote(excerpt),
+        kind: "action",
+        source_id: `fact-${index}`,
+        supporting_excerpt: excerpt,
+      }));
+      const rawBody = claims.map(({ text }) => text).join("\n");
+      expect(rawBody).toHaveLength(length);
+      expect(rawBody.split(/\s+/u)).toHaveLength(48);
+      expect(getYcApplicationToolInput(response({ claims })).body).toBe(
+        length === 2_900
+          ? rawBody + "\nThank you for considering my application."
+          : rawBody,
+      );
+    },
+  );
+
+  it("keeps a one-character boundary when common whitespace would merge claims", () => {
+    const texts = ["A", "B", "A\nB", "A B", "A\tB"];
+    const result = getYcApplicationToolInput(
+      response({
+        claims: texts.map((text, index) => ({
+          text,
+          kind: "action",
+          source_id: `fact-${index}`,
+          supporting_excerpt: text,
+        })),
+      }),
+    );
+    expect(result.body).toBe("A\u2028B\nA\nB\nA B\nA\tB");
+  });
+
   it.each([
     ["missing tool", { content: [] }],
-    [
-      "wrong tool",
-      response({ body: "Body", claims: [] }, "return_email_draft"),
-    ],
-    ["missing claims", response({ body: "Body" })],
+    ["wrong tool", response({ claims: [] }, "return_email_draft")],
+    ["missing claims", response({})],
     [
       "missing source references",
       response({
-        body: "Body",
-        word_count: 50,
         claims: [{ text: "Claim", source_ids: [] }],
       }),
     ],
     [
       "unknown fields",
       response({
-        body: "Body",
-        word_count: 50,
         claims: [{ text: "Claim", source_ids: ["profile.current_role"] }],
         explanation: "Hidden chain of thought",
       }),
@@ -84,16 +121,18 @@ describe("getYcApplicationToolInput", () => {
     );
   });
 
-  it.each([49, 151])("rejects declared word count %i", (wordCount) => {
+  it("rejects obsolete private tool fields even when both are well formed", () => {
     expect(() =>
       getYcApplicationToolInput(
         response({
           body: "A valid-looking answer body.",
-          word_count: wordCount,
+          word_count: 50,
           claims: [
             {
               text: "A valid-looking answer body.",
-              source_ids: ["profile.current_role"],
+              kind: "action",
+              source_id: "evidence:fixture",
+              supporting_excerpt: "A valid-looking answer body.",
             },
           ],
         }),
@@ -103,12 +142,15 @@ describe("getYcApplicationToolInput", () => {
 });
 
 describe("createYcApplicationMessage", () => {
-  it("publishes the application word constraint in the tool schema", () => {
-    expect(ycApplicationTool.input_schema.properties.word_count).toMatchObject({
-      minimum: 50,
-      maximum: 150,
+  it("requests ordered claims without an independent body or declared count", () => {
+    expect(ycApplicationTool.description).toContain("50 to 150 word");
+    expect(ycApplicationTool.input_schema.properties).toEqual({
+      claims: expect.objectContaining({ minItems: 1 }),
     });
-    expect(ycApplicationTool.input_schema.required).toContain("word_count");
+    expect(ycApplicationTool.input_schema.required).toEqual(["claims"]);
+    expect(
+      applicationBatchTool.input_schema.properties.answers.items.required,
+    ).toEqual(["questionId", "claims"]);
   });
 
   it("forces the structured YC tool through the shared model and timeout", async () => {

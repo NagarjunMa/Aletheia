@@ -1,3 +1,7 @@
+import {
+  APPLICATION_ANSWER_MIN_CLAIM_WORDS,
+  renderYcAnswer,
+} from "../domain/render-yc-answer";
 import { includesSelectedEvidence } from "@/modules/candidate-context/application/selected-evidence";
 import {
   APPLICATION_ANSWER_MIN_WORDS,
@@ -94,7 +98,7 @@ function isValidAnswer(
   }
 }
 
-/** Find a complete answer under the existing free-form tool limits, without changing its tool. */
+/** Check that selected facts can make a complete answer with the default renderer. */
 export function assertYcSelectionFeasible(context: YcGroundingContext) {
   const required = context.requiredEvidenceRoots;
   if (!required) return;
@@ -149,53 +153,58 @@ export function assertYcSelectionFeasible(context: YcGroundingContext) {
       remainingWords[i] = remainingWords[i + 1]! + candidates[i]!.words;
       remainingRoots[i] = remainingRoots[i + 1]! | candidates[i]!.rootBit;
     }
-    let visits = 0;
-    let validations = 0;
-    const exhausted = () => visits >= 4096 || validations >= 256;
-    const search = (start: number, words: number, roots: number): boolean => {
-      if (
-        words + remainingWords[start]! < APPLICATION_ANSWER_MIN_WORDS ||
-        (roots | remainingRoots[start]!) !== requiredMask
-      )
+    const hasAnswer = (minimumWords: number, maximumWords: number) => {
+      let visits = 0;
+      let validations = 0;
+      const exhausted = () => visits >= 4096 || validations >= 256;
+      const search = (start: number, words: number, roots: number): boolean => {
+        if (
+          words + remainingWords[start]! < minimumWords ||
+          (roots | remainingRoots[start]!) !== requiredMask
+        )
+          return false;
+        if (words >= minimumWords && roots === requiredMask) {
+          validations++;
+          const claims = group.map(({ claim }) => claim);
+          if (isValidAnswer(scoped, renderYcAnswer(claims), claims))
+            return true;
+        }
+        if (group.length >= MAX_ATOMIC_CLAIMS) return false;
+        for (
+          let index = start;
+          index < candidates.length && !exhausted();
+          index++
+        ) {
+          visits++;
+          const candidate = candidates[index]!;
+          const nextWords = words + candidate.words;
+          if (
+            nextWords > maximumWords ||
+            group.some(
+              ({ claim }) =>
+                claim.source_id === candidate.claim.source_id ||
+                claim.text === candidate.claim.text,
+            )
+          )
+            continue;
+          group.push(candidate);
+          if (search(index + 1, nextWords, roots | candidate.rootBit))
+            return true;
+          group.pop();
+        }
         return false;
-      if (words >= APPLICATION_ANSWER_MIN_WORDS && roots === requiredMask) {
-        validations++;
-        const claims = group.map(({ claim }) => claim);
-        if (
-          isValidAnswer(
-            scoped,
-            claims.map(({ text }) => text).join(" "),
-            claims,
-          )
-        )
-          return true;
-      }
-      if (group.length >= MAX_ATOMIC_CLAIMS) return false;
-      for (
-        let index = start;
-        index < candidates.length && !exhausted();
-        index++
-      ) {
-        visits++;
-        const candidate = candidates[index]!;
-        const nextWords = words + candidate.words;
-        if (
-          nextWords > APPLICATION_ANSWER_MAX_WORDS ||
-          group.some(
-            ({ claim }) =>
-              claim.source_id === candidate.claim.source_id ||
-              claim.text === candidate.claim.text,
-          )
-        )
-          continue;
-        group.push(candidate);
-        if (search(index + 1, nextWords, roots | candidate.rootBit))
-          return true;
-        group.pop();
-      }
-      return false;
+      };
+      return search(0, 0, 0);
     };
-    if (!search(0, 0, 0)) throw new YcPlanUnavailableError();
+    // Sparse candidates must never spend the regular answer search budget.
+    if (
+      !hasAnswer(APPLICATION_ANSWER_MIN_WORDS, APPLICATION_ANSWER_MAX_WORDS) &&
+      !hasAnswer(
+        APPLICATION_ANSWER_MIN_CLAIM_WORDS,
+        APPLICATION_ANSWER_MIN_WORDS - 1,
+      )
+    )
+      throw new YcPlanUnavailableError();
   }
 }
 

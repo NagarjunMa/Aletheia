@@ -3,7 +3,10 @@ import {
   finalizeGroundedOutput,
   prepareGroundedText,
 } from "@/modules/grounding/application/finalize-grounded-output";
-import { resolveOutputConstraint } from "@/lib/ai/output-constraints";
+import {
+  APPLICATION_ANSWER_MAX_CHARACTERS,
+  resolveOutputConstraint,
+} from "@/lib/ai/output-constraints";
 import type { YcApplicationToolOutput } from "../infrastructure/anthropic-yc.repository";
 import type { YcGroundingContext } from "../domain/yc-grounding.types";
 
@@ -109,7 +112,7 @@ export function validateYcApplicationOutput(input: {
     }
   }
 
-  if (body.length > 3000) {
+  if (body.length > APPLICATION_ANSWER_MAX_CHARACTERS) {
     throw new YcApplicationOutputValidationError(
       "Answer exceeds the character limit",
       "YC_CHARACTER_LIMIT",

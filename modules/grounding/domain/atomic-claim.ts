@@ -79,6 +79,9 @@ export const atomicClaimsToolSchema = {
   },
 } as const;
 
+export const APPLICATION_ANSWER_COURTESY =
+  "Thank you for considering my application.";
+
 /** Whole phrases only. Never strip arbitrary "non-factual" words from text. */
 export const NEUTRAL_FRAMING = [
   "Open to connecting?",
@@ -88,7 +91,7 @@ export const NEUTRAL_FRAMING = [
   "Would you be open to discussing the role?",
   "May I ask you a question?",
   "I'd welcome a conversation.",
-  "Thank you for considering my application.",
+  APPLICATION_ANSWER_COURTESY,
   "Professional introduction",
   "A brief introduction",
   "Following up",

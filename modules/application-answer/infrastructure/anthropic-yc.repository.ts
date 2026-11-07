@@ -1,3 +1,4 @@
+import { renderYcAnswer } from "../domain/render-yc-answer";
 import type { YcPlannedOptions } from "../application/yc-rhetorical-options";
 import { buildYcPlannedTool } from "./yc-planned-tool";
 import {
@@ -25,39 +26,19 @@ const log = createLogger("yc-anthropic-repository");
 
 export const ycApplicationTool = {
   name: YC_APPLICATION_TOOL_NAME,
-  description:
-    "Return a grounded YC startup application answer and a server-validated claim ledger.",
+  description: `Return complete approved claims in answer order. Aim for ${APPLICATION_ANSWER_MIN_WORDS} to ${APPLICATION_ANSWER_MAX_WORDS} words of approved claims.`,
   input_schema: {
     type: "object",
     additionalProperties: false,
     properties: {
-      body: {
-        type: "string",
-        minLength: 1,
-        maxLength: 3_000,
-        description: `The final ${APPLICATION_ANSWER_MIN_WORDS} to ${APPLICATION_ANSWER_MAX_WORDS} word application answer.`,
-      },
-      word_count: {
-        type: "integer",
-        minimum: APPLICATION_ANSWER_MIN_WORDS,
-        maximum: APPLICATION_ANSWER_MAX_WORDS,
-        description:
-          "Declared body word count. The server recalculates and validates the final body independently.",
-      },
       claims: { ...atomicClaimsToolSchema, minItems: 1 },
     },
-    required: ["body", "word_count", "claims"],
+    required: ["claims"],
   },
 } as const;
 
 const ycApplicationToolInputSchema = z
   .object({
-    body: z.string().trim().min(1).max(3_000),
-    word_count: z
-      .number()
-      .int()
-      .min(APPLICATION_ANSWER_MIN_WORDS)
-      .max(APPLICATION_ANSWER_MAX_WORDS),
     claims: atomicClaimsSchema.refine(
       (claims) => claims.length > 0,
       "Claims required",
@@ -69,7 +50,7 @@ const ycApplicationToolInputSchema = z
 export const applicationBatchTool = {
   name: "return_application_answers",
   description:
-    "Return one grounded answer and claim ledger for every supplied question ID.",
+    "Return one ordered list of complete approved claims for every supplied question ID.",
   input_schema: {
     type: "object",
     additionalProperties: false,
@@ -87,7 +68,7 @@ export const applicationBatchTool = {
             },
             ...ycApplicationTool.input_schema.properties,
           },
-          required: ["questionId", "body", "word_count", "claims"],
+          required: ["questionId", "claims"],
         },
       },
     },
@@ -144,13 +125,9 @@ export function getApplicationBatchToolInput(
       })
       .strict()
       .parse(block.input);
-    return parsed.answers.map((answer) => ({
-      questionId: answer.questionId,
-      body: answer.body,
-      claims: answer.claims.map((claim) => ({
-        ...claim,
-        sourceIds: [claim.source_id],
-      })),
+    return parsed.answers.map(({ questionId, claims }) => ({
+      questionId,
+      ...renderToolAnswer(claims),
     }));
   } catch (error) {
     if (error instanceof YcApplicationStructuredOutputError) throw error;
@@ -168,6 +145,16 @@ export type YcApplicationToolOutput = {
   >;
 };
 
+function renderToolAnswer(claims: AtomicClaim[]): YcApplicationToolOutput {
+  return {
+    body: renderYcAnswer(claims),
+    claims: claims.map((claim) => ({
+      ...claim,
+      sourceIds: [claim.source_id],
+    })),
+  };
+}
+
 export type YcToolValidationCode =
   "YC_TOOL_SCHEMA" | "YC_TOOL_ENVELOPE" | "YC_TOOL_TRUNCATED" | "YC_BATCH_IDS";
 
@@ -184,10 +171,7 @@ function toolValidationDetails(error: z.ZodError): ToolValidationDetail[] {
       path = path.slice(2);
     }
     let field = "tool";
-    if (
-      path.length === 1 &&
-      ["body", "word_count", "questionId", "claims"].includes(String(path[0]))
-    )
+    if (path.length === 1 && ["questionId", "claims"].includes(String(path[0])))
       field = prefix + String(path[0]);
     if (
       path[0] === "claims" &&
@@ -239,13 +223,7 @@ export function getYcApplicationToolInput(
     }
 
     const parsed = ycApplicationToolInputSchema.parse(toolBlock.input);
-    return {
-      body: parsed.body,
-      claims: parsed.claims.map((claim) => ({
-        ...claim,
-        sourceIds: [claim.source_id],
-      })),
-    };
+    return renderToolAnswer(parsed.claims);
   } catch (error) {
     if (error instanceof YcApplicationStructuredOutputError) throw error;
     throw new YcApplicationStructuredOutputError(

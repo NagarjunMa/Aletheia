@@ -5,6 +5,7 @@ import { resolveYcPlannedTool } from "../infrastructure/yc-planned-tool";
 import { planSelection } from "@/modules/grounding/domain/rhetorical-plan";
 import { it, expect } from "vitest";
 import {
+  assertYcSelectionFeasible,
   buildYcPlannedOptions,
   ycQuestionContext,
 } from "./yc-rhetorical-options";
@@ -132,4 +133,92 @@ it("keeps length-qualified owner-reviewed instruction-looking text as data and r
     expect(() =>
       resolveYcPlannedTool(response({ ...selected, ...extra }), options, false),
     ).toThrow();
+});
+
+it("keeps the selected-story search budget for ordinary answers when a sparse courtesy is excluded", () => {
+  const pad = (prefix: string, words: number) =>
+    [
+      prefix,
+      ...Array.from(
+        { length: words - prefix.split(" ").length },
+        (_, i) =>
+          [
+            "reviewed",
+            "operational",
+            "results",
+            "with",
+            "engineering",
+            "partners",
+            "during",
+            "project",
+            "delivery",
+            "and",
+            "deployment",
+            "planning",
+            "across",
+            "the",
+            "business",
+          ][i % 15],
+      ),
+    ].join(" ") + ".";
+  const selected = [
+    [1, pad("The platform team completed", 20)],
+    [2, pad("The product group coordinated", 19)],
+  ] as const;
+  const confirmedEvidence = selected.map(([i, actions]) => {
+    const record = {
+      id: `11111111-1111-4111-8111-11111111111${i}`,
+      kind: "technical_project" as const,
+      title: `TypeScript dashboard project ${i}`,
+      context: "",
+      actions,
+      outcome: "",
+      metrics: [],
+      skills: [],
+      links: [],
+      confirmed: true,
+      sortOrder: i,
+    };
+    return {
+      ...record,
+      factReview: prepareFactReview(record, [
+        {
+          id: `22222222-2222-4222-8222-22222222222${i}`,
+          kind: "action",
+          excerpt: actions,
+          confirmed: true,
+        },
+      ]),
+    };
+  });
+  const jobDescription = [
+    pad("The perfect candidate will", 13),
+    pad("The opportunity involves", 12),
+    pad("The role includes", 10),
+    pad("The group expects", 9),
+    pad("The position requires", 9),
+    pad("The business prefers", 7),
+    pad("The organization uses", 7),
+    pad("Teams include", 4),
+    "perfect candidate",
+  ].join("\n\n");
+  const question =
+    "Describe your experience with a TypeScript platform rollout?";
+  const context = buildYcGroundingContext({
+    question,
+    questions: [question],
+    jobDescription,
+    selectedEvidenceIds: confirmedEvidence.map((e) => e.id),
+    candidate: {
+      identity: { fullName: "", linkedinUrl: "" },
+      profile: candidateProfileInputSchema.parse({
+        currentRole: "Engineer",
+        excludedClaims: ["Thank you for considering my application."],
+      }),
+      resume: { text: "", source: "none" },
+      confirmedEvidence,
+    },
+  });
+  expect(context.readiness.ready).toBe(true);
+  expect(() => assertYcSelectionFeasible(context)).not.toThrow();
 });

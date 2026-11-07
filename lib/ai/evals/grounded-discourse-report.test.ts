@@ -13,7 +13,7 @@ describe("offline discourse baseline and comparison", () => {
     const report = runDiscourseBaseline();
     expect(report.configuration).toMatchObject({
       outreachPromptVersion: "6.0.0",
-      applicationPromptVersion: "yc-2.0.1",
+      applicationPromptVersion: "yc-2.1.0",
       model: "claude-sonnet-4-6",
       providerCalls: 0,
       measuredProviderTokenUsage: null,

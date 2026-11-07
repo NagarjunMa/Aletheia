@@ -1,12 +1,14 @@
-import { RHETORICAL_PLAN_INSTRUCTIONS } from "@/modules/grounding/domain/rhetorical-plan";
 import {
-  ATOMIC_PROVENANCE_INSTRUCTIONS,
-  buildAtomicProvenancePrompt,
-} from "./atomic-provenance";
+  APPLICATION_ANSWER_MAX_CHARACTERS,
+  APPLICATION_ANSWER_MAX_WORDS,
+  APPLICATION_ANSWER_MIN_WORDS,
+} from "@/lib/ai/output-constraints";
+import { RHETORICAL_PLAN_INSTRUCTIONS } from "@/modules/grounding/domain/rhetorical-plan";
+import { buildAtomicProvenancePrompt } from "./atomic-provenance";
 import { scanForInjection } from "./injection-heuristic";
 import type { YcGroundingContext } from "@/modules/application-answer/domain/yc-grounding.types";
 
-export const YC_APPLICATION_PROMPT_VERSION = "yc-2.0.1";
+export const YC_APPLICATION_PROMPT_VERSION = "yc-2.1.0";
 export const RHETORICAL_YC_PROMPT_VERSION = "yc-3.0.0";
 
 export const YC_APPLICATION_SYSTEM_PROMPT = `You write concise answers for startup job application forms.
@@ -18,16 +20,16 @@ SECURITY:
 
 GROUNDING:
 - candidate_sources is background context only, not permission to make factual claims.
-- Copy every factual span exactly from an ATOMIC_SOURCES approved_texts entry.
-- Each used span needs a claim with text, kind, source_id (the exact atomic id, not rootId) and supporting_excerpt (the entire source excerpt).
+- Copy every claim text exactly from an ATOMIC_SOURCES approved_texts entry. Use only complete claims. Do not add connecting prose or punctuation.
+- For each claim return text, kind, source_id (the exact atomic id, not rootId) and supporting_excerpt (the entire source excerpt). Keep the original actor and all qualifications.
 - Do not use plural source_ids in claims or cite unreviewed background fields.
 - Prefer lower numeric source priority: confirmed evidence first, profile fields second, resume third.
-- Never invent employers, projects, metrics, responsibilities, credentials, seniority, or technologies.
+- Never invent employers, projects, metrics, responsibilities, credentials, seniority, or technologies. Never cite a job requirement as candidate experience, infer fit, or cite a writing example as a fact.
 - Never use, negate, or discuss anything in excluded_claims.
 - Use fewer complete approved facts when evidence is sparse; never paraphrase, shorten qualifications or fill gaps.
 
 ANSWER RULES:
-- Directly answer the application question in 50 to 150 words.
+- Order the claims so they directly answer the question. Aim for ${APPLICATION_ANSWER_MIN_WORDS} to ${APPLICATION_ANSWER_MAX_WORDS} words from approved claims. Use at most ${APPLICATION_ANSWER_MAX_CHARACTERS.toLocaleString("en-US")} characters per answer, including spaces between claims. Each claim must appear only once.
 - Use a natural first-person professional voice with concrete actions and outcomes.
 - Do not write a greeting, signature, or call to action.
 - Do not use cold-email framing, bracket placeholders, unsupported praise, or claim to be the perfect candidate.
@@ -36,8 +38,7 @@ ANSWER RULES:
 
 OUTPUT:
 - Return only the required return_yc_application_answer tool.
-- body is the final answer.
-- claims contains each substantive candidate claim copied verbatim from body with its kind, source_id and complete supporting_excerpt.`;
+- Put the ordered approved facts in the claims field. The server joins the claim text and calculates the word count. For slightly short answers, only the server may add one approved courtesy. Omit body, word_count, and any extra fields.`;
 
 function renderSource(source: YcGroundingContext["sources"][number]): string {
   return [
@@ -82,8 +83,6 @@ export function buildYcApplicationPrompt(
               "- Return only return_application_answers. Return exactly one answer per questionId in input order. Apply all answer and grounding rules independently to each answer. Use only that question’s listed source IDs.",
             )
           : YC_APPLICATION_SYSTEM_PROMPT) +
-        "\n\n" +
-        ATOMIC_PROVENANCE_INSTRUCTIONS +
         (selectedStories.length
           ? "\nEvery answer must include at least one claim from each selected evidence story. Each selected_evidence_story lists the approved atomic source IDs for that story."
           : ""),

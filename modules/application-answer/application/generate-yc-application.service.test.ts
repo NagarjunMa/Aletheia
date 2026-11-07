@@ -1,8 +1,12 @@
+import { allowedClaimTexts } from "@/modules/grounding/domain/atomic-claim";
 import { describe, expect, it, vi } from "vitest";
 import { SelectedEvidenceUnavailableError } from "@/modules/candidate-context/application/selected-evidence";
 import Anthropic from "@anthropic-ai/sdk";
 import type { YcGroundingContext } from "../domain/yc-grounding.types";
-import { YcApplicationStructuredOutputError } from "../infrastructure/anthropic-yc.repository";
+import {
+  getYcApplicationToolInput,
+  YcApplicationStructuredOutputError,
+} from "../infrastructure/anthropic-yc.repository";
 import {
   generateYcApplication,
   type GenerateYcApplicationDependencies,
@@ -545,7 +549,7 @@ describe("generateYcApplication", () => {
       creditsRemaining: 36,
       evalMetadata: {
         generationId: "33333333-3333-4333-8333-333333333333",
-        promptVersion: "yc-2.0.1",
+        promptVersion: "yc-2.1.0",
         model: "claude-test-model",
         category: "yc_application",
         profileFieldCount: 2,
@@ -854,8 +858,6 @@ describe("ALE-37 batch orchestration", () => {
   const batch = (ids = ["q2", "q1"]) => ({
     answers: ids.map((questionId) => ({
       questionId,
-      body: answer,
-      word_count: 50,
       claims: [
         {
           text: answer,
@@ -883,6 +885,7 @@ describe("ALE-37 batch orchestration", () => {
   }
   it.each([
     ["tool_schema", "tool_parse", "YC_TOOL_SCHEMA", undefined],
+    ["obsolete_tool_fields", "tool_parse", "YC_TOOL_SCHEMA", undefined],
     ["ids", "batch_contract", "YC_BATCH_IDS", undefined],
     ["source", "grounding", "CLAIM_SOURCE", 1],
     ["coverage", "grounding", "CLAIM_COVERAGE", 1],
@@ -897,17 +900,27 @@ describe("ALE-37 batch orchestration", () => {
       const logger = createLogger("test-yc-diagnostics");
       const warn = vi.spyOn(logger, "warn");
       if (kind === "tool_schema")
-        Object.assign(output.answers[0]!, {
-          word_count: "PRIVATE_TOOL_VALUE",
+        Object.assign(output.answers[0]!.claims[0]!, {
+          text: 123,
           PRIVATE_FIELD: "PRIVATE_RAW_INPUT",
+        });
+      if (kind === "obsolete_tool_fields")
+        Object.assign(output.answers[0]!, {
+          body: answer,
+          word_count: answer.split(/\s+/u).length,
         });
       if (kind === "ids") output.answers[1]!.questionId = "q1";
       if (kind === "source")
         output.answers[0]!.claims[0]!.source_id = "PRIVATE_SOURCE_ID";
-      if (kind === "coverage")
-        output.answers[0]!.body += " PRIVATE_UNSUPPORTED_TEXT";
-      if (kind === "limit")
-        output.answers[0]!.body = Array(4).fill(answer).join(" ");
+      if (kind === "coverage" || kind === "limit")
+        deps.sanitizeOutput = vi.fn(async (input) => {
+          const sanitized = await sanitizeYcApplicationOutput(input);
+          sanitized.output.body =
+            kind === "coverage"
+              ? sanitized.output.body + " PRIVATE_UNSUPPORTED_TEXT"
+              : Array(4).fill(sanitized.output.body).join(" ");
+          return sanitized;
+        });
       if (kind === "sanitize")
         deps.sanitizeOutput = vi
           .fn()
@@ -950,7 +963,7 @@ describe("ALE-37 batch orchestration", () => {
         expect(diagnostics).toMatchObject({
           validationDetails: expect.arrayContaining([
             expect.objectContaining({
-              field: "answers.item.word_count",
+              field: "answers.item.claims.item.text",
               code: "invalid_type",
               itemIndex: 1,
             }),
@@ -1023,8 +1036,6 @@ describe("ALE-37 batch orchestration", () => {
     const output = {
       answers: fiveQuestions.map((_, i) => ({
         questionId: `q${i + 1}`,
-        body: answer,
-        word_count: answer.split(/\s+/u).length,
         claims: [
           {
             text: answer,
@@ -1185,8 +1196,7 @@ describe("ALE-37 batch orchestration", () => {
   );
   it("rejects a batch if just one answer has an unsupported metric", async () => {
     const output = batch();
-    if (!output.answers[1]) throw new Error("Missing fixture");
-    output.answers[1].body += " Increased revenue by 987%.";
+    output.answers[1]!.claims[0]!.text += " Increased revenue by 987%.";
     const deps = batchDeps(output);
     const response = await run(deps);
     expect(response.status).toBe(502);
@@ -1307,7 +1317,8 @@ describe("ALE-47 actual YC finalization", () => {
       const deps = dependencies({
         prepareGrounding: vi.fn().mockResolvedValue(ctx),
         parseMessage: vi.fn().mockReturnValue({ body, claims: [claim] }),
-        sanitizeOutput: sanitizeYcApplicationOutput,
+        sanitizeOutput: (output) =>
+          sanitizeYcApplicationOutput({ ...output, body }),
         createMessage: vi.fn().mockResolvedValue({
           stop_reason: "tool_use",
           content: [
@@ -1317,8 +1328,6 @@ describe("ALE-47 actual YC finalization", () => {
               input: {
                 answers: questions.map((_, index) => ({
                   questionId: `q${index + 1}`,
-                  body,
-                  word_count: 65,
                   claims: [
                     {
                       text: fact,
@@ -1869,4 +1878,405 @@ it("accepts a complete approved quote when the direct wording falls below the wo
   );
   expect(response.status).toBe(200);
   expect(await response.json()).toMatchObject({ body: text });
+});
+
+describe("ALE-37 server-built YC answers", () => {
+  const questions = [
+    "Describe your relevant engineering work?",
+    "How did you review difficult production changes?",
+    "How did you help other engineers ship safely?",
+    "How did you verify customer-facing delivery?",
+    "What would you bring to this engineering team?",
+  ];
+
+  it.each([
+    "legacy",
+    "single",
+    "five",
+    "overlap",
+    "multiline-overlap",
+    "long-line-break-run",
+    "exact-character-limit",
+  ] as const)(
+    "builds the %s answer text from ordered claims and preserves question order",
+    async (mode) => {
+      const submitted = questions.slice(0, mode === "five" ? 5 : 1);
+      const source = grounding().atomicSources![0]!;
+      const opening = "I reviewed TypeScript changes with engineers.";
+      const opener = {
+        ...source,
+        id: "evidence:review",
+        content:
+          mode === "long-line-break-run"
+            ? `I reviewed TypeScript changes.${"\n".repeat(100)}I shared the review findings with engineers.`
+            : opening,
+      };
+      const atCharacterLimit = mode === "exact-character-limit";
+      const hasMultilineOverlap =
+        mode === "multiline-overlap" || atCharacterLimit;
+      const hasOverlap = mode === "overlap" || hasMultilineOverlap;
+      const combined = {
+        ...source,
+        id: "evidence:combined",
+        content: [opening, source.content].join(
+          hasMultilineOverlap ? "\n" : " ",
+        ),
+      };
+      const extras = Array.from({ length: 5 }, (_, index) => ({
+        ...source,
+        id: `f${index}`,
+        content: `Phase${" ".repeat(380)}${index}.`,
+      }));
+      const quoted = (text: string) => `My background includes: "${text}"`;
+      if (atCharacterLimit) {
+        const unpaddedLength = [
+          opening,
+          source.content,
+          combined.content,
+          ...extras.map((extra) => quoted(extra.content)),
+        ].join("\n").length;
+        expect(unpaddedLength).toBeLessThan(3_000);
+        extras[0]!.content = extras[0]!.content.replace(
+          "Phase",
+          `Phase${" ".repeat(3_000 - unpaddedLength)}`,
+        );
+      }
+      const context: YcGroundingContext = {
+        ...grounding(),
+        atomicSources: hasOverlap
+          ? [source, opener, combined, ...(atCharacterLimit ? extras : [])]
+          : [source, opener],
+        ...(mode === "legacy"
+          ? {}
+          : {
+              questions: submitted.map((question, i) => ({
+                questionId: `q${i + 1}`,
+                question,
+                sourceIds: [source.rootId!],
+              })),
+            }),
+      };
+      const claim = (entry: typeof source) => ({
+        text: entry.content,
+        source_id: entry.id,
+        supporting_excerpt: entry.content,
+        kind: entry.kind,
+      });
+      const mockAnswers = submitted.map((_, i) => ({
+        questionId: `q${i + 1}`,
+        claims: hasOverlap
+          ? [
+              claim(opener),
+              claim(source),
+              claim(combined),
+              ...(atCharacterLimit
+                ? extras.map((extra) => ({
+                    ...claim(extra),
+                    text: quoted(extra.content),
+                  }))
+                : []),
+            ]
+          : i % 2
+            ? [claim(source), claim(opener)]
+            : [claim(opener), claim(source)],
+      }));
+      const deps = dependencies({
+        prepareGrounding: vi.fn().mockResolvedValue(context),
+        parseMessage: getYcApplicationToolInput,
+        sanitizeOutput: sanitizeYcApplicationOutput,
+        createMessage: vi.fn().mockResolvedValue({
+          stop_reason: "tool_use",
+          content: [
+            {
+              type: "tool_use",
+              name:
+                mode === "legacy"
+                  ? "return_yc_application_answer"
+                  : "return_application_answers",
+              input:
+                mode === "legacy"
+                  ? { claims: mockAnswers[0]!.claims }
+                  : { answers: [...mockAnswers].reverse() },
+            },
+          ],
+          usage: { input_tokens: 120, output_tokens: 80 },
+        }),
+      });
+      const result = await generateYcApplication(
+        {
+          caller,
+          request:
+            mode === "legacy"
+              ? { ...request, question: submitted[0]! }
+              : {
+                  category: "yc_application",
+                  jd: request.jd,
+                  questions: submitted,
+                },
+          corsHeaders: {},
+          applicationBaseUrl: "https://aletheia.live",
+          rhetoricalPlans: false,
+        },
+        deps,
+      );
+      expect(result.status).toBe(200);
+      const payload = await result.json();
+      const expected = mockAnswers.map((entry, i) => {
+        const [first, ...remaining] = entry.claims.map(({ text }) => text);
+        const boundary = hasMultilineOverlap ? " " : "\n";
+        const body = first + boundary + remaining.join("\n");
+        return {
+          questionId: entry.questionId,
+          question: submitted[i],
+          body,
+          character_count: body.length,
+          word_count: body.split(/\s+/u).length,
+        };
+      });
+      if (atCharacterLimit) expect(expected[0]!.character_count).toBe(3_000);
+      if (mode === "legacy") {
+        expect(payload.body).toBe(expected[0]!.body);
+        expect(payload.answers).toBeUndefined();
+      } else {
+        expect(payload.answers).toEqual(expected);
+      }
+      expect(payload.evalMetadata.groundingValidationPassed).toBe(true);
+      expect(JSON.stringify(payload)).not.toMatch(
+        /supporting_excerpt|source_id|evidence:/u,
+      );
+      expect(deps.createMessage).toHaveBeenCalledTimes(1);
+      expect(deps.refundCredits).not.toHaveBeenCalled();
+    },
+  );
+});
+
+it("rejects an unapproved claims-only rewrite and compensates the request", async () => {
+  const context = grounding();
+  const source = context.atomicSources![0]!;
+  const logger = createLogger("test-yc-coverage-repair");
+  const warn = vi.spyOn(logger, "warn");
+  const deps = dependencies({
+    prepareGrounding: vi.fn().mockResolvedValue(context),
+    parseMessage: getYcApplicationToolInput,
+    createMessage: vi.fn().mockResolvedValue({
+      stop_reason: "tool_use",
+      content: [
+        {
+          type: "tool_use",
+          name: "return_yc_application_answer",
+          input: {
+            claims: [
+              {
+                text: "I managed a division of 500 employees.",
+                kind: source.kind,
+                source_id: source.id,
+                supporting_excerpt: source.content,
+              },
+            ],
+          },
+        },
+      ],
+      usage: { input_tokens: 120, output_tokens: 80 },
+    }),
+  });
+  const result = await generateYcApplication(
+    {
+      caller,
+      request,
+      corsHeaders: {},
+      applicationBaseUrl: "https://aletheia.live",
+      rhetoricalPlans: false,
+      logger,
+    },
+    deps,
+  );
+  expect(result.status).toBe(502);
+  await expect(result.json()).resolves.toMatchObject({
+    code: "YC_OUTPUT_INVALID",
+  });
+  expect(warn).toHaveBeenCalledWith(
+    expect.objectContaining({
+      validationStage: "grounding",
+      validationCode: "CLAIM_REWRITE",
+      itemIndex: 1,
+    }),
+    expect.any(String),
+  );
+  expect(deps.refundCredits).toHaveBeenCalledTimes(1);
+  expect(deps.releaseRateLimit).toHaveBeenCalledTimes(1);
+});
+
+it.each([
+  "legacy",
+  "single",
+  "five",
+  "selected",
+  "too-short",
+  "excluded",
+] as const)("handles sparse approved YC evidence (%s)", async (mode) => {
+  const actions =
+    mode === "too-short"
+      ? "The platform team improved TypeScript deployment reliability."
+      : "The platform team implemented a TypeScript rollout for the customer dashboard, introduced a deployment checklist, compared reliability metrics after release, documented recovery steps for other engineers, coordinated stakeholder feedback, and reviewed every production change with the on-call engineer before gradually enabling the new dashboard.";
+  const record = {
+    id: "11111111-1111-4111-8111-111111111111",
+    kind: "technical_project" as const,
+    title: "TypeScript platform rollout",
+    context: "",
+    actions,
+    outcome: "",
+    metrics: [],
+    skills: ["TypeScript"],
+    links: [],
+    confirmed: true,
+    sortOrder: 0,
+  };
+  const question =
+    "Describe your experience with a TypeScript platform rollout?";
+  const questions =
+    mode === "five"
+      ? [
+          question,
+          ...Array.from(
+            { length: 4 },
+            (_, i) => `Describe TypeScript platform rollout example ${i + 1}?`,
+          ),
+        ]
+      : [question];
+  const jd =
+    "The startup is hiring platform engineers to work on TypeScript dashboard rollouts and deployment reliability. "
+      .repeat(7)
+      .trim();
+  const selectedEvidenceIds = mode === "selected" ? [record.id] : undefined;
+  const courtesy = "Thank you for considering my application.";
+  const context = buildYcGroundingContext({
+    question,
+    ...(mode !== "legacy" && { questions }),
+    ...(selectedEvidenceIds && { selectedEvidenceIds }),
+    jobDescription: jd,
+    candidate: {
+      identity: { fullName: "", linkedinUrl: "" },
+      profile: candidateProfileInputSchema.parse({
+        currentRole: "Platform Engineer",
+        ...(mode === "excluded" && { excludedClaims: [courtesy] }),
+      }),
+      resume: { text: "", source: "none" },
+      confirmedEvidence: [
+        {
+          ...record,
+          factReview: prepareFactReview(record, [
+            {
+              id: "22222222-2222-4222-8222-222222222222",
+              kind: "action",
+              excerpt: actions,
+              confirmed: true,
+            },
+          ]),
+        },
+      ],
+    },
+  });
+  expect(context.readiness.ready).toBe(true);
+  expect(context.atomicSources).toHaveLength(1);
+  const source = context.atomicSources![0]!;
+  const [text] = allowedClaimTexts(source);
+  const claims = [
+    {
+      text: text!,
+      kind: source.kind,
+      source_id: source.id,
+      supporting_excerpt: source.content,
+    },
+  ];
+  const deps = dependencies({
+    prepareGrounding: vi.fn().mockResolvedValue(context),
+    parseMessage: getYcApplicationToolInput,
+    sanitizeOutput: vi.fn(sanitizeYcApplicationOutput),
+    createMessage: vi.fn().mockResolvedValue({
+      stop_reason: "tool_use",
+      content: [
+        {
+          type: "tool_use",
+          name:
+            mode === "legacy"
+              ? "return_yc_application_answer"
+              : "return_application_answers",
+          input:
+            mode === "legacy"
+              ? { claims }
+              : {
+                  answers: questions
+                    .map((_, i) => ({ questionId: `q${i + 1}`, claims }))
+                    .reverse(),
+                },
+        },
+      ],
+      usage: { input_tokens: 120, output_tokens: 80 },
+    }),
+  });
+  const logger = createLogger("test-yc-sparse");
+  const warn = vi.spyOn(logger, "warn");
+  const response = await generateYcApplication(
+    {
+      caller,
+      request:
+        mode === "legacy"
+          ? { category: "yc_application", jd, question }
+          : {
+              category: "yc_application",
+              jd,
+              questions,
+              ...(selectedEvidenceIds && { selectedEvidenceIds }),
+            },
+      corsHeaders: {},
+      applicationBaseUrl: "https://example.test",
+      rhetoricalPlans: false,
+      logger,
+    },
+    deps,
+  );
+  const payload = await response.json();
+  expect(deps.createMessage).toHaveBeenCalledTimes(1);
+  if (mode === "too-short" || mode === "excluded") {
+    expect(response.status).toBe(502);
+    expect(payload).toMatchObject({
+      code: "YC_OUTPUT_INVALID",
+      billing: "refunded",
+    });
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        validationCode:
+          mode === "too-short" ? "OUTPUT_LIMIT" : "CLAIM_EXCLUDED",
+        itemIndex: 1,
+      }),
+      expect.any(String),
+    );
+    if (mode === "too-short") {
+      expect(deps.sanitizeOutput).toHaveBeenCalledWith(
+        expect.objectContaining({ body: text }),
+      );
+    }
+    expect(deps.refundCredits).toHaveBeenCalledTimes(1);
+    return;
+  }
+  expect(response.status).toBe(200);
+  const body = `${text}\n${courtesy}`;
+  if (mode === "legacy") {
+    expect(payload).toMatchObject({ body, word_count: 53 });
+  } else {
+    expect(payload.answers).toEqual(
+      questions.map((question, i) => ({
+        questionId: `q${i + 1}`,
+        question,
+        body,
+        word_count: 53,
+        character_count: body.length,
+      })),
+    );
+  }
+  expect(payload.evalMetadata.groundingValidationPassed).toBe(true);
+  expect(JSON.stringify(payload)).not.toMatch(
+    /supporting_excerpt|source_id|evidence:/u,
+  );
+  expect(deps.refundCredits).not.toHaveBeenCalled();
 });
