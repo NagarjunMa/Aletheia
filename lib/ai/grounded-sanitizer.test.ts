@@ -4,7 +4,11 @@ vi.mock("@/lib/logger", () => ({
   createLogger: () => ({ info, warn }),
   startTimedStage: () => () => {},
 }));
-import { inspectGroundedText, sanitizeAIOutput } from "./sanitizer";
+import {
+  inspectGroundedText,
+  isGroundedTextSafe,
+  sanitizeAIOutput,
+} from "./sanitizer";
 
 describe("output safety repeatability", () => {
   it("rejects the same blocked content on every attempt", async () => {
@@ -23,8 +27,12 @@ describe("output safety repeatability", () => {
   ])("rejects unsafe grounded text without logging it", (text) => {
     info.mockClear();
     warn.mockClear();
+    expect(isGroundedTextSafe(text, "general")).toBe(false);
+    expect(info).not.toHaveBeenCalled();
+    expect(warn).not.toHaveBeenCalled();
     for (let attempt = 0; attempt < 3; attempt++)
       expect(() => inspectGroundedText(text, "general")).toThrow();
+    expect(warn).toHaveBeenCalledTimes(3);
     expect(JSON.stringify([info.mock.calls, warn.mock.calls])).not.toContain(
       text,
     );
@@ -37,6 +45,9 @@ describe("output safety repeatability", () => {
       const text =
         'PRIVATECANARY I built robust AI-first TypeScript v5.6 services — using --name="two  spaces".\n\nhttps://example.test/v1?q=a--b';
       const before = text;
+      expect(isGroundedTextSafe(text, platform)).toBe(true);
+      expect(info).not.toHaveBeenCalled();
+      expect(warn).not.toHaveBeenCalled();
       const result = inspectGroundedText(text, platform);
       expect(result.fingerprintPatterns.length).toBeGreaterThan(0);
       expect(text).toBe(before);

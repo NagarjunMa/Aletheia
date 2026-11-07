@@ -1877,3 +1877,13 @@ No new cost, model judge, acceptance waiver or release approved.
 - Critical. Restore the existing approved courtesy only when it brings an otherwise short answer within both limits. Run final grounding and sanitation against the full rendered answer.
 - State the existing 3,000-character per-answer limit in both default provider paths. Preserve the claims-only contract, request and billing behavior, and separately flagged rhetorical mode.
 - Keep the ordinary selected-story search budget separate from sparse fallback search. A failed courtesy must not prevent evaluation of a feasible regular answer.
+
+2026-11-06 ALE-54 reviewed-fact relevance correction
+- Critical. From clean main 8d96c14, fix automatic cold email, InMail and YC selection so relevant support comes from current reviewed facts that can enter the channel budget.
+- Reproduce the mixed-review AI-agent failure and retain genuine matches, exclusions, per-question eligibility, explicit story selection and final grounding. Run local acceptance and verify the deployed SHA before claiming hosted acceptance.
+- Local acceptance passed on the correction. Exact fact IDs and escaped source budgets preserve reviewed evidence. Fresh review of the final generic-framing correction and hosted acceptance on its deploy SHA remain pending.
+
+2026-11-07 ALE-54 generic activity closure
+- Critical. The two-word adjacent-domain exception admits unrelated paid generation. Replace it with explicit reviewed AI-agent support for automatic AI-agent requests, using the same fact that supplies the target match. Activity synonyms and an AI mention elsewhere do not establish that support.
+- Keep source safety, provenance, explicit choices and quotas intact. Plain policy/documentation evidence remains usable for those topics, while automatic AI-agent requests require an explicitly reviewed AI-agent fact. Cover the exact reviewer failure and both positive and negative controls in all three channels.
+- Corrected the ambiguous reversed human-agent modifier found in independent review. Direct AI-family agent expressions pass, while generic activities, human-agent AI tooling and non-AI prefixes fail before model work. Independent return review passed 302 maintained tests, 75 reviewer cases and 15 guardrails. Hosted acceptance remains pending.

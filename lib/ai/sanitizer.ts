@@ -354,30 +354,48 @@ export class GroundedTextSanitizationError extends Error {
   }
 }
 
-/** Inspect text-only grounded output without editing facts, technical syntax or CTA. */
-export function inspectGroundedText(
+type GroundedPlatform = "linkedin" | "email" | "general";
+
+function groundedTextViolation(
   content: string,
-  platform: "linkedin" | "email" | "general",
-): { fingerprintPatterns: string[] } {
-  const reject = (code: GroundedTextSanitizationError["code"]): never => {
-    log.warn(
-      { event: "grounded_output.rejected", errorCode: code, platform },
-      "Grounded output rejected",
-    );
-    throw new GroundedTextSanitizationError(code);
-  };
-  if (stripSurrogates(content) !== content) reject("OUTPUT_ENCODING");
+  platform: GroundedPlatform,
+): GroundedTextSanitizationError["code"] | undefined {
+  if (stripSurrogates(content) !== content) return "OUTPUT_ENCODING";
   // String.match resets global-regex state, keeping repeated attempts fail-closed.
   if (
     BLOCKED_CONTENT_PATTERNS.some((pattern) => Boolean(content.match(pattern)))
   )
-    reject("OUTPUT_BLOCKED");
+    return "OUTPUT_BLOCKED";
   if (
     HARMFUL_PATTERNS.some((pattern) => Boolean(content.match(pattern))) ||
     PROFANITY_PATTERNS.some((pattern) => Boolean(content.match(pattern))) ||
     (platform !== "email" && Boolean(content.match(EMAIL_PATTERN)))
   )
-    reject("OUTPUT_UNSAFE");
+    return "OUTPUT_UNSAFE";
+  return undefined;
+}
+
+/** Candidate preflight uses the same safety rules without reporting draft failures. */
+export function isGroundedTextSafe(
+  content: string,
+  platform: GroundedPlatform,
+) {
+  return groundedTextViolation(content, platform) === undefined;
+}
+
+/** Inspect text-only grounded output without editing facts, technical syntax or CTA. */
+export function inspectGroundedText(
+  content: string,
+  platform: GroundedPlatform,
+): { fingerprintPatterns: string[] } {
+  const errorCode = groundedTextViolation(content, platform);
+  if (errorCode) {
+    log.warn(
+      { event: "grounded_output.rejected", errorCode, platform },
+      "Grounded output rejected",
+    );
+    throw new GroundedTextSanitizationError(errorCode);
+  }
   const fingerprintPatterns = detectAIFingerprints(
     content,
     platform,

@@ -214,11 +214,12 @@ describe("LinkedIn reviewed evidence before the one-story budget", () => {
   );
 
   it.each(["cold_email", "linkedin_inmail"] as const)(
-    "preserves existing record selection for %s",
+    "rejects record-only confirmation in automatic %s",
     (category) => {
       const result = build([unusable], {}, category);
-      expect(result.sources[0]!.id).toBe("evidence:unusable");
-      expect(result.sources[0]!.content).toContain(unusable.context);
+      expect(result.sources.some((source) => source.type === "evidence")).toBe(
+        false,
+      );
       expect(candidateFacts(result)).toEqual([]);
     },
   );
