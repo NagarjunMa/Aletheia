@@ -458,23 +458,26 @@ describe("ALE-54 actual selector contract", () => {
         "I onboarded and supported real estate agents powered by AI tools to organize appointments.",
         "I onboarded and supported real estate agents using agentic AI tools to organize appointments.",
         "I onboarded and supported non-AI agents at a local property brokerage.",
-      ])(
-        "rejects indirect AI tooling as AI-agent experience: %s",
-        (actions) => {
-          const entry = story("human-agents", { actions });
-          const target = "Describe how you onboarded and supported AI agents.";
-          const result =
-            category === "yc_application"
-              ? buildYcGroundingContext({
-                  candidate: candidate([entry]),
-                  question: target,
-                  jobDescription: "",
-                })
-              : outreach([entry], category, target);
-          expect(ids(result)).toEqual([]);
-          if ("readiness" in result) expect(result.readiness.ready).toBe(false);
-        },
-      );
+        "I onboarded and supported non AI agents at a local property brokerage.",
+        "I onboarded and supported non  AI agents at a local property brokerage.",
+        "I onboarded and supported non - AI agents at a local property brokerage.",
+        "I onboarded and supported non−AI agents at a local property brokerage.",
+        "I onboarded and supported non − AI agents at a local property brokerage.",
+        "I onboarded and supported non\u0085AI agents at a local property brokerage.",
+      ])("rejects indirect or negated AI-agent evidence: %s", (actions) => {
+        const entry = story("human-agents", { actions });
+        const target = "Describe how you onboarded and supported AI agents.";
+        const result =
+          category === "yc_application"
+            ? buildYcGroundingContext({
+                candidate: candidate([entry]),
+                question: target,
+                jobDescription: "",
+              })
+            : outreach([entry], category, target);
+        expect(ids(result)).toEqual([]);
+        if ("readiness" in result) expect(result.readiness.ready).toBe(false);
+      });
 
       it("keeps adjacent-only facts for their own topic instead of AI-agent work", () => {
         const entry = story("adjacent-policy", {
@@ -514,6 +517,8 @@ describe("ALE-54 actual selector contract", () => {
         "I built LLM-based agents for policy documentation.",
         "I built artificial intelligence agents for policy documentation.",
         "I built large language model agents for policy documentation.",
+        "I replaced non AI agents with AI agents for policy documentation.",
+        "I replaced non AI agents with Xénon AI agents for policy documentation.",
       ])("recognizes explicitly reviewed AI-agent wording: %s", (actions) => {
         const entry = story("explicit-agent", { actions });
         const result =

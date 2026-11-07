@@ -36,8 +36,9 @@ const ALIASES = new Map(
 const AI_TERMS = new Set(["ai", "llm", "rag", "ml"]);
 const AI_TOPIC_TERMS = new Set([...AI_TERMS, "agent"]);
 
+// Match the non qualifier as a whole Unicode word.
 const AI_AGENT_PATTERN =
-  /(?<![\p{L}\p{N}_\p{Pd}])(?:ai|llms?|ml|rag)(?:[\s-]+(?:powered|based|grounded))?[\s-]+agents?\b/u;
+  /(?<![\p{L}\p{N}_\p{Pd}])(?<!(?:^|[^\p{L}\p{M}\p{N}_])non[\s\p{White_Space}\p{Dash}]+)(?:ai|llms?|ml|rag)(?:[\s-]+(?:powered|based|grounded))?[\s-]+agents?\b/u;
 
 function normalizeMatchingText(value: string): string {
   return value
