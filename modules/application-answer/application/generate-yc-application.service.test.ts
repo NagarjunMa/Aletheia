@@ -464,51 +464,124 @@ describe("generateYcApplication", () => {
     expect(deps.createMessage).not.toHaveBeenCalled();
   });
 
-  it("rejects a real zero-match context before quota, credit and provider work", async () => {
-    const jd = "Quantum chemistry research studying molecular spectroscopy.";
-    const context = buildYcGroundingContext({
-      question: request.question,
-      jobDescription: jd,
-      candidate: {
-        identity: { fullName: "Synthetic", linkedinUrl: "" },
-        profile: candidateProfileInputSchema.parse({ currentRole: "Engineer" }),
-        resume: { text: "", source: "none" },
-        confirmedEvidence: [
-          {
-            id: "policy",
-            kind: "technical_project",
-            title: "Policy project",
-            context: "",
-            actions: "I built policy documentation tools.",
-            outcome: "",
-            metrics: [],
-            skills: [],
-            links: [],
-            confirmed: true,
-            sortOrder: 0,
-          },
-        ],
-      },
-    });
-    expect(context.selectionDiagnostics?.[0]?.outcome).toBe("no_match");
-    const deps = dependencies({
-      prepareGrounding: vi.fn().mockResolvedValue(context),
-    });
-    const response = await generateYcApplication(
+  it.each(
+    [
       {
-        caller,
-        request: { ...request, jd },
-        corsHeaders: {},
-        applicationBaseUrl: "https://aletheia.live",
+        label: "unrelated reviewed story",
+        jd: "Quantum chemistry research studying molecular spectroscopy.",
+        reviewed: "I built policy documentation tools.",
+        unreviewed: "",
+        outcome: "no_match",
       },
-      deps,
-    );
-    expect(response.status).toBe(422);
-    expect(deps.checkRateLimit).not.toHaveBeenCalled();
-    expect(deps.reserveCredits).not.toHaveBeenCalled();
-    expect(deps.startAttempt).not.toHaveBeenCalled();
-    expect(deps.createMessage).not.toHaveBeenCalled();
-  });
+      {
+        label: "AI keywords in an unreviewed sentence",
+        jd: "Build AI agents.",
+        reviewed: "I worked as a real estate agent.",
+        unreviewed: "I built AI tools for property listings.",
+        outcome: "weak_match",
+      },
+      {
+        label: "two generic activities shared with real estate agents",
+        question: "Describe how you onboarded and supported AI agents.",
+        jd: "Build AI agents.",
+        reviewed:
+          "I onboarded and supported real estate agents at a local property brokerage. I introduced new colleagues to the listing process, answered questions about property viewings, reviewed offer paperwork with sellers, organized weekend appointments, maintained the office contact roster, and kept daily schedules up to date so the real estate office could handle customer inquiries.",
+        unreviewed: "",
+        outcome: "weak_match",
+      },
+      {
+        label: "human agents backed by AI tools",
+        question: "Describe how you onboarded and supported AI agents.",
+        jd: "Build AI agents.",
+        reviewed:
+          "I onboarded and supported real estate agents backed by AI tools to organize appointments at a local property brokerage.",
+        unreviewed: "",
+        outcome: "weak_match",
+      },
+      {
+        label: "generic framing shared with non-AI agents",
+        question: "Tell me about a time you managed AI agents.",
+        jd: "Build AI agents.",
+        reviewed: "I managed real estate agents full time.",
+        unreviewed: "",
+        outcome: "weak_match",
+      },
+    ].flatMap((scenario) =>
+      [1, 5].map((questionCount) => ({ ...scenario, questionCount })),
+    ),
+  )(
+    "rejects $label in a $questionCount-question request before quota, credit and provider work",
+    async ({
+      question = request.question,
+      questionCount,
+      jd,
+      reviewed,
+      unreviewed,
+      outcome,
+    }) => {
+      const evidence = {
+        id: "synthetic-evidence",
+        kind: "technical_project" as const,
+        title: "Synthetic project",
+        context: "",
+        actions: [reviewed, unreviewed].filter(Boolean).join(" "),
+        outcome: "",
+        metrics: [],
+        skills: [],
+        links: [],
+        confirmed: true,
+        sortOrder: 0,
+      };
+      const questions = Array.from({ length: questionCount }, () => question);
+      const context = buildYcGroundingContext({
+        question,
+        ...(questionCount > 1 ? { questions } : {}),
+        jobDescription: jd,
+        candidate: {
+          identity: { fullName: "Synthetic", linkedinUrl: "" },
+          profile: candidateProfileInputSchema.parse({
+            currentRole: "Engineer",
+          }),
+          resume: { text: "", source: "none" },
+          confirmedEvidence: [
+            {
+              ...evidence,
+              factReview: prepareFactReview(evidence, [
+                {
+                  id: "11111111-1111-4111-8111-111111111111",
+                  kind: "action",
+                  excerpt: reviewed,
+                  confirmed: true,
+                },
+              ]),
+            },
+          ],
+        },
+      });
+      expect(context.selectionDiagnostics?.[0]?.outcome).toBe(outcome);
+      const deps = dependencies({
+        prepareGrounding: vi.fn().mockResolvedValue(context),
+      });
+      const response = await generateYcApplication(
+        {
+          caller,
+          request: {
+            category: "yc_application",
+            jd,
+            ...(questionCount > 1 ? { questions } : { question }),
+          },
+          corsHeaders: {},
+          applicationBaseUrl: "https://aletheia.live",
+        },
+        deps,
+      );
+      expect(response.status).toBe(422);
+      expect(deps.checkRateLimit).not.toHaveBeenCalled();
+      expect(deps.reserveCredits).not.toHaveBeenCalled();
+      expect(deps.startAttempt).not.toHaveBeenCalled();
+      expect(deps.createMessage).not.toHaveBeenCalled();
+    },
+  );
 
   it("reserves four credits only after grounding and returns validated provenance metadata", async () => {
     const deps = dependencies();

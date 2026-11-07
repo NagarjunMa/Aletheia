@@ -1,9 +1,10 @@
 import {
   assertSafeSelectionText,
-  budgetReviewedStory,
   includesSelectedEvidence,
+  prepareReviewedStoryFacts,
   prepareSelectedStoryFacts,
   resolveSelectedEvidence,
+  reviewedStoryText,
   SelectedEvidenceUnavailableError,
 } from "@/modules/candidate-context/application/selected-evidence";
 import { normalizeClaimText } from "@/modules/grounding/domain/atomic-claim";
@@ -16,6 +17,7 @@ import { escapeForXmlTag } from "@/lib/ai/prompts/linkedin-connection";
 import {
   buildAtomicCandidateSources,
   buildAtomicTargetSources,
+  candidateEvidenceFactId,
 } from "@/modules/grounding/application/build-atomic-sources";
 import type { CandidateEvidenceRecord } from "@/lib/candidate-profile/service";
 import type {
@@ -73,22 +75,6 @@ function truncateAtBoundary(value: string, maximum: number): string {
       ? candidate.slice(0, boundary)
       : candidate
   ).trim();
-}
-
-function renderEvidence(entry: CandidateEvidenceRecord): string {
-  const parts = [
-    `Title: ${normalizeText(entry.title)}`,
-    entry.skills.length > 0
-      ? `Skills: ${entry.skills.map(normalizeText).join(", ")}`
-      : "",
-    entry.context ? `Context: ${normalizeText(entry.context)}` : "",
-    `Actions: ${normalizeText(entry.actions)}`,
-    entry.outcome ? `Outcome: ${normalizeText(entry.outcome)}` : "",
-    entry.metrics.length > 0
-      ? `Metrics: ${entry.metrics.map(normalizeText).join(", ")}`
-      : "",
-  ].filter(Boolean);
-  return truncateAtBoundary(parts.join("\n"), MAX_EVIDENCE_SOURCE_CHARS);
 }
 
 function profileDraftSources(candidate: CandidateGroundingData): DraftSource[] {
@@ -267,17 +253,23 @@ export function buildYcGroundingContext(input: {
     assertSafeSelectionText(
       [...questions, normalizedJobDescription].join("\n"),
     );
+  const reviewedEvidence = prepareReviewedStoryFacts(
+    explicit ?? allowedEvidence,
+    "general",
+    MAX_EVIDENCE_SOURCE_CHARS,
+  );
   const rankEvidence = explicit
     ? undefined
-    : createEvidenceRanker(allowedEvidence);
-  const selections = rankEvidence
-    ? questions.map((question) =>
-        rankEvidence({
-          primary: normalizeText(question),
-          secondary: normalizedJobDescription,
-        }),
-      )
-    : [];
+    : createEvidenceRanker(
+        allowedEvidence,
+        (entry) =>
+          reviewedEvidence.get(entry.id)?.map(({ excerpt }) => excerpt) ?? [],
+      );
+  const targets = questions.map((question) => ({
+    primary: normalizeText(question),
+    secondary: normalizedJobDescription,
+  }));
+  const selections = rankEvidence ? targets.map(rankEvidence) : [];
   const rankedByQuestion = explicit
     ? questions.map(() => explicit)
     : selections.map((selection) =>
@@ -301,10 +293,8 @@ export function buildYcGroundingContext(input: {
   const evidenceDrafts: DraftSource[] = selectedEvidence.map((entry) => ({
     id: `evidence:${entry.id}`,
     type: "evidence",
-    label: entry.title,
-    content: explicit
-      ? budgetReviewedStory(entry, "general", MAX_EVIDENCE_SOURCE_CHARS)
-      : renderEvidence(entry),
+    label: "Reviewed experience",
+    content: reviewedStoryText(reviewedEvidence.get(entry.id)),
     rawContent: [
       entry.title,
       entry.context,
@@ -341,28 +331,78 @@ export function buildYcGroundingContext(input: {
   const candidateAtoms = buildAtomicCandidateSources(
     input.candidate,
     budgetedSources,
+    explicit ? undefined : reviewedEvidence,
   );
   const prepared = requiredEvidenceRoots
     ? prepareSelectedStoryFacts(budgetedSources, candidateAtoms, "general")
     : { sources: budgetedSources, safeAtoms: candidateAtoms };
-  const { sources } = prepared;
-  const atomicSources = [
-    ...prepared.safeAtoms,
-    ...buildAtomicTargetSources(
-      { jobDescription: normalizedJobDescription },
-      excludedClaims,
-    ).sources,
-  ];
+  const availableByRoot = new Map<string, string[]>();
+  for (const atom of prepared.safeAtoms) {
+    if (!atom.rootId) continue;
+    const excerpts = availableByRoot.get(atom.rootId) ?? [];
+    excerpts.push(atom.content);
+    availableByRoot.set(atom.rootId, excerpts);
+  }
+  // Only original reviewed text from facts still in the ledger can qualify.
+  const survivingFactIds = new Set(prepared.safeAtoms.map(({ id }) => id));
+  const rankAvailable = explicit
+    ? undefined
+    : createEvidenceRanker(selectedEvidence, (entry) =>
+        (reviewedEvidence.get(entry.id) ?? [])
+          .filter(({ id }) =>
+            survivingFactIds.has(
+              candidateEvidenceFactId(`evidence:${entry.id}`, id),
+            ),
+          )
+          .map(({ excerpt }) => excerpt),
+      );
+  const availableByQuestion = rankAvailable
+    ? targets.map((target, index) => {
+        const originallyRanked = new Set(
+          rankedByQuestion[index]?.map(({ id }) => id),
+        );
+        return rankAvailable(target).evidence.filter(({ id }) =>
+          originallyRanked.has(id),
+        );
+      })
+    : rankedByQuestion;
   const usableRoots = new Set(
-    atomicSources
-      .filter((source) => source.scope === "candidate")
-      .map((source) => source.rootId),
+    availableByQuestion.flatMap((ranked) =>
+      ranked
+        .map(({ id }) => `evidence:${id}`)
+        .filter((root) => availableByRoot.has(root)),
+    ),
   );
   if (
     requiredEvidenceRoots &&
     !includesSelectedEvidence(requiredEvidenceRoots, usableRoots)
   )
     throw new SelectedEvidenceUnavailableError();
+  const sources = explicit
+    ? prepared.sources
+    : prepared.sources.flatMap((source) =>
+        source.type !== "evidence"
+          ? [source]
+          : usableRoots.has(source.id)
+            ? [
+                {
+                  ...source,
+                  content: escapeForXmlTag(
+                    availableByRoot.get(source.id)!.join("\n"),
+                  ),
+                },
+              ]
+            : [],
+      );
+  const atomicSources = [
+    ...prepared.safeAtoms.filter(
+      (source) => source.rootId && usableRoots.has(source.rootId),
+    ),
+    ...buildAtomicTargetSources(
+      { jobDescription: normalizedJobDescription },
+      excludedClaims,
+    ).sources,
+  ];
   const usableSources = sources.filter((source) => usableRoots.has(source.id));
   const readiness = buildReadiness(
     sources,
@@ -370,15 +410,8 @@ export function buildYcGroundingContext(input: {
     input.candidate,
     selectedEvidence,
   );
-  // Every batch question needs eligible evidence, not just the union. An
-  // unusable question must be caught before reserving quota/credits/model work.
-  if (
-    input.questions &&
-    rankedByQuestion.some(
-      (ranked) =>
-        !ranked.some((entry) => usableRoots.has(`evidence:${entry.id}`)),
-    )
-  ) {
+  // Every batch question needs eligible evidence before quota, credits or model work.
+  if (input.questions && availableByQuestion.some((ranked) => !ranked.length)) {
     readiness.ready = false;
     if (!readiness.missingFields.includes("confirmed_evidence"))
       readiness.missingFields.push("confirmed_evidence");
@@ -397,9 +430,17 @@ export function buildYcGroundingContext(input: {
     ...(requiredEvidenceRoots
       ? { requiredEvidenceRoots }
       : {
-          selectionDiagnostics: selections.map(
-            (selection) => selection.diagnostics,
-          ),
+          selectionDiagnostics: selections.map(({ diagnostics }, index) => {
+            const matchedCount = availableByQuestion[index]?.length ?? 0;
+            return {
+              ...diagnostics,
+              matchedCount,
+              outcome:
+                !matchedCount && diagnostics.outcome === "matched"
+                  ? ("weak_match" as const)
+                  : diagnostics.outcome,
+            };
+          }),
         }),
     question: escapeForXmlTag(normalizedQuestion),
     ...(input.questions
@@ -411,7 +452,7 @@ export function buildYcGroundingContext(input: {
               .filter(
                 (source) =>
                   source.type !== "evidence" ||
-                  rankedByQuestion[index]?.some(
+                  availableByQuestion[index]?.some(
                     (entry) => source.id === `evidence:${entry.id}`,
                   ),
               )

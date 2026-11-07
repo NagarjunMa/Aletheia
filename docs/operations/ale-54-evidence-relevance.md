@@ -146,3 +146,97 @@ Preserve unrelated work, use TDD and canonical source rules, re-read acceptance 
 - [x] Security/privacy/compatibility/rollback reviewed
 - [ ] Fresh independent review completed on final source
 - [ ] Dated evidence and remaining limitations recorded
+
+## Reviewed-fact correction — 2026-11-06
+
+The original acceptance smoke passed for User B in production. Independent
+review on `8d96c14` found a different case. In automatic cold email, InMail and
+YC, an unreviewed AI sentence could make a story relevant even when its only
+reviewed fact concerned real-estate work. YC could reach the admission and
+model path. Final grounding still required approved evidence.
+
+Automatic selection in those channels now scores whole, current reviewed
+excerpts within the existing channel limits. Each eligibility match needs
+support in one excerpt. Raw story text and labels cannot qualify a story.
+The evidence context uses the same bounded excerpts. YC checks matches again
+after the final atomic budget using each surviving fact ID and its original
+text, so escaping cannot manufacture a topic. Exact fact IDs keep dropped
+excerpts out of the ledger even when they occur inside another excerpt.
+Candidate preflight uses the existing safety rules without emitting generated
+output events. Reviewed source budgets include the whitespace inserted by
+role-marker escaping, so a matching final fact stays whole or is excluded
+before ranking. For explicit AI-agent work, generic activity and question
+framing do not qualify non-AI facts. A fact without AI support can qualify
+for an adjacent domain through at least two matching topical terms in the
+same excerpt. This keeps policy and documentation work eligible. Explicit selections and LinkedIn
+connection ranking retain their existing eligibility paths.
+
+Regression coverage includes the partial, stale and split-review cases, a
+genuine reviewed AI match, stable held-out ranking, a YC question whose matching
+excerpt falls out of the atomic budget, and denial before quota, credits or the
+provider. Node 24.16.0 local p95 for 25 stories and 250 runs was 1.58 ms for
+outreach and 1.80 ms for five-question YC, within the existing 10 ms gate.
+
+Local acceptance passed on 2026-11-06. The 2,038 web tests with coverage,
+15 guardrails, six held-out scenarios, offline release preflight, type-check,
+production build, lint, 53 browser smoke tests and seven Chromium story-picker
+checks passed. The web audit passed its high-severity gate with 12 inherited
+moderate advisories. Extension CI passed 275 tests and built successfully.
+Type-check initially caught an implicit return. The first broad browser run
+used a localhost canonical URL and failed the crawler metadata check. Both
+passed on rerun after the return and smoke configuration were corrected.
+
+Three fresh reviews reproduced and narrowed the remaining AI-agent eligibility
+case. The last correction has passing local regressions. Fresh independent
+review of that correction is pending. The synthetic negative cases make zero
+quota, credit, or model calls. No new paid or hosted generation ran against the
+fix because the published health SHA still points to pre-fix main.
+
+Risk remains Critical. Keep ALE-54 In Progress until the final correction is
+independently reviewed and the hosted gate passes on the deployed fix SHA.
+Rollout uses the normal backend deploy. Revert the backend commit and redeploy
+to roll back.
+
+## Generic activity eligibility repair — 2026-11-07
+
+The additional review disproved the two-topic exception. Generic activities
+can overlap twice without describing AI-agent work. This increment removes
+that exception and the activity-word filter. Automatic requests containing
+AI-family and agent requirements need an explicit AI-agent expression in
+the same current reviewed fact that provides the matching topic. Recognized
+forms are direct AI/LLM/ML/RAG agent noun phrases, including powered/based
+forms. Reversed modifiers such as human agents backed by AI tools and loose
+agentic-AI mentions are ambiguous and do not qualify automatically. Matching
+normalization never edits source text.
+
+This is a deliberate conservative eligibility change. An adjacent policy or
+documentation fact alone no longer qualifies for explicit AI-agent work. Such
+facts still qualify for their own requested topics, and explicit story choices
+retain their existing reviewed-source rules. Update synthetic AI-agent positive
+fixtures to state their AI-agent work explicitly, and retain separate tests
+for adjacent-only rejection and ordinary policy/documentation eligibility.
+
+Scope stays in the shared selector and its maintained tests and evidence. No
+model call, dependency, prompt rewrite or new storage is needed. Risk stays
+Critical. The parent issue stays In Progress pending hosted acceptance.
+
+Validation on Node 24.16.0 passed 2,087 web tests with coverage, 15 guardrails,
+the offline gate, lint, type-check, production build and scoped formatting.
+The six-domain held-out expectations remain intact. The exact original paid
+failure and the ambiguous human-agent modifiers were reproduced before their
+corrections. The maintained service regressions now deny both single-question
+and five-question requests before quota, credit reservation or provider work.
+Local p95 at 25 stories and 250 iterations was 1.62 ms for outreach and
+1.68 ms for five-question YC against the 10 ms gate.
+
+The independent return review found no material findings after the correction.
+It passed 302 maintained tests, 75 reviewer cases and 15 guardrails, verifying
+the manifest before and after. The earlier broad regex failure is retained as
+review history. Final review receipts and publication identifiers are recorded
+in Linear. The web audit passes its high-severity gate with 12 inherited
+moderate advisories. Lint retains the existing refund-admin warning.
+
+Direct recognized wording is intentionally conservative and can miss equivalent
+indirect descriptions. Explicit story selection retains the existing reviewed
+fact rules. Hosted/provider acceptance is pending on the deployed fix SHA.
+Rollout uses the backend deployment. Rollback reverts the commit and redeploys.

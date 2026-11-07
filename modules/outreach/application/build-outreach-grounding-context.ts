@@ -2,8 +2,10 @@ import {
   assertSafeSelectionText,
   budgetReviewedStory,
   includesSelectedEvidence,
+  prepareReviewedStoryFacts,
   prepareSelectedStoryFacts,
   resolveSelectedEvidence,
+  reviewedStoryText,
   SelectedEvidenceUnavailableError,
 } from "@/modules/candidate-context/application/selected-evidence";
 import {
@@ -256,17 +258,24 @@ export function buildOutreachGroundingContext(input: {
   const requiredEvidenceRoots = explicit?.map(
     (entry) => `evidence:${entry.id}`,
   );
+  const reviewedEvidence =
+    !explicit && !injectionSafeMode && target.category !== "linkedin_connection"
+      ? prepareReviewedStoryFacts(
+          allowedEvidence,
+          target.category === "cold_email" ? "email" : "linkedin",
+          OUTREACH_GROUNDING_BUDGETS[target.category].maxSourceChars,
+        )
+      : undefined;
   const selection =
     injectionSafeMode || explicit
       ? undefined
-      : createEvidenceRanker(
-          allowedEvidence,
-          target.category === "linkedin_connection"
-            ? (entry) =>
-                readFactReview(entry, entry.factReview)
-                  .map((fact) => fact.excerpt)
-                  .join("\n")
-            : undefined,
+      : createEvidenceRanker(allowedEvidence, (entry) =>
+          reviewedEvidence
+            ? (reviewedEvidence.get(entry.id)?.map(({ excerpt }) => excerpt) ??
+              [])
+            : readFactReview(entry, entry.factReview)
+                .map((fact) => fact.excerpt)
+                .join("\n"),
         )({
           primary:
             target.jobDescription ||
@@ -345,7 +354,7 @@ export function buildOutreachGroundingContext(input: {
       )
       .map((entry) => ({
         id: `evidence:${entry.id}`,
-        label: entry.title,
+        label: reviewedEvidence ? "Reviewed experience" : entry.title,
         content:
           target.category === "linkedin_connection"
             ? reviewedLinkedinEvidence(entry, targets.sources)
@@ -355,7 +364,7 @@ export function buildOutreachGroundingContext(input: {
                   target.category === "cold_email" ? "email" : "linkedin",
                   OUTREACH_GROUNDING_BUDGETS[target.category].maxSourceChars,
                 )
-              : renderEvidence(entry),
+              : reviewedStoryText(reviewedEvidence?.get(entry.id)),
         rawContent: renderEvidence(entry),
         type: "evidence" as const,
         priority: 1 as const,
@@ -389,6 +398,7 @@ export function buildOutreachGroundingContext(input: {
   const candidateAtoms = buildAtomicCandidateSources(
     input.candidate,
     budgetedSources,
+    reviewedEvidence,
   ).filter(
     (source) =>
       target.category !== "linkedin_connection" ||

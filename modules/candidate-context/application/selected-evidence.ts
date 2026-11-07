@@ -2,13 +2,10 @@ import type { CandidateEvidenceRecord } from "@/lib/candidate-profile/service";
 import {
   evidenceFactFields,
   readFactReview,
+  type CandidateFact,
 } from "@/lib/candidate-profile/fact-review";
 import { scanForInjection } from "@/lib/ai/prompts/injection-heuristic";
-import {
-  GroundedTextSanitizationError,
-  inspectGroundedText,
-  stripSurrogates,
-} from "@/lib/ai/sanitizer";
+import { isGroundedTextSafe, stripSurrogates } from "@/lib/ai/sanitizer";
 import {
   allowedClaimTexts,
   MAX_SUPPORTING_EXCERPT,
@@ -16,7 +13,7 @@ import {
   type AtomicSource,
 } from "@/modules/grounding/domain/atomic-claim";
 import { containsExcludedClaim } from "@/modules/grounding/domain/excluded-claims";
-import { normalizeAtomicSourceText } from "@/modules/grounding/application/build-atomic-sources";
+import { escapeForXmlTag } from "@/lib/ai/prompts/linkedin-connection";
 import type { CandidateGroundingSource } from "../domain/candidate-context.types";
 
 export function assertSafeSelectionText(text: string) {
@@ -63,29 +60,24 @@ export function includesSelectedEvidence(
   return required.every((root) => roots.has(root));
 }
 
-type StoryPlatform = Parameters<typeof inspectGroundedText>[1];
+type StoryPlatform = Parameters<typeof isGroundedTextSafe>[1];
 
 function isSafeFact(atom: AtomicSource, platform: StoryPlatform) {
-  try {
-    inspectGroundedText(allowedClaimTexts(atom).at(-1)!, platform);
-    return true;
-  } catch (error) {
-    if (error instanceof GroundedTextSanitizationError) return false;
-    throw error;
-  }
+  return isGroundedTextSafe(allowedClaimTexts(atom).at(-1)!, platform);
 }
 
-/** Budget only whole reviewed excerpts, using the same escaping as the ledger. */
-export function budgetReviewedStory(
+/** Budget whole reviewed excerpts using their escaped length in the source. */
+function budgetReviewedStoryFacts(
   entry: CandidateEvidenceRecord,
   platform: StoryPlatform,
   maxChars: number,
 ) {
-  const excerpts: string[] = [];
+  const facts: CandidateFact[] = [];
   let remaining = maxChars;
   for (const fact of readFactReview(entry, entry.factReview)) {
-    const content = normalizeAtomicSourceText(fact.excerpt);
-    const size = content.length + (excerpts.length ? 1 : 0);
+    const escaped = escapeForXmlTag(normalizeClaimText(fact.excerpt));
+    const content = normalizeClaimText(escaped);
+    const size = escaped.length + (facts.length ? 1 : 0);
     if (
       !content ||
       content.length > MAX_SUPPORTING_EXCERPT ||
@@ -96,10 +88,35 @@ export function budgetReviewedStory(
       )
     )
       continue;
-    excerpts.push(normalizeClaimText(fact.excerpt));
+    facts.push(fact);
     remaining -= size;
   }
-  return excerpts.join("\n");
+  return facts;
+}
+
+export function budgetReviewedStory(
+  entry: CandidateEvidenceRecord,
+  platform: StoryPlatform,
+  maxChars: number,
+) {
+  return reviewedStoryText(budgetReviewedStoryFacts(entry, platform, maxChars));
+}
+
+export function reviewedStoryText(facts: readonly CandidateFact[] = []) {
+  return facts.map(({ excerpt }) => normalizeClaimText(excerpt)).join("\n");
+}
+
+export function prepareReviewedStoryFacts(
+  entries: readonly CandidateEvidenceRecord[],
+  platform: StoryPlatform,
+  maxChars: number,
+) {
+  return new Map(
+    entries.map((entry) => [
+      entry.id,
+      budgetReviewedStoryFacts(entry, platform, maxChars),
+    ]),
+  );
 }
 
 /** Explicit stories provide vetted facts, never their entire saved record. */

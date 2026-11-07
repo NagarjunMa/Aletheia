@@ -23,7 +23,7 @@ function candidate(
           title: "LLM developer productivity workflow",
           context: "Engineers needed faster code review support.",
           actions:
-            "Built and operated an LLM-assisted review workflow for developers.",
+            "Built and operated LLM agents for a developer review workflow.",
           outcome: "Improved developer productivity on production services.",
           metrics: ["40% faster reviews"],
           skills: ["LLM", "TypeScript"],
@@ -163,7 +163,16 @@ describe("buildOutreachGroundingContext", () => {
   });
   it("prefers confirmed AI evidence for AI targets and obeys per-channel evidence limits", () => {
     const data = candidate();
-    data.confirmedEvidence[1]!.skills.push("LLM");
+    const second = data.confirmedEvidence[1]!;
+    second.actions = "I built LLM agents for developer observability.";
+    second.factReview = prepareFactReview(second, [
+      {
+        id: "33333333-3333-4333-8333-333333333333",
+        kind: "action",
+        excerpt: second.actions,
+        confirmed: true,
+      },
+    ]);
     const connection = build("linkedin_connection", data);
     const inmail = build("linkedin_inmail", data);
     const coldEmail = build("cold_email", data);

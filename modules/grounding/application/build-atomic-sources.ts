@@ -3,7 +3,10 @@ import type {
   CandidateGroundingSource,
 } from "@/modules/candidate-context/domain/candidate-context.types";
 import { escapeForXmlTag } from "@/lib/ai/prompts/linkedin-connection";
-import { readFactReview } from "@/lib/candidate-profile/fact-review";
+import {
+  readFactReview,
+  type CandidateFact,
+} from "@/lib/candidate-profile/fact-review";
 import {
   MAX_SUPPORTING_EXCERPT,
   type AtomicSource,
@@ -20,16 +23,21 @@ export function normalizeAtomicSourceText(value: string): string {
   return normalizeClaimText(escapeForXmlTag(normalizeClaimText(value)));
 }
 
+export function candidateEvidenceFactId(rootId: string, factId: string) {
+  return `${rootId}.fact.${factId}`;
+}
+
 /** Only owner-reviewed individual assertions can become candidate claims. */
 export function buildAtomicCandidateSources(
   candidate: CandidateGroundingData,
   selected: readonly CandidateGroundingSource[],
+  preparedFacts?: ReadonlyMap<string, readonly CandidateFact[]>,
 ): AtomicSource[] {
   const result: AtomicSource[] = [];
   let remaining = MAX_TOTAL_CHARS;
   const add = (
     source: CandidateGroundingSource,
-    key: string,
+    id: string,
     kind: ClaimKind,
     raw: string,
     rewrite?: "current_role",
@@ -45,7 +53,7 @@ export function buildAtomicCandidateSources(
     // Selection/exclusion/budget already happened. Never cite a field omitted by it.
     if (!normalizeClaimText(source.content).includes(content)) return;
     result.push({
-      id: `${source.id}.${key}`,
+      id,
       rootId: source.id,
       scope: "candidate",
       kind,
@@ -61,7 +69,17 @@ export function buildAtomicCandidateSources(
       );
       if (!evidence) continue;
       for (const fact of readFactReview(evidence, evidence.factReview)) {
-        add(source, `fact.${fact.id}`, fact.kind, fact.excerpt);
+        if (
+          preparedFacts &&
+          !preparedFacts.get(evidence.id)?.some(({ id }) => id === fact.id)
+        )
+          continue;
+        add(
+          source,
+          candidateEvidenceFactId(source.id, fact.id),
+          fact.kind,
+          fact.excerpt,
+        );
       }
     }
   }

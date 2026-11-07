@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { prepareFactReview } from "@/lib/candidate-profile/fact-review";
+import { prepareReviewedStoryFacts } from "./selected-evidence";
 import type { CandidateEvidenceRecord } from "@/lib/candidate-profile/service";
 import { createEvidenceRanker } from "./rank-evidence";
 
@@ -93,13 +95,25 @@ describe("ALE-54 held-out selection matrix", () => {
           confirmed: true,
         }),
       );
-      expect(
-        createEvidenceRanker(entries)({ primary: target }).evidence[0]?.id,
-      ).toBe(expected);
-      expect(
-        createEvidenceRanker([...entries].reverse())({ primary: target })
-          .evidence[0]?.id,
-      ).toBe(expected);
+      const reviewed = entries.map((entry) => ({
+        ...entry,
+        factReview: prepareFactReview(entry, [
+          {
+            id: "11111111-1111-4111-8111-111111111111",
+            kind: "action",
+            excerpt: entry.actions,
+            confirmed: true,
+          },
+        ]),
+      }));
+      const facts = prepareReviewedStoryFacts(reviewed, "general", 2_400);
+      for (const order of [reviewed, [...reviewed].reverse()]) {
+        const rank = createEvidenceRanker(
+          order,
+          (entry) => facts.get(entry.id)?.map(({ excerpt }) => excerpt) ?? [],
+        );
+        expect(rank({ primary: target }).evidence[0]?.id).toBe(expected);
+      }
     },
   );
 });

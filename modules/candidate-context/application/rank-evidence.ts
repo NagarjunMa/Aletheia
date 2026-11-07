@@ -36,14 +36,21 @@ const ALIASES = new Map(
 const AI_TERMS = new Set(["ai", "llm", "rag", "ml"]);
 const AI_TOPIC_TERMS = new Set([...AI_TERMS, "agent"]);
 
-function tokens(value: string): Set<string> {
-  const normalized = value
+const AI_AGENT_PATTERN =
+  /(?<![\p{L}\p{N}_\p{Pd}])(?:ai|llms?|ml|rag)(?:[\s-]+(?:powered|based|grounded))?[\s-]+agents?\b/u;
+
+function normalizeMatchingText(value: string): string {
+  return value
     .normalize("NFKC")
     .toLocaleLowerCase("en-US")
     .replace(/\bartificial intelligence\b/gu, "ai")
     .replace(/\blarge language models?\b/gu, "llm")
     .replace(/\bmachine learning\b/gu, "ml")
     .replace(/\bretrieval[ -]augmented generation\b/gu, "rag");
+}
+
+function tokens(value: string): Set<string> {
+  const normalized = normalizeMatchingText(value);
   const result = new Set(
     (normalized.match(/[\p{L}\p{N}][\p{L}\p{N}+#.]*/gu) ?? [])
       .map((term) => term.replace(/\.+$/u, ""))
@@ -128,23 +135,65 @@ export function createEvidenceTargetRanker(
   };
 }
 
-/** Per-request matching data only; ownership, exclusions and fact support remain caller-owned. */
+const NO_TERMS: ReadonlySet<string> = new Set();
+function bestReviewedMatch(
+  target: ReadonlySet<string>,
+  excerpts: readonly { terms: ReadonlySet<string>; aiAgent: boolean }[],
+) {
+  const explicitAiAgents = target.has("ai") && target.has("agent");
+  let best = { score: 0, domainScore: 0, supported: false };
+  for (const excerpt of excerpts) {
+    const candidate = match(target, excerpt.terms, NO_TERMS, NO_TERMS);
+    // Activities cannot substitute for an explicit reviewed AI-agent assertion.
+    if (explicitAiAgents && !excerpt.aiAgent) candidate.supported = false;
+    if (
+      Number(candidate.supported) > Number(best.supported) ||
+      (candidate.supported === best.supported &&
+        (candidate.domainScore > best.domainScore ||
+          (candidate.domainScore === best.domainScore &&
+            candidate.score > best.score)))
+    )
+      best = candidate;
+  }
+  return best;
+}
+
+/**
+ * An excerpt array ranks only individual reviewed facts. The legacy string
+ * projection retains record labels and context for LinkedIn connection ranking.
+ */
 export function createEvidenceRanker(
   evidence: readonly CandidateEvidenceRecord[],
-  contributionText?: (_entry: CandidateEvidenceRecord) => string,
+  contributionText?: (
+    _entry: CandidateEvidenceRecord,
+  ) => string | readonly string[],
 ) {
   const eligible = evidence
     .filter((entry) => entry.confirmed)
-    .map((entry) => ({
-      entry,
-      contribution: tokens(
-        contributionText
-          ? contributionText(entry)
-          : [entry.actions, entry.outcome, ...entry.metrics].join(" "),
-      ),
-      labels: tokens([entry.title, ...entry.skills].join(" ")),
-      context: tokens(entry.context),
-    }));
+    .map((entry) => {
+      const text =
+        contributionText?.(entry) ??
+        [entry.actions, entry.outcome, ...entry.metrics].join(" ");
+      if (typeof text !== "string") {
+        return {
+          entry,
+          reviewed: text.map((excerpt) => ({
+            terms: tokens(excerpt),
+            aiAgent: AI_AGENT_PATTERN.test(normalizeMatchingText(excerpt)),
+          })),
+          contribution: NO_TERMS,
+          labels: NO_TERMS,
+          context: NO_TERMS,
+        };
+      }
+      return {
+        entry,
+        reviewed: undefined,
+        contribution: tokens(text),
+        labels: tokens([entry.title, ...entry.skills].join(" ")),
+        context: tokens(entry.context),
+      };
+    });
   return (target: {
     primary: string;
     secondary?: string;
@@ -154,21 +203,29 @@ export function createEvidenceRanker(
   } => {
     const primary = tokens(target.primary);
     const secondary = tokens(target.secondary ?? "");
-    const ranked = eligible.map(({ entry, contribution, labels, context }) => {
-      const first = match(primary, contribution, labels, context);
-      const second = match(secondary, contribution, labels, context);
-      return {
-        entry,
-        first,
-        second,
-        supported: primary.size ? first.supported : second.supported,
-        aiTie: Number(
-          (primary.size ? primary : secondary).has("ai") &&
-            entry.kind === "ai_usage" &&
-            (contribution.has("ai") || labels.has("ai")),
-        ),
-      };
-    });
+    const ranked = eligible.map(
+      ({ entry, contribution, labels, context, reviewed }) => {
+        const first = reviewed
+          ? bestReviewedMatch(primary, reviewed)
+          : match(primary, contribution, labels, context);
+        const second = reviewed
+          ? bestReviewedMatch(secondary, reviewed)
+          : match(secondary, contribution, labels, context);
+        return {
+          entry,
+          first,
+          second,
+          supported: primary.size ? first.supported : second.supported,
+          aiTie: Number(
+            (primary.size ? primary : secondary).has("ai") &&
+              entry.kind === "ai_usage" &&
+              (reviewed
+                ? reviewed.some(({ terms }) => terms.has("ai"))
+                : contribution.has("ai") || labels.has("ai")),
+          ),
+        };
+      },
+    );
     const matches = ranked
       .filter((item) => item.supported)
       .sort(
