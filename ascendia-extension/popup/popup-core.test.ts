@@ -135,22 +135,22 @@ describe("parseGenerationResponse", () => {
 // ─── calculateCharCount ───
 
 describe("calculateCharCount", () => {
-  it("linkedin_connection: under limit", () => {
+  it("linkedin_connection: at the Basic limit", () => {
     const result = calculateCharCount("x".repeat(200), "linkedin_connection");
     expect(result.count).toBe(200);
     expect(result.isOverLimit).toBe(false);
-    expect(result.isNearLimit).toBe(false);
-    expect(result.displayText).toBe("200/300");
+    expect(result.isNearLimit).toBe(true);
+    expect(result.displayText).toBe("200/200");
   });
 
-  it("linkedin_connection: near limit (271-300)", () => {
-    const result = calculateCharCount("x".repeat(280), "linkedin_connection");
+  it("linkedin_connection: near limit (181-200)", () => {
+    const result = calculateCharCount("x".repeat(181), "linkedin_connection");
     expect(result.isNearLimit).toBe(true);
     expect(result.isOverLimit).toBe(false);
   });
 
-  it("linkedin_connection: over limit (>300)", () => {
-    const result = calculateCharCount("x".repeat(301), "linkedin_connection");
+  it("linkedin_connection: over limit (>200)", () => {
+    const result = calculateCharCount("x".repeat(201), "linkedin_connection");
     expect(result.isOverLimit).toBe(true);
     expect(result.isNearLimit).toBe(false);
   });
@@ -197,6 +197,26 @@ describe("calculateCharCount", () => {
 // ─── buildGeneratePayload ───
 
 describe("buildGeneratePayload", () => {
+  it("requests the Basic composer limit only for LinkedIn connection notes", () => {
+    for (const category of [
+      "linkedin_connection",
+      "linkedin_inmail",
+      "cold_email",
+    ]) {
+      const payload = buildGeneratePayload(
+        { profileMarkdown: "md" },
+        "",
+        "",
+        category,
+      );
+      if (category === "linkedin_connection") {
+        expect(payload).toHaveProperty("connectionNoteLimit", 200);
+      } else {
+        expect(payload).not.toHaveProperty("connectionNoteLimit");
+      }
+    }
+  });
+
   it("assembles correct shape", () => {
     const profile = {
       profileMarkdown: "md",

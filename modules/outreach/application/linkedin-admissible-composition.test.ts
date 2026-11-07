@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildLinkedinCompositions,
   buildLinkedinSelectionTool,
   resolveLinkedinSelection,
 } from "../domain/linkedin-grounded-selection";
@@ -407,6 +408,38 @@ describe("ALE-46 admissible LinkedIn composition", () => {
         roots,
       ),
     ).toThrow();
+  });
+  it("does not resolve a rejected Basic option as the next available CTA", () => {
+    const before = buildLinkedinCompositions(
+      sources,
+      "networking",
+      false,
+      undefined,
+      200,
+    );
+    const after = buildLinkedinCompositions(
+      sources,
+      "networking",
+      false,
+      (draft) =>
+        draft.cta.startsWith("Open to connecting")
+          ? undefined
+          : renderLinkedinConnection({ draft, sources: roots }).body,
+      200,
+    );
+    expect(before[0]!.draft.cta).toBe("Open to connecting? Thank you.");
+    expect(after[0]!.draft.cta).toBe("Open to a brief chat? Thank you.");
+    expect(() =>
+      resolveLinkedinSelection(
+        { option_id: before[0]!.id },
+        sources,
+        roots,
+        "networking",
+        false,
+        after,
+      ),
+    ).toThrow();
+    expect(after[0]!.id).toBe(before[1]!.id);
   });
   it("offers only complete option IDs, never independent facts or a nullable candidate", () => {
     const tool = buildLinkedinSelectionTool(sources);

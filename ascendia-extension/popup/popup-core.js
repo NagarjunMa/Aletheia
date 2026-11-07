@@ -1,3 +1,5 @@
+import { LINKEDIN_CONNECTION_NOTE_LIMIT } from "../lib/linkedin-connection-limit.js";
+
 // Popup Core — Pure functions extracted from popup.js for testability.
 // No DOM access, no chrome.* calls — just data transformations.
 
@@ -133,9 +135,10 @@ export function calculateCharCount(text, category) {
 
   switch (category) {
     case "linkedin_connection":
-      isOverLimit = count > 300;
-      isNearLimit = !isOverLimit && count > 270;
-      displayText = `${count}/300`;
+      isOverLimit = count > LINKEDIN_CONNECTION_NOTE_LIMIT;
+      isNearLimit =
+        !isOverLimit && count > LINKEDIN_CONNECTION_NOTE_LIMIT * 0.9;
+      displayText = `${count}/${LINKEDIN_CONNECTION_NOTE_LIMIT}`;
       break;
     case "linkedin_inmail":
       isOverLimit = count > 1800;
@@ -189,6 +192,9 @@ export function buildGeneratePayload(
     intent,
     emailMode,
     acceptedExamples: acceptedExamples || [],
+    ...(category === "linkedin_connection"
+      ? { connectionNoteLimit: LINKEDIN_CONNECTION_NOTE_LIMIT }
+      : {}),
     ...selection,
   };
 }

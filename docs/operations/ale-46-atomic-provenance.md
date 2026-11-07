@@ -1,5 +1,41 @@
 # ALE-46 — Atomic claim provenance
 
+## LinkedIn Basic composer compatibility — 2026-11-07
+
+Scope: `fix/ale-46-linkedin-composer-limit` from verified main `d394929`.
+Risk: Significant for this increment (extension/API contract and model-option
+eligibility); the parent provenance acceptance remains Critical.
+
+- The updated extension requests a 200-character connection note. The API
+  accepts only 200 or 300 for this channel and still defaults to 300 if omitted.
+  Other channels, response shape, model budget, and admission/refund rules stay
+  unchanged.
+- The selected limit applies to source eligibility, the complete options offered
+  to the model, and final validation. A shorter supported target observation may
+  let the sender keep a complete reviewed fact. Automatic mode can still use a
+  target-only note when no complete pair fits and passes final validation. An
+  explicit story that cannot fit
+  returns 422 before quota or model work. No factual span is shortened.
+- Autofill identifies a single visible, editable invitation field and checks its declared
+  limit, defaulting to 200 when absent, before modifying the note. The profile reader no longer claims unrelated
+  messages, so the extension can report the actual fill result.
+- A synthetic route regression reproduced 223 characters before the fix.
+  An offline replay of 13 cases produced 30 options across 11 eligible cases,
+  all within 200 (maximum 199). The 300-character control produced three
+  options over 200. Return review cases cover rejected pairs, rejected option IDs
+  and preserving unrelated, visually hidden, or uneditable fields. Packaged Chromium exercises over-limit refusal,
+  exact-200 acceptance and an explicitly advertised 300-character field.
+
+Evidence receipts: `/tmp/ale46-composer-evidence/`. No provider calls, production
+data changes, deployment or store publication. Deploy the compatible backend
+before publishing the extension. To roll back, revert the backend and redeploy;
+an updated extension still checks the composer before filling a legacy response.
+Chrome Store rollback would require a new release. No migration is involved.
+
+The actual LinkedIn composer with a signed-in account, human usefulness review,
+and full disposable Supabase migration/type replay remain separate parent
+acceptance checks. Keep ALE-46 In Progress and preserve the ALE-61 worktree.
+
 ## Final three-call result and structural correction — 2026-11-02
 
 The user approved three additional synthetic calls (combined output ceiling

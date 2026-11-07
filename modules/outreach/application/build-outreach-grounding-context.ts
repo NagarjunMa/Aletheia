@@ -102,6 +102,7 @@ function renderEvidence(entry: CandidateEvidenceRecord): string {
 function reviewedLinkedinEvidence(
   entry: CandidateEvidenceRecord,
   targets: readonly AtomicSource[],
+  limit: OutreachGroundingInput["connectionNoteLimit"],
 ): string {
   const parts: string[] = [];
   let remaining = OUTREACH_GROUNDING_BUDGETS.linkedin_connection.maxSourceChars;
@@ -117,7 +118,7 @@ function reviewedLinkedinEvidence(
     if (
       content.length > MAX_SUPPORTING_EXCERPT ||
       size > remaining ||
-      !linkedinCandidateFits(source, targets)
+      !linkedinCandidateFits(source, targets, limit)
     )
       continue;
     parts.push(content);
@@ -299,13 +300,18 @@ export function buildOutreachGroundingContext(input: {
           conversation: target.conversationContext,
         },
     input.candidate.profile.excludedClaims,
-    target.category === "linkedin_connection" ? linkedinTargetFits : undefined,
+    target.category === "linkedin_connection"
+      ? (source) => linkedinTargetFits(source, target.connectionNoteLimit)
+      : undefined,
     target.category === "linkedin_connection"
       ? "linkedin_connection"
       : undefined,
     target.category === "linkedin_connection"
       ? (pool) => {
-          const matchTargets = createLinkedinTargetMatcher(pool);
+          const matchTargets = createLinkedinTargetMatcher(
+            pool,
+            target.connectionNoteLimit,
+          );
           let fallback:
             { entryId: string; targets: AtomicSource[] } | undefined;
           for (const entry of selectedEvidence) {
@@ -362,7 +368,11 @@ export function buildOutreachGroundingContext(input: {
         label: reviewedEvidence ? "Reviewed experience" : entry.title,
         content:
           target.category === "linkedin_connection"
-            ? reviewedLinkedinEvidence(entry, targets.sources)
+            ? reviewedLinkedinEvidence(
+                entry,
+                targets.sources,
+                target.connectionNoteLimit,
+              )
             : explicit
               ? budgetReviewedStory(
                   entry,
@@ -407,7 +417,11 @@ export function buildOutreachGroundingContext(input: {
   ).filter(
     (source) =>
       target.category !== "linkedin_connection" ||
-      linkedinCandidateFits(source, targets.sources),
+      linkedinCandidateFits(
+        source,
+        targets.sources,
+        target.connectionNoteLimit,
+      ),
   );
   const prepared = requiredEvidenceRoots
     ? prepareSelectedStoryFacts(

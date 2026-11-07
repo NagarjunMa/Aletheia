@@ -1329,11 +1329,18 @@ async function autoFillMessage() {
       currentWindow: true,
     });
 
-    await chrome.tabs.sendMessage(tab.id, {
+    const response = await chrome.tabs.sendMessage(tab.id, {
       action: "autoFill",
       data: currentOutput,
     });
 
+    if (!response?.success) {
+      showError(
+        response?.error ||
+          "Could not auto-fill. Make sure you're on the right page.",
+      );
+      return;
+    }
     showTemporaryFeedback(document.getElementById("fillBtn"), "Filled!");
   } catch (error) {
     console.error("Auto-fill error:", error);
@@ -1801,16 +1808,18 @@ function displayValidationFeedback(output) {
   const feedbackItems = [];
 
   if (category === "linkedin_connection") {
-    const charCount = output.character_count || 0;
-    const isWithinLimit = charCount <= 300;
+    const { displayText, isOverLimit } = calculateCharCount(
+      output.body,
+      category,
+    );
 
     feedbackItems.push({
-      icon: isWithinLimit ? "✅" : "⚠️",
-      text: `${charCount}/300 characters`,
-      status: isWithinLimit ? "success" : "warning",
-      details: isWithinLimit
-        ? "Within LinkedIn limit"
-        : "Exceeds LinkedIn character limit",
+      icon: isOverLimit ? "⚠️" : "✅",
+      text: `${displayText} characters`,
+      status: isOverLimit ? "warning" : "success",
+      details: isOverLimit
+        ? "Exceeds the Basic LinkedIn note limit"
+        : "Within the Basic LinkedIn note limit",
     });
 
     if (validation.truncated) {

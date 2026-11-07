@@ -1,3 +1,12 @@
+## 2026-11-07 — ALE-46 LinkedIn Basic composer compatibility
+
+In isolated `fix/ale-46-linkedin-composer-limit`, the extension requests a
+200-character LinkedIn connection draft and protects the composer from oversized
+legacy notes. The server preserves complete reviewed facts and the legacy
+300-character default. Significant increment; parent remains Critical and
+In Progress. See docs/operations/ale-46-atomic-provenance.md for the contract,
+verification and rollout sequence.
+
 ## 2026-11-07 — ALE-54 outreach admission correction
 
 On `fix/ale-54-require-reviewed-outreach-facts`, require a complete, relevant

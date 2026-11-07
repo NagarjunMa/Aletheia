@@ -1,3 +1,4 @@
+import type { LinkedinConnectionNoteLimit } from "@/lib/ai/output-constraints";
 import type {
   CandidateIdentity,
   CandidateGroundingSource,
@@ -67,6 +68,7 @@ export type OutreachGroundingInput = {
   profileMarkdown: string;
   jobDescription: string;
   conversationContext: string;
+  connectionNoteLimit?: LinkedinConnectionNoteLimit;
 };
 
 /**
