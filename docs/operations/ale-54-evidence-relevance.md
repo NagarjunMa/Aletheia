@@ -254,3 +254,31 @@ the corrections. The focused suite passed 328 tests, including cold email,
 InMail, and both YC request sizes. The YC regressions verify rejection before quota,
 credit reservation, or provider work. Verification and review receipts are
 recorded in Linear under ALE-54. Hosted acceptance remains pending.
+
+## Cold email and InMail admission correction
+
+Hosted acceptance on `1174284` exposed a draft fallback that could call the
+model with a complete unrelated job description after the selector had rejected
+the candidate's unrelated facts. Risk remains Critical because this boundary
+controls access to quota, billing and the model.
+
+Every cold email or InMail option must now contain at least one complete reviewed
+candidate fact that individually matches the target under the existing scoring
+rules and fits the final draft. This applies to automatic and explicit story
+selection. Explicit selection still requires the chosen stories to contribute.
+The route uses its existing 422 codes and stops before reserving any resources
+when no option fits. A preselected synthetic discourse fixture supplies the
+relevance decision in offline evaluations. No scoring threshold, billing
+operation, provider adapter, extension, or migration changes.
+
+Six synthetic route cases returned 200 on the merge base. The local regressions
+exercise complete unrelated job descriptions in both channels, including when
+an unrelated story was explicitly selected or the relevant fact in a mixed
+story cannot fit. They assert a 422 and zero quota, billing and model calls.
+The first independent review found that markup escaping could introduce a
+false keyword match. Relevance now uses the original reviewed excerpts for
+the exact fact IDs that survive grounding. Two selector regressions cover
+that case, and the independent reviewer reproduced it through both routes.
+The four hosted YC cases already passed on the merge base. Hosted outreach
+acceptance still needs to run against the deployed correction. Roll back by
+reverting the backend change and redeploying.

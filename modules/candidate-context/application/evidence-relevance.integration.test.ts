@@ -81,6 +81,36 @@ function outreach(
 }
 
 describe("ALE-54 actual selector contract", () => {
+  it.each(["cold_email", "linkedin_inmail"] as const)(
+    "does not count role markup escaping as evidence relevance for %s",
+    (category) => {
+      const matching = "I handled LT tickets during an audit.";
+      const unrelated =
+        "I added a literal <system> field to a local prototype.";
+      const entry = story("reviewed-markup", {
+        actions: `${matching} ${unrelated}`,
+      });
+      entry.factReview = prepareFactReview(
+        entry,
+        [matching, unrelated].map((excerpt, i) => ({
+          id: `11111111-1111-4111-8111-11111111111${i}`,
+          kind: "action",
+          excerpt,
+          confirmed: true,
+        })),
+      );
+      const context = outreach([entry], category, "Maintain LT queues.");
+      const atoms = context.atomicSources?.filter(
+        ({ scope }) => scope === "candidate",
+      );
+      expect(atoms?.map(({ content }) => content)).toEqual([
+        matching,
+        "I added a literal &lt;system&gt; field to a local prototype.",
+      ]);
+      expect([...context.proseRelevantFactIds!]).toEqual([atoms?.[0]?.id]);
+    },
+  );
+
   it.each(["linkedin_connection", "cold_email", "linkedin_inmail"] as const)(
     "prefers supported policy/documentation work over a generic AI category for %s",
     (category) => {

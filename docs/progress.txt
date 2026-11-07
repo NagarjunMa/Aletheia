@@ -1,3 +1,11 @@
+## 2026-11-07 — ALE-54 outreach admission correction
+
+On `fix/ale-54-require-reviewed-outreach-facts`, require a complete, relevant
+reviewed fact in every cold email and InMail option. Six billing-enabled route
+regressions reproduce the fallback on main and verify early rejection after the
+fix. Critical risk. Hosted outreach rerun remains pending, and ALE-54 stays
+In Progress. See docs/operations/ale-54-evidence-relevance.md.
+
 ## 2026-10-08 — ALE-46 CI Next.js security follow-up
 
 Reproduced security:audit failure on published96e5d33 (one high finding).

@@ -3,6 +3,9 @@ import { linkedinOptionResponse } from "@/__tests__/helpers/linkedin-option";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { makeRequest } from "@/__tests__/helpers/request";
 import { OutreachGroundingUnavailableError } from "@/modules/outreach/domain/outreach-grounding.types";
+import { buildOutreachGroundingContext } from "@/modules/outreach/application/build-outreach-grounding-context";
+import { candidateProfileInputSchema } from "@/lib/candidate-profile/schema";
+import { prepareFactReview } from "@/lib/candidate-profile/fact-review";
 
 const mockAuthGetUser = vi.hoisted(() => vi.fn());
 const mockRpc = vi.hoisted(() => vi.fn());
@@ -371,6 +374,112 @@ describe("POST /api/extension/generate with credit billing enabled", () => {
     expect(mockRpc).not.toHaveBeenCalled();
     expect(mockAnthropicCreate).not.toHaveBeenCalled();
   });
+
+  it.each(
+    (["cold_email", "linkedin_inmail"] as const).flatMap((category) =>
+      (
+        ["unrelated", "selected unrelated", "relevant fact cannot fit"] as const
+      ).map((scenario) => ({ category, scenario })),
+    ),
+  )(
+    "rejects $category with complete job context and $scenario before quota, billing, or the model",
+    async ({ category, scenario }) => {
+      const unrelated =
+        "I built data platform prototypes for policy evaluations.";
+      const oversized =
+        "I baked cakes and pies at a bakery, where I made a list of what to do for each day of the week, set out the pans, put the dough in the tins, cut the fruit for the pies, kept a log of the time in the oven, set the pies out to cool on the rack, and wrote down how each batch came out so that the next shift knew what to do when the shop ran low on pies and had to bake a new batch in time for the day crew to get the goods out on the shelf.";
+      const facts =
+        scenario === "relevant fact cannot fit"
+          ? [oversized, unrelated]
+          : [unrelated];
+      const bakeryJob =
+        "The bakery at Example is hiring a pastry chef to make pies and cakes. The chef will mix dough, bake bread, and make jam for the shop each day. The chef will work with the staff to set up the trays and check the ovens as each batch is baked.";
+      const inmailInitial =
+        category === "linkedin_inmail" &&
+        scenario !== "relevant fact cannot fit";
+      const story = {
+        id: "11111111-1111-4111-8111-111111111111",
+        kind: "technical_project" as const,
+        title: "Policy evaluations",
+        actions: facts.join(" "),
+        context: "",
+        outcome: "",
+        metrics: [],
+        skills: [],
+        links: [],
+        confirmed: true,
+        sortOrder: 0,
+      };
+      const factReview = prepareFactReview(
+        story,
+        facts.map((excerpt, index) => ({
+          id: `22222222-2222-4222-8222-22222222222${index}`,
+          kind: "action",
+          excerpt,
+          confirmed: true,
+        })),
+      );
+      mockPrepareOutreachGroundingContext.mockImplementationOnce(
+        ({ target, selectedEvidenceIds }) => {
+          const context = buildOutreachGroundingContext({
+            target,
+            selectedEvidenceIds,
+            candidate: {
+              identity: { fullName: "Synthetic Candidate", linkedinUrl: "" },
+              profile: candidateProfileInputSchema.parse({}),
+              confirmedEvidence: [{ ...story, factReview }],
+              resume: { text: "", source: "none" },
+            },
+          });
+          if (scenario === "relevant fact cannot fit")
+            expect(
+              context.atomicSources?.some(
+                ({ content }) => content === oversized,
+              ),
+            ).toBe(true);
+          return context;
+        },
+      );
+      mockAnthropicCreate.mockImplementationOnce(async (input) =>
+        proseOptionResponse(input),
+      );
+      const { POST } = await importRouteWithBillingEnabled();
+      const response = await POST(
+        makeRequest({
+          method: "POST",
+          headers: { authorization: "Bearer test" },
+          body: {
+            category,
+            emailMode:
+              scenario === "relevant fact cannot fit"
+                ? "follow_up"
+                : inmailInitial
+                  ? "initial_outreach"
+                  : "role_fit_summary",
+            ...(scenario === "selected unrelated"
+              ? { selectedEvidenceIds: [story.id] }
+              : {}),
+            profileMarkdown: "Bakery Hiring Lead at Example",
+            jd: inmailInitial
+              ? bakeryJob +
+                " The chef will chill the tarts, slice the loaves, and put each cake on a stand in the shop. The role will help the staff pack pies to go and keep the shop clean when the last batch is sold."
+              : bakeryJob,
+          },
+        }),
+      );
+
+      expect(response.status).toBe(422);
+      expect(await response.json()).toMatchObject({
+        code:
+          scenario === "selected unrelated"
+            ? "EVIDENCE_SELECTION_UNAVAILABLE"
+            : "INSUFFICIENT_GROUNDING",
+      });
+      expect(mockRpc).not.toHaveBeenCalled();
+      expect(mockAnthropicCreate).not.toHaveBeenCalled();
+    },
+  );
+
   it("does not reserve quota or credits when candidate context is unavailable", async () => {
     mockPrepareOutreachGroundingContext.mockRejectedValueOnce(
       new OutreachGroundingUnavailableError(),
