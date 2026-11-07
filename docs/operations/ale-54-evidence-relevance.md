@@ -240,3 +240,17 @@ Direct recognized wording is intentionally conservative and can miss equivalent
 indirect descriptions. Explicit story selection retains the existing reviewed
 fact rules. Hosted/provider acceptance is pending on the deployed fix SHA.
 Rollout uses the backend deployment. Rollback reverts the commit and redeploys.
+
+## Non-AI qualifier correction
+
+Treat whitespace and Unicode dashes, including minus signs, between the whole
+word `non` and an AI-family agent phrase as part of the same qualifier. The
+shared matcher excludes that occurrence and can still find a separate
+affirmative AI-agent phrase in the reviewed fact. The Unicode word boundary
+preserves affirmative phrases after names such as Xénon.
+
+Twenty-three checks reproduced the spacing and Unicode boundary gaps before
+the corrections. The focused suite passed 328 tests, including cold email,
+InMail, and both YC request sizes. The YC regressions verify rejection before quota,
+credit reservation, or provider work. Verification and review receipts are
+recorded in Linear under ALE-54. Hosted acceptance remains pending.

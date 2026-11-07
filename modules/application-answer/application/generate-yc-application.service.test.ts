@@ -499,6 +499,15 @@ describe("generateYcApplication", () => {
         outcome: "weak_match",
       },
       {
+        label: "spaced non AI qualifier on human-agent work",
+        question: "Describe how you onboarded and supported AI agents.",
+        jd: "Build AI agents.",
+        reviewed:
+          "I onboarded and supported non AI agents at a local property brokerage. I introduced new colleagues to the listing process, answered questions about property viewings, reviewed offer paperwork with sellers, organized weekend appointments, maintained the office contact roster, and kept daily schedules up to date so the real estate office could handle customer inquiries.",
+        unreviewed: "",
+        outcome: "weak_match",
+      },
+      {
         label: "generic framing shared with non-AI agents",
         question: "Tell me about a time you managed AI agents.",
         jd: "Build AI agents.",
