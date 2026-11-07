@@ -66,7 +66,7 @@ it.each(
       expect(() => resolveProseSelection(input, options)).toThrow();
   },
 );
-it("binds options to current source review, identity and mode", () => {
+it("binds options to current source review, identity, relevance and mode", () => {
   const { context } = proseFixture("cold_email", "initial_outreach");
   const options = buildProseCompositions({
     category: "cold_email",
@@ -92,6 +92,20 @@ it("binds options to current source review, identity and mode", () => {
         category: "cold_email",
         emailMode: "follow_up",
         context,
+      }),
+    ),
+  ).toThrow();
+  const relevanceChanged = structuredClone(context);
+  relevanceChanged.proseRelevantFactIds = new Set(
+    [...context.proseRelevantFactIds!].slice(1),
+  );
+  expect(() =>
+    resolveProseSelection(
+      { option_id: options[0]!.id },
+      buildProseCompositions({
+        category: "cold_email",
+        emailMode: "initial_outreach",
+        context: relevanceChanged,
       }),
     ),
   ).toThrow();
@@ -140,6 +154,11 @@ it("bounds final-validation work when every otherwise fitting combination is exc
     })),
     ...Array.from({ length: 16 }, (_, i) => ({ ...target, id: `target-${i}` })),
   ];
+  context.proseRelevantFactIds = new Set(
+    context.atomicSources
+      .filter(({ scope }) => scope === "candidate")
+      .map(({ id }) => id),
+  );
   context.excludedClaims = ["prototype"];
   const check = vi.spyOn(provenance, "validateOutreachProvenance");
   try {

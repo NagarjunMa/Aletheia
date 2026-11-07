@@ -582,7 +582,7 @@ async function handlePost(
             error: "Insufficient grounding",
             code: "INSUFFICIENT_GROUNDING",
             message:
-              "No complete reviewed fact combination fits this mode. Review complete facts or choose another message mode; qualifications will not be shortened.",
+              "No relevant reviewed fact fits this message. Review a relevant fact or choose another message mode.",
           },
           { status: 422, headers: corsHeaders },
         );

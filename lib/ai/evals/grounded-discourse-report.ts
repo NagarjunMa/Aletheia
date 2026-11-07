@@ -68,6 +68,8 @@ function serverOption(
         .join("\n"),
     })),
     atomicSources: sample.sources,
+    // The locked discourse fixtures start after synthetic evidence selection.
+    proseRelevantFactIds: new Set(candidates.map(({ id }) => id)),
     excludedClaims: sample.excludedClaims,
     metadata: {
       groundingLevel: candidates.length ? "verified_evidence" : "target_only",

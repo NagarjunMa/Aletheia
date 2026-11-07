@@ -50,7 +50,6 @@ const selectionSchema = z
 
 /** Complete combinations only: no shortening, repetition or model-authored factual wording. */
 function* combinations<T>(values: readonly T[]): Generator<T[]> {
-  yield [];
   for (let i = 0; i < values.length; i++) {
     yield [values[i]!];
     for (let j = i + 1; j < values.length; j++) {
@@ -70,7 +69,9 @@ export function buildProseCompositions(input: {
 }) {
   const { category, emailMode, context } = input;
   const sources = context.atomicSources ?? [];
-  if (sources.length > 64) throw new ProseGroundingUnavailableError();
+  const relevantFactIds = context.proseRelevantFactIds;
+  if (sources.length > 64 || !relevantFactIds?.size)
+    throw new ProseGroundingUnavailableError();
   const selected = new Set(context.sources.map((s) => s.id));
   const seen = new Set<string>();
   const candidates = sources
@@ -112,6 +113,7 @@ export function buildProseCompositions(input: {
         context.identity,
         context.sources,
         sources,
+        [...relevantFactIds],
         context.excludedClaims,
       ]),
     )
@@ -147,141 +149,133 @@ export function buildProseCompositions(input: {
     : 0;
   // Target-aware drafts are preferred. InMail can use candidate-only proof when a complete target would exceed its shorter budget.
   let validationAttempts = 0;
-  search: for (const includeCandidate of [true, false]) {
-    if (!includeCandidate && options.length) break;
-    for (const target of [
-      ...targets,
-      ...(category === "linkedin_inmail" ? [undefined] : []),
-    ]) {
-      if (!target && options.length) break;
-      for (const facts of combinations(candidates)) {
-        if (Boolean(facts.length) !== includeCandidate) continue;
-        if (
-          context.requiredEvidenceRoots &&
-          (!includesSelectedEvidence(
-            context.requiredEvidenceRoots,
-            facts.map(({ source }) => source.rootId),
-          ) ||
-            new Set(facts.map(({ text }) => text)).size !== facts.length)
-        )
-          continue;
-        for (const cta of CTAS) {
-          const factualWords =
-            facts.reduce((n, f) => n + f.words, 0) + (target?.words ?? 0);
-          const overhead =
-            category === "cold_email"
-              ? 2 +
-                (facts.length ? 0 : 4) +
-                (facts.length > 1 ? 6 : 0) +
-                2 +
-                countOutputUnits(cta, "words") +
-                signatureWords
-              : 2 + countOutputUnits(cta, "words");
-          const words = factualWords + overhead;
-          if (words < constraint.minimum || words > constraint.maximum)
-            continue;
-          // Bound expensive safety checks even when every fitting combination is excluded.
-          if (validationAttempts++ === MAX_VALIDATION_ATTEMPTS) break search;
-          const claims = [
-            ...(target ? [claim(target)] : []),
-            ...facts.map(claim),
-          ];
-          try {
-            const rhetoricalPlan = input.rhetoricalPlans
-              ? buildRhetoricalPlan({
-                  category,
-                  emailMode,
-                  ...(input.intent ? { intent: input.intent } : {}),
-                  sources,
-                  claims,
-                })
-              : undefined;
-            let body: string;
-            let coldDraft: ColdEmailDraft | undefined;
-            if (category === "cold_email") {
-              if (!target) continue;
-              coldDraft = coldEmailDraftSchema.parse({
-                subject_line: "A brief introduction",
-                greeting: "there",
-                target_opening: target.text,
-                candidate_positioning:
-                  facts[0]?.text ?? "I'd welcome a conversation.",
-                proof_points: facts
-                  .slice(1)
-                  .map((f) => ({ text: f.text, source_ids: [f.source.id] })),
-                value_statement: "Thank you.",
-                cta,
+  search: for (const target of [
+    ...targets,
+    ...(category === "linkedin_inmail" ? [undefined] : []),
+  ]) {
+    if (!target && options.length) break;
+    for (const facts of combinations(candidates)) {
+      if (!facts.some(({ source }) => relevantFactIds.has(source.id))) continue;
+      if (
+        context.requiredEvidenceRoots &&
+        (!includesSelectedEvidence(
+          context.requiredEvidenceRoots,
+          facts.map(({ source }) => source.rootId),
+        ) ||
+          new Set(facts.map(({ text }) => text)).size !== facts.length)
+      )
+        continue;
+      for (const cta of CTAS) {
+        const factualWords =
+          facts.reduce((n, f) => n + f.words, 0) + (target?.words ?? 0);
+        const overhead =
+          category === "cold_email"
+            ? 2 +
+              (facts.length > 1 ? 6 : 0) +
+              2 +
+              countOutputUnits(cta, "words") +
+              signatureWords
+            : 2 + countOutputUnits(cta, "words");
+        const words = factualWords + overhead;
+        if (words < constraint.minimum || words > constraint.maximum) continue;
+        // Bound expensive safety checks even when every fitting combination is excluded.
+        if (validationAttempts++ === MAX_VALIDATION_ATTEMPTS) break search;
+        const claims = [
+          ...(target ? [claim(target)] : []),
+          ...facts.map(claim),
+        ];
+        try {
+          const rhetoricalPlan = input.rhetoricalPlans
+            ? buildRhetoricalPlan({
+                category,
+                emailMode,
+                ...(input.intent ? { intent: input.intent } : {}),
+                sources,
                 claims,
-              });
-              if (rhetoricalPlan) coldDraft.rhetoricalPlan = rhetoricalPlan;
-              validateOutreachDraft({
-                draft: coldDraft,
-                sources: context.sources,
-                atomicSources: sources,
-              });
-              body = renderColdEmail({
-                draft: coldDraft,
-                identity: context.identity,
-                mode: emailMode,
-              }).body;
-            } else
-              body = [
-                "Hi there,",
-                ...(rhetoricalPlan
-                  ? orderedPlanClaims(rhetoricalPlan, claims).map((c) => c.text)
-                  : [
-                      ...(target ? [target.text] : []),
-                      ...facts.map((f) => f.text),
-                    ]),
-                cta,
-              ].join("\n\n");
-            validateOutreachProvenance({
-              body,
-              subject: "A brief introduction",
-              bodyConstraint: constraint,
+              })
+            : undefined;
+          let body: string;
+          let coldDraft: ColdEmailDraft | undefined;
+          if (category === "cold_email") {
+            if (!target) continue;
+            coldDraft = coldEmailDraftSchema.parse({
+              subject_line: "A brief introduction",
+              greeting: "there",
+              target_opening: target.text,
+              candidate_positioning: facts[0]!.text,
+              proof_points: facts
+                .slice(1)
+                .map((f) => ({ text: f.text, source_ids: [f.source.id] })),
+              value_statement: "Thank you.",
+              cta,
               claims,
-              context,
-              platform: category === "cold_email" ? "email" : "linkedin",
-              ...(coldDraft
-                ? { requiredEnding: cta, renderedSignature: true }
-                : {}),
             });
-            const id = `prose.${prefix}.${options.length + 1}`;
-            const preview = {
-              id,
-              body,
-              subject: "A brief introduction",
+            if (rhetoricalPlan) coldDraft.rhetoricalPlan = rhetoricalPlan;
+            validateOutreachDraft({
+              draft: coldDraft,
+              sources: context.sources,
+              atomicSources: sources,
+            });
+            body = renderColdEmail({
+              draft: coldDraft,
+              identity: context.identity,
+              mode: emailMode,
+            }).body;
+          } else
+            body = [
+              "Hi there,",
               ...(rhetoricalPlan
-                ? { rhetorical_plan: planSelection(rhetoricalPlan) }
-                : {}),
-            };
-            if (
-              Buffer.byteLength(
-                JSON.stringify([...previews, preview]),
-                "utf8",
-              ) > MAX_PREVIEW_BYTES
-            )
-              continue;
-            previews.push(preview);
-            options.push({
-              ...preview,
-              claims,
-              ...(rhetoricalPlan ? { rhetoricalPlan } : {}),
-              ...(coldDraft ? { coldDraft } : {}),
-            });
-            if (options.length === MAX_OPTIONS) return options;
-          } catch (error) {
-            // A combination can fail a field, safety, exclusion or final-source constraint; never repair it.
-            if (
-              error instanceof z.ZodError ||
-              error instanceof AtomicClaimValidationError ||
-              error instanceof GroundedOutputLimitError ||
-              error instanceof GroundedTextSanitizationError ||
-              error instanceof OutreachDraftValidationError
-            )
-              continue;
-            throw error;
-          }
+                ? orderedPlanClaims(rhetoricalPlan, claims).map((c) => c.text)
+                : [
+                    ...(target ? [target.text] : []),
+                    ...facts.map((f) => f.text),
+                  ]),
+              cta,
+            ].join("\n\n");
+          validateOutreachProvenance({
+            body,
+            subject: "A brief introduction",
+            bodyConstraint: constraint,
+            claims,
+            context,
+            platform: category === "cold_email" ? "email" : "linkedin",
+            ...(coldDraft
+              ? { requiredEnding: cta, renderedSignature: true }
+              : {}),
+          });
+          const id = `prose.${prefix}.${options.length + 1}`;
+          const preview = {
+            id,
+            body,
+            subject: "A brief introduction",
+            ...(rhetoricalPlan
+              ? { rhetorical_plan: planSelection(rhetoricalPlan) }
+              : {}),
+          };
+          if (
+            Buffer.byteLength(JSON.stringify([...previews, preview]), "utf8") >
+            MAX_PREVIEW_BYTES
+          )
+            continue;
+          previews.push(preview);
+          options.push({
+            ...preview,
+            claims,
+            ...(rhetoricalPlan ? { rhetoricalPlan } : {}),
+            ...(coldDraft ? { coldDraft } : {}),
+          });
+          if (options.length === MAX_OPTIONS) return options;
+        } catch (error) {
+          // A combination can fail a field, safety, exclusion or final-source constraint; never repair it.
+          if (
+            error instanceof z.ZodError ||
+            error instanceof AtomicClaimValidationError ||
+            error instanceof GroundedOutputLimitError ||
+            error instanceof GroundedTextSanitizationError ||
+            error instanceof OutreachDraftValidationError
+          )
+            continue;
+          throw error;
         }
       }
     }

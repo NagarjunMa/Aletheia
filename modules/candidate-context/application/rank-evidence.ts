@@ -137,6 +137,13 @@ export function createEvidenceTargetRanker(
 }
 
 const NO_TERMS: ReadonlySet<string> = new Set();
+function prepareReviewedExcerpt(excerpt: string) {
+  return {
+    terms: tokens(excerpt),
+    aiAgent: AI_AGENT_PATTERN.test(normalizeMatchingText(excerpt)),
+  };
+}
+
 function bestReviewedMatch(
   target: ReadonlySet<string>,
   excerpts: readonly { terms: ReadonlySet<string>; aiAgent: boolean }[],
@@ -159,6 +166,16 @@ function bestReviewedMatch(
   return best;
 }
 
+export function createReviewedFactMatcher(target: {
+  primary: string;
+  secondary?: string;
+}) {
+  const primary = tokens(target.primary);
+  const terms = primary.size ? primary : tokens(target.secondary ?? "");
+  return (excerpt: string) =>
+    bestReviewedMatch(terms, [prepareReviewedExcerpt(excerpt)]).supported;
+}
+
 /**
  * An excerpt array ranks only individual reviewed facts. The legacy string
  * projection retains record labels and context for LinkedIn connection ranking.
@@ -178,10 +195,7 @@ export function createEvidenceRanker(
       if (typeof text !== "string") {
         return {
           entry,
-          reviewed: text.map((excerpt) => ({
-            terms: tokens(excerpt),
-            aiAgent: AI_AGENT_PATTERN.test(normalizeMatchingText(excerpt)),
-          })),
+          reviewed: text.map(prepareReviewedExcerpt),
           contribution: NO_TERMS,
           labels: NO_TERMS,
           context: NO_TERMS,

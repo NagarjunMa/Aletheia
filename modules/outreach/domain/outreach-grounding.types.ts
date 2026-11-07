@@ -93,6 +93,8 @@ export type OutreachGroundingContext = {
   sources: CandidateGroundingSource[];
   /** Server-only evidence; absence fails closed at final validation. */
   atomicSources?: AtomicSource[];
+  /** Server-only set of reviewed facts that individually match the prose target. */
+  proseRelevantFactIds?: ReadonlySet<string>;
   excludedClaims?: string[];
   /** Internal counters only; not part of public eval metadata. */
   targetDiagnostics?: {

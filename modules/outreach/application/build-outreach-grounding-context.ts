@@ -17,11 +17,15 @@ import {
   normalizeForExclusion,
   containsExcludedClaim,
 } from "@/modules/grounding/domain/excluded-claims";
-import { createEvidenceRanker } from "@/modules/candidate-context/application/rank-evidence";
+import {
+  createEvidenceRanker,
+  createReviewedFactMatcher,
+} from "@/modules/candidate-context/application/rank-evidence";
 import { deriveSafeCandidateSummary } from "@/lib/ai/candidate-summary";
 import {
   buildAtomicCandidateSources,
   buildAtomicTargetSources,
+  candidateEvidenceFactId,
   normalizeAtomicSourceText,
 } from "@/modules/grounding/application/build-atomic-sources";
 import { escapeForXmlTag } from "@/lib/ai/prompts/linkedin-connection";
@@ -266,6 +270,13 @@ export function buildOutreachGroundingContext(input: {
           OUTREACH_GROUNDING_BUDGETS[target.category].maxSourceChars,
         )
       : undefined;
+  const relevanceTarget = {
+    primary:
+      target.jobDescription ||
+      target.conversationContext ||
+      target.profileMarkdown,
+    secondary: `${target.profileMarkdown} ${target.conversationContext}`,
+  };
   const selection =
     injectionSafeMode || explicit
       ? undefined
@@ -276,13 +287,7 @@ export function buildOutreachGroundingContext(input: {
             : readFactReview(entry, entry.factReview)
                 .map((fact) => fact.excerpt)
                 .join("\n"),
-        )({
-          primary:
-            target.jobDescription ||
-            target.conversationContext ||
-            target.profileMarkdown,
-          secondary: `${target.profileMarkdown} ${target.conversationContext}`,
-        });
+        )(relevanceTarget);
   const selectedEvidence = explicit ?? selection?.evidence ?? [];
   let preferredEvidenceId: string | undefined;
   const targets = buildAtomicTargetSources(
@@ -412,6 +417,23 @@ export function buildOutreachGroundingContext(input: {
       )
     : { sources: budgetedSources, safeAtoms: candidateAtoms };
   const { sources } = prepared;
+  let proseRelevantFactIds: ReadonlySet<string> | undefined;
+  if (target.category !== "linkedin_connection") {
+    const matches = createReviewedFactMatcher(relevanceTarget);
+    const survivingFactIds = new Set(prepared.safeAtoms.map(({ id }) => id));
+    // Match original reviewed wording so markup escaping cannot add keywords.
+    proseRelevantFactIds = new Set(
+      selectedEvidence.flatMap((entry) => {
+        const facts = reviewedEvidence
+          ? (reviewedEvidence.get(entry.id) ?? [])
+          : readFactReview(entry, entry.factReview);
+        return facts.flatMap((fact) => {
+          const id = candidateEvidenceFactId(`evidence:${entry.id}`, fact.id);
+          return survivingFactIds.has(id) && matches(fact.excerpt) ? [id] : [];
+        });
+      }),
+    );
+  }
   const evidenceCount = sources.filter(
     (source) => source.type === "evidence",
   ).length;
@@ -454,6 +476,7 @@ export function buildOutreachGroundingContext(input: {
     ...(requiredEvidenceRoots ? { requiredEvidenceRoots } : {}),
     sources,
     atomicSources,
+    ...(proseRelevantFactIds ? { proseRelevantFactIds } : {}),
     targetDiagnostics: {
       ...targets.diagnostics,
       injectionReasons: injectionScan.reasons,
