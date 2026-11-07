@@ -3,6 +3,7 @@ import { z } from "zod";
 import { messageFocusSchema } from "@/modules/outreach/domain/message-focus";
 import { EMAIL_MODES } from "@/lib/ai/email-formatter";
 import {
+  APPLICATION_ANSWER_MAX_CHARACTERS,
   APPLICATION_ANSWER_MAX_WORDS,
   APPLICATION_ANSWER_MIN_WORDS,
 } from "@/lib/ai/output-constraints";
@@ -165,7 +166,7 @@ const applicationAnswerSchema = z
   .object({
     questionId: z.string().regex(/^q[1-5]$/u),
     question: normalizedBoundedString(10, 1000),
-    body: z.string().trim().min(1).max(3000),
+    body: z.string().trim().min(1).max(APPLICATION_ANSWER_MAX_CHARACTERS),
     word_count: z.number().int().min(50).max(150),
     character_count: z.number().int().nonnegative(),
   })
@@ -263,7 +264,7 @@ export const ycApplicationPublicSuccessSchema = z
       }
     } else if (
       value.word_count > YC_APPLICATION_MAX_WORDS ||
-      value.body.length > 3000
+      value.body.length > APPLICATION_ANSWER_MAX_CHARACTERS
     ) {
       context.addIssue({
         code: "custom",

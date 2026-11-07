@@ -1,3 +1,4 @@
+import { APPLICATION_ANSWER_MAX_CHARACTERS } from "@/lib/ai/output-constraints";
 import { inspectGroundedText } from "@/lib/ai/sanitizer";
 import { prepareGroundedText } from "@/modules/grounding/application/finalize-grounded-output";
 import type { YcApplicationToolOutput } from "../infrastructure/anthropic-yc.repository";
@@ -19,8 +20,6 @@ export type SanitizedYcApplicationOutput = {
   metadata: YcApplicationSanitizationMetadata;
 };
 
-const YC_APPLICATION_BODY_MAX_CHARS = 3_000;
-
 /**
  * Evidence is immutable. Prepare only nonsemantic public text and inspect safety; final grounding
  * still verifies immutable evidence against the exact returned answer.
@@ -29,7 +28,7 @@ export async function sanitizeYcApplicationOutput(
   input: YcApplicationToolOutput,
 ): Promise<SanitizedYcApplicationOutput> {
   const body = prepareGroundedText(input.body);
-  if (!body || body.length > YC_APPLICATION_BODY_MAX_CHARS) {
+  if (!body || body.length > APPLICATION_ANSWER_MAX_CHARACTERS) {
     throw new YcApplicationOutputSanitizationError(
       "Generated answer exceeded or failed the sanitization limit",
     );

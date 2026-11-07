@@ -49,6 +49,26 @@ function groundingContext(
 }
 
 describe("YC application prompt", () => {
+  it.each([false, true])(
+    "states the character cap per answer (batch: %s)",
+    (batch) => {
+      const context = groundingContext();
+      if (batch) {
+        context.questions = [
+          { questionId: "q1", question: context.question, sourceIds: [] },
+          {
+            questionId: "q2",
+            question: "Describe your rollout?",
+            sourceIds: [],
+          },
+        ];
+      }
+      expect(buildYcApplicationPrompt(context).systemPrompt).toContain(
+        "at most 3,000 characters per answer",
+      );
+    },
+  );
+
   it("lists real atomic IDs for each question, not the selected parent IDs", () => {
     const record = {
       id: "policy",
@@ -130,6 +150,7 @@ describe("YC application prompt", () => {
     );
     expect(result.systemPrompt).toContain("exactly one answer per questionId");
     expect(result.systemPrompt).toContain("independently to each answer");
+    expect(result.systemPrompt).toContain("Omit body, word_count");
   });
   it("retains international context without false injection signals", () => {
     const jobDescription =
@@ -142,7 +163,7 @@ describe("YC application prompt", () => {
   });
 
   it("freezes a dedicated prompt version and grounded output rules", () => {
-    expect(YC_APPLICATION_PROMPT_VERSION).toBe("yc-2.0.1");
+    expect(YC_APPLICATION_PROMPT_VERSION).toBe("yc-2.1.0");
     expect(YC_APPLICATION_SYSTEM_PROMPT).toContain("50 to 150 words");
     expect(YC_APPLICATION_SYSTEM_PROMPT).toContain("source_ids");
     expect(YC_APPLICATION_SYSTEM_PROMPT).toContain(
@@ -222,11 +243,13 @@ describe("YC application prompt", () => {
 
 it("gives the actual singular atomic claim contract precedence over background labels", () => {
   const { systemPrompt } = buildYcApplicationPrompt(groundingContext());
-  expect(YC_APPLICATION_PROMPT_VERSION).toBe("yc-2.0.1");
+  expect(YC_APPLICATION_PROMPT_VERSION).toBe("yc-2.1.0");
   expect(systemPrompt).toContain("candidate_sources is background context");
   expect(systemPrompt).toContain("source_id");
   expect(systemPrompt).toContain("supporting_excerpt");
   expect(systemPrompt).not.toContain("one or more matching source_ids");
   expect(systemPrompt).not.toContain("with its supporting source_ids");
   expect(systemPrompt).not.toContain("write less specifically");
+  expect(systemPrompt).toContain("The server joins the claim text");
+  expect(systemPrompt).not.toContain("body is the final answer");
 });

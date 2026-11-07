@@ -180,3 +180,48 @@ Authoritative behavior references checked during implementation (2026-09-18):
 [Supabase RPC results](https://supabase.com/docs/reference/javascript/rpc).
 The shipped SDK/source and repository migration define the actual retry and
 credit-idempotency behavior tested here.
+
+## 2026-11-06 production claim coverage repair
+
+Two production requests, one question and five questions, both reached final
+grounding validation and returned `YC_OUTPUT_INVALID` with `CLAIM_COVERAGE` on
+answer 1. Both provider responses fit their output-token caps. The old tool
+required independently generated answer text and a matching claim ledger, and
+the final validator rejected the mismatch. Production diagnostics did not retain
+the model text, so the exact mismatch cannot be reconstructed.
+
+The default tool now supplies ordered, complete atomic claims. The server
+assembles the answer with line breaks that preserve boundaries between
+overlapping claims without expanding unrelated internal whitespace. It then runs
+the same sanitizer, final grounding and size validation. The private tool
+rejects extra fields, including the retired body and word count. The separate
+rhetorical mode, legacy single-question public contract, per-answer source
+restrictions, token ceilings and compensation behavior are preserved.
+
+Local regressions exercise the legacy single request, a canonical one-question
+request and a five-question request with deliberately reversed provider results.
+They check exact question mapping and answer counts, grounding, omission of
+private provenance, and one provider call. Separate cases cover overlapping
+reviewed facts, internal line breaks, obsolete tool fields, unsupported claims
+and post-sanitization coverage failure. Invalid responses still trigger
+compensation.
+
+Run the single- and five-question production smoke tests after the backend is
+deployed. Inspect every answer for exact question mapping, 50–150 words, at most
+3,000 characters, and support in the selected synthetic evidence. Record observed
+latency, tokens and any validation or compensation outcomes before closing
+ALE-37. Roll back by reverting the backend repair and redeploying.
+
+### Review follow-up
+
+When complete approved claims total 44–49 words, the server can add the
+existing allowlisted courtesy once if the rendered answer stays within the
+character limit. The exact displayed answer, including the courtesy, goes
+through sanitation and final grounding. The selected-story preflight uses the
+same renderer and still requires all selected stories. It searches regular
+answers first and gives sparse candidates a separate bounded search. Shorter answers and
+answers containing an excluded courtesy still fail the existing checks.
+
+The single-answer and batch prompts state the 3,000-character cap per answer.
+The server uses one character-limit constant for rendering, validation and the
+public response schema. The provider tool continues to accept only claims.
