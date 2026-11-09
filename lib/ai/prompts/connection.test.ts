@@ -419,7 +419,7 @@ describe("getSystemPrompt", () => {
 
 describe("prose instructions match the exact grounding contract", () => {
   it("versions the prose contract repair", () => {
-    expect(PROMPT_VERSION).toBe("6.0.0");
+    expect(PROMPT_VERSION).toBe("6.1.0");
   });
   it.each([COLD_EMAIL_PROMPT, LINKEDIN_INMAIL_PROMPT])(
     "requires one current option without model-authored factual fields",
@@ -447,7 +447,9 @@ describe("prose instructions match the exact grounding contract", () => {
   });
   it("uses complete option selection rather than free-form composition instructions", () => {
     expect(LINKEDIN_CONNECTION_PROMPT).toContain("option_id");
-    expect(LINKEDIN_CONNECTION_PROMPT).toContain("within 300");
+    expect(LINKEDIN_CONNECTION_PROMPT).toContain(
+      "within the requested character limit",
+    );
     expect(LINKEDIN_CONNECTION_PROMPT).toContain(
       "Never shorten or paraphrase a fact",
     );

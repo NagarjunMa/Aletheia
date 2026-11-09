@@ -67,7 +67,7 @@ describe("server-owned LinkedIn factual composition", () => {
           excludedClaims: [],
           fields: [
             { text: rendered.body, scope: "either" },
-            { text: draft.target_observation, scope: "target" },
+            { text: draft.target_observation!, scope: "target" },
             { text: draft.candidate_relevance!.text, scope: "candidate" },
             { text: draft.cta, scope: "either" },
           ],

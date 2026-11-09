@@ -1,4 +1,4 @@
-import { LINKEDIN_CONNECTION_NOTE_LIMIT } from "../lib/linkedin-connection-limit.js";
+import { normalizeConnectionNoteLimit } from "../lib/linkedin-connection-limit.js";
 
 // Popup Core — Pure functions extracted from popup.js for testability.
 // No DOM access, no chrome.* calls — just data transformations.
@@ -126,7 +126,7 @@ export function parseGenerationResponse(output, expectedQuestions) {
  * Calculate character or word-count info for a given category.
  * Returns { count, displayText, isOverLimit, isNearLimit }.
  */
-export function calculateCharCount(text, category) {
+export function calculateCharCount(text, category, connectionNoteLimit) {
   const count =
     category === YC_APPLICATION_CATEGORY ? countWords(text) : text.length;
   let isOverLimit = false;
@@ -134,12 +134,13 @@ export function calculateCharCount(text, category) {
   let displayText;
 
   switch (category) {
-    case "linkedin_connection":
-      isOverLimit = count > LINKEDIN_CONNECTION_NOTE_LIMIT;
-      isNearLimit =
-        !isOverLimit && count > LINKEDIN_CONNECTION_NOTE_LIMIT * 0.9;
-      displayText = `${count}/${LINKEDIN_CONNECTION_NOTE_LIMIT}`;
+    case "linkedin_connection": {
+      const limit = normalizeConnectionNoteLimit(connectionNoteLimit);
+      isOverLimit = count > limit;
+      isNearLimit = !isOverLimit && count > limit * 0.9;
+      displayText = `${count}/${limit}`;
       break;
+    }
     case "linkedin_inmail":
       isOverLimit = count > 1800;
       displayText = `${count} chars`;
@@ -172,6 +173,7 @@ export function buildGeneratePayload(
   emailMode = "initial_outreach",
   questionValue = "",
   selectedEvidenceIds = [],
+  connectionNoteLimit,
 ) {
   const selection = selectedEvidenceIds.length ? { selectedEvidenceIds } : {};
   if (category === YC_APPLICATION_CATEGORY) {
@@ -193,7 +195,10 @@ export function buildGeneratePayload(
     emailMode,
     acceptedExamples: acceptedExamples || [],
     ...(category === "linkedin_connection"
-      ? { connectionNoteLimit: LINKEDIN_CONNECTION_NOTE_LIMIT }
+      ? {
+          connectionNoteLimit:
+            normalizeConnectionNoteLimit(connectionNoteLimit),
+        }
       : {}),
     ...selection,
   };

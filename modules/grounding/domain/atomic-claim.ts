@@ -185,12 +185,18 @@ const DISCUSSION_MENTION = new RegExp(`\\b${DISCUSSION_TOPIC}\\b`, "iu");
 const DISCUSSION_MENTIONS = new RegExp(DISCUSSION_MENTION.source, "giu");
 const NON_AFFIRMATIVE_TOPIC =
   /\b(?:no|not|never|non|nothing|neither|nor|former|formerly|previously|only|unless|except|exclud(?:e|es|ed|ing)|besides|apart\s+from|retired|instead\s+of|other\s+than|rather\s+than|alternatives?\s+to|stopped|ceased|discontinued|hypothetical|if|but)\b|n['’]t\b/iu;
+const ROLE_MODIFIER =
+  "(?:senior|staff|principal|lead|junior|founding|full[- ]stack|front[- ]?end|back[- ]?end|software|platform|data|product|security|infrastructure|systems?|site reliability|developer tools|machine learning|applied ai|ai|ml|research|ux)";
 const HIRING_RETRACTION =
-  /\b(?:hypothetical|(?:not|no longer|stopped|ceased|(?:is|are|was|were)n['’]t) (?:currently |actively )?(?:hiring|accepting (?:new )?applications(?=\s*(?:[.!?]|$)| for (?:this|the) (?:role|position|opening|vacancy|job))))\b/iu;
+  /\b(?:hypothetical|(?:not|no longer|stopped|ceased|paused|(?:is|are|was|were)n['’]t) (?:currently |actively )?(?:hiring|recruiting(?= for (?:this|the) (?:role|position|opening|vacancy|job))|accepting (?:new )?applications(?=\s*(?:[.!?]|$)| (?:at this time|right now|currently)\b| for (?:this|the) (?:role|position|opening|vacancy|job))))\b/iu;
+const NEGATED_ROLE_SEARCH =
+  /\b(?:we (?:are (?:not|no longer)|aren['’]t|stopped|ceased)|we['’]re (?:not|no longer)) (?:currently |actively )?looking for (.+)$/iu;
 const CLOSED_OPENING =
-  /\b(?:opening|role|position|vacancy|posting|requisition) (?:(?:has been|had been|is(?: now)?|was) (?:filled|closed|withdrawn|cancelled|canceled|no longer (?:open|available))|(?:filled|closed|withdrawn|cancelled|canceled)(?=[.!?]|$))\b/iu;
+  /\b(?:opening|role|position|vacancy|posting|requisition) (?:(?:(?:has|had) (?:(?:already|since) )?been|is(?: now)?|was(?: already)?) (?:filled|closed|withdrawn|cancelled|canceled|paused|on hold|no longer (?:open|available))|(?:filled|closed|withdrawn|cancelled|canceled)(?=[.!?]|$))\b/iu;
 const CLOSED_APPLICATIONS =
   /\bapplications (?:for (?:this|the) (?:role|position|opening|vacancy|job) )?(?:(?:are|were)(?: now)?|have been) closed\b/iu;
+const UNCONFIRMED_OPENING =
+  /\b(?:fictional (?:job|role|opening|posting|simulation)|training simulation|simulation for training|not an? (?:actual|real|live) (?:job|role|opening|posting)|there (?:is|are) no(?: [\p{L}\p{N}+#/-]+){0,7} openings?|(?:position|role|opening) opens? only if|open (?:this|the) (?:position|role|opening) only if)\b/iu;
 const PROFILE_RETRACTION =
   /\b(?:no longer|stopped|ceased|discontinued|ended(?= [^.!?]{0,100}\b(?:work|project|program|effort)\b)|(?:never|not|(?:do|does|did|is|are|was|were|wo)n['’]t) (?:currently |actively )?(?:be )?(?:build(?:ing)?|develop(?:ing)?|design(?:ing)?|work(?:ing)? (?:on|with)|us(?:e|ing)|specializ(?:e|ing) in|focus(?:ing)? on|do(?:ing)?))\b/iu;
 const JD_LOGISTICS = /^no (?:relocation|travel) is required[.!]?$/iu;
@@ -209,8 +215,10 @@ function retractsHiring(value: string) {
   const text = value.replace(/\s+/gu, " ");
   return (
     HIRING_RETRACTION.test(text) ||
+    hasNegatedHiringSearch(value) ||
     CLOSED_OPENING.test(text) ||
-    CLOSED_APPLICATIONS.test(text)
+    CLOSED_APPLICATIONS.test(text) ||
+    UNCONFIRMED_OPENING.test(text)
   );
 }
 
@@ -354,6 +362,88 @@ export function linkedinDiscussionTopic(
   return linkedinDiscussionPassages(value, jobDescription)[0]?.topic;
 }
 
+export function linkedinTargetHasContradiction(profile: string, jd: string) {
+  const profileParagraphs = profile.split(/\n\s*\n/u);
+  return (
+    linkedinJobHasRetraction(jd.split(/\n\s*\n/u)) ||
+    retractsHiring(profile) ||
+    linkedinProfileRetractedTopics(profileParagraphs).size > 0 ||
+    profileParagraphs.some((paragraph) =>
+      hasNegatedJobTopic(linkedinPassages(paragraph, false)),
+    )
+  );
+}
+
+const SIMPLE_HIRING_ROLE = new RegExp(
+  `^(?:(?:we are|we['’]re) (?:hiring|looking for)|hiring:?) (?:an? )?((?:${ROLE_MODIFIER} ){0,6}(?:engineers?|developers?|designers?|researchers?))[.!]?$`,
+  "iu",
+);
+const HIRING_TRAIT =
+  "(?:curious|pragmatic|collaborative|proactive|resourceful|adaptable|motivated)";
+const HIRING_PREFERENCES = new RegExp(
+  `^(?:we are|we['’]re) looking for (?:(${HIRING_TRAIT}(?:(?:,? and|,)? ${HIRING_TRAIT}){0,4}) )?(?:engineers?|developers?|designers?|researchers?|candidates?)( who take ownership(?: of their work)?(?: and enjoy solving ambiguous problems)?)?[.!]?$`,
+  "iu",
+);
+
+export function linkedinHiringWording(content: string) {
+  const text = content.replace(JD_BULLET_START, "").replace(/\s+/gu, " ");
+  const role = SIMPLE_HIRING_ROLE.exec(text)?.[1];
+  if (role)
+    return {
+      kind: "role" as const,
+      text: /s$/iu.test(role)
+        ? `I'm interested in the openings for ${role}.`
+        : `I'm interested in the ${role} opening.`,
+    };
+
+  const preferences = HIRING_PREFERENCES.exec(text);
+  if (!preferences) return undefined;
+  const adjectives = new Set(preferences[1]?.toLowerCase().match(/[a-z]+/gu));
+  const themes = [
+    adjectives.has("curious") && "curiosity",
+    Boolean(preferences[2]) && "ownership",
+    adjectives.has("collaborative") && "collaboration",
+    adjectives.has("pragmatic") && "pragmatism",
+    adjectives.has("proactive") && "initiative",
+    adjectives.has("resourceful") && "resourcefulness",
+    adjectives.has("adaptable") && "adaptability",
+    adjectives.has("motivated") && "motivation",
+  ].filter(Boolean);
+  if (!themes.length) return undefined;
+  return {
+    kind: "preference" as const,
+    text: `I'm interested in discussing ${themes.slice(0, 2).join(" and ")}.`,
+  };
+}
+
+function hasNegatedHiringSearch(value: string): boolean {
+  if (!/\blooking for\b/iu.test(value)) return false;
+  return linkedinPassages(value, true).some(({ text }) => {
+    const detail = NEGATED_ROLE_SEARCH.exec(text)?.[1];
+    return Boolean(
+      detail &&
+      (linkedinHiringWording(`We are looking for ${detail}`) ||
+        /^candidates[.!]?$/iu.test(detail)),
+    );
+  });
+}
+
+export function linkedinHiringPassages(value: string): string[] {
+  const passages = linkedinPassages(value, true).map(({ content }) => content);
+  const hiring = passages.filter(linkedinHiringWording);
+  if (!hiring.length || hiring.length === passages.length) return hiring;
+
+  // An unrecognized sentence in the same paragraph can qualify a hiring claim.
+  const independentWork = new Set(
+    linkedinDiscussionPassages(value, true).map(({ content }) => content),
+  );
+  return passages.every(
+    (passage) => hiring.includes(passage) || independentWork.has(passage),
+  )
+    ? hiring
+    : [];
+}
+
 /** Finite source-owned rewrites, shared by prompt examples and validation. */
 export function allowedClaimTexts(source: AtomicSource): string[] {
   const excerpt = normalizeClaimText(source.content);
@@ -413,7 +503,8 @@ export function allowedClaimTexts(source: AtomicSource): string[] {
       return [
         hiring
           ? `I'm interested in the openings for ${hiring[2]} with ${hiring[1]!.replace(/^The /u, "the ")}.`
-          : (linkedinTopicInterest(excerpt, true) ??
+          : (linkedinHiringWording(excerpt)?.text ??
+            linkedinTopicInterest(excerpt, true) ??
             `I'd like to connect about this context: "${excerpt}"`),
       ];
     }

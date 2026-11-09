@@ -10,6 +10,7 @@ import {
 import {
   linkedinDiscussionPassages,
   linkedinJobHasRetraction,
+  linkedinHiringPassages,
   linkedinProfileHeadlineTopics,
   linkedinProfileRetractedTopics,
   linkedinProfileTopicIsRetracted,
@@ -183,8 +184,18 @@ export function buildAtomicTargetSources(
         (discussion.length > 0 &&
           (content.length > MAX_SUPPORTING_EXCERPT ||
             (name === "jobDescription" && discussion[0]?.content !== content)));
-      const excerpts = topicOnly
-        ? discussion.map((passage) => passage.content)
+      const hiring =
+        channel === "linkedin_connection" && name === "jobDescription"
+          ? new Set(linkedinHiringPassages(content))
+          : undefined;
+      const projected = topicOnly || Boolean(hiring?.size);
+      const excerpts = projected
+        ? [
+            ...new Set([
+              ...(hiring ?? []),
+              ...discussion.map(({ content }) => content),
+            ]),
+          ]
         : [content];
       for (const [part, excerpt] of excerpts.entries()) {
         const topic = discussion[part]?.topic;
@@ -203,7 +214,7 @@ export function buildAtomicTargetSources(
           continue;
         }
         const source: AtomicSource = {
-          id: topicOnly
+          id: projected
             ? `target.${name}.${index}.${part}`
             : `target.${name}.${index}`,
           scope: "target",
@@ -218,9 +229,10 @@ export function buildAtomicTargetSources(
             : {}),
           ...(channel === "linkedin_connection" && name === "jobDescription"
             ? {
-                rewrite: topicOnly
-                  ? "linkedin_job_topic"
-                  : "linkedin_job_interest",
+                rewrite:
+                  projected && !hiring?.has(excerpt)
+                    ? "linkedin_job_topic"
+                    : "linkedin_job_interest",
               }
             : {}),
         };

@@ -95,7 +95,7 @@ describe("ALE47-R3-1 real reviewed fact to final output", () => {
         sources: context.atomicSources!,
         excludedClaims: [],
         scopedFields: [
-          { text: draft.target_observation, scope: "target" },
+          { text: draft.target_observation!, scope: "target" },
           { text: draft.candidate_relevance!.text, scope: "candidate" },
           { text: draft.cta, scope: "either" },
         ],

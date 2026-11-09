@@ -155,6 +155,19 @@ describe("calculateCharCount", () => {
     expect(result.isNearLimit).toBe(false);
   });
 
+  it.each([
+    [300, 300, "300/300", false],
+    [301, 300, "301/300", true],
+    [201, 500, "201/200", true],
+  ])(
+    "counts %i characters against a requested limit of %i",
+    (length, limit, displayText, isOverLimit) => {
+      expect(
+        calculateCharCount("x".repeat(length), "linkedin_connection", limit),
+      ).toMatchObject({ displayText, isOverLimit });
+    },
+  );
+
   it("cold_email: over limit (>1500)", () => {
     const result = calculateCharCount("x".repeat(1600), "cold_email");
     expect(result.isOverLimit).toBe(true);

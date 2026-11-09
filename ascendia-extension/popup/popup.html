@@ -185,6 +185,21 @@
           </select>
         </div>
 
+        <div id="connectionNoteLimitGroup" class="input-group">
+          <label for="connectionNoteLimit">LinkedIn note limit</label>
+          <select
+            id="connectionNoteLimit"
+            class="select-input"
+            aria-describedby="connectionNoteLimitHelp"
+          >
+            <option value="200">Basic (200 characters)</option>
+            <option value="300">Premium (300 characters)</option>
+          </select>
+          <p id="connectionNoteLimitHelp" class="input-help">
+            Choose the limit shown in your LinkedIn invitation composer.
+          </p>
+        </div>
+
         <!-- Intent Selection -->
         <div id="intentGroup" class="input-group">
           <label for="intent">Purpose</label>
