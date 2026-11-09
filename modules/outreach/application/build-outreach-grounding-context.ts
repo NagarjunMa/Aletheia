@@ -32,6 +32,7 @@ import {
   type CandidateFact,
 } from "@/lib/candidate-profile/fact-review";
 import {
+  linkedinTargetHasContradiction,
   MAX_SUPPORTING_EXCERPT,
   type AtomicSource,
 } from "@/modules/grounding/domain/atomic-claim";
@@ -283,7 +284,11 @@ export function buildOutreachGroundingContext(input: {
   const claims = excludedClaims(input.candidate.profile.excludedClaims);
   const injectionScan = scanForInjection(
     linkedin
-      ? [target.profileMarkdown, target.jobDescription].join("\n\n")
+      ? [
+          target.profileMarkdown,
+          target.jobDescription,
+          target.conversationContext,
+        ].join("\n\n")
       : target.profileMarkdown,
   );
   const injectionSafeMode = injectionScan.triggered;
@@ -437,6 +442,50 @@ export function buildOutreachGroundingContext(input: {
         }
       : undefined,
   );
+  const targetContradicted =
+    linkedin &&
+    !targets.sources.length &&
+    !injectionSafeMode &&
+    linkedinTargetHasContradiction(
+      target.profileMarkdown,
+      target.jobDescription,
+    );
+  if (
+    linkedin &&
+    !explicit &&
+    !injectionSafeMode &&
+    !targets.sources.length &&
+    !targets.diagnostics.excluded &&
+    !targets.diagnostics.unsafeWording &&
+    !targetContradicted
+  ) {
+    const entries = allowedEvidence
+      .slice()
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.id.localeCompare(b.id));
+    for (const entry of entries) {
+      const fact = linkedinFacts?.get(entry.id)?.find((fact) => {
+        const content = normalizeAtomicSourceText(fact.excerpt);
+        return (
+          content.length <= MAX_SUPPORTING_EXCERPT &&
+          isLinkedinExperience({ kind: fact.kind, content }) &&
+          isGroundedTextSafe(content, "linkedin") &&
+          linkedinCandidateFits(
+            { id: fact.id, kind: fact.kind, scope: "candidate", content },
+            [],
+            target.connectionNoteLimit,
+          )
+        );
+      });
+      if (!fact) continue;
+      selectedEvidence = [entry];
+      winningLinkedinFact = {
+        entryId: entry.id,
+        fact,
+        content: normalizeAtomicSourceText(fact.excerpt),
+      };
+      break;
+    }
+  }
   let drafts: DraftSource[];
 
   if (injectionSafeMode) {
@@ -453,7 +502,9 @@ export function buildOutreachGroundingContext(input: {
           ? (winningLinkedinFact?.content ??
             reviewedLinkedinEvidence(
               entry.id,
-              linkedinFacts?.get(entry.id) ?? [],
+              targets.sources.length
+                ? (linkedinFacts?.get(entry.id) ?? [])
+                : [],
               targets.sources,
               target.connectionNoteLimit,
             ))
@@ -561,9 +612,9 @@ export function buildOutreachGroundingContext(input: {
           : "no_resume_context";
 
   const atomicSources = [...prepared.safeAtoms, ...targets.sources];
-  // With no LinkedIn target, composition records the denial and keeps the explicit-selection response.
+  // With neither source available, composition records the explicit-selection denial.
   const noLinkedinTarget =
-    target.category === "linkedin_connection" && targets.sources.length === 0;
+    linkedin && !targets.sources.length && !winningLinkedinFact;
   if (
     requiredEvidenceRoots &&
     !noLinkedinTarget &&
@@ -583,6 +634,7 @@ export function buildOutreachGroundingContext(input: {
     ...(proseRelevantFactIds ? { proseRelevantFactIds } : {}),
     targetDiagnostics: {
       ...targets.diagnostics,
+      ...(targetContradicted ? { contradicted: true } : {}),
       injectionReasons: injectionScan.reasons,
     },
     excludedClaims: input.candidate.profile.excludedClaims,

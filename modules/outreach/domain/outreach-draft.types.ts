@@ -65,13 +65,13 @@ const linkedinConnectionRelevanceSchema = z
 
 /**
  * Server-only semantic composition for a connection note. A null relevance
- * section is the explicit target-only fallback; it cannot imply candidate fit.
+ * section is the target-only fallback. A null observation is the candidate-only fallback.
  * Raw sections share the final budget instead of fixed allocations. The renderer
  * enforces the combined sanitized length, including separating spaces.
  */
 export const linkedinConnectionDraftSchema = z
   .object({
-    target_observation: connectionSection,
+    target_observation: connectionSection.nullable(),
     candidate_relevance: linkedinConnectionRelevanceSchema.nullable(),
     cta: connectionSection,
     claims: atomicClaimsSchema,

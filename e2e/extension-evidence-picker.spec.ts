@@ -130,6 +130,7 @@ test("the packaged extension leaves a LinkedIn composer untouched when the draft
       body: `<textarea hidden name="message" maxlength="300">Unrelated draft</textarea>
       <div role="dialog" aria-label="Add a note">
         <textarea name="message" maxlength="200">Existing text</textarea>
+        <div><span aria-live="polite">13/300</span></div>
       </div>
       <div style="opacity: 0">
         <textarea placeholder="Add a note" maxlength="300">Fading draft</textarea>
@@ -177,6 +178,34 @@ test("the packaged extension leaves a LinkedIn composer untouched when the draft
   await expect(unrelated).toHaveValue("Unrelated draft");
   await expect(page.getByText("Message Filled!")).toHaveCount(0);
   await textarea.evaluate((element) => element.removeAttribute("maxlength"));
+  const counter = invitation.locator('[aria-live="polite"]');
+  await counter.evaluate((element) =>
+    element.setAttribute("style", "visibility: hidden"),
+  );
+  expect(await fill(201)).toMatchObject({ success: false });
+  await expect(textarea).toHaveValue("Existing text");
+  await counter.evaluate((element) => element.removeAttribute("style"));
+  expect(await fill(301)).toMatchObject({
+    success: false,
+    error: expect.stringContaining("300 characters"),
+  });
+  await expect(textarea).toHaveValue("Existing text");
+  expect(await fill(300)).toMatchObject({ success: true });
+  await expect(textarea).toHaveValue("x".repeat(300));
+  await counter.evaluate((element) => {
+    element.textContent = "300/500";
+  });
+  expect(await fill(201)).toMatchObject({ success: false });
+  await expect(textarea).toHaveValue("x".repeat(300));
+  await textarea.fill("Existing text");
+  await counter.evaluate((element) => {
+    element.textContent = "13/100";
+  });
+  expect(await fill(101)).toMatchObject({
+    success: false,
+    error: expect.stringContaining("100 characters"),
+  });
+  await counter.evaluate((element) => element.remove());
   expect(await fill(201)).toMatchObject({ success: false });
   await expect(textarea).toHaveValue("Existing text");
   expect(await fill(200)).toMatchObject({ success: true });
@@ -203,6 +232,71 @@ test("the packaged extension leaves a LinkedIn composer untouched when the draft
   });
   expect(await fill(200)).toMatchObject({ success: false });
   await expect(textarea).toHaveValue("x".repeat(201));
+});
+
+test("remembers the LinkedIn note limit and sends it with and without a job description", async () => {
+  const url = "https://www.linkedin.com/in/note-limit-fixture";
+  const posts: Record<string, unknown>[] = [];
+  await browser.route(url, (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: "<title>Alex Example | LinkedIn</title><main>Alex Example leads policy evaluation and data platform tooling at Example Labs.</main>",
+    }),
+  );
+  await browser.route(
+    "https://www.aletheia.live/api/extension/generate",
+    async (route) => {
+      const body = route.request().postDataJSON();
+      posts.push(body);
+      return route.fulfill({
+        json: {
+          success: true,
+          category: "linkedin_connection",
+          body: "x".repeat(body.connectionNoteLimit === 300 ? 280 : 190),
+        },
+      });
+    },
+  );
+  const worker =
+    browser.serviceWorkers()[0] ??
+    (await browser.waitForEvent("serviceworker"));
+  await signIn(worker, "user-a");
+  const profile = await browser.newPage();
+  await profile.goto(url);
+  const panel = await browser.newPage();
+  await profile.bringToFront();
+  await panel.goto(
+    `chrome-extension://${new URL(worker.url()).host}/popup/popup.html`,
+  );
+  await expect(panel.locator("#profileName")).toHaveText("Alex Example");
+
+  const limit = panel.getByLabel("LinkedIn note limit");
+  const generate = panel.locator("#generateBtn");
+  const count = panel.locator("#messageCharCount");
+  await expect(limit).toHaveValue("200");
+  await limit.selectOption("300");
+  await generate.click();
+  await expect(count).toHaveText("280/300");
+  expect(posts[0]).toMatchObject({ connectionNoteLimit: 300, jd: "" });
+
+  await profile.bringToFront();
+  await panel.reload();
+  await expect(panel.locator("#profileName")).toHaveText("Alex Example");
+  await expect(limit).toHaveValue("300");
+  await panel.locator("#jdInput").fill(jd);
+  await generate.click();
+  await expect(generate).toBeEnabled();
+  expect(posts[1]).toMatchObject({ connectionNoteLimit: 300, jd });
+
+  await limit.selectOption("200");
+  await expect(count).toHaveText("280/200");
+  await expect(count).toHaveClass(/over-limit/);
+  await generate.click();
+  await expect(count).toHaveText("190/200");
+  expect(posts[2]).toMatchObject({ connectionNoteLimit: 200, jd });
+
+  await panel.locator("#category").selectOption("linkedin_inmail");
+  await expect(limit).toBeHidden();
 });
 
 test("uses the selected endpoint, recovers from stale stories and clears before automatic generation", async () => {

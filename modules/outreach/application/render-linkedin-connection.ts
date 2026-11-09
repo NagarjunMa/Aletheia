@@ -108,12 +108,20 @@ export function renderLinkedinConnection(input: {
   sources: CandidateGroundingSource[];
 }): { body: string; characterCount: number; hasCandidateRelevance: boolean } {
   validateRelevance(input.draft, input.sources);
-  const observation = normalize(input.draft.target_observation);
+  const observation =
+    input.draft.target_observation === null
+      ? ""
+      : normalize(input.draft.target_observation);
   const relevance = input.draft.candidate_relevance
     ? normalize(input.draft.candidate_relevance.text)
     : "";
   const cta = normalize(input.draft.cta);
-  if (!observation || !cta || (input.draft.candidate_relevance && !relevance)) {
+  if (
+    !cta ||
+    (input.draft.target_observation !== null && !observation) ||
+    (input.draft.candidate_relevance && !relevance) ||
+    (!observation && !relevance)
+  ) {
     throw new LinkedinConnectionValidationError("CONNECTION_EMPTY_SECTION");
   }
   const body = input.draft.rhetoricalPlan

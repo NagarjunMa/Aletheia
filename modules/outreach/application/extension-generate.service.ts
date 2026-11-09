@@ -302,10 +302,10 @@ function validateLinkedinComposition(
     if (!prepared) throw new LinkedinConnectionValidationError(failureCode);
     return prepared;
   };
-  const targetObservation = prepareComponent(
-    draft.target_observation,
-    "CONNECTION_EMPTY_SECTION",
-  );
+  const targetObservation =
+    draft.target_observation === null
+      ? null
+      : prepareComponent(draft.target_observation, "CONNECTION_EMPTY_SECTION");
   const candidateRelevance = draft.candidate_relevance
     ? prepareComponent(
         draft.candidate_relevance.text,
@@ -344,7 +344,9 @@ function validateLinkedinComposition(
     sources: preparedGrounding.atomicSources ?? [],
     excludedClaims: preparedGrounding.excludedClaims ?? [],
     scopedFields: [
-      { text: targetObservation, scope: "target" },
+      ...(targetObservation
+        ? [{ text: targetObservation, scope: "target" as const }]
+        : []),
       ...(candidateRelevance
         ? [{ text: candidateRelevance, scope: "candidate" as const }]
         : []),
@@ -521,7 +523,7 @@ async function handlePost(
           atoms,
           validatedData.intent ?? "networking",
           rhetoricalPlans,
-          required || basicConnectionNote
+          required || basicConnectionNote || !eligibleTargets.length
             ? (draft) => {
                 if (
                   required &&
@@ -613,21 +615,30 @@ async function handlePost(
       ),
       sourceCount: preparedGrounding.sources.length,
     });
-    timing.enter("styleLoad");
-    // 2. Fetch user style profile (non-blocking — failure just skips learned style)
+    const candidateOnlyConnection = linkedinCompositions?.some(
+      ({ draft }) => draft.target_observation === null,
+    );
     let styleProfile: StylePatterns | undefined;
-    const completeStyle = startTimedStage(log, "outreach.style_profile_read", {
-      userId: authResult.userId,
-    });
-    try {
-      styleProfile = await getUserStyleProfile(authResult.userId, log);
-      completeStyle("success", { found: Boolean(styleProfile) });
-    } catch {
-      completeStyle("failure", { errorCode: "STYLE_PROFILE_READ_FAILED" });
-      log.warn(
-        { errorCode: "STYLE_PROFILE_READ_FAILED" },
-        "Failed to fetch style profile, continuing without it",
+    if (!candidateOnlyConnection) {
+      timing.enter("styleLoad");
+      // 2. Fetch user style profile (non-blocking — failure just skips learned style)
+      const completeStyle = startTimedStage(
+        log,
+        "outreach.style_profile_read",
+        {
+          userId: authResult.userId,
+        },
       );
+      try {
+        styleProfile = await getUserStyleProfile(authResult.userId, log);
+        completeStyle("success", { found: Boolean(styleProfile) });
+      } catch {
+        completeStyle("failure", { errorCode: "STYLE_PROFILE_READ_FAILED" });
+        log.warn(
+          { errorCode: "STYLE_PROFILE_READ_FAILED" },
+          "Failed to fetch style profile, continuing without it",
+        );
+      }
     }
 
     // 3. Rate limiting (per user, persistent). Reservation is atomic.
@@ -880,19 +891,23 @@ async function handlePost(
 
     const systemPrompt = `${getSystemPrompt(category, rhetoricalPlans)}\n\n${getAtomicProvenanceInstructions(category, rhetoricalPlans)}`;
     const promptInput: GenerateInput = {
-      profileMarkdown: cleanMarkdown,
-      resume: resumeForPrompt,
-      jd: jdForPrompt,
-      conversationContext: sanitizedConversationContext,
+      profileMarkdown: candidateOnlyConnection ? "" : cleanMarkdown,
+      resume: candidateOnlyConnection ? "" : resumeForPrompt,
+      jd: candidateOnlyConnection ? "" : jdForPrompt,
+      conversationContext: candidateOnlyConnection
+        ? ""
+        : sanitizedConversationContext,
       category,
       intent: intent || "networking",
       emailMode,
-      acceptedExamples: sanitizedExamples || [],
+      acceptedExamples: candidateOnlyConnection ? [] : sanitizedExamples || [],
     };
     let promptAtomicSources = preparedGrounding.atomicSources ?? [];
     if (
       linkedinCompositions &&
-      (preparedGrounding.requiredEvidenceRoots || basicConnectionNote)
+      (preparedGrounding.requiredEvidenceRoots ||
+        basicConnectionNote ||
+        candidateOnlyConnection)
     ) {
       const offered = new Set(
         linkedinCompositions.flatMap(

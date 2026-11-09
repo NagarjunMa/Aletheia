@@ -1,6 +1,7 @@
 import { createEvidencePicker } from "./evidence-picker.js";
 import { saveApplicationAuthDraft } from "../lib/application-auth-draft.js";
 import { isValidOperationId } from "../lib/logger-core.js";
+import { normalizeConnectionNoteLimit } from "../lib/linkedin-connection-limit.js";
 // Aletheia Extension Popup JavaScript
 // Main UI logic and user interaction handlers
 
@@ -126,6 +127,12 @@ function sendBackgroundMessage(message) {
 
 // Initialize popup when DOM is loaded
 document.addEventListener("DOMContentLoaded", async () => {
+  const { connectionNoteLimit } = await chrome.storage.local
+    .get("connectionNoteLimit")
+    .catch(() => ({}));
+  document.getElementById("connectionNoteLimit").value = String(
+    normalizeConnectionNoteLimit(connectionNoteLimit),
+  );
   setupEventListeners();
   // React to auth state changes (e.g., auth-bridge stores session while popup is open).
   // Full reload is the safest path: showAuthRequired() may have wiped #mainContent
@@ -406,6 +413,22 @@ function setupEventListeners() {
         document.getElementById("feedbackError").textContent = error.message;
       } finally {
         submit.disabled = false;
+      }
+    });
+
+  document
+    .getElementById("connectionNoteLimit")
+    .addEventListener("change", async () => {
+      if (currentOutput?.category === "linkedin_connection") {
+        updateCharacterCountDisplay(currentOutput.body, currentOutput.category);
+        displayValidationFeedback(currentOutput);
+      }
+      try {
+        await chrome.storage.local.set({
+          connectionNoteLimit: getConnectionNoteLimit(),
+        });
+      } catch {
+        showError("Could not save the LinkedIn note limit for next time.");
       }
     });
 
@@ -786,6 +809,10 @@ function enableMainContent() {
   updateGenerateAvailability();
 }
 
+function getConnectionNoteLimit() {
+  return Number(document.getElementById("connectionNoteLimit").value);
+}
+
 async function generateMessage() {
   if (generationInFlight || feedbackInFlight) return;
   const generationStartedAt = Date.now();
@@ -882,6 +909,7 @@ async function generateMessage() {
       emailMode,
       questionValue,
       storySelection.ids,
+      category === "linkedin_connection" ? getConnectionNoteLimit() : undefined,
     );
 
     setGenerationPhase("generating");
@@ -1071,6 +1099,7 @@ function updateCharacterCountDisplay(text, category) {
   const { displayText, isOverLimit, isNearLimit } = calculateCharCount(
     text,
     category,
+    category === "linkedin_connection" ? getConnectionNoteLimit() : undefined,
   );
 
   messageCharCount.textContent = displayText;
@@ -1106,6 +1135,7 @@ function setGeneratingState(isGenerating) {
     "ycQuestionInput",
     "emailMode",
     "intent",
+    "connectionNoteLimit",
   ]) {
     const control = document.getElementById(id);
     if (control) control.disabled = isGenerating;
@@ -1499,6 +1529,9 @@ function updateUIForCategory() {
 
   document.getElementById("generateText").textContent = uiState.generateLabel;
   intentGroup?.classList.toggle("hidden", !uiState.showIntent);
+  document
+    .getElementById("connectionNoteLimitGroup")
+    .classList.toggle("hidden", category !== "linkedin_connection");
   emailModeGroup?.classList.toggle("hidden", !uiState.showEmailMode);
   ycQuestionGroup?.classList.toggle("hidden", !uiState.showQuestion);
   fillButton?.classList.toggle("hidden", !uiState.showAutoFill);
@@ -1811,6 +1844,7 @@ function displayValidationFeedback(output) {
     const { displayText, isOverLimit } = calculateCharCount(
       output.body,
       category,
+      getConnectionNoteLimit(),
     );
 
     feedbackItems.push({
@@ -1818,8 +1852,8 @@ function displayValidationFeedback(output) {
       text: `${displayText} characters`,
       status: isOverLimit ? "warning" : "success",
       details: isOverLimit
-        ? "Exceeds the Basic LinkedIn note limit"
-        : "Within the Basic LinkedIn note limit",
+        ? "Exceeds the selected LinkedIn note limit"
+        : "Within the selected LinkedIn note limit",
     });
 
     if (validation.truncated) {

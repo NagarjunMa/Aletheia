@@ -1,4 +1,7 @@
-import { LINKEDIN_CONNECTION_NOTE_LIMIT } from "../lib/linkedin-connection-limit.js";
+import {
+  LINKEDIN_CONNECTION_NOTE_LIMIT,
+  normalizeConnectionNoteLimit,
+} from "../lib/linkedin-connection-limit.js";
 
 // Apollo and LinkedIn Auto-fill Content Script
 // Automatically fills generated messages into various platforms
@@ -18,17 +21,22 @@ import { LINKEDIN_CONNECTION_NOTE_LIMIT } from "../lib/linkedin-connection-limit
   const LINKEDIN_NOTE_PLACEHOLDER = 'textarea[placeholder="Add a note" i]';
   const LINKEDIN_NOTE_SELECTOR = `${LINKEDIN_NOTE_PLACEHOLDER}, :is([role="dialog"], dialog[open]) textarea[name="message"]`;
 
-  function isVisibleInvitationField(field) {
+  function isVisible(element) {
     if (
-      field.matches(":disabled, [readonly]") ||
-      !field.getClientRects().length ||
-      getComputedStyle(field).visibility !== "visible" ||
-      field.closest('[aria-hidden="true"], [aria-disabled="true"], [inert]')
+      !element.getClientRects().length ||
+      getComputedStyle(element).visibility !== "visible" ||
+      element.closest('[aria-hidden="true"], [aria-disabled="true"], [inert]')
     )
       return false;
-    for (let node = field; node; node = node.parentElement) {
+    for (let node = element; node; node = node.parentElement) {
       if (getComputedStyle(node).opacity === "0") return false;
     }
+    return true;
+  }
+
+  function isVisibleInvitationField(field) {
+    if (field.matches(":disabled, [readonly]") || !isVisible(field))
+      return false;
     if (field.matches(LINKEDIN_NOTE_PLACEHOLDER)) return true;
     const dialog = field.closest('[role="dialog"], dialog[open]');
     if (!dialog) return false;
@@ -44,6 +52,28 @@ import { LINKEDIN_CONNECTION_NOTE_LIMIT } from "../lib/linkedin-connection-limit
     return /^(?:add a note|personalize your invitation|invite .+ to connect|send (?:an? )?invitation)\b/iu.test(
       label.trim().replace(/\s+/gu, " "),
     );
+  }
+
+  function getComposerLimit(field) {
+    if (field.maxLength >= 0) return field.maxLength;
+
+    // LinkedIn's live invitation composer may show a counter without maxlength.
+    const counters = field.closest('[role="dialog"], dialog[open]')
+      ? Array.from(
+          field.nextElementSibling?.querySelectorAll(
+            'span[aria-live="polite"]',
+          ) ?? [],
+        ).filter(isVisible)
+      : [];
+    const displayedLimit =
+      counters.length === 1
+        ? Number(
+            counters[0].textContent.match(/^\s*\d+\s*\/\s*(\d+)\s*$/u)?.[1],
+          )
+        : NaN;
+    return displayedLimit <= LINKEDIN_CONNECTION_NOTE_LIMIT
+      ? displayedLimit
+      : normalizeConnectionNoteLimit(displayedLimit);
   }
 
   // Auto-fill configuration for different platforms
@@ -251,10 +281,7 @@ import { LINKEDIN_CONNECTION_NOTE_LIMIT } from "../lib/linkedin-connection-limit
       }
 
       if (connectionNote) {
-        const limit =
-          element.maxLength >= 0
-            ? element.maxLength
-            : LINKEDIN_CONNECTION_NOTE_LIMIT;
+        const limit = getComposerLimit(element);
         if (content.length > limit) {
           return {
             success: false,

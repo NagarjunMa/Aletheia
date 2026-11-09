@@ -79,7 +79,7 @@ export function buildRhetoricalPlan(input: {
   if (
     category === "yc_application"
       ? !candidates.length
-      : !targets.length && category !== "linkedin_inmail"
+      : !targets.length && category === "cold_email"
   )
     throw new Error("Invalid plan scope");
   const eligible: RhetoricalPlan["archetype"][] = !candidates.length

@@ -144,7 +144,7 @@ describe("ALE-46 admissible LinkedIn composition", () => {
             fields: [
               { text: body, scope: "either" },
               { text: draft.candidate_relevance!.text, scope: "candidate" },
-              { text: draft.target_observation, scope: "target" },
+              { text: draft.target_observation!, scope: "target" },
               { text: draft.cta, scope: "either" },
             ],
           }),

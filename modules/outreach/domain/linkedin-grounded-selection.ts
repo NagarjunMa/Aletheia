@@ -18,6 +18,7 @@ import {
   isFirstPersonAssertion,
   allowedClaimTexts,
   linkedinDiscussionTopic,
+  linkedinHiringWording,
   type AtomicSource,
 } from "@/modules/grounding/domain/atomic-claim";
 import {
@@ -39,6 +40,8 @@ export class LinkedinGroundingUnavailableError extends Error {
     this.reasonCodes = [];
     if (diagnostics?.injectionReasons.length)
       this.reasonCodes.push("TARGET_INJECTION_DETECTED");
+    if (diagnostics?.contradicted)
+      this.reasonCodes.push("TARGET_CONTEXT_CONTRADICTED");
     if (diagnostics?.overlength) this.reasonCodes.push("TARGET_FACT_TOO_LONG");
     if (diagnostics?.excluded) this.reasonCodes.push("TARGET_FACT_EXCLUDED");
     if (diagnostics?.budgetRejected)
@@ -53,29 +56,24 @@ export class LinkedinGroundingUnavailableError extends Error {
     if (wordingRejected) this.reasonCodes.push("TARGET_WORDING_UNSUPPORTED");
     if (!this.reasonCodes.length)
       this.reasonCodes.push("NO_ELIGIBLE_TARGET_FACT");
-    this.publicMessage = diagnostics?.injectionReasons.length
-      ? "The selected profile contains instruction-like or encoded text that cannot be used safely. Try another profile. No draft was generated."
-      : [
-          "No complete, usable target fact is available.",
-          wordingRejected
-            ? "The available facts cannot be phrased as an introduction without changing their meaning. Use a complete role headline or hiring sentence; qualifications will not be dropped."
-            : "",
-          diagnostics?.overlength
-            ? `Passages exceed the space available in a ${limit}-character note.`
-            : "",
-          diagnostics?.excluded
-            ? "Passages match your saved excluded topics."
-            : "",
-          diagnostics?.pageControls
-            ? "Page controls and section labels cannot be used as facts."
-            : "",
-          diagnostics?.budgetRejected
-            ? "The context selection limit was reached."
-            : "",
-          "Add a short, complete factual sentence about the target in the optional Job Description field; excluded topics remain blocked.",
-        ]
-          .filter(Boolean)
-          .join(" ");
+    if (diagnostics?.injectionReasons.length) {
+      this.publicMessage =
+        "The selected context contains instruction-like or encoded text. Try another profile or remove that text from the job description.";
+    } else if (diagnostics?.contradicted) {
+      this.publicMessage =
+        "The supplied context contradicts the role or work detail. Use a current job post or another profile.";
+    } else if (wordingRejected) {
+      this.publicMessage =
+        "We couldn't use the available context for a grounded note. In Job Description, add a short role or work detail.";
+    } else if (diagnostics?.excluded) {
+      this.publicMessage =
+        "The available context matches your saved exclusions. Add a role or work detail outside those exclusions.";
+    } else if (diagnostics?.overlength) {
+      this.publicMessage = `No complete fact fits this ${limit}-character note. In Job Description, add a shorter role or work detail.`;
+    } else {
+      this.publicMessage =
+        "There's no usable profile detail or reviewed experience for this note. In Job Description, add a short role or work detail.";
+    }
   }
 }
 
@@ -97,8 +95,7 @@ function minimumNoteLength(target: string, candidate?: string): number {
   return (
     GREETING.length +
     1 +
-    target.length +
-    1 +
+    (target ? target.length + 1 : 0) +
     MIN_CTA_CHARACTERS +
     (candidate ? candidate.length + 1 : 0)
   );
@@ -114,7 +111,7 @@ export function linkedinTargetFits(
   );
 }
 
-/** A reviewed fact must fit intact with at least one offered target and CTA. */
+/** Keep reviewed facts intact within the note, including a target when available. */
 export function linkedinCandidateFits(
   candidate: AtomicSource,
   targets: readonly AtomicSource[],
@@ -122,14 +119,16 @@ export function linkedinCandidateFits(
 ): boolean {
   return (
     candidate.scope === "candidate" &&
-    targets.some(
-      (target) =>
-        linkedinTargetFits(target, limit) &&
-        minimumNoteLength(
-          allowedClaimTexts(target).at(-1)!,
-          allowedClaimTexts(candidate).at(-1)!,
-        ) <= limit,
-    )
+    (targets.length
+      ? targets.some(
+          (target) =>
+            linkedinTargetFits(target, limit) &&
+            minimumNoteLength(
+              allowedClaimTexts(target).at(-1)!,
+              allowedClaimTexts(candidate).at(-1)!,
+            ) <= limit,
+        )
+      : minimumNoteLength("", allowedClaimTexts(candidate).at(-1)!) <= limit)
   );
 }
 const selectionSchema = z
@@ -222,16 +221,18 @@ export function buildLinkedinCompositions(
     supporting_excerpt: source.content,
   });
   const make = (
-    target: AtomicSource,
+    target: AtomicSource | undefined,
     candidate: AtomicSource | undefined,
     cta: string,
   ) => {
-    const targetClaim = claim(target);
+    const targetClaim = target ? claim(target) : null;
     const candidateClaim = candidate ? claim(candidate) : null;
     const draft: ReturnType<typeof linkedinConnectionDraftSchema.parse> & {
       rhetoricalPlan?: RhetoricalPlan;
     } = linkedinConnectionDraftSchema.parse({
-      target_observation: `${candidate ? "" : GREETING + " "}${targetClaim.text}`,
+      target_observation: targetClaim
+        ? `${candidate ? "" : GREETING + " "}${targetClaim.text}`
+        : null,
       candidate_relevance: candidateClaim
         ? {
             text: `${GREETING} ${candidateClaim.text}`,
@@ -239,7 +240,7 @@ export function buildLinkedinCompositions(
           }
         : null,
       cta: `${cta} ${COURTESY}`,
-      claims: [targetClaim, ...(candidateClaim ? [candidateClaim] : [])],
+      claims: [targetClaim, candidateClaim].filter((fact) => fact !== null),
     });
     if (rhetoricalPlans)
       draft.rhetoricalPlan = buildRhetoricalPlan({
@@ -265,11 +266,12 @@ export function buildLinkedinCompositions(
       ...(draft.rhetoricalPlan ? { rhetoricalPlan: draft.rhetoricalPlan } : {}),
     };
   };
-  const invitations = (target: AtomicSource): readonly string[] =>
+  const invitations = (target?: AtomicSource): readonly string[] =>
     intent === "mentorship"
       ? [CTAS[2], CTAS[1], CTAS[0]]
       : (intent === "job_inquiry" || intent === "referral") &&
-          target.rewrite === "linkedin_job_interest"
+          target?.rewrite === "linkedin_job_interest" &&
+          linkedinHiringWording(target.content)?.kind !== "preference"
         ? [CTAS[3], CTAS[1], CTAS[0]]
         : [CTAS[0], CTAS[1]];
   const matchTargets = createLinkedinTargetMatcher(targets, limit);
@@ -293,7 +295,7 @@ export function buildLinkedinCompositions(
     rhetoricalPlan?: RhetoricalPlan;
   }> = [];
   type Pair = {
-    target: AtomicSource;
+    target: AtomicSource | undefined;
     candidate: AtomicSource | undefined;
     related: boolean;
   };
@@ -323,15 +325,27 @@ export function buildLinkedinCompositions(
     if (!options.length) offer(pairs.filter(({ related }) => related));
   };
   const offerPreferred = (pairs: Pair[]) => {
-    const jobPairs = pairs.filter(({ target }) => isLinkedinJobTarget(target));
+    const jobPairs = pairs.filter(
+      ({ target }) => target && isLinkedinJobTarget(target),
+    );
     if (jobPairs.length) offerBestMatch(jobPairs);
     if (!jobPairs.length) offerBestMatch(pairs);
     else if (basicNote && !options.length) {
       offerBestMatch(
-        pairs.filter(({ target }) => !isLinkedinJobTarget(target)),
+        pairs.filter(({ target }) => target && !isLinkedinJobTarget(target)),
       );
     }
   };
+  if (!targets.length) {
+    offer(
+      candidates.map((candidate) => ({
+        target: undefined,
+        candidate,
+        related: false,
+      })),
+    );
+    return options;
+  }
   offerPreferred(paired.length ? paired : targetOnly);
   // A physically fitting pair can still fail privacy or grounding validation.
   if (basicNote && paired.length && !options.length) offerPreferred(targetOnly);

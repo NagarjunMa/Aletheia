@@ -231,8 +231,8 @@ describe("paired hosted workload", () => {
             ? "yc-3.0.0"
             : "yc-2.1.0"
           : enabled && defect !== "wrong-prompt"
-            ? "7.0.0"
-            : "6.0.0",
+            ? "7.1.0"
+            : "6.1.0",
         inputTokens: 100,
         outputTokens: 20,
         injectionTriggered: injection,
