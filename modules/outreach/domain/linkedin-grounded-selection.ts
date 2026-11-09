@@ -17,6 +17,7 @@ import type { OutreachGroundingContext } from "./outreach-grounding.types";
 import {
   isFirstPersonAssertion,
   allowedClaimTexts,
+  linkedinDiscussionTopic,
   type AtomicSource,
 } from "@/modules/grounding/domain/atomic-claim";
 import {
@@ -46,7 +47,9 @@ export class LinkedinGroundingUnavailableError extends Error {
       this.reasonCodes.push("TARGET_PAGE_CONTROLS");
     const wordingRejected =
       unsupportedWording ||
-      (diagnostics?.accepted === 0 && Boolean(diagnostics.unsupportedWording));
+      (diagnostics?.accepted === 0 &&
+        !diagnostics.unsafeWording &&
+        Boolean(diagnostics.unsupportedWording));
     if (wordingRejected) this.reasonCodes.push("TARGET_WORDING_UNSUPPORTED");
     if (!this.reasonCodes.length)
       this.reasonCodes.push("NO_ELIGIBLE_TARGET_FACT");
@@ -152,18 +155,39 @@ export function createLinkedinTargetMatcher(
     return text && minimumNoteLength(text) <= limit ? [{ source, text }] : [];
   });
   const rank = createEvidenceTargetRanker(
+    eligible.map(({ source, text }) => {
+      const topic =
+        text.startsWith("I'm interested in discussing ") ||
+        isLinkedinJobTarget(source)
+          ? linkedinDiscussionTopic(source.content, isLinkedinJobTarget(source))
+          : undefined;
+      return (
+        topic?.replace(/^intelligent agents?$/iu, "AI agents") ?? source.content
+      );
+    }),
     eligible.map(({ source }) => source.content),
   );
   return (candidate: AtomicSource) => {
+    if (candidate.scope !== "candidate") return [];
     const text = allowedClaimTexts(candidate).at(-1)!;
-    return rank(candidate.content)
-      .map(({ index, related }) => ({ ...eligible[index]!, related }))
-      .filter(
-        (target) =>
-          candidate.scope === "candidate" &&
-          minimumNoteLength(target.text, text) <= limit,
-      )
-      .map(({ source, related }) => ({ source, related }));
+    // Separate sentences may describe unrelated work. Score each on its own.
+    const ranked = affirmativeExperience(candidate.content)
+      .flatMap((sentence) => rank(candidate.content, sentence))
+      .sort(
+        (a, b) =>
+          Number(a.related) - Number(b.related) ||
+          b.domainScore - a.domainScore ||
+          b.score - a.score ||
+          a.index - b.index,
+      );
+    const seen = new Set<number>();
+    return ranked.flatMap(({ index, related, domainScore, score }) => {
+      const target = eligible[index]!;
+      if (seen.has(index) || minimumNoteLength(target.text, text) > limit)
+        return [];
+      seen.add(index);
+      return [{ source: target.source, related, domainScore, score }];
+    });
   };
 }
 
@@ -179,8 +203,7 @@ export function buildLinkedinCompositions(
       linkedinTargetFits(source, limit) && linkedinTargetWording(source),
   );
   const candidates = sources.filter(
-    (source) =>
-      source.scope === "candidate" && isFirstPersonAssertion(source.content),
+    (source) => source.scope === "candidate" && isLinkedinExperience(source),
   );
   const prefix = createHash("sha256")
     .update(
@@ -300,16 +323,12 @@ export function buildLinkedinCompositions(
     if (!options.length) offer(pairs.filter(({ related }) => related));
   };
   const offerPreferred = (pairs: Pair[]) => {
-    const jobPairs = pairs.filter(
-      ({ target }) => target.rewrite === "linkedin_job_interest",
-    );
+    const jobPairs = pairs.filter(({ target }) => isLinkedinJobTarget(target));
     if (jobPairs.length) offerBestMatch(jobPairs);
     if (!jobPairs.length) offerBestMatch(pairs);
     else if (basicNote && !options.length) {
       offerBestMatch(
-        pairs.filter(
-          ({ target }) => target.rewrite !== "linkedin_job_interest",
-        ),
+        pairs.filter(({ target }) => !isLinkedinJobTarget(target)),
       );
     }
   };
@@ -317,6 +336,45 @@ export function buildLinkedinCompositions(
   // A physically fitting pair can still fail privacy or grounding validation.
   if (basicNote && paired.length && !options.length) offerPreferred(targetOnly);
   return options;
+}
+
+export function isLinkedinJobTarget(source: AtomicSource): boolean {
+  return (
+    source.rewrite === "linkedin_job_interest" ||
+    source.rewrite === "linkedin_job_topic"
+  );
+}
+
+const UNFINISHED_WORK = String.raw`(?:(?:failed|attempted|tried) (?:to|(?=[\p{L}]+ing\b))|(?:trying|attempting|unable|yet|want|hope|plan) to|attempts? (?:to|at))`;
+const NON_COMPLETING_ASSERTION = new RegExp(
+  String.raw`^I(?:\s+|['’](?:ve|m|d|ll)\s+)(?:(?:have|had|do|did|am|was|would|could|can)\s+)?(?:never|not|no|zero|0|lack|stopped|${UNFINISHED_WORK}|[\p{L}]+n['’]t)\b`,
+  "iu",
+);
+const AFFIRMATIVE_BOUNDARY = new RegExp(
+  String.raw`;|\b(?:no|zero|lack(?:ing)?)\s+|\b(?:${UNFINISHED_WORK}|but|however|although|except|excluding|nothing|neither|nor|besides|apart\s+from|other\s+than|rather\s+than|instead\s+of|without|not|never|[\p{L}]+n['’]t)\b`,
+  "iu",
+);
+
+function affirmativeExperience(content: string): string[] {
+  // Each first-person sentence can contribute. Render all reviewed text intact.
+  return content
+    .split(/(?<=[.!?])\s+/u)
+    .filter(
+      (part) =>
+        isFirstPersonAssertion(part) && !NON_COMPLETING_ASSERTION.test(part),
+    )
+    .map((part) => part.split(AFFIRMATIVE_BOUNDARY, 1)[0]!)
+    .filter(Boolean);
+}
+
+export function isLinkedinExperience(
+  source: Pick<AtomicSource, "kind" | "content">,
+) {
+  return (
+    source.kind !== "preference" &&
+    isFirstPersonAssertion(source.content) &&
+    affirmativeExperience(source.content).length > 0
+  );
 }
 
 export type LinkedinCompositions = Readonly<

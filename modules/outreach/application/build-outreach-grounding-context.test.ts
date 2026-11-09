@@ -130,7 +130,16 @@ describe("buildOutreachGroundingContext", () => {
       expect(
         result.atomicSources?.some((source) => source.content === text),
       ).toBe(true);
-      expect(JSON.stringify(result.sources)).toContain("40% faster reviews");
+      if (category === "linkedin_connection") {
+        expect(JSON.stringify(result.sources)).toContain(
+          "I built and operated LLM agents for a developer review workflow.",
+        );
+        expect(JSON.stringify(result.sources)).not.toContain(
+          "40% faster reviews",
+        );
+      } else {
+        expect(JSON.stringify(result.sources)).toContain("40% faster reviews");
+      }
     },
   );
   it("does not spend the LinkedIn target budget on facts which cannot fit a note", () => {

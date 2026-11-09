@@ -8,6 +8,11 @@ import {
   type CandidateFact,
 } from "@/lib/candidate-profile/fact-review";
 import {
+  linkedinDiscussionPassages,
+  linkedinJobHasRetraction,
+  linkedinProfileHeadlineTopics,
+  linkedinProfileRetractedTopics,
+  linkedinProfileTopicIsRetracted,
   MAX_SUPPORTING_EXCERPT,
   type AtomicSource,
   type ClaimKind,
@@ -17,7 +22,6 @@ import { containsExcludedClaim } from "../domain/excluded-claims";
 
 const MAX_SOURCES = 48;
 const MAX_TOTAL_CHARS = 8_000;
-
 /** NFKC can create role markup; escape after it, consistently across projections. */
 export function normalizeAtomicSourceText(value: string): string {
   return normalizeClaimText(escapeForXmlTag(normalizeClaimText(value)));
@@ -96,7 +100,12 @@ export function buildAtomicTargetSources(
   excludedClaims: readonly string[] = [],
   outputRejection?: (
     _source: AtomicSource,
-  ) => "overlength" | "unsupportedWording" | undefined,
+  ) =>
+    | "overlength"
+    | "unsupportedWording"
+    | "unsafeWording"
+    | "excluded"
+    | undefined,
   channel?: "linkedin_connection",
   prioritize?: (_sources: readonly AtomicSource[]) => readonly AtomicSource[],
 ) {
@@ -106,6 +115,7 @@ export function buildAtomicTargetSources(
     excluded: 0,
     overlength: 0,
     unsupportedWording: 0,
+    unsafeWording: 0,
     budgetRejected: 0,
     pageControls: 0,
     accepted: 0,
@@ -121,54 +131,107 @@ export function buildAtomicTargetSources(
   }
   for (const [name, raw] of entries) {
     if (!raw) continue;
-    raw
-      .replace(/\r\n?/gu, "\n")
-      .split(/\n\s*\n/u)
-      .forEach((paragraph, index) => {
-        const content = normalizeAtomicSourceText(paragraph);
-        if (!content) return;
-        diagnostics.examined += 1;
-        // Reject control-only blocks; never remove lines from a mixed fact.
-        if (
-          name === "profile" &&
-          paragraph
-            .split("\n")
-            .filter((line) => line.trim())
-            .every((line) =>
-              /^(?:#{1,6}\s*)?(?:connect|follow|message|more|show (?:all|more|less)|about|experience|education|skills|activity|recommendations|contact info)$/iu.test(
-                line.trim(),
-              ),
+    const paragraphs = raw.replace(/\r\n?/gu, "\n").split(/\n\s*\n/u);
+    const retractedTopics =
+      channel === "linkedin_connection" && name === "profile"
+        ? linkedinProfileRetractedTopics(paragraphs.map(normalizeClaimText))
+        : undefined;
+    if (
+      channel === "linkedin_connection" &&
+      name === "jobDescription" &&
+      linkedinJobHasRetraction(paragraphs.map(normalizeClaimText))
+    ) {
+      diagnostics.examined += paragraphs.length;
+      diagnostics.unsupportedWording += paragraphs.length;
+      continue;
+    }
+    paragraphs.forEach((paragraph, index) => {
+      const content = normalizeAtomicSourceText(paragraph);
+      if (!content) return;
+      diagnostics.examined += 1;
+      // Reject control-only blocks; never remove lines from a mixed fact.
+      if (
+        name === "profile" &&
+        paragraph
+          .split("\n")
+          .filter((line) => line.trim())
+          .every((line) =>
+            /^(?:#{1,6}\s*)?(?:connect|follow|message|more|show (?:all|more|less)|about|experience|education|skills|activity|recommendations|contact info)$/iu.test(
+              line.trim(),
+            ),
+          )
+      ) {
+        diagnostics.pageControls += 1;
+        return;
+      }
+      if (containsExcludedClaim(content, excludedClaims)) {
+        diagnostics.excluded += 1;
+        return;
+      }
+      const discussion =
+        channel === "linkedin_connection" &&
+        (name === "profile" || name === "jobDescription")
+          ? linkedinDiscussionPassages(
+              content,
+              name === "jobDescription",
+            ).filter(
+              (passage) => passage.content.length <= MAX_SUPPORTING_EXCERPT,
             )
+          : [];
+      const topicOnly =
+        discussion.length > 1 ||
+        (discussion.length > 0 &&
+          (content.length > MAX_SUPPORTING_EXCERPT ||
+            (name === "jobDescription" && discussion[0]?.content !== content)));
+      const excerpts = topicOnly
+        ? discussion.map((passage) => passage.content)
+        : [content];
+      for (const [part, excerpt] of excerpts.entries()) {
+        const topic = discussion[part]?.topic;
+        const profileTopics = topic
+          ? [topic]
+          : retractedTopics?.size
+            ? linkedinProfileHeadlineTopics(excerpt)
+            : [];
+        if (
+          retractedTopics?.size &&
+          profileTopics.some((name) =>
+            linkedinProfileTopicIsRetracted(name, retractedTopics),
+          )
         ) {
-          diagnostics.pageControls += 1;
-          return;
-        }
-        if (containsExcludedClaim(content, excludedClaims)) {
-          diagnostics.excluded += 1;
-          return;
+          diagnostics.unsupportedWording += 1;
+          continue;
         }
         const source: AtomicSource = {
-          id: `target.${name}.${index}`,
+          id: topicOnly
+            ? `target.${name}.${index}.${part}`
+            : `target.${name}.${index}`,
           scope: "target",
           kind: "target_observation",
-          content,
+          content: excerpt,
           ...(channel === "linkedin_connection" && name === "profile"
-            ? { rewrite: "linkedin_profile_interest" as const }
+            ? {
+                rewrite: topicOnly
+                  ? "linkedin_profile_topic"
+                  : "linkedin_profile_interest",
+              }
             : {}),
           ...(channel === "linkedin_connection" && name === "jobDescription"
-            ? { rewrite: "linkedin_job_interest" as const }
+            ? {
+                rewrite: topicOnly
+                  ? "linkedin_job_topic"
+                  : "linkedin_job_interest",
+              }
             : {}),
         };
         const rejection =
-          content.length > MAX_SUPPORTING_EXCERPT
+          excerpt.length > MAX_SUPPORTING_EXCERPT
             ? "overlength"
             : outputRejection?.(source);
-        if (rejection) {
-          diagnostics[rejection] += 1;
-          return;
-        }
-        result.push(source);
-      });
+        if (rejection) diagnostics[rejection] += 1;
+        else result.push(source);
+      }
+    });
   }
   const selected: AtomicSource[] = [];
   for (const source of prioritize ? prioritize(result) : result) {

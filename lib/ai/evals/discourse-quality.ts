@@ -4,6 +4,7 @@ import {
   YcApplicationOutputValidationError,
 } from "@/modules/application-answer/application/validate-yc-application-output";
 import {
+  ATOMIC_SOURCE_REWRITES,
   atomicClaimsSchema,
   CLAIM_KINDS,
   NEUTRAL_FRAMING,
@@ -31,13 +32,7 @@ const sourceSchema = z
     scope: z.enum(["candidate", "target"]),
     kind: z.enum(CLAIM_KINDS),
     content: z.string().min(1).max(600),
-    rewrite: z
-      .enum([
-        "current_role",
-        "linkedin_profile_interest",
-        "linkedin_job_interest",
-      ])
-      .optional(),
+    rewrite: z.enum(ATOMIC_SOURCE_REWRITES).optional(),
   })
   .strict()
   .transform(({ rootId, rewrite, ...source }) => ({

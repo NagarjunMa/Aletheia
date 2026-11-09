@@ -76,6 +76,7 @@ describe("complete source units", () => {
       excluded: 1,
       overlength: 1,
       unsupportedWording: 0,
+      unsafeWording: 0,
       pageControls: 1,
       budgetRejected: 1,
       accepted: 16,

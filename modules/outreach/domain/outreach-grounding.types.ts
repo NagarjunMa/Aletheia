@@ -104,6 +104,7 @@ export type OutreachGroundingContext = {
     excluded: number;
     overlength: number;
     unsupportedWording?: number;
+    unsafeWording?: number;
     budgetRejected: number;
     pageControls?: number;
     accepted: number;

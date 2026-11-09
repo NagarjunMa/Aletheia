@@ -120,8 +120,43 @@ describe("LinkedIn reviewed evidence before the one-story budget", () => {
     const qualified =
       "I built evaluation agents in a prototype; I have not deployed them to production.";
     expect(
-      candidateFacts(build([reviewed(evidence("qualified", qualified))])),
+      candidateFacts(
+        build(
+          [reviewed(evidence("qualified", qualified))],
+          {},
+          "linkedin_connection",
+          "The Evaluation team at Apple is hiring Engineers!",
+        ),
+      ),
     ).toEqual([expect.objectContaining({ content: qualified })]);
+  });
+
+  it("does not reintroduce a shorter reviewed substring of the winning fact", () => {
+    const short = "I built AI agents";
+    const full = `${short} for auditable refund policy; I have not deployed them.`;
+    const entry = evidence("qualified", full);
+    const result = build(
+      [
+        {
+          ...entry,
+          factReview: prepareFactReview(entry, [
+            { id: reviewedId, kind: "action", excerpt: short, confirmed: true },
+            {
+              id: "22222222-2222-4222-8222-222222222222",
+              kind: "action",
+              excerpt: full,
+              confirmed: true,
+            },
+          ]),
+        },
+      ],
+      {},
+      "linkedin_connection",
+      "The Developer Tools team at Example is hiring Engineers! The role focuses on auditable AI refund agents.",
+    );
+    expect(candidateFacts(result).map((source) => source.content)).toEqual([
+      full,
+    ]);
   });
 
   it.each([
@@ -158,7 +193,8 @@ describe("LinkedIn reviewed evidence before the one-story budget", () => {
     const observation =
       "Hi there, I'm interested in Applied AI & Data Platform and your Engineering Manager role at Apple.";
     const cta = "Open to connecting? Thank you.";
-    const whole = `I ${"x".repeat(300 - observation.length - cta.length - 5)}.`;
+    const prefix = "I built data platform ";
+    const whole = `${prefix}${"x".repeat(300 - observation.length - cta.length - prefix.length - 3)}.`;
     const entry = evidence("overlapping", whole);
     const withReviews = {
       ...entry,
