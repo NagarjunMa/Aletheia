@@ -1913,3 +1913,10 @@ No new cost, model judge, acceptance waiver or release approved.
 2026-11-08 ALE-46 Related monitoring experience
 - Significant. Match reviewed application or service monitoring to an AI observability target in LinkedIn notes. Direct relevance takes priority. Keep the candidate's exact assertion and express interest in the target separately.
 - The profile-only route originally returned 422 and the job route omitted the reviewed AWS fact. Both now draft within 200 characters in the local route regressions.
+
+2026-11-09 ALE-46 LinkedIn project introductions
+- Significant backend change from merged main b06f8d1. Production rejected an ordinary profile and a one-paragraph JD. A separately formatted hiring sentence yielded a 123-character draft without experience.
+- Reproduced both 422s through the real route with a mocked provider. Support scoped target interests, then rank safe, fitting reviewed project facts before spending the one-story budget. Preserve complete candidate assertions, private provenance and the explicit target-only fallback when no reviewed fact fits.
+- Added route coverage for pasted lists, comma modifiers, negated matches and tied qualifications with and without a JD under 200 characters. After corrections, 2,199 local tests and the 192-case reviewer matrix passed locally. Independent sign-off on the corrected source and live verification remain open.
+- See docs/operations/linkedin-target-context.md for the contract and rollout checks.
+- Return-review fixes scope profile and job retractions, preserve affirmative duties beside optional experience, exclude failed work from relevance, and keep longer overlapping qualifications intact. All 95 targeted route cases pass locally. The latest correction needs independent review before publication.

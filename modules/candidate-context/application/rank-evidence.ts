@@ -168,8 +168,14 @@ function match(
 }
 
 /** Rank complete LinkedIn target units against a reviewed assertion. */
-export function createEvidenceTargetRanker(targets: readonly string[]) {
+export function createEvidenceTargetRanker(
+  targets: readonly string[],
+  context: readonly string[] = targets,
+) {
   const preparedTargets = targets.map(tokens);
+  const preparedContext = context.map((text, index) =>
+    text === targets[index] ? undefined : tokens(text),
+  );
   const observabilityTargets = new Set(
     targets.flatMap((target, index) =>
       hasAiObservabilityTopic(target) ? [index] : [],
@@ -184,8 +190,8 @@ export function createEvidenceTargetRanker(targets: readonly string[]) {
     }
   });
   const empty = new Set<string>();
-  return (contribution: string) => {
-    const prepared = tokens(contribution);
+  return (contribution: string, affirmative = contribution) => {
+    const prepared = tokens(affirmative);
     const candidates = new Set(
       [...prepared].flatMap((term) => byTerm.get(term) ?? []),
     );
@@ -204,13 +210,28 @@ export function createEvidenceTargetRanker(targets: readonly string[]) {
         ),
       }))
       .filter((item) => item.supported)
+      .map((item) => {
+        const terms = preparedContext[item.index];
+        if (!terms || item.related) return item;
+        const detail = match(terms, prepared, empty, empty);
+        return {
+          ...item,
+          domainScore: item.domainScore + detail.domainScore,
+          score: item.score + detail.score,
+        };
+      })
       .sort(
         (a, b) =>
           b.domainScore - a.domainScore ||
           b.score - a.score ||
           a.index - b.index,
       )
-      .map(({ index, related }) => ({ index, related }));
+      .map(({ index, related, domainScore, score }) => ({
+        index,
+        related,
+        domainScore,
+        score,
+      }));
   };
 }
 

@@ -1,5 +1,129 @@
 # LinkedIn target-context repair
 
+## Return review corrections — 2026-11-09
+
+Significant backend follow-up on the existing branch. Keep exact reviewed
+source text, complete note options, the 200-character Basic cap and the
+legacy 300-character default. The route must deny retracted work or closed
+openings before model or quota work when no independent target fits. A
+standalone optional-experience requirement must not veto an affirmative JD
+responsibility. Candidate ranking must use completed work and omit the failed
+portion of a compound assertion. An overlapping longer reviewed fact must
+stay intact when it qualifies the shorter fact. If it cannot fit, omit the
+short fragment too.
+
+Add route regressions with and without a JD, including an independent profile
+fallback, exact reviewed wording, and notes under 200 characters. Reuse the
+existing source builder and final validators. Run native checks and independent
+review before publishing. Live verification and parent completion stay open.
+
+The correction distinguishes job status, optional applicant experience and
+affirmative duties. It recognizes explicit profile work retractions and keeps
+an independent profile headline available. Candidate ranking stops before
+failed or attempted work. The full reviewed text remains the rendered claim.
+A longer reviewed excerpt supersedes an exact contained fact on text
+boundaries, including qualifications before or after that fact. The ranker
+scores each completed first-person sentence separately so unrelated
+sentences cannot combine into one stronger claim.
+
+The route suite reproduced 16 failures for the return findings and four for
+adjacent controls. All 66 targeted cases pass, including both under-200 flows.
+The prior review matrices also pass with both note limits and rhetorical
+plans enabled and disabled. They use mocked admission and model services.
+The independent return reproduced passive and application retractions,
+optional requirements after a dash, attempted work phrased as a gerund,
+and fragments inside longer reviewed facts. Eight targeted tests reproduced
+those failures. Two further tests showed why ranking must keep sentences
+separate. All 80 targeted cases now pass. Independent review receipts are
+recorded separately so they can identify the exact source snapshot.
+
+The next return confirmed containment and found that named profile headlines
+could bypass work-topic retraction screening. The source builder now checks
+specialties from the same headline parser used to render them. Retractions
+also cover narrower supported agent topics and an immediate unambiguous
+reference to a single prior topic. The route verifies that independent safe
+profile context still works. Added coverage also distinguishes “a plus, not
+a requirement” from a withdrawn duty and excludes unsuccessful attempts
+described inside a completed action. Six new route cases reproduced these
+failures. All 87 targeted cases then passed.
+
+The third independent round verified the whole qualification and reproduced
+further closed-application, profile retraction, optional-experience and
+incomplete-work variants. The local correction recognizes application
+closure and a dated immediate reference to retracted work, allows modifiers
+in optional experience, and excludes “trying to” work from relevance.
+Eight maintained route checks failed before that correction. All 95 targeted
+cases pass afterward. This correction still requires independent review
+before publication.
+
+## Project introductions from ordinary context — 2026-11-09
+
+Significant follow-up from `b06f8d1`. A profile alone or a normal multi-sentence
+JD should yield a relevant project introduction when a fitting reviewed action
+is available. Match before spending the one-story budget. Keep the reviewed
+statement intact and express interest in the recipient's topic without
+asserting a role, hiring relationship or qualification the source cannot prove.
+Preserve the explicit target-only fallback when no relevant reviewed fact fits.
+
+Route regressions reproduce the two production 422s and the omission of a
+usable fact. They compare the exact first sentence and final 200-character cap, and
+include excluded, unrelated and unreviewed facts. Verify legacy callers, final
+grounding, private source data and existing pre-model denial. No changes to
+storage, the extension, model calls or release configuration.
+
+The selector now uses complete recognized headlines or an interest in a topic
+supported by affirmative work text. For a long passage, it can keep complete
+topic-bearing sentences after checking the entire passage for exclusions and
+qualifiers. A topic sentence cannot establish that someone currently works for
+an organization or that a team is hiring.
+
+The automatic path compares eligible facts across reviewed projects before
+projecting the winner. Initial independent review reproduced five failures:
+the story budget hid a later short fact, discontinued or markup text supplied
+interest, negated experience ranked as relevant, long JDs lost specific work,
+and unsafe target wording displaced a valid profile match. The corrections
+have passing route regressions. Candidate qualification remains verbatim.
+
+The third review independently reproduced closure of the six earlier cases
+with rhetorical plans enabled and disabled, then found a remaining gap in
+present-progressive profile text and JD responsibility sentences. Both cases
+failed locally before the final correction and pass after it. The latest
+return review found ordinary pasted lists and comma-separated modifiers could
+hide relevant job context. It also found negated matches and overlapping
+reviewed facts that could lose their qualifications. Match JD bullets without
+rewriting their source text and reject negative topic assertions before
+ranking. Prefer a complete reviewed assertion over its overlapping fragment
+within the same story. When the complete fact cannot fit, the fragment stays
+ineligible. Route regressions cover both 200-character flows, negated targets
+and candidates, and the target-only fallback.
+
+JD matching permits unrelated requirements beside a supported responsibility.
+It still rejects passages that negate a recognized topic or retract the
+hiring claim. Screen the whole JD before using individual paragraphs so a
+blank line cannot hide a retraction. A reviewed continuation inside the same
+sentence stays attached, including qualifications introduced by a dash or
+colon. The route tests exercise the rendered note with its original
+qualification and enforce the Basic limit. Review receipts and local checks
+are recorded outside the repository in the ALE-46 blocker review packet.
+
+The third blocker review also reproduced a negative clause within a candidate
+fact, a standalone prototype qualification, a separate logistics clause, and
+later retractions. The correction ranks only the affirmative candidate wording,
+keeps the full reviewed assertion, ignores a separate no-relocation or no-travel
+requirement when matching, and suppresses retracted topics. A standalone safe
+profile headline can still support a draft. Ten new route regressions failed
+before these corrections. All 2,199 local tests, 15 guardrails, the offline
+grounding gate, lint, types and the production build then passed. The same local
+run of the independent review harness passed 192 additional cases across the
+Basic and legacy limits and both rhetorical-plan settings. The corrected
+snapshot still needs independent sign-off before publication.
+
+After deployment, retest the extension with the same profile alone and with a
+normal JD. Use a real reviewed action that can fit with the interest and CTA.
+Verify that the action leads the note, the final count is at most 200, and no
+invitation is sent during testing. Roll back by reverting the backend change
+and redeploying. Hosted verification and the parent acceptance gates remain open.
+
 ## Related application monitoring evidence — 2026-11-08
 
 Significant. Continue the current ALE-46 branch. A LinkedIn connection note

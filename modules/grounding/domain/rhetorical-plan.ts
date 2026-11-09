@@ -84,18 +84,21 @@ export function buildRhetoricalPlan(input: {
     throw new Error("Invalid plan scope");
   const eligible: RhetoricalPlan["archetype"][] = !candidates.length
     ? ["target_only"]
-    : ["follow_up", "clarification", "role_fit_summary"].includes(
-          input.emailMode ?? "",
-        )
-      ? ["concise_direct"]
-      : [
-          ...(targets.length ? ["target_led" as const] : []),
-          "evidence_led",
-          ...(category !== "linkedin_connection" &&
-          candidates.some((s) => s.kind === "outcome" || s.kind === "metric")
-            ? ["outcome_led" as const]
-            : []),
-        ];
+    : category === "linkedin_connection"
+      ? ["evidence_led"]
+      : ["follow_up", "clarification", "role_fit_summary"].includes(
+            input.emailMode ?? "",
+          )
+        ? ["concise_direct"]
+        : [
+            ...(targets.length ? ["target_led" as const] : []),
+            "evidence_led",
+            ...(candidates.some(
+              (s) => s.kind === "outcome" || s.kind === "metric",
+            )
+              ? ["outcome_led" as const]
+              : []),
+          ];
   const binding = createHash("sha256")
     .update(
       JSON.stringify([

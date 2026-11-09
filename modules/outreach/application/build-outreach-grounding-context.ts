@@ -8,11 +8,7 @@ import {
   reviewedStoryText,
   SelectedEvidenceUnavailableError,
 } from "@/modules/candidate-context/application/selected-evidence";
-import {
-  normalizeClaimText,
-  isFirstPersonAssertion,
-} from "@/modules/grounding/domain/atomic-claim";
-import type { EvidenceSelectionDiagnostics } from "@/modules/candidate-context/domain/candidate-context.types";
+import { normalizeClaimText } from "@/modules/grounding/domain/atomic-claim";
 import {
   normalizeForExclusion,
   containsExcludedClaim,
@@ -29,8 +25,12 @@ import {
   normalizeAtomicSourceText,
 } from "@/modules/grounding/application/build-atomic-sources";
 import { escapeForXmlTag } from "@/lib/ai/prompts/linkedin-connection";
+import { isGroundedTextSafe } from "@/lib/ai/sanitizer";
 import { scanForInjection } from "@/lib/ai/prompts/injection-heuristic";
-import { readFactReview } from "@/lib/candidate-profile/fact-review";
+import {
+  readFactReview,
+  type CandidateFact,
+} from "@/lib/candidate-profile/fact-review";
 import {
   MAX_SUPPORTING_EXCERPT,
   type AtomicSource,
@@ -38,6 +38,8 @@ import {
 import {
   linkedinCandidateFits,
   createLinkedinTargetMatcher,
+  isLinkedinExperience,
+  isLinkedinJobTarget,
   linkedinTargetFits,
   linkedinTargetWording,
 } from "../domain/linkedin-grounded-selection";
@@ -100,17 +102,51 @@ function renderEvidence(entry: CandidateEvidenceRecord): string {
     .join("\n");
 }
 
-function reviewedLinkedinEvidence(
+const REVIEWED_FRAGMENT_BOUNDARY = /[.!?;,:\p{Pd}\s]/u;
+
+function containsReviewedFragment(full: string, fragment: string): boolean {
+  if (!fragment || full.length <= fragment.length) return false;
+  let start = full.indexOf(fragment);
+  while (start >= 0) {
+    const end = start + fragment.length;
+    const before = full[start - 1];
+    const after = full[end];
+    if (
+      (!before || REVIEWED_FRAGMENT_BOUNDARY.test(before)) &&
+      (!after || REVIEWED_FRAGMENT_BOUNDARY.test(after)) &&
+      /[\p{L}\p{N}]/u.test(full.slice(0, start) + full.slice(end))
+    )
+      return true;
+    start = full.indexOf(fragment, start + 1);
+  }
+  return false;
+}
+
+function completeLinkedinFacts(
   entry: CandidateEvidenceRecord,
+): CandidateFact[] {
+  const facts = readFactReview(entry, entry.factReview);
+  // A longer owner-reviewed excerpt can qualify the whole shorter assertion.
+  return facts.filter(({ excerpt }) => {
+    const fragment = normalizeClaimText(excerpt).replace(/[.!?]$/u, "");
+    return !facts.some((other) =>
+      containsReviewedFragment(normalizeClaimText(other.excerpt), fragment),
+    );
+  });
+}
+
+function reviewedLinkedinEvidence(
+  entryId: string,
+  facts: readonly CandidateFact[],
   targets: readonly AtomicSource[],
   limit: OutreachGroundingInput["connectionNoteLimit"],
 ): string {
   const parts: string[] = [];
   let remaining = OUTREACH_GROUNDING_BUDGETS.linkedin_connection.maxSourceChars;
-  for (const fact of readFactReview(entry, entry.factReview)) {
+  for (const fact of facts) {
     const content = normalizeAtomicSourceText(fact.excerpt);
     const source: AtomicSource = {
-      id: `evidence:${entry.id}.fact.${fact.id}`,
+      id: `evidence:${entryId}.fact.${fact.id}`,
       scope: "candidate",
       kind: fact.kind,
       content,
@@ -234,6 +270,7 @@ export function buildOutreachGroundingContext(input: {
     jobDescription: normalizeText(input.target.jobDescription),
     conversationContext: normalizeText(input.target.conversationContext),
   };
+  const linkedin = target.category === "linkedin_connection";
   if (input.selectedEvidenceIds?.length) {
     assertSafeSelectionText(
       [
@@ -244,7 +281,11 @@ export function buildOutreachGroundingContext(input: {
     );
   }
   const claims = excludedClaims(input.candidate.profile.excludedClaims);
-  const injectionScan = scanForInjection(target.profileMarkdown);
+  const injectionScan = scanForInjection(
+    linkedin
+      ? [target.profileMarkdown, target.jobDescription].join("\n\n")
+      : target.profileMarkdown,
+  );
   const injectionSafeMode = injectionScan.triggered;
   const allowedEvidence = injectionSafeMode
     ? []
@@ -265,7 +306,7 @@ export function buildOutreachGroundingContext(input: {
     (entry) => `evidence:${entry.id}`,
   );
   const reviewedEvidence =
-    !explicit && !injectionSafeMode && target.category !== "linkedin_connection"
+    !explicit && !injectionSafeMode && !linkedin
       ? prepareReviewedStoryFacts(
           allowedEvidence,
           target.category === "cold_email" ? "email" : "linkedin",
@@ -280,19 +321,24 @@ export function buildOutreachGroundingContext(input: {
     secondary: `${target.profileMarkdown} ${target.conversationContext}`,
   };
   const selection =
-    injectionSafeMode || explicit
+    injectionSafeMode || explicit || linkedin
       ? undefined
-      : createEvidenceRanker(
-          allowedEvidence,
-          (entry) =>
-            (reviewedEvidence
-              ? (reviewedEvidence.get(entry.id) ?? [])
-              : readFactReview(entry, entry.factReview)
-            ).map(({ excerpt }) => excerpt),
-          { linkedinConnection: target.category === "linkedin_connection" },
+      : createEvidenceRanker(allowedEvidence, (entry) =>
+          (reviewedEvidence?.get(entry.id) ?? []).map(({ excerpt }) => excerpt),
         )(relevanceTarget);
-  const selectedEvidence = explicit ?? selection?.evidence ?? [];
-  let preferredEvidenceId: string | undefined;
+  let selectedEvidence = explicit ?? selection?.evidence ?? [];
+  let winningLinkedinFact:
+    { entryId: string; fact: CandidateFact; content: string } | undefined;
+  let selectionDiagnostics = selection?.diagnostics;
+  const linkedinFacts =
+    linkedin && !injectionSafeMode
+      ? new Map(
+          (explicit ?? allowedEvidence).map((entry) => [
+            entry.id,
+            completeLinkedinFacts(entry),
+          ]),
+        )
+      : undefined;
   const targets = buildAtomicTargetSources(
     injectionSafeMode
       ? {}
@@ -306,7 +352,10 @@ export function buildOutreachGroundingContext(input: {
       ? (source) => {
           if (!linkedinTargetFits(source, target.connectionNoteLimit))
             return "overlength";
-          if (!linkedinTargetWording(source)) return "unsupportedWording";
+          const text = linkedinTargetWording(source);
+          if (!text) return "unsupportedWording";
+          if (containsExcludedClaim(text, claims)) return "excluded";
+          if (!isGroundedTextSafe(text, "linkedin")) return "unsafeWording";
           return undefined;
         }
       : undefined,
@@ -319,85 +368,102 @@ export function buildOutreachGroundingContext(input: {
             pool,
             target.connectionNoteLimit,
           );
-          let fallback:
-            | { entryId: string; targets: AtomicSource[]; priority: number }
+          let best:
+            | {
+                entry: CandidateEvidenceRecord;
+                fact: CandidateFact;
+                content: string;
+                match: ReturnType<typeof matchTargets>[number];
+              }
             | undefined;
-          for (const entry of selectedEvidence) {
-            const matched = new Map<
-              string,
-              { source: AtomicSource; related: boolean }
-            >();
-            for (const fact of readFactReview(entry, entry.factReview)) {
+          let matchedCount = 0;
+          for (const entry of explicit ?? allowedEvidence) {
+            let matched = false;
+            for (const fact of linkedinFacts?.get(entry.id) ?? []) {
               const content = normalizeAtomicSourceText(fact.excerpt);
-              if (!isFirstPersonAssertion(content)) continue;
+              if (
+                content.length > MAX_SUPPORTING_EXCERPT ||
+                !isLinkedinExperience({ kind: fact.kind, content }) ||
+                !isGroundedTextSafe(content, "linkedin")
+              )
+                continue;
               for (const match of matchTargets({
                 id: fact.id,
                 scope: "candidate",
                 kind: fact.kind,
                 content,
               })) {
-                const id = match.source.id;
-                if (!matched.has(id) || !match.related) matched.set(id, match);
+                matched = true;
+                if (
+                  !best ||
+                  (Number(isLinkedinJobTarget(match.source)) -
+                    Number(isLinkedinJobTarget(best.match.source)) ||
+                    Number(best.match.related) - Number(match.related) ||
+                    match.domainScore - best.match.domainScore ||
+                    match.score - best.match.score ||
+                    best.entry.sortOrder - entry.sortOrder ||
+                    best.entry.id.localeCompare(entry.id)) > 0
+                )
+                  best = { entry, fact, content, match };
               }
             }
-            const ordered = [...matched.values()].sort(
-              (a, b) =>
-                Number(b.source.rewrite === "linkedin_job_interest") -
-                  Number(a.source.rewrite === "linkedin_job_interest") ||
-                Number(a.related) - Number(b.related),
-            );
-            const first = ordered[0];
-            if (!first) continue;
-            const jobTarget = first.source.rewrite === "linkedin_job_interest";
-            const priority = Number(jobTarget) * 2 + Number(!first.related);
-            if (!fallback || priority > fallback.priority)
-              fallback = {
-                entryId: entry.id,
-                targets: ordered.map(({ source }) => source),
-                priority,
-              };
-            if (jobTarget && !first.related) break;
+            if (matched) matchedCount++;
           }
-          if (!fallback) return pool;
-          preferredEvidenceId = fallback.entryId;
-          const selected = new Set(fallback.targets.map((source) => source.id));
+          if (!explicit && !injectionSafeMode) {
+            selectionDiagnostics = {
+              outcome: matchedCount
+                ? "matched"
+                : allowedEvidence.length
+                  ? "no_match"
+                  : "no_evidence",
+              consideredCount: allowedEvidence.length,
+              matchedCount,
+            };
+            if (best) {
+              selectedEvidence = [best.entry];
+              winningLinkedinFact = {
+                entryId: best.entry.id,
+                fact: best.fact,
+                content: best.content,
+              };
+            }
+          }
+          if (!best) return pool;
+          const targetId = best.match.source.id;
           return [
-            ...fallback.targets,
-            ...pool.filter((source) => !selected.has(source.id)),
+            best.match.source,
+            ...pool.filter((source) => source.id !== targetId),
           ];
         }
       : undefined,
   );
   let drafts: DraftSource[];
-  let selectionDiagnostics: EvidenceSelectionDiagnostics | undefined;
 
   if (injectionSafeMode) {
     drafts = safeSummaryDraft(input.candidate);
   } else {
-    selectionDiagnostics = selection?.diagnostics;
-    const evidence = [...selectedEvidence]
-      .sort(
-        (a, b) =>
-          Number(b.id === preferredEvidenceId) -
-          Number(a.id === preferredEvidenceId),
-      )
+    const evidence = selectedEvidence
       .map((entry) => ({
         id: `evidence:${entry.id}`,
-        label: reviewedEvidence ? "Reviewed experience" : entry.title,
-        content:
-          target.category === "linkedin_connection"
-            ? reviewedLinkedinEvidence(
+        label:
+          reviewedEvidence || winningLinkedinFact
+            ? "Reviewed experience"
+            : entry.title,
+        content: linkedin
+          ? (winningLinkedinFact?.content ??
+            reviewedLinkedinEvidence(
+              entry.id,
+              linkedinFacts?.get(entry.id) ?? [],
+              targets.sources,
+              target.connectionNoteLimit,
+            ))
+          : explicit
+            ? budgetReviewedStory(
                 entry,
-                targets.sources,
-                target.connectionNoteLimit,
+                target.category === "cold_email" ? "email" : "linkedin",
+                OUTREACH_GROUNDING_BUDGETS[target.category].maxSourceChars,
               )
-            : explicit
-              ? budgetReviewedStory(
-                  entry,
-                  target.category === "cold_email" ? "email" : "linkedin",
-                  OUTREACH_GROUNDING_BUDGETS[target.category].maxSourceChars,
-                )
-              : reviewedStoryText(reviewedEvidence?.get(entry.id)),
+            : reviewedStoryText(reviewedEvidence?.get(entry.id)),
         rawContent: renderEvidence(entry),
         type: "evidence" as const,
         priority: 1 as const,
@@ -431,7 +497,9 @@ export function buildOutreachGroundingContext(input: {
   const candidateAtoms = buildAtomicCandidateSources(
     input.candidate,
     budgetedSources,
-    reviewedEvidence,
+    winningLinkedinFact
+      ? new Map([[winningLinkedinFact.entryId, [winningLinkedinFact.fact]]])
+      : (linkedinFacts ?? reviewedEvidence),
   ).filter(
     (source) =>
       target.category !== "linkedin_connection" ||
