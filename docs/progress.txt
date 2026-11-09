@@ -1905,3 +1905,11 @@ No new cost, model judge, acceptance waiver or release approved.
 - Keep source safety, provenance, explicit choices and quotas intact. Plain policy/documentation evidence remains usable for those topics, while automatic AI-agent requests require an explicitly reviewed AI-agent fact. Cover the exact reviewer failure and both positive and negative controls in all three channels.
 - Corrected the ambiguous reversed human-agent modifier found in independent review. Direct AI-family agent expressions pass, while generic activities, human-agent AI tooling and non-AI prefixes fail before model work. Independent return review passed 302 maintained tests, 75 reviewer cases and 15 guardrails. Hosted acceptance remains pending.
 - Closed the non-AI qualifier gap for whitespace and Unicode dashes in the shared matcher. Added red/green coverage for all three channels and a separate affirmative phrase in the same fact.
+
+2026-11-08 ALE-46 LinkedIn target eligibility
+- Significant. On fix/ale-46-linkedin-target-eligibility, validate target wording and length before the bounded selection. Reproduced three false 422s and an inaccurate budget reason through the real route with a mocked provider before correction.
+- Preserve job and reviewed-evidence priority, exact grounding, pre-model denial, and the Basic 200-character cap. See docs/operations/linkedin-target-context.md for the acceptance and rollout evidence.
+
+2026-11-08 ALE-46 Related monitoring experience
+- Significant. Match reviewed application or service monitoring to an AI observability target in LinkedIn notes. Direct relevance takes priority. Keep the candidate's exact assertion and express interest in the target separately.
+- The profile-only route originally returned 422 and the job route omitted the reviewed AWS fact. Both now draft within 200 characters in the local route regressions.

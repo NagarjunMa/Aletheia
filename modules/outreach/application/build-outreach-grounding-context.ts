@@ -39,6 +39,7 @@ import {
   linkedinCandidateFits,
   createLinkedinTargetMatcher,
   linkedinTargetFits,
+  linkedinTargetWording,
 } from "../domain/linkedin-grounded-selection";
 import type { CandidateEvidenceRecord } from "@/lib/candidate-profile/service";
 import type {
@@ -281,13 +282,14 @@ export function buildOutreachGroundingContext(input: {
   const selection =
     injectionSafeMode || explicit
       ? undefined
-      : createEvidenceRanker(allowedEvidence, (entry) =>
-          reviewedEvidence
-            ? (reviewedEvidence.get(entry.id)?.map(({ excerpt }) => excerpt) ??
-              [])
-            : readFactReview(entry, entry.factReview)
-                .map((fact) => fact.excerpt)
-                .join("\n"),
+      : createEvidenceRanker(
+          allowedEvidence,
+          (entry) =>
+            (reviewedEvidence
+              ? (reviewedEvidence.get(entry.id) ?? [])
+              : readFactReview(entry, entry.factReview)
+            ).map(({ excerpt }) => excerpt),
+          { linkedinConnection: target.category === "linkedin_connection" },
         )(relevanceTarget);
   const selectedEvidence = explicit ?? selection?.evidence ?? [];
   let preferredEvidenceId: string | undefined;
@@ -301,7 +303,12 @@ export function buildOutreachGroundingContext(input: {
         },
     input.candidate.profile.excludedClaims,
     target.category === "linkedin_connection"
-      ? (source) => linkedinTargetFits(source, target.connectionNoteLimit)
+      ? (source) => {
+          if (!linkedinTargetFits(source, target.connectionNoteLimit))
+            return "overlength";
+          if (!linkedinTargetWording(source)) return "unsupportedWording";
+          return undefined;
+        }
       : undefined,
     target.category === "linkedin_connection"
       ? "linkedin_connection"
@@ -313,32 +320,43 @@ export function buildOutreachGroundingContext(input: {
             target.connectionNoteLimit,
           );
           let fallback:
-            { entryId: string; targets: AtomicSource[] } | undefined;
+            | { entryId: string; targets: AtomicSource[]; priority: number }
+            | undefined;
           for (const entry of selectedEvidence) {
-            const matched = new Map<string, AtomicSource>();
+            const matched = new Map<
+              string,
+              { source: AtomicSource; related: boolean }
+            >();
             for (const fact of readFactReview(entry, entry.factReview)) {
               const content = normalizeAtomicSourceText(fact.excerpt);
               if (!isFirstPersonAssertion(content)) continue;
-              for (const source of matchTargets({
+              for (const match of matchTargets({
                 id: fact.id,
                 scope: "candidate",
                 kind: fact.kind,
                 content,
-              }))
-                matched.set(source.id, source);
+              })) {
+                const id = match.source.id;
+                if (!matched.has(id) || !match.related) matched.set(id, match);
+              }
             }
             const ordered = [...matched.values()].sort(
               (a, b) =>
-                Number(b.rewrite === "linkedin_job_interest") -
-                Number(a.rewrite === "linkedin_job_interest"),
+                Number(b.source.rewrite === "linkedin_job_interest") -
+                  Number(a.source.rewrite === "linkedin_job_interest") ||
+                Number(a.related) - Number(b.related),
             );
-            if (!ordered.length) continue;
-            const result = { entryId: entry.id, targets: ordered };
-            if (ordered[0]!.rewrite === "linkedin_job_interest") {
-              fallback = result;
-              break;
-            }
-            fallback ??= result;
+            const first = ordered[0];
+            if (!first) continue;
+            const jobTarget = first.source.rewrite === "linkedin_job_interest";
+            const priority = Number(jobTarget) * 2 + Number(!first.related);
+            if (!fallback || priority > fallback.priority)
+              fallback = {
+                entryId: entry.id,
+                targets: ordered.map(({ source }) => source),
+                priority,
+              };
+            if (jobTarget && !first.related) break;
           }
           if (!fallback) return pool;
           preferredEvidenceId = fallback.entryId;
@@ -475,8 +493,12 @@ export function buildOutreachGroundingContext(input: {
           : "no_resume_context";
 
   const atomicSources = [...prepared.safeAtoms, ...targets.sources];
+  // With no LinkedIn target, composition records the denial and keeps the explicit-selection response.
+  const noLinkedinTarget =
+    target.category === "linkedin_connection" && targets.sources.length === 0;
   if (
     requiredEvidenceRoots &&
+    !noLinkedinTarget &&
     !includesSelectedEvidence(
       requiredEvidenceRoots,
       atomicSources.map((source) => source.rootId),

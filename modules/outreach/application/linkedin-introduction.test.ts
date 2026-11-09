@@ -119,10 +119,12 @@ describe("LinkedIn introductory product contract", () => {
     `${hiring} Only candidates with three years of experience qualify.`,
     "The AI Data Platform team at Apple is hiring Applied AI Engineers only for a training simulation.",
   ])(
-    "keeps qualified JD intact but uses a supported profile introduction: %s",
+    "rejects the whole qualified JD as an introduction and uses the profile: %s",
     (jd) => {
       const { draft, sources } = compose(jd, false);
-      expect(sources.some((source) => source.content === jd)).toBe(true);
+      expect(sources.filter((source) => source.scope === "target")).toEqual([
+        expect.objectContaining({ content: profile }),
+      ]);
       expect(draft.target_observation).toContain(
         "Engineering Manager role at Apple",
       );
@@ -136,7 +138,7 @@ describe("introductory wording safety boundary", () => {
     const result = buildAtomicTargetSources(
       { profile: Array(16).fill(profile).join("\n\n"), jobDescription: hiring },
       [],
-      linkedinTargetFits,
+      (source) => (linkedinTargetFits(source) ? undefined : "overlength"),
       "linkedin_connection",
     );
     expect(result.sources).toHaveLength(16);
@@ -162,7 +164,7 @@ describe("introductory wording safety boundary", () => {
       const source = buildAtomicTargetSources(
         { profile: text },
         [],
-        linkedinTargetFits,
+        (source) => (linkedinTargetFits(source) ? undefined : "overlength"),
         "linkedin_connection",
       ).sources[0]!;
       expect(allowedClaimTexts(source)).toEqual([

@@ -37,6 +37,34 @@ const roots = [
 ];
 
 describe("ALE-46 admissible LinkedIn composition", () => {
+  it("offers a later direct observability fact before filling slots with related monitoring", () => {
+    const observability = {
+      ...target,
+      content: "The AI Observability team at Example is hiring Engineers!",
+    };
+    const related = ["rollouts", "releases", "deployments", "upgrades"].map(
+      (activity, index) => ({
+        ...candidate,
+        id: `evidence:one.fact.${index}`,
+        content: `I monitored production applications during ${activity}.`,
+      }),
+    );
+    const exact = {
+      ...candidate,
+      content: "I built AI observability tools.",
+    };
+    const options = buildLinkedinCompositions(
+      [observability, ...related, exact],
+      "networking",
+      false,
+      undefined,
+      200,
+    );
+    expect(options.length).toBeGreaterThan(0);
+    expect(options.every(({ body }) => body.includes(exact.content))).toBe(
+      true,
+    );
+  });
   it.each(
     [
       "I'm building policy evaluation tools.",

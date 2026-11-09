@@ -547,6 +547,89 @@ describe("LinkedIn real target preparation through the HTTP boundary", () => {
       );
     },
   );
+  it.each(
+    [
+      {
+        jd: undefined,
+        expectedTarget: "AI Observability and your Engineering Manager role",
+      },
+      {
+        jd: "The AI Observability team at Acme is hiring Engineers!",
+        expectedTarget: "openings for Engineers with the AI Observability team",
+      },
+    ].flatMap((scenario) =>
+      [false, true].map((direct) => ({ ...scenario, direct })),
+    ),
+  )(
+    "uses reviewed monitoring or the direct fact (JD: $jd, direct: $direct)",
+    async ({ jd, expectedTarget, direct }) => {
+      const experience =
+        "I built infrastructure to monitor applications on AWS.";
+      const exact = "I built AI observability tools.";
+      const story = (id: string, title: string, actions: string) => {
+        const record = {
+          id,
+          kind: "technical_project" as const,
+          title,
+          context: "",
+          actions,
+          outcome: "",
+          metrics: [],
+          skills: [],
+          links: [],
+          confirmed: true,
+          sortOrder: 0,
+        };
+        return {
+          ...record,
+          factReview: prepareFactReview(record, [
+            {
+              id: "11111111-1111-4111-8111-111111111111",
+              kind: "action",
+              excerpt: actions,
+              confirmed: true,
+            },
+          ]),
+        };
+      };
+      await useRealPreparation(
+        [],
+        [
+          story(
+            "synthetic-aws-monitoring",
+            direct ? "Acme Observability" : "Application infrastructure",
+            experience,
+          ),
+          ...(direct
+            ? [story("synthetic-ai-observability", "Systems", exact)]
+            : []),
+        ],
+      );
+      const response = await POST(
+        makeRequest({
+          method: "POST",
+          headers: { Authorization: "Bearer test" },
+          body: {
+            category: "linkedin_connection",
+            connectionNoteLimit: 200,
+            profileMarkdown: "Engineering Manager at Acme | AI Observability",
+            ...(jd ? { jd } : {}),
+          },
+        }),
+      );
+      expect(response.status).toBe(200);
+      const result = await response.json();
+      expect(result.body).toContain(
+        `Hi there, ${direct ? exact : experience} I'm interested in`,
+      );
+      expect(result.body).toContain(expectedTarget);
+      if (!direct) expect(result.body).not.toMatch(/I built AI observability/i);
+      expect(result.evalMetadata.hasCandidateRelevance).toBe(true);
+      expect(result.character_count).toBe(result.body.length);
+      expect(result.character_count).toBeLessThanOrEqual(200);
+      expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
+    },
+  );
   it.each(["", "The Évaluation team at Équipe is hiring Engineers!"])(
     "preserves Unicode through preparation and final grounding with JD %j",
     async (jd) => {
@@ -603,6 +686,178 @@ describe("LinkedIn real target preparation through the HTTP boundary", () => {
     expect(await response.json()).toMatchObject({
       error: expect.stringContaining("200-character note"),
       reasonCodes: ["TARGET_FACT_TOO_LONG"],
+    });
+    expect(mockRpc).not.toHaveBeenCalled();
+    expect(mockAnthropicCreate).not.toHaveBeenCalled();
+  });
+
+  const unsupportedBlocks = Array.from(
+    { length: 16 },
+    (_, index) => `Published evaluation article ${index + 1}.`,
+  ).join("\n\n");
+  const approvedHiring = "The Evaluation team at Example is hiring Engineers!";
+
+  it.each([
+    {
+      scenario: "profile only",
+      profileMarkdown: `${unsupportedBlocks}\n\n${short}`,
+      jd: "",
+      expected: "Engineering Manager role at Example",
+    },
+    {
+      scenario: "usable JD fact after unsupported blocks",
+      profileMarkdown: short,
+      jd: `${unsupportedBlocks}\n\n${approvedHiring}`,
+      expected: "openings for Engineers with the Evaluation team at Example",
+    },
+    {
+      scenario: "unsupported JD with a usable profile",
+      profileMarkdown: short,
+      jd: unsupportedBlocks,
+      expected: "Engineering Manager role at Example",
+    },
+  ])(
+    "keeps usable Basic note context after the old target pool fills: $scenario",
+    async ({ profileMarkdown, jd, expected }) => {
+      await useRealPreparation();
+      const response = await POST(
+        makeRequest({
+          method: "POST",
+          headers: { Authorization: "Bearer test" },
+          body: {
+            category: "linkedin_connection",
+            connectionNoteLimit: 200,
+            profileMarkdown,
+            jd,
+          },
+        }),
+      );
+      expect(response.status).toBe(200);
+      const result = await response.json();
+      expect(result.body).toContain(expected);
+      expect(result.character_count).toBe(result.body.length);
+      expect(result.character_count).toBeLessThanOrEqual(200);
+      expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
+      expect(
+        mockAnthropicCreate.mock.calls[0]![0].tools[0].description,
+      ).not.toContain("Published evaluation article");
+    },
+  );
+
+  it("reports unsupported wording without spending a slot or starting paid work", async () => {
+    await useRealPreparation();
+    const response = await POST(
+      makeRequest({
+        method: "POST",
+        headers: { Authorization: "Bearer test" },
+        body: {
+          category: "linkedin_connection",
+          connectionNoteLimit: 200,
+          profileMarkdown: `${unsupportedBlocks}\n\nPublished one more article.`,
+          jd: "",
+        },
+      }),
+    );
+    expect(response.status).toBe(422);
+    expect(await response.json()).toMatchObject({
+      code: "INSUFFICIENT_GROUNDING",
+      reasonCodes: ["TARGET_WORDING_UNSUPPORTED"],
+    });
+    expect(mockRpc).not.toHaveBeenCalled();
+    expect(mockAnthropicCreate).not.toHaveBeenCalled();
+  });
+
+  it("logs why explicit LinkedIn selection failed when no target wording is eligible", async () => {
+    const record = {
+      id: "ae550000-1111-4111-8111-111111111111",
+      kind: "technical_project" as const,
+      title: "Evaluations",
+      context: "",
+      actions: "I build evaluation tools for applied AI systems.",
+      outcome: "",
+      metrics: [],
+      skills: [],
+      links: [],
+      confirmed: true,
+      sortOrder: 0,
+    };
+    await useRealPreparation(
+      [],
+      [
+        {
+          ...record,
+          factReview: prepareFactReview(record, [
+            {
+              id: "11111111-1111-4111-8111-111111111111",
+              kind: "action",
+              excerpt: record.actions,
+              confirmed: true,
+            },
+          ]),
+        },
+      ],
+    );
+    const info = vi.fn();
+    const spy = vi.spyOn(loggerModule, "createRequestLogger").mockReturnValue({
+      info,
+      debug: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      child: vi.fn(),
+    });
+    const profileMarkdown = "Published an evaluation article.";
+    try {
+      const response = await POST(
+        makeRequest({
+          method: "POST",
+          headers: { authorization: "Bearer test" },
+          body: {
+            category: "linkedin_connection",
+            connectionNoteLimit: 200,
+            profileMarkdown,
+            selectedEvidenceIds: [record.id],
+          },
+        }),
+      );
+      expect(response.status).toBe(422);
+      expect(await response.json()).toMatchObject({
+        code: "EVIDENCE_SELECTION_UNAVAILABLE",
+      });
+      expect(info).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: "outreach.target_eligibility",
+          outcome: "failure",
+          unsupportedWording: 1,
+          eligibleOptionCount: 0,
+        }),
+        expect.any(String),
+      );
+      expect(JSON.stringify(info.mock.calls)).not.toContain(profileMarkdown);
+      expect(mockRpc).not.toHaveBeenCalled();
+      expect(mockAnthropicCreate).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("does not blame unsupported wording when a supported target fails final safety", async () => {
+    await useRealPreparation();
+    const response = await POST(
+      makeRequest({
+        method: "POST",
+        headers: { authorization: "Bearer test" },
+        body: {
+          category: "linkedin_connection",
+          connectionNoteLimit: 200,
+          profileMarkdown:
+            "Published an evaluation article.\n\nEngineering Manager at Onload Labs | AI Evaluation",
+        },
+      }),
+    );
+    expect(response.status).toBe(422);
+    expect(await response.json()).toMatchObject({
+      code: "INSUFFICIENT_GROUNDING",
+      reasonCodes: ["NO_ELIGIBLE_TARGET_FACT"],
     });
     expect(mockRpc).not.toHaveBeenCalled();
     expect(mockAnthropicCreate).not.toHaveBeenCalled();
