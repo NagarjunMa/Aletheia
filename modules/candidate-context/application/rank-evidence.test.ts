@@ -32,10 +32,110 @@ const ids = (
   createEvidenceRanker(entries)({ primary, secondary }).evidence.map(
     (entry) => entry.id,
   );
+const rankTargetIndices = (targets: readonly string[]) => {
+  const rank = createEvidenceTargetRanker(targets);
+  return (excerpt: string) => rank(excerpt).map(({ index }) => index);
+};
 
 describe("createEvidenceRanker", () => {
+  it("ranks exact observability above related monitoring and rejects unrelated or negated work", () => {
+    const related = "I built infrastructure to monitor applications on AWS.";
+    const targets = [
+      "Engineering Manager at Example | AI Observability",
+      "Engineering Manager at Example | AI Evaluation",
+    ];
+    const rank = rankTargetIndices(targets);
+    expect(rank(related)).toEqual([0]);
+    expect(
+      rank("I built infrastructure to deploy applications on AWS."),
+    ).toEqual([]);
+    expect(
+      rank("I built monitoring infrastructure for applications on AWS."),
+    ).toEqual([0]);
+    expect(rank("I monitored applications for an open job.")).toEqual([]);
+    expect(rank("I built application monitoring training slides.")).toEqual([]);
+    expect(
+      rank(
+        "I built application monitoring systems for tracking job applicants.",
+      ),
+    ).toEqual([]);
+    expect(
+      rank(
+        "I built service monitoring systems, but they cannot monitor services.",
+      ),
+    ).toEqual([]);
+    expect(
+      rank("I built service monitoring systems, but they failed."),
+    ).toEqual([]);
+    expect(
+      rank("I built service monitoring systems, but monitoring failed."),
+    ).toEqual([]);
+    expect(
+      rank(
+        "I built application monitoring systems to track hiring submissions.",
+      ),
+    ).toEqual([]);
+    expect(
+      rank(
+        "I built infrastructure to monitor applications on AWS for our recruiting team.",
+      ),
+    ).toEqual([]);
+    expect(
+      rank("I did not build application monitoring infrastructure."),
+    ).toEqual([]);
+    expect(
+      rank(
+        "I built infrastructure to monitor applications on AWS, but it never monitored an application.",
+      ),
+    ).toEqual([]);
+    expect(
+      rank("I've built infrastructure to monitor applications on AWS."),
+    ).toEqual([0]);
+    expect(
+      rank(
+        "I have worked on building the infrastructure that can monitor the application on AWS.",
+      ),
+    ).toEqual([0]);
+    expect(
+      rank(
+        "I built infrastructure to monitor production services without downtime.",
+      ),
+    ).toEqual([0]);
+    expect(
+      rank(
+        "I built infrastructure to monitor applications on AWS, with no downtime.",
+      ),
+    ).toEqual([0]);
+    expect(
+      rankTargetIndices([
+        "The Non-AI Observability team at Example is hiring Engineers!",
+        "The Non AI Observability team at Example is hiring Engineers!",
+        "The Non‑AI Observability team at Example is hiring Engineers!",
+        "The Ex AI Observability team at Example is hiring Engineers!",
+        "The Formerly Known As AI Observability team at Example is hiring Engineers!",
+        "The Infrastructure Observability team at AI Studio is hiring Engineers!",
+        "The Design team at AI Observability Labs is hiring Engineers!",
+        "Engineering Manager at AI Observability Labs | Developer Tools",
+      ])("I monitored production applications."),
+    ).toEqual([]);
+    const entries = [
+      story("related", { actions: related }),
+      story("exact", { actions: "I built AI observability tools." }),
+      story("context-only", { context: related }),
+    ];
+    expect(
+      createEvidenceRanker(entries, (entry) => [entry.actions], {
+        linkedinConnection: true,
+      })({ primary: targets[0]! }).evidence.map(({ id }) => id),
+    ).toEqual(["exact", "related"]);
+    expect(
+      createEvidenceRanker(entries, (entry) => [entry.actions])({
+        primary: targets[0]!,
+      }).evidence.map(({ id }) => id),
+    ).toEqual(["exact"]);
+  });
   it("uses the same topic weights, aliases and stable ordering for target units", () => {
-    const rank = createEvidenceTargetRanker([
+    const rank = rankTargetIndices([
       "policy",
       "policy documentation",
       "policymaking",
@@ -43,12 +143,10 @@ describe("createEvidenceRanker", () => {
     ]);
     expect(rank("I wrote documentation for policy review.")).toEqual([1, 0]);
     expect(
-      createEvidenceTargetRanker(["evaluation", "evals evals evals"])(
-        "I built evals.",
-      ),
+      rankTargetIndices(["evaluation", "evals evals evals"])("I built evals."),
     ).toEqual([0, 1]);
     expect(
-      createEvidenceTargetRanker(["AI agents"])("I helped an estate agent."),
+      rankTargetIndices(["AI agents"])("I helped an estate agent."),
     ).toEqual([]);
     expect(rank("I built gardening tools.")).toEqual([]);
     expect(rank("I wrote documentation for policy review.")).toEqual([1, 0]);

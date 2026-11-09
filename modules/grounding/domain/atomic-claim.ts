@@ -126,6 +126,7 @@ const LINKEDIN_SPECIALTIES = new Set([
   "Reliability",
   "Developer Tools",
   "AI Evaluation",
+  "AI Observability",
 ]);
 
 /** Finite source-owned rewrites, shared by prompt examples and validation. */

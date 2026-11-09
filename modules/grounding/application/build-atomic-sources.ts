@@ -94,7 +94,9 @@ export function buildAtomicTargetSources(
     conversation?: string;
   },
   excludedClaims: readonly string[] = [],
-  fitsOutput: (_source: AtomicSource) => boolean = () => true,
+  outputRejection?: (
+    _source: AtomicSource,
+  ) => "overlength" | "unsupportedWording" | undefined,
   channel?: "linkedin_connection",
   prioritize?: (_sources: readonly AtomicSource[]) => readonly AtomicSource[],
 ) {
@@ -103,6 +105,7 @@ export function buildAtomicTargetSources(
     examined: 0,
     excluded: 0,
     overlength: 0,
+    unsupportedWording: 0,
     budgetRejected: 0,
     pageControls: 0,
     accepted: 0,
@@ -156,8 +159,12 @@ export function buildAtomicTargetSources(
             ? { rewrite: "linkedin_job_interest" as const }
             : {}),
         };
-        if (content.length > MAX_SUPPORTING_EXCERPT || !fitsOutput(source)) {
-          diagnostics.overlength += 1;
+        const rejection =
+          content.length > MAX_SUPPORTING_EXCERPT
+            ? "overlength"
+            : outputRejection?.(source);
+        if (rejection) {
+          diagnostics[rejection] += 1;
           return;
         }
         result.push(source);

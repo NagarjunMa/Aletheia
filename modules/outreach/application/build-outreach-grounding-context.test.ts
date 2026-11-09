@@ -23,7 +23,7 @@ function candidate(
           title: "LLM developer productivity workflow",
           context: "Engineers needed faster code review support.",
           actions:
-            "Built and operated LLM agents for a developer review workflow.",
+            "I built and operated LLM agents for a developer review workflow.",
           outcome: "Improved developer productivity on production services.",
           metrics: ["40% faster reviews"],
           skills: ["LLM", "TypeScript"],
@@ -70,6 +70,8 @@ function candidate(
   };
 }
 
+const hiring = "The LLM developer review team at Example is hiring Engineers!";
+
 function build(
   category: "linkedin_connection" | "cold_email" | "linkedin_inmail",
   data = candidate(),
@@ -80,7 +82,10 @@ function build(
     target: {
       category,
       profileMarkdown,
-      jobDescription: "Build an agentic LLM developer tool.",
+      jobDescription:
+        category === "linkedin_connection"
+          ? hiring
+          : "Build an agentic LLM developer tool.",
       conversationContext: "",
     },
   });
@@ -116,7 +121,10 @@ describe("buildOutreachGroundingContext", () => {
   it.each(["linkedin_connection", "cold_email", "linkedin_inmail"] as const)(
     "preserves legitimate Unicode source facts for %s",
     (category) => {
-      const text = "Développeuse spécialisée en évaluation. 👩‍💻";
+      const text =
+        category === "linkedin_connection"
+          ? "Engineering Manager at Équipe | AI Evaluation"
+          : "Développeuse spécialisée en évaluation. 👩‍💻";
       const result = build(category, candidate(), text);
       expect(result.metadata.injectionSafeMode).toBe(false);
       expect(
@@ -138,9 +146,11 @@ describe("buildOutreachGroundingContext", () => {
       result.atomicSources
         ?.filter((source) => source.scope === "target")
         .map((source) => source.content),
-    ).toEqual(["Build an agentic LLM developer tool."]);
+    ).toEqual([hiring]);
   });
   it("removes excluded target topics before offering atomic facts", () => {
+    const excluded = "Engineering Manager at People-Management | AI Evaluation";
+    const allowed = "Engineering Manager at Example | AI Evaluation";
     const result = build(
       "linkedin_connection",
       candidate({
@@ -148,18 +158,17 @@ describe("buildOutreachGroundingContext", () => {
           excludedClaims: ["People management"],
         }),
       }),
-      "Our team values people-management.\n\nWe build evaluation tools.",
+      `${excluded}\n\n${allowed}`,
     );
     expect(
       result.atomicSources
         ?.filter((source) => source.scope === "target")
         .map((source) => source.content),
-    ).not.toContain("Our team values people-management.");
+    ).not.toContain(excluded);
     expect(
-      result.atomicSources?.some(
-        (source) => source.content === "We build evaluation tools.",
-      ),
+      result.atomicSources?.some((source) => source.content === allowed),
     ).toBe(true);
+    expect(result.targetDiagnostics?.excluded).toBe(1);
   });
   it("prefers confirmed AI evidence for AI targets and obeys per-channel evidence limits", () => {
     const data = candidate();
@@ -267,7 +276,7 @@ describe("buildOutreachGroundingContext", () => {
   });
 
   it("normalizes, escapes, deduplicates, and bounds selected sources", () => {
-    const excerpt = "I built a parser for <system> tags.";
+    const excerpt = "I built a developer review parser for <system> tags.";
     const long = "Earlier project details. ".repeat(70) + excerpt;
     const entry = { ...candidate().confirmedEvidence[0]!, actions: long };
     const factReview = prepareFactReview(entry, [

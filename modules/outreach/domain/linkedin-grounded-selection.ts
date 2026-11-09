@@ -44,14 +44,17 @@ export class LinkedinGroundingUnavailableError extends Error {
       this.reasonCodes.push("TARGET_SOURCE_BUDGET");
     if (diagnostics?.pageControls)
       this.reasonCodes.push("TARGET_PAGE_CONTROLS");
-    if (unsupportedWording) this.reasonCodes.push("TARGET_WORDING_UNSUPPORTED");
+    const wordingRejected =
+      unsupportedWording ||
+      (diagnostics?.accepted === 0 && Boolean(diagnostics.unsupportedWording));
+    if (wordingRejected) this.reasonCodes.push("TARGET_WORDING_UNSUPPORTED");
     if (!this.reasonCodes.length)
       this.reasonCodes.push("NO_ELIGIBLE_TARGET_FACT");
     this.publicMessage = diagnostics?.injectionReasons.length
       ? "The selected profile contains instruction-like or encoded text that cannot be used safely. Try another profile. No draft was generated."
       : [
           "No complete, usable target fact is available.",
-          unsupportedWording
+          wordingRejected
             ? "The available facts cannot be phrased as an introduction without changing their meaning. Use a complete role headline or hiring sentence; qualifications will not be dropped."
             : "",
           diagnostics?.overlength
@@ -151,16 +154,16 @@ export function createLinkedinTargetMatcher(
   const rank = createEvidenceTargetRanker(
     eligible.map(({ source }) => source.content),
   );
-  return (candidate: AtomicSource): AtomicSource[] => {
+  return (candidate: AtomicSource) => {
     const text = allowedClaimTexts(candidate).at(-1)!;
     return rank(candidate.content)
-      .map((index) => eligible[index]!)
+      .map(({ index, related }) => ({ ...eligible[index]!, related }))
       .filter(
         (target) =>
           candidate.scope === "candidate" &&
           minimumNoteLength(target.text, text) <= limit,
       )
-      .map(({ source }) => source);
+      .map(({ source, related }) => ({ source, related }));
   };
 }
 
@@ -248,15 +251,17 @@ export function buildLinkedinCompositions(
         : [CTAS[0], CTAS[1]];
   const matchTargets = createLinkedinTargetMatcher(targets, limit);
   const paired = candidates.flatMap((candidate) =>
-    matchTargets(candidate).map((target) => ({
-      target,
+    matchTargets(candidate).map(({ source, related }) => ({
+      target: source,
       candidate,
+      related,
     })),
   );
   const basicNote = limit < LINKEDIN_CONNECTION_MAX_CHARACTERS;
   const targetOnly = targets.map((target) => ({
     target,
     candidate: undefined,
+    related: false,
   }));
   const options: Array<{
     id: string;
@@ -264,7 +269,11 @@ export function buildLinkedinCompositions(
     body: string;
     rhetoricalPlan?: RhetoricalPlan;
   }> = [];
-  type Pair = { target: AtomicSource; candidate: AtomicSource | undefined };
+  type Pair = {
+    target: AtomicSource;
+    candidate: AtomicSource | undefined;
+    related: boolean;
+  };
   const offer = (pairs: Pair[]) => {
     for (const { target, candidate } of pairs) {
       for (const cta of invitations(target)) {
@@ -286,14 +295,18 @@ export function buildLinkedinCompositions(
       }
     }
   };
+  const offerBestMatch = (pairs: Pair[]) => {
+    offer(pairs.filter(({ related }) => !related));
+    if (!options.length) offer(pairs.filter(({ related }) => related));
+  };
   const offerPreferred = (pairs: Pair[]) => {
     const jobPairs = pairs.filter(
       ({ target }) => target.rewrite === "linkedin_job_interest",
     );
-    if (jobPairs.length) offer(jobPairs);
-    if (!jobPairs.length) offer(pairs);
+    if (jobPairs.length) offerBestMatch(jobPairs);
+    if (!jobPairs.length) offerBestMatch(pairs);
     else if (basicNote && !options.length) {
-      offer(
+      offerBestMatch(
         pairs.filter(
           ({ target }) => target.rewrite !== "linkedin_job_interest",
         ),

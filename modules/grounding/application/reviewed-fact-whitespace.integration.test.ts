@@ -4,6 +4,7 @@ import { prepareFactReview } from "@/lib/candidate-profile/fact-review";
 import { resolveOutputConstraint } from "@/lib/ai/output-constraints";
 import { buildOutreachGroundingContext } from "@/modules/outreach/application/build-outreach-grounding-context";
 import { buildYcGroundingContext } from "@/modules/application-answer/application/build-yc-grounding-context";
+import { buildAtomicTargetSources } from "./build-atomic-sources";
 import { firstLinkedinOption } from "@/__tests__/helpers/linkedin-option";
 import { allowedClaimTexts } from "@/modules/grounding/domain/atomic-claim";
 import { resolveLinkedinSelection } from "@/modules/outreach/domain/linkedin-grounded-selection";
@@ -247,9 +248,16 @@ describe("ALE47-R3-1 real reviewed fact to final output", () => {
         candidate: candidate(cases[0]!),
         target: wrapped,
       });
-      const selected = context.atomicSources!.find((source) =>
-        source.id.startsWith(`target.${field}.`),
-      )!;
+      expect(
+        context.atomicSources!.some((source) => source.scope === "target"),
+      ).toBe(false);
+      const { sources } = buildAtomicTargetSources(
+        { [field]: literal },
+        [],
+        undefined,
+        "linkedin_connection",
+      );
+      const selected = sources[0]!;
       expect(selected.content).toBe(literal);
       const text = allowedClaimTexts(selected).at(-1)!;
       const draft = {
@@ -278,7 +286,7 @@ describe("ALE47-R3-1 real reviewed fact to final output", () => {
             category: "linkedin_connection",
           }),
           requiredEnding: draft.cta,
-          sources: context.atomicSources!,
+          sources,
           claims: draft.claims,
           excludedClaims: [],
         }),

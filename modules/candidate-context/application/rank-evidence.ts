@@ -39,6 +39,10 @@ const AI_TOPIC_TERMS = new Set([...AI_TERMS, "agent"]);
 // Match the non qualifier as a whole Unicode word.
 const AI_AGENT_PATTERN =
   /(?<![\p{L}\p{N}_\p{Pd}])(?<!(?:^|[^\p{L}\p{M}\p{N}_])non[\s\p{White_Space}\p{Dash}]+)(?:ai|llms?|ml|rag)(?:[\s-]+(?:powered|based|grounded))?[\s-]+agents?\b/u;
+const AI_OBSERVABILITY_PATTERN =
+  /(?<![\p{L}\p{N}_\p{Dash}])(?<!(?:^|[^\p{L}\p{M}\p{N}_])(?:non|not|no|without|former|formerly)[\s\p{Dash}]+)ai[\s\p{Dash}]+observability\b/u;
+const NAMED_AI_OBSERVABILITY =
+  /^(?:applied )?ai[\s\p{Dash}]+observability(?: (?:platform|engineers|developers|designers|researchers))?[.!]?$/u;
 
 function normalizeMatchingText(value: string): string {
   return value
@@ -62,11 +66,70 @@ function tokens(value: string): Set<string> {
   return result;
 }
 
+function hasAiObservabilityTopic(value: string): boolean {
+  return normalizeMatchingText(value)
+    .split(/\n\s*\n/u)
+    .some((paragraph) => {
+      const text = paragraph.trim().replace(/\s+/gu, " ");
+      // Organization names in supported headlines and job facts aren't topics.
+      const hiring = /^the (.+?) team at .+? is hiring (.+)$/u.exec(text);
+      if (hiring)
+        return (
+          NAMED_AI_OBSERVABILITY.test(hiring[1]!) ||
+          NAMED_AI_OBSERVABILITY.test(hiring[2]!)
+        );
+      const specialty = text.split(" | ")[1];
+      return specialty
+        ? specialty
+            .split(" & ")
+            .some((field) => NAMED_AI_OBSERVABILITY.test(field))
+        : AI_OBSERVABILITY_PATTERN.test(text);
+    });
+}
+
+function describesApplicationMonitoring(excerpt: string): boolean {
+  // Match the whole assertion so an unrecognized qualifier cannot turn a
+  // failed or unrelated monitoring effort into a positive relevance signal.
+  const statement = normalizeMatchingText(excerpt)
+    .trim()
+    .replace(/\s+/gu, " ")
+    .replace(/^i(?: have|['’]ve) /u, "i ")
+    .replace(/[.!]$/u, "")
+    .replace(/,? (?:with no|without) downtime$/u, "")
+    .replace(/ during (?:rollouts|releases|deployments|upgrades)$/u, "");
+  const scope = / (?:on aws|in production)$/u;
+  const technicalScope = scope.test(statement);
+  const text = statement.replace(scope, "");
+  const software = (object: string) =>
+    /^(?:production (?:applications?|services?)|services?)$/u.test(object) ||
+    (technicalScope && /^applications?$/u.test(object));
+  const monitored = /^i monitor(?:ed)? (.+)$/u.exec(text)?.[1];
+  if (monitored) return software(monitored);
+  const action =
+    /^i (?:built|designed|implemented|operated|maintained|set up|helped build|worked on building) (?:(?:a|an|the|aws|cloud|production) ){0,3}/u.exec(
+      text,
+    );
+  if (!action) return false;
+  const work = text.slice(action[0].length);
+  if (
+    /^(?:application|service) monitoring (?:infrastructure|tooling|platform|systems?)$/u.test(
+      work,
+    )
+  )
+    return true;
+  const object =
+    /^(?:monitoring infrastructure for|infrastructure (?:to monitor|for monitoring|that (?:can monitor|monitors?))) (?:the )?(.+)$/u.exec(
+      work,
+    )?.[1];
+  return object !== undefined && software(object);
+}
+
 function match(
   target: ReadonlySet<string>,
   contribution: ReadonlySet<string>,
   labels: ReadonlySet<string>,
   context: ReadonlySet<string>,
+  relatedObservability = false,
 ) {
   let score = 0;
   let domainScore = 0;
@@ -98,14 +161,20 @@ function match(
     )
       supported = true;
   }
-  return { score, domainScore, supported };
+  // A related capability is eligible for ranking but below a direct domain match.
+  if (relatedObservability && !contribution.has("observability"))
+    return { score: 1, domainScore: 1, supported: true, related: true };
+  return { score, domainScore, supported, related: false };
 }
 
-/** The same topic policy ranks whole target units against a reviewed assertion. */
-export function createEvidenceTargetRanker(
-  targets: readonly string[],
-): (_contribution: string) => number[] {
+/** Rank complete LinkedIn target units against a reviewed assertion. */
+export function createEvidenceTargetRanker(targets: readonly string[]) {
   const preparedTargets = targets.map(tokens);
+  const observabilityTargets = new Set(
+    targets.flatMap((target, index) =>
+      hasAiObservabilityTopic(target) ? [index] : [],
+    ),
+  );
   const byTerm = new Map<string, number[]>();
   preparedTargets.forEach((target, index) => {
     for (const term of target) {
@@ -115,15 +184,24 @@ export function createEvidenceTargetRanker(
     }
   });
   const empty = new Set<string>();
-  return (contribution) => {
+  return (contribution: string) => {
     const prepared = tokens(contribution);
     const candidates = new Set(
       [...prepared].flatMap((term) => byTerm.get(term) ?? []),
     );
+    const relatedMonitoring = describesApplicationMonitoring(contribution);
+    if (relatedMonitoring)
+      for (const index of observabilityTargets) candidates.add(index);
     return [...candidates]
       .map((index) => ({
         index,
-        ...match(preparedTargets[index]!, prepared, empty, empty),
+        ...match(
+          preparedTargets[index]!,
+          prepared,
+          empty,
+          empty,
+          relatedMonitoring && observabilityTargets.has(index),
+        ),
       }))
       .filter((item) => item.supported)
       .sort(
@@ -132,7 +210,7 @@ export function createEvidenceTargetRanker(
           b.score - a.score ||
           a.index - b.index,
       )
-      .map((item) => item.index);
+      .map(({ index, related }) => ({ index, related }));
   };
 }
 
@@ -177,14 +255,15 @@ export function createReviewedFactMatcher(target: {
 }
 
 /**
- * An excerpt array ranks only individual reviewed facts. The legacy string
- * projection retains record labels and context for LinkedIn connection ranking.
+ * An excerpt array ranks only individual reviewed facts by default. LinkedIn
+ * retains record labels and context while checking related work per excerpt.
  */
 export function createEvidenceRanker(
   evidence: readonly CandidateEvidenceRecord[],
   contributionText?: (
     _entry: CandidateEvidenceRecord,
   ) => string | readonly string[],
+  { linkedinConnection = false }: { linkedinConnection?: boolean } = {},
 ) {
   const eligible = evidence
     .filter((entry) => entry.confirmed)
@@ -192,21 +271,24 @@ export function createEvidenceRanker(
       const text =
         contributionText?.(entry) ??
         [entry.actions, entry.outcome, ...entry.metrics].join(" ");
-      if (typeof text !== "string") {
+      if (typeof text !== "string" && !linkedinConnection) {
         return {
           entry,
           reviewed: text.map(prepareReviewedExcerpt),
           contribution: NO_TERMS,
           labels: NO_TERMS,
           context: NO_TERMS,
+          relatedMonitoring: false,
         };
       }
       return {
         entry,
         reviewed: undefined,
-        contribution: tokens(text),
+        contribution: tokens(typeof text === "string" ? text : text.join("\n")),
         labels: tokens([entry.title, ...entry.skills].join(" ")),
         context: tokens(entry.context),
+        relatedMonitoring:
+          typeof text !== "string" && text.some(describesApplicationMonitoring),
       };
     });
   return (target: {
@@ -218,14 +300,37 @@ export function createEvidenceRanker(
   } => {
     const primary = tokens(target.primary);
     const secondary = tokens(target.secondary ?? "");
+    const primaryObservability =
+      linkedinConnection && hasAiObservabilityTopic(target.primary);
+    const secondaryObservability =
+      linkedinConnection && hasAiObservabilityTopic(target.secondary ?? "");
     const ranked = eligible.map(
-      ({ entry, contribution, labels, context, reviewed }) => {
+      ({
+        entry,
+        contribution,
+        labels,
+        context,
+        reviewed,
+        relatedMonitoring,
+      }) => {
         const first = reviewed
           ? bestReviewedMatch(primary, reviewed)
-          : match(primary, contribution, labels, context);
+          : match(
+              primary,
+              contribution,
+              labels,
+              context,
+              relatedMonitoring && primaryObservability,
+            );
         const second = reviewed
           ? bestReviewedMatch(secondary, reviewed)
-          : match(secondary, contribution, labels, context);
+          : match(
+              secondary,
+              contribution,
+              labels,
+              context,
+              relatedMonitoring && secondaryObservability,
+            );
         return {
           entry,
           first,

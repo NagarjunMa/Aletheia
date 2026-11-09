@@ -68,13 +68,17 @@ function outreach(
   entries: CandidateEvidenceRecord[],
   category: "linkedin_connection" | "cold_email" | "linkedin_inmail",
   jobDescription = jd,
+  hiringFact?: string,
 ) {
   return buildOutreachGroundingContext({
     candidate: candidate(entries),
     target: {
       category,
       profileMarkdown: "Engineering Manager working on AI.",
-      jobDescription,
+      jobDescription:
+        category === "linkedin_connection" && hiringFact
+          ? `${jobDescription}\n\n${hiringFact}`
+          : jobDescription,
       conversationContext: "",
     },
   });
@@ -114,9 +118,16 @@ describe("ALE-54 actual selector contract", () => {
   it.each(["linkedin_connection", "cold_email", "linkedin_inmail"] as const)(
     "prefers supported policy/documentation work over a generic AI category for %s",
     (category) => {
-      expect(ids(outreach([generic, policy], category))[0]).toBe(
-        "evidence:policy",
-      );
+      expect(
+        ids(
+          outreach(
+            [generic, policy],
+            category,
+            jd,
+            "The AI agents policy documentation team at Example is hiring Engineers!",
+          ),
+        )[0],
+      ).toBe("evidence:policy");
     },
   );
   it.each(["linkedin_connection", "cold_email", "linkedin_inmail"] as const)(
@@ -133,6 +144,7 @@ describe("ALE-54 actual selector contract", () => {
             [generic, labelledPolicy],
             category,
             "Build LLM policy documentation tools.",
+            "The LLM policy documentation team at Example is hiring Engineers!",
           ),
         )[0],
       ).toBe("evidence:labelled-policy");
@@ -166,9 +178,15 @@ describe("ALE-54 actual selector contract", () => {
     expect(result.readiness.ready).toBe(true);
   });
   describe.each([
-    "Build AI agents for policy documentation.",
-    "Build LLM RAG ML agents grounded in policy documentation.",
-  ])("prioritizes the requested domain: %s", (jobDescription) => {
+    [
+      "Build AI agents for policy documentation.",
+      "The AI agents policy documentation team at Example is hiring Engineers!",
+    ],
+    [
+      "Build LLM RAG ML agents grounded in policy documentation.",
+      "The LLM RAG ML agents policy documentation team at Example is hiring Engineers!",
+    ],
+  ])("prioritizes the requested domain: %s", (jobDescription, hiringFact) => {
     it.each([
       "linkedin_connection",
       "cold_email",
@@ -195,7 +213,7 @@ describe("ALE-54 actual selector contract", () => {
               question: "Why this role?",
               jobDescription,
             })
-          : outreach(entries, category, jobDescription);
+          : outreach(entries, category, jobDescription, hiringFact);
       expect(ids(result)[0]).toBe("evidence:specific-policy");
     });
   });
@@ -693,6 +711,7 @@ describe("ALE-54 actual selector contract", () => {
           [generic, policy],
           "linkedin_connection",
           "Work on evals for agents using policies and docs.",
+          "The agent evals policies and docs team at Example is hiring Engineers!",
         ),
       ),
     ).toEqual(["evidence:policy"]);
