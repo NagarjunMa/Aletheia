@@ -6,12 +6,14 @@ import {
   type Route,
   type Worker,
 } from "@playwright/test";
-import { resolve } from "node:path";
-import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import JSZip from "jszip";
 
-const test = base.extend<{ slowReader: boolean }>({
+const test = base.extend<{ slowReader: boolean; storeZip: boolean }>({
   slowReader: [false, { option: true }],
+  storeZip: [false, { option: true }],
 });
 
 const first = {
@@ -65,8 +67,21 @@ async function signIn(worker: Worker, id: string, expiresIn = 3600) {
 
 let browser: BrowserContext;
 let scratchExtension: string | undefined;
-test.beforeEach(async ({ slowReader }) => {
+test.beforeEach(async ({ slowReader, storeZip }) => {
   let extension = resolve("ascendia-extension/dist");
+  if (storeZip) {
+    const zip = await JSZip.loadAsync(
+      await readFile(resolve(extension, "aletheia-extension.zip")),
+    );
+    scratchExtension = await mkdtemp(resolve(tmpdir(), "aletheia-store-zip-"));
+    extension = scratchExtension;
+    for (const file of Object.values(zip.files)) {
+      if (file.dir) continue;
+      const destination = resolve(extension, file.name);
+      await mkdir(dirname(destination), { recursive: true });
+      await writeFile(destination, await file.async("nodebuffer"));
+    }
+  }
   if (slowReader) {
     scratchExtension = await mkdtemp(resolve(tmpdir(), "ale55-chromium-"));
     await cp(extension, scratchExtension, { recursive: true });
@@ -232,6 +247,349 @@ test("the packaged extension leaves a LinkedIn composer untouched when the draft
   });
   expect(await fill(200)).toMatchObject({ success: false });
   await expect(textarea).toHaveValue("x".repeat(201));
+});
+
+test.describe("Store ZIP", () => {
+  test.use({ storeZip: true });
+
+  for (const layout of ["shadow", "standalone"] as const) {
+    test(`the Store ZIP honors the counter linked to a ${layout} note`, async () => {
+      const url = `https://www.linkedin.com/in/linked-counter-${layout}`;
+      const note = `<div><textarea id="note" name="message" placeholder="Add a note" maxlength="300"
+        aria-describedby="hint invisible count">Existing note</textarea></div>
+        <footer><p id="hint">Please add a short note</p>
+        <span id="invisible" hidden aria-live="polite">13/10</span>
+        ${
+          layout === "shadow"
+            ? '<div id="count"><span>Note length</span><span aria-live="polite">13/200</span></div>'
+            : '<span id="count">13/200</span>'
+        }</footer>`;
+      await browser.route(url, (route) =>
+        route.fulfill({
+          contentType: "text/html",
+          body:
+            layout === "shadow"
+              ? `<div id="interop-outlet"><template shadowrootmode="open">
+                <section role="dialog" aria-label="Add a note to your invitation">
+                  ${note}<button id="send" type="button" onclick="this.dataset.clicked='true'">Send invitation</button>
+                </section>
+              </template></div>`
+              : note,
+        }),
+      );
+      const worker =
+        browser.serviceWorkers()[0] ??
+        (await browser.waitForEvent("serviceworker"));
+      const page = await browser.newPage();
+      await page.goto(url);
+      const field = page.locator("#note");
+      const fill = (length: number) =>
+        worker.evaluate(
+          async ({ url, length }) => {
+            const [tab] = await chrome.tabs.query({ url });
+            return chrome.tabs.sendMessage(tab!.id, {
+              action: "autoFill",
+              data: {
+                category: "linkedin_connection",
+                body: "x".repeat(length),
+              },
+            });
+          },
+          { url, length },
+        );
+
+      let result: unknown;
+      await expect
+        .poll(async () => {
+          try {
+            result = await fill(250);
+            return true;
+          } catch (error) {
+            if (
+              !(error instanceof Error) ||
+              !error.message.includes("Receiving end does not exist")
+            )
+              throw error;
+            return false;
+          }
+        })
+        .toBe(true);
+      expect(result).toMatchObject({
+        success: false,
+        error: expect.stringContaining("200 characters"),
+      });
+      await expect(field).toHaveValue("Existing note");
+      expect(await fill(200)).toMatchObject({ success: true });
+      await expect(field).toHaveValue("x".repeat(200));
+
+      await field.evaluate((textarea) => {
+        const root = textarea.getRootNode() as Document | ShadowRoot;
+        const counter = root.getElementById("count")!;
+        const count = document.createElement("span");
+        count.textContent = "13/200";
+        counter.replaceChildren(count);
+        counter.setAttribute("style", "display: contents");
+      });
+      expect(await fill(250)).toMatchObject({
+        success: false,
+        error: expect.stringContaining("200 characters"),
+      });
+      await expect(field).toHaveValue("x".repeat(200));
+
+      await field.evaluate((textarea) => {
+        textarea.removeAttribute("maxlength");
+        const root = textarea.getRootNode() as Document | ShadowRoot;
+        const counter = root.getElementById("count")!;
+        const hidden = document.createElement("span");
+        hidden.setAttribute("aria-live", "polite");
+        hidden.hidden = true;
+        hidden.textContent = "0/300";
+        counter.replaceChildren(hidden);
+        counter.setAttribute("style", "display: block; min-height: 20px");
+      });
+      expect(await fill(250)).toMatchObject({
+        success: false,
+        error: expect.stringContaining("200 characters"),
+      });
+      await expect(field).toHaveValue("x".repeat(200));
+      await field.evaluate((textarea) => {
+        const root = textarea.getRootNode() as Document | ShadowRoot;
+        const hidden = root.getElementById("count")!.firstElementChild!;
+        hidden.removeAttribute("hidden");
+        hidden.setAttribute(
+          "style",
+          "position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap",
+        );
+      });
+      expect(await fill(250)).toMatchObject({
+        success: false,
+        error: expect.stringContaining("200 characters"),
+      });
+      await expect(field).toHaveValue("x".repeat(200));
+
+      await field.evaluate((textarea) => {
+        const root = textarea.getRootNode() as Document | ShadowRoot;
+        const counter = root.getElementById("count")!;
+        const clipped = document.createElement("span");
+        clipped.setAttribute(
+          "style",
+          "position: absolute; width: 0; height: 0; overflow: hidden; white-space: nowrap",
+        );
+        const count = document.createElement("span");
+        count.setAttribute("aria-live", "polite");
+        count.textContent = "0/300";
+        clipped.append(count);
+        counter.replaceChildren(clipped);
+      });
+      expect(await fill(250)).toMatchObject({
+        success: false,
+        error: expect.stringContaining("200 characters"),
+      });
+      await expect(field).toHaveValue("x".repeat(200));
+
+      await field.evaluate((textarea) => {
+        textarea.setAttribute("maxlength", "300");
+        const root = textarea.getRootNode() as Document | ShadowRoot;
+        const counter = root.getElementById("count")!;
+        const wrapper = counter.firstElementChild!;
+        const count = wrapper.firstElementChild!;
+        counter.setAttribute("style", "position: relative; min-height: 20px");
+        wrapper.setAttribute(
+          "style",
+          "display: block; width: 0; height: 0; overflow: hidden",
+        );
+        count.setAttribute("style", "position: absolute; top: 0; left: 0");
+        count.textContent = "13/200";
+      });
+      expect(await fill(250)).toMatchObject({
+        success: false,
+        error: expect.stringContaining("200 characters"),
+      });
+      await expect(field).toHaveValue("x".repeat(200));
+      if (layout === "shadow")
+        expect(
+          await page.locator("#send").getAttribute("data-clicked"),
+        ).toBeNull();
+    });
+  }
+
+  test("the packaged extension fills only the live-shaped LinkedIn shadow composer", async () => {
+    const url = "https://www.linkedin.com/in/shadow-composer-fixture";
+    await browser.route(url, (route) =>
+      route.fulfill({
+        contentType: "text/html",
+        body: `<textarea name="message" id="dm">Unrelated message</textarea>
+      <div id="interop-outlet"><template shadowrootmode="open">
+        <div role="dialog" aria-labelledby="send-invite-modal">
+          <h2 id="send-invite-modal">Add a note to your invitation</h2>
+          <textarea name="message" id="custom-message" placeholder="Ex: We know each other from…">Existing note</textarea>
+          <div><span aria-live="polite">13/300</span></div>
+          <button type="submit">Send invitation</button>
+        </div>
+      </template></div>`,
+      }),
+    );
+    const worker =
+      browser.serviceWorkers()[0] ??
+      (await browser.waitForEvent("serviceworker"));
+    const page = await browser.newPage();
+    await page.goto(url);
+    const host = page.locator("#interop-outlet");
+    const note = host.locator("#custom-message");
+    const send = host.getByRole("button", { name: "Send invitation" });
+    await send.evaluate((button) => {
+      button.addEventListener("click", () =>
+        button.setAttribute("data-clicked", "true"),
+      );
+    });
+    const fill = (length: number) =>
+      worker.evaluate(
+        async ({ url, length }) => {
+          const [tab] = await chrome.tabs.query({ url });
+          return chrome.tabs.sendMessage(tab!.id, {
+            action: "autoFill",
+            data: { category: "linkedin_connection", body: "x".repeat(length) },
+          });
+        },
+        { url, length },
+      );
+
+    expect(await fill(301)).toMatchObject({
+      success: false,
+      error: expect.stringContaining("300 characters"),
+    });
+    await expect(note).toHaveValue("Existing note");
+    expect(await fill(300)).toMatchObject({ success: true });
+    await expect(note).toHaveValue("x".repeat(300));
+    await expect(page.locator("#dm")).toHaveValue("Unrelated message");
+    expect(await send.getAttribute("data-clicked")).toBeNull();
+
+    await host.evaluate((element) =>
+      element.setAttribute("aria-hidden", "true"),
+    );
+    expect(await fill(200)).toMatchObject({ success: false });
+    await expect(note).toHaveValue("x".repeat(300));
+    await host.evaluate((element) => element.removeAttribute("aria-hidden"));
+    await host.evaluate((element) => {
+      const otherNote = document.createElement("textarea");
+      otherNote.id = "other-shadow-note";
+      otherNote.placeholder = "Add a note";
+      otherNote.value = "Unrelated note";
+      element.shadowRoot!.append(otherNote);
+    });
+    expect(await fill(200)).toMatchObject({ success: true });
+    await expect(note).toHaveValue("x".repeat(200));
+    await expect(host.locator("#other-shadow-note")).toHaveValue(
+      "Unrelated note",
+    );
+    await page.locator("body").evaluate((body) => {
+      const dialog = document.createElement("div");
+      dialog.setAttribute("role", "dialog");
+      dialog.setAttribute("aria-label", "Add a note");
+      dialog.innerHTML =
+        '<textarea name="message">Another invitation</textarea>';
+      body.append(dialog);
+    });
+    expect(await fill(200)).toMatchObject({ success: false });
+    await expect(note).toHaveValue("x".repeat(200));
+    await expect(page.getByText("Another invitation")).toHaveCount(1);
+
+    await page
+      .getByText("Another invitation")
+      .evaluate((field) => field.closest('[role="dialog"]')?.remove());
+    await note.evaluate((field) => {
+      field.setAttribute("maxlength", "300");
+      field.nextElementSibling!.querySelector("span")!.textContent = "200/200";
+    });
+    expect(await fill(250)).toMatchObject({
+      success: false,
+      error: expect.stringContaining("200 characters"),
+    });
+    await expect(note).toHaveValue("x".repeat(200));
+    await note.evaluate((field) => {
+      const adjacent = field.nextElementSibling!;
+      const status = document.createElement("span");
+      status.setAttribute("aria-live", "polite");
+      status.textContent = "Saved";
+      adjacent.append(status);
+    });
+    expect(await fill(250)).toMatchObject({ success: false });
+    await note.evaluate((field) => {
+      field.nextElementSibling!.lastElementChild!.textContent = "200/300";
+    });
+    expect(await fill(250)).toMatchObject({ success: false });
+    await expect(note).toHaveValue("x".repeat(200));
+    await note.evaluate((field) => {
+      const status = document.createElement("span");
+      status.setAttribute("aria-live", "polite");
+      status.textContent = "Saved";
+      field.after(status);
+    });
+    expect(await fill(250)).toMatchObject({ success: false });
+    await expect(note).toHaveValue("x".repeat(200));
+    await note.evaluate((field) => {
+      field.nextElementSibling!.remove();
+      field.removeAttribute("maxlength");
+      const wrapper = field.nextElementSibling!;
+      const counter = wrapper.querySelector("span")!;
+      counter.textContent = "200/300";
+      wrapper.replaceWith(counter);
+    });
+    expect(await fill(250)).toMatchObject({ success: true });
+    await expect(note).toHaveValue("x".repeat(250));
+
+    await host.locator("#send-invite-modal").evaluate((heading) => {
+      heading.textContent = "Send invitation to Event";
+    });
+    expect(await fill(100)).toMatchObject({ success: false });
+    await expect(note).toHaveValue("x".repeat(250));
+
+    await host.evaluate((element) => {
+      const shadow = element.shadowRoot!;
+      shadow.replaceChildren();
+      const hidden = document.createElement("div");
+      hidden.setAttribute("aria-hidden", "true");
+      hidden.append(document.createElement("slot"));
+      shadow.append(hidden);
+      const dialog = document.createElement("div");
+      dialog.setAttribute("role", "dialog");
+      dialog.setAttribute("aria-label", "Add a note to your invitation");
+      const slottedNote = document.createElement("textarea");
+      slottedNote.id = "slotted-note";
+      slottedNote.name = "message";
+      slottedNote.value = "Hidden note";
+      dialog.append(slottedNote);
+      element.append(dialog);
+    });
+    expect(await fill(100)).toMatchObject({ success: false });
+    await expect(host.locator("#slotted-note")).toHaveValue("Hidden note");
+
+    await page.locator("body").evaluate((body) => {
+      const event = document.createElement("div");
+      event.setAttribute("role", "dialog");
+      event.setAttribute("aria-label", "Send invitation to Event");
+      const eventNote = document.createElement("textarea");
+      eventNote.id = "event-note";
+      eventNote.placeholder = "Add a note";
+      eventNote.value = "Event draft";
+      event.append(eventNote);
+      body.append(event);
+    });
+    expect(await fill(100)).toMatchObject({ success: false });
+    await expect(page.locator("#event-note")).toHaveValue("Event draft");
+
+    await page.locator("#event-note").evaluate((field) => {
+      field.closest('[role="dialog"]')?.remove();
+      field.setAttribute("id", "legacy-note");
+      field.setAttribute("maxlength", "300");
+      const counter = document.createElement("span");
+      counter.setAttribute("aria-live", "polite");
+      counter.textContent = "11/200";
+      document.body.append(field, counter);
+    });
+    expect(await fill(250)).toMatchObject({ success: false });
+    await expect(page.locator("#legacy-note")).toHaveValue("Event draft");
+  });
 });
 
 test("remembers the LinkedIn note limit and sends it with and without a job description", async () => {

@@ -48,7 +48,11 @@ export function compareVersions(left, right) {
 
 export function isPackagedExtensionPath(filePath) {
   if (filePath === MANIFEST_PATH) return true;
-  if (filePath === "scripts/build-extension-zip.mjs") return true;
+  if (
+    filePath === "scripts/build-extension-zip.mjs" ||
+    filePath === "ascendia-extension/build.mjs"
+  )
+    return true;
   if (EXCLUDED_PACKAGED_FILES.has(filePath)) return false;
   if (/\.(test|spec)\.[jt]sx?$/.test(filePath)) return false;
   if (filePath.endsWith(".ts") || filePath.endsWith(".d.ts")) return false;

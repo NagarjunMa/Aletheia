@@ -10,6 +10,7 @@ import {
 import {
   linkedinDiscussionPassages,
   linkedinJobHasRetraction,
+  linkedinJobParagraphs,
   linkedinHiringPassages,
   linkedinProfileHeadlineTopics,
   linkedinProfileRetractedTopics,
@@ -132,7 +133,11 @@ export function buildAtomicTargetSources(
   }
   for (const [name, raw] of entries) {
     if (!raw) continue;
-    const paragraphs = raw.replace(/\r\n?/gu, "\n").split(/\n\s*\n/u);
+    const normalizedLines = raw.replace(/\r\n?/gu, "\n");
+    const paragraphs =
+      channel === "linkedin_connection" && name === "jobDescription"
+        ? linkedinJobParagraphs(normalizedLines)
+        : normalizedLines.split(/\n\s*\n/u);
     const retractedTopics =
       channel === "linkedin_connection" && name === "profile"
         ? linkedinProfileRetractedTopics(paragraphs.map(normalizeClaimText))
