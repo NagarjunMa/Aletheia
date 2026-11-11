@@ -194,7 +194,8 @@ const ROLE_MODIFIER =
   "(?:senior|staff|principal|lead|junior|founding|full[- ]stack|front[- ]?end|back[- ]?end|software|platform|data|product|security|infrastructure|systems?|site reliability|developer tools|machine learning|applied ai|ai|ml|research|ux)";
 const COFOUNDER = String.raw`co[\p{Pd} ]?founders?`;
 const FUNDING = "funding|financing|approval";
-const RECENT_STATUS = "(?:today|yesterday|(?:this|last) (?:week|month))";
+const RECENT_STATUS =
+  "(?:today|yesterday|(?:this|last) (?:week|month)|(?:last|on) (?:monday|tuesday|wednesday|thursday|friday|saturday|sunday))";
 const FUNDING_CONDITION = new RegExp(
   String.raw`\b(?:(?:pending|awaiting) (?:${FUNDING})|(?:contingent on|subject to|depends? on) (?:[\p{L}]+ ){0,3}(?:${FUNDING})|(?:if|unless|until|once|when|after) (?:(?:we|i|the (?:company|team))(?: (?:can|have) |['’]ve | )(?:secure(?:d)?|rais(?:e|ed)|obtain(?:ed)?|receiv(?:e|ed)|get|got|have) (?:[\p{L}]+ ){0,3}(?:${FUNDING})|(?:(?:the|our) )?(?:(?:new|additional) )?(?:${FUNDING}|(?:hiring )?budget) (?:comes through|(?:is|has been|can be) (?:approved|secured|confirmed|received|granted))))\b`,
   "iu",
@@ -280,11 +281,15 @@ const ROLE_UPDATE_SEPARATOR = new RegExp(
   String.raw`\s*(?:;|—(?!\s*${REVERSIBLE_ROLE_STATE}\b)|,?\s+\b(?:but|whereas)\s+|,?\s+and\s+(?=(?:we|they|the|these|those|both|neither)\b))`,
   "iu",
 );
-const REOPENED_ROLE_UPDATE =
-  /^(.+?) (?:(?:has|have) (?:(?:now|since) )?reopened|reopened|(?:is|are) now (?:open|accepting applications again))[.!]?$/iu;
+const REOPENED_ROLE_UPDATE = new RegExp(
+  String.raw`^(.+?) (?:(?:has|have) (?:(?:now|since) )?reopened|reopened|(?:is|are) now (?:open|accepting applications again))(?: ${RECENT_STATUS})?[.!]?$`,
+  "iu",
+);
 const NEGATED_ROLE_SUBJECT = /^(?:none|neither|no)\b/iu;
 const AMBIGUOUS_REOPENING =
   /^(?:none|neither|no|one|some|any|either|several)\b/iu;
+const DETACHED_REOPENING_CONDITION =
+  /^(?:only )?(?:if|unless|until|contingent on|subject to|depends? on|pending|awaiting)\b/iu;
 const NEGATED_OPENING_SUBJECT = new RegExp(
   String.raw`^(?<target>(?:neither|none|no)(?: .+?)?) (?:is|are|was|were|remain|remains) (?:${STATUS_ADVERB} )?(?:open|available|${APPLICATION_INTAKE})\b`,
   "iu",
@@ -315,6 +320,7 @@ const ROLE_STATUS_QUALIFIER = new RegExp(
   String.raw`,? ${TRAILING_STATUS_QUALIFIER}\b.*$`,
   "iu",
 );
+const ROLE_STATUS_DATE = new RegExp(String.raw`,? ${RECENT_STATUS}$`, "iu");
 const TRAILING_ROLE_REFERENCE = /^ for ([^.!?]+)/iu;
 const STOPPED_ACTIVITY_SCOPE = String.raw`(?=\s*(?:[.!?]|$)| (?:at this time|right now|currently)\b| for ${OPENING_REFERENCE}\b)`;
 const HIRING_RETRACTION = new RegExp(
@@ -369,7 +375,10 @@ function openingTitle(value: string) {
 }
 
 function roleReferenceWithoutStatus(reference: string) {
-  return reference.replace(ROLE_STATUS_QUALIFIER, "").trim();
+  return reference
+    .replace(ROLE_STATUS_QUALIFIER, "")
+    .replace(ROLE_STATUS_DATE, "")
+    .trim();
 }
 
 function normalizeRoleReference(reference: string) {
@@ -432,6 +441,14 @@ function refersToAdvertisedRole(
 
 function stripUpdateLabel(text: string) {
   return text.replace(/^(?:update|correction):\s*/iu, "");
+}
+
+function isDetachedReopeningCondition(text: string) {
+  const funding = FUNDING_CONDITION.exec(text);
+  return (
+    DETACHED_REOPENING_CONDITION.test(text) ||
+    (funding && HIRING_CONDITION_PREFIX.test(text.slice(0, funding.index)))
+  );
 }
 
 function hiringFundingApplies(
@@ -605,14 +622,15 @@ export function linkedinJobHasRetraction(paragraphs: readonly string[]) {
     const closedRoles = new Set<string>();
     let lastClosedRole: string | undefined;
     for (const { text } of passages) {
-      const parts = text.split(ROLE_UPDATE_SEPARATOR);
+      const parts = text
+        .split(ROLE_UPDATE_SEPARATOR)
+        .map((part) => stripUpdateLabel(part.trim()));
       if (
         parts.length > 1 &&
         hiringFundingApplies(text, advertisedRoles) === true
       )
         return true;
-      for (const part of parts) {
-        const update = stripUpdateLabel(part.trim());
+      for (const [index, update] of parts.entries()) {
         const conditional = hiringFundingApplies(
           update,
           advertisedRoles,
@@ -623,7 +641,9 @@ export function linkedinJobHasRetraction(paragraphs: readonly string[]) {
         if (reopened) {
           if (
             !AMBIGUOUS_REOPENING.test(reopened) &&
-            (!/^both\b/iu.test(reopened) || advertisedRoles.length === 2)
+            (!/^both\b/iu.test(reopened) || advertisedRoles.length === 2) &&
+            !isDetachedReopeningCondition(parts[index - 1] ?? "") &&
+            !isDetachedReopeningCondition(parts[index + 1] ?? "")
           ) {
             for (const role of closedRoles) {
               if (
@@ -637,16 +657,20 @@ export function linkedinJobHasRetraction(paragraphs: readonly string[]) {
           continue;
         }
         const closure = CLOSED_ROLE_UPDATE.exec(update)?.groups;
-        if (closure?.target) {
-          if (NEGATED_ROLE_SUBJECT.test(closure.target)) {
+        const activeClosure = SCOPED_ACTIVE_STOP.exec(update)?.groups;
+        const closedTarget =
+          closure?.target ?? activeClosure?.target ?? activeClosure?.onHold;
+        if (closedTarget) {
+          if (NEGATED_ROLE_SUBJECT.test(closedTarget)) {
             lastClosedRole = undefined;
             continue;
           }
-          const target = scopedClosureTarget(closure.target, closure.scope);
+          const target = scopedClosureTarget(closedTarget, closure?.scope);
           const affected = advertisedRoles.filter((role) =>
             refersToAdvertisedRole(target, [role]),
           );
           if (affected.length) {
+            if (FUNDING_CONDITION.test(update)) return true;
             for (const role of affected) closedRoles.add(role);
             lastClosedRole = affected.length === 1 ? affected[0] : undefined;
             continue;
