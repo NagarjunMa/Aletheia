@@ -239,6 +239,10 @@ const CONDITIONAL_RECRUITMENT = new RegExp(
   String.raw`^(?:(?:${HIRING_ACTOR})(?: ${HIRING_MODAL}|['’]ll (?:only |not |then )?))?(?:open|reopen|accept|take|start|resume|begin|fill|post|hire|recruit|(?:be )?(?:hiring|recruiting))(?: (?<target>[^.!?]+))?[.!?]?$|^(?:${HIRING_ACTOR}(?: (?:are|am|is) |['’](?:re|m|s) ))?(?:only )?(?:hiring|recruiting|looking for|seeking)(?: (?<progressiveTarget>[^.!?]+))?[.!?]?$`,
   "iu",
 );
+const CONDITIONAL_FOLLOWUP_SCOPE = new RegExp(
+  String.raw`^${HIRING_ACTOR}(?: ${HIRING_MODAL}|['’]ll )(?:interview|revisit) ([^.!?]+)[.!?]?$`,
+  "iu",
+);
 const ROLE_REFERENCE = new RegExp(
   String.raw`^(?:${OPENING_REFERENCE}|${OPENING}|this|(?:this|the) (?:post|list)|(?:any|each|every) ${OPENING}|(?:the |our )?(?:${HIRING_ACTIVITY}|job applications)|(?:all|any|both|each|either|neither|none|one|some)(?: of (?:them|these|those))?)$`,
   "iu",
@@ -476,9 +480,17 @@ function isDetachedReopeningCondition(
       separate.consequent,
     )?.groups;
     const opening = CONDITIONAL_OPENING.exec(separate.consequent)?.groups;
+    const followup = CONDITIONAL_FOLLOWUP_SCOPE.exec(separate.consequent)?.[1];
+    const namedFollowup =
+      followup &&
+      !/^that\b/iu.test(followup) &&
+      !ROLE_REFERENCE.test(normalizeRoleReference(followup))
+        ? followup
+        : undefined;
     const actionRole =
       recruitment?.target ??
       recruitment?.progressiveTarget ??
+      namedFollowup ??
       opening?.object ??
       opening?.subject;
     const premiseRole = DEPENDENT_OPENING.exec(separate.premise)?.groups
@@ -519,7 +531,9 @@ function statusCanFollow(previous?: string, next?: string) {
   // Compare only relative dates with clear ordering. Undated updates retain
   // narrative order; differently dated but ambiguous updates cannot reopen.
   return (
-    next === "today" || (next === "yesterday" && previous.startsWith("last "))
+    next === "today" ||
+    (next === "yesterday" && previous.startsWith("last ")) ||
+    (next.startsWith("this ") && previous === next.replace(/^this /u, "last "))
   );
 }
 
