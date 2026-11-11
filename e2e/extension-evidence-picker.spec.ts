@@ -540,6 +540,7 @@ test.describe("Store ZIP", () => {
         250,
       ],
       ["#counter", "color:transparent", 250],
+      ["#counter", "filter:opacity(0)", 250],
       ["#counter", "mask-image:linear-gradient(transparent,transparent)", 250],
     ] as const) {
       await note.evaluate(

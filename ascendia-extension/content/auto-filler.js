@@ -70,6 +70,7 @@ import {
       if (
         node.matches('[aria-hidden="true"], [aria-disabled="true"], [inert]') ||
         style.opacity === "0" ||
+        /\b(?:opacity\(\s*0(?:\.0+)?%?\s*\)|url\()/iu.test(style.filter) ||
         style.contentVisibility === "hidden" ||
         style.maskImage !== "none" ||
         style.clip !== "auto" ||
