@@ -280,7 +280,7 @@ const CLOSED_ROLE_UPDATE = new RegExp(
   "iu",
 );
 const ROLE_UPDATE_SEPARATOR = new RegExp(
-  String.raw`\s*(?:;|—(?!\s*${REVERSIBLE_ROLE_STATE}\b)|,?\s+\b(?:but|whereas)\s+|,?\s+and\s+(?=(?:we|they|these|those|both|neither)\b|the [^.!?]{1,100}? (?:is|are|was|were|has|have|reopened|closed|paused|filled)\b))`,
+  String.raw`\s*(?:;|—(?!\s*${REVERSIBLE_ROLE_STATE}\b)|,?\s+\b(?:but|whereas)\s+|,?\s+and\s+(?=(?:${RECENT_STATUS},?\s+)?(?:(?:we|they|these|those|both|neither)\b|the [^.!?]{1,100}? (?:is|are|was|were|has|have|reopened|closed|paused|filled)\b)))`,
   "iu",
 );
 const REOPENED_ROLE_UPDATE = new RegExp(
@@ -465,8 +465,12 @@ function isDetachedReopeningCondition(
   text: string,
   advertisedRoles: readonly string[],
 ) {
+  const condition = text
+    .replace(LEADING_ROLE_STATUS_DATE, "")
+    .replace(/^(?:but,?\s+|(?:however|that is),\s*)/iu, "")
+    .replace(LEADING_ROLE_STATUS_DATE, "");
   // A complete conditional about another named opening does not qualify this one.
-  const separate = SEPARATE_REOPENING_CONDITION.exec(text)?.groups;
+  const separate = SEPARATE_REOPENING_CONDITION.exec(condition)?.groups;
   if (separate?.premise && separate.consequent) {
     const recruitment = CONDITIONAL_RECRUITMENT.exec(
       separate.consequent,
@@ -483,10 +487,10 @@ function isDetachedReopeningCondition(
     if (separateRole && !refersToAdvertisedRole(separateRole, advertisedRoles))
       return false;
   }
-  const funding = FUNDING_CONDITION.exec(text);
+  const funding = FUNDING_CONDITION.exec(condition);
   return (
-    DETACHED_REOPENING_CONDITION.test(text) ||
-    (funding && HIRING_CONDITION_PREFIX.test(text.slice(0, funding.index)))
+    DETACHED_REOPENING_CONDITION.test(condition) ||
+    (funding && HIRING_CONDITION_PREFIX.test(condition.slice(0, funding.index)))
   );
 }
 
