@@ -413,6 +413,79 @@ test.describe("Store ZIP", () => {
     });
   }
 
+  test("the Store ZIP rejects clipped fields and counters unrelated to the composer", async () => {
+    const url = "https://www.linkedin.com/in/untrusted-composer-counter";
+    await browser.route(url, (route) =>
+      route.fulfill({
+        contentType: "text/html",
+        body:
+          '<div id="interop-outlet"><template shadowrootmode="open">' +
+          '<section role="dialog" aria-label="Add a note to your invitation">' +
+          '<div id="note-wrap" style="height:0;overflow:hidden">' +
+          '<textarea id="note" name="message" aria-describedby="counter">Existing note</textarea></div>' +
+          '<span id="counter" aria-live="polite">13/300</span>' +
+          '<button id="send" onclick="this.dataset.clicked=\'true\'">Send invitation</button>' +
+          "</section></template></div>",
+      }),
+    );
+    const worker =
+      browser.serviceWorkers()[0] ??
+      (await browser.waitForEvent("serviceworker"));
+    const page = await browser.newPage();
+    await page.goto(url);
+    const fill = (length: number) =>
+      worker.evaluate(
+        async ({ url, length }) => {
+          const [tab] = await chrome.tabs.query({ url });
+          return chrome.tabs.sendMessage(tab!.id, {
+            action: "autoFill",
+            data: { category: "linkedin_connection", body: "x".repeat(length) },
+          });
+        },
+        { url, length },
+      );
+
+    const note = page.locator("#note");
+    expect.soft(await fill(150)).toMatchObject({ success: false });
+    await expect.soft(note).toHaveValue("Existing note", { timeout: 500 });
+
+    await note.evaluate((field) => {
+      const root = field.getRootNode() as ShadowRoot;
+      root.getElementById("note-wrap")!.removeAttribute("style");
+      root.getElementById("counter")!.style.clipPath = "inset(100%)";
+      (field as HTMLTextAreaElement).value = "Existing note";
+    });
+    expect.soft(await fill(250)).toMatchObject({
+      success: false,
+      error: expect.stringContaining("200 characters"),
+    });
+    await expect.soft(note).toHaveValue("Existing note", { timeout: 500 });
+    await page.locator("#counter").evaluate((counter) => {
+      counter.removeAttribute("style");
+      counter.textContent = "12/300";
+    });
+    expect(await fill(250)).toMatchObject({ success: false });
+    await expect(note).toHaveValue("Existing note");
+    await page.locator("#counter").evaluate((counter) => {
+      counter.textContent = "13/300";
+    });
+    expect(await fill(250)).toMatchObject({ success: true });
+    await expect(note).toHaveValue("x".repeat(250));
+    expect(await page.locator("#send").getAttribute("data-clicked")).toBeNull();
+
+    await page.locator("body").evaluate((body) => {
+      body.innerHTML =
+        '<textarea id="note" placeholder="Add a note">Existing note</textarea>' +
+        '<span aria-live="polite">Saved</span>' +
+        '<span aria-live="polite" aria-label="Team member count">13/300</span>';
+    });
+    expect.soft(await fill(250)).toMatchObject({
+      success: false,
+      error: expect.stringContaining("200 characters"),
+    });
+    await expect.soft(note).toHaveValue("Existing note", { timeout: 500 });
+  });
+
   test("the packaged extension fills only the live-shaped LinkedIn shadow composer", async () => {
     const url = "https://www.linkedin.com/in/shadow-composer-fixture";
     await browser.route(url, (route) =>
