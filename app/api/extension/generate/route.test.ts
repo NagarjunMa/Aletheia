@@ -401,6 +401,18 @@ describe("LinkedIn real target preparation through the HTTP boundary", () => {
               200,
             ],
             [
+              "The AI Engineer role was closed last week. The AI Engineer role reopened this week.",
+              200,
+            ],
+            [
+              "The AI Engineer role reopened this week. The AI Engineer role was closed last week.",
+              200,
+            ],
+            [
+              "The AI Engineer role was closed last month. The AI Engineer role reopened this month.",
+              200,
+            ],
+            [
               "We reopened the AI Engineer role today. We paused the AI Engineer role yesterday.",
               200,
             ],
@@ -411,6 +423,18 @@ describe("LinkedIn real target preparation through the HTTP boundary", () => {
             [
               "The AI Engineer role was closed, but it has reopened — if funding is secured, we'll hire Construction Engineers.",
               200,
+            ],
+            [
+              "The AI Engineer role was closed, but it has reopened — if funding is secured, we will revisit the Construction Engineer role.",
+              200,
+            ],
+            [
+              "The AI Engineer role was closed, but it has reopened — if funding is secured, we'll interview Construction Engineers.",
+              200,
+            ],
+            [
+              "The AI Engineer role was closed, but it has reopened — if funding is secured, we'll interview AI Engineers.",
+              422,
             ],
             [
               "The AI Engineer role was closed, but it has reopened. Provided financing is secured, that is.",
