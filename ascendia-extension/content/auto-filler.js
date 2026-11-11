@@ -29,6 +29,18 @@ import {
     return root instanceof ShadowRoot ? root.host : null;
   }
 
+  function hasUnsupportedClipTransform(style) {
+    if (
+      (style.rotate !== "none" && style.rotate !== "0deg") ||
+      style.scale.includes("-") ||
+      style.perspective !== "none"
+    )
+      return true;
+    if (style.transform === "none") return false;
+    const { is2D, a, b, c, d } = new DOMMatrixReadOnly(style.transform);
+    return !is2D || a <= 0 || d <= 0 || b !== 0 || c !== 0;
+  }
+
   function isVisible(element, box, fullyVisible = false) {
     if (
       box.width <= 0 ||
@@ -52,6 +64,7 @@ import {
           bottom >= box.bottom - 0.5));
     if (!remainsVisible()) return false;
     let containingBlock;
+    let hasClip = false;
     for (let node = element; node; node = composedParent(node)) {
       const style = getComputedStyle(node);
       if (
@@ -74,18 +87,25 @@ import {
         paintContained || (!containingBlock && style.overflowX !== "visible");
       const clipsY =
         paintContained || (!containingBlock && style.overflowY !== "visible");
+      hasClip ||= clipsX || clipsY;
+      if (hasClip && hasUnsupportedClipTransform(style)) return false;
       if (clipsX || clipsY) {
-        // Text ranges include pixels outside a clipping ancestor's scrollport.
+        // Range and scrollport bounds must both be in viewport coordinates.
+        if (!(node instanceof HTMLElement)) return false;
         const bounds = node.getBoundingClientRect();
         if (clipsX) {
-          const start = bounds.left + node.clientLeft;
+          if (node.offsetWidth <= 0) return false;
+          const scale = bounds.width / node.offsetWidth;
+          const start = bounds.left + node.clientLeft * scale;
           left = Math.max(left, start);
-          right = Math.min(right, start + node.clientWidth);
+          right = Math.min(right, start + node.clientWidth * scale);
         }
         if (clipsY) {
-          const start = bounds.top + node.clientTop;
+          if (node.offsetHeight <= 0) return false;
+          const scale = bounds.height / node.offsetHeight;
+          const start = bounds.top + node.clientTop * scale;
           top = Math.max(top, start);
-          bottom = Math.min(bottom, start + node.clientHeight);
+          bottom = Math.min(bottom, start + node.clientHeight * scale);
         }
         if (!remainsVisible()) return false;
       }
@@ -129,13 +149,9 @@ import {
   }
 
   function counterHasCharacterContext(element, dialog) {
-    if (element.closest(DIALOG_SELECTOR) !== dialog) return false;
-    const root = element.getRootNode();
-    for (
-      let node = element;
-      node && node !== dialog;
-      node = node.parentElement
-    ) {
+    for (let node = element; node; node = composedParent(node)) {
+      if (node.matches(DIALOG_SELECTOR)) return node === dialog;
+      const root = node.getRootNode();
       const labels = [
         node.getAttribute("aria-label"),
         node
@@ -151,7 +167,7 @@ import {
       )
         return false;
     }
-    return true;
+    return !dialog;
   }
 
   function readVisibleCounter(counter, dialog) {
@@ -162,10 +178,16 @@ import {
       if (!node.textContent.trim()) continue;
       range.selectNodeContents(node);
       const parent = node.assignedSlot ?? node.parentElement;
+      const style = getComputedStyle(parent);
+      const textFill =
+        style.getPropertyValue("-webkit-text-fill-color") || style.color;
       // The text can render even when its linked wrapper has no box.
       const boxes = [...range.getClientRects()];
       if (
         !counterHasCharacterContext(parent, dialog) ||
+        /^(?:transparent|rgba\([^)]*,\s*0(?:\.0+)?\)|[\w-]+\([^)]*\/\s*0(?:\.0+)?%?\))$/iu.test(
+          textFill,
+        ) ||
         !boxes.length ||
         !boxes.every((box) => isVisible(parent, box, true))
       )

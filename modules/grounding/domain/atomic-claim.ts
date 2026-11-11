@@ -284,7 +284,7 @@ const ROLE_UPDATE_SEPARATOR = new RegExp(
   "iu",
 );
 const REOPENED_ROLE_UPDATE = new RegExp(
-  String.raw`^(.+?) (?:(?:has|have) (?:(?:now|since) )?reopened|reopened|(?:is|are) now (?:open|accepting applications again))(?: ${RECENT_STATUS})?[.!]?$`,
+  String.raw`^(.+?) (?:${STATUS_VERB} reopened|(?:has|have) (?:(?:now|since) )?reopened|reopened|(?:is|are) now (?:open|accepting applications again))(?: ${RECENT_STATUS})?[.!]?$`,
   "iu",
 );
 const NEGATED_ROLE_SUBJECT = /^(?:none|neither|no)\b/iu;
@@ -302,7 +302,7 @@ const HIRING_STOP_ACTION = "(?:paused|suspended|halted|stopped|froze)";
 const ACTIVE_STATUS_SUBJECT = String.raw`(?:${HIRING_ACTOR}|(?:my|our) (?:team|company))(?:['’](?:ve|s)| (?:have|has))?`;
 const ACTIVE_STATUS_ACTOR = String.raw`(?:${ACTIVE_STATUS_SUBJECT} )?`;
 const ACTIVE_ROLE_REOPEN_UPDATE = new RegExp(
-  String.raw`^${ACTIVE_STATUS_SUBJECT} (?:now )?reopened (.+?)(?: ${RECENT_STATUS})?[.!]?$`,
+  String.raw`^${ACTIVE_STATUS_SUBJECT} (?:(?:now|since) )?reopened (.+?)(?: ${RECENT_STATUS})?[.!]?$`,
   "iu",
 );
 const SCOPED_ACTIVE_STOP = new RegExp(
@@ -329,6 +329,14 @@ const ROLE_STATUS_QUALIFIER = new RegExp(
 );
 const ROLE_STATUS_DATE = new RegExp(
   String.raw`,? (${RECENT_STATUS})(?=[.!]?$)`,
+  "iu",
+);
+const LEADING_ROLE_STATUS_DATE = new RegExp(
+  String.raw`^(${RECENT_STATUS}),?\s+`,
+  "iu",
+);
+const SEPARATE_REOPENING_CONDITION = new RegExp(
+  String.raw`^(?:only )?${CONDITION_CONNECTOR} (?<premise>[^,]+),\s+(?<consequent>\S.+)$`,
   "iu",
 );
 const TRAILING_ROLE_REFERENCE = /^ for ([^.!?]+)/iu;
@@ -458,20 +466,48 @@ function isDetachedReopeningCondition(
   advertisedRoles: readonly string[],
 ) {
   // A complete conditional about another named opening does not qualify this one.
-  const separateCondition =
-    /^(?:only )?(?:if|unless|until|once|when|after) ([^,]+),\s+(?:we|i|they|the (?:team|company))\s+(?:will|would|can|could|may)\s+\S/iu.exec(
-      text,
-    )?.[1];
-  const separateRole = separateCondition
-    ? DEPENDENT_OPENING.exec(separateCondition)?.groups?.target
-    : undefined;
-  if (separateRole && !refersToAdvertisedRole(separateRole, advertisedRoles))
-    return false;
+  const separate = SEPARATE_REOPENING_CONDITION.exec(text)?.groups;
+  if (separate?.premise && separate.consequent) {
+    const recruitment = CONDITIONAL_RECRUITMENT.exec(
+      separate.consequent,
+    )?.groups;
+    const opening = CONDITIONAL_OPENING.exec(separate.consequent)?.groups;
+    const actionRole =
+      recruitment?.target ??
+      recruitment?.progressiveTarget ??
+      opening?.object ??
+      opening?.subject;
+    const premiseRole = DEPENDENT_OPENING.exec(separate.premise)?.groups
+      ?.target;
+    const separateRole = actionRole ?? premiseRole;
+    if (separateRole && !refersToAdvertisedRole(separateRole, advertisedRoles))
+      return false;
+  }
   const funding = FUNDING_CONDITION.exec(text);
   return (
     DETACHED_REOPENING_CONDITION.test(text) ||
     (funding && HIRING_CONDITION_PREFIX.test(text.slice(0, funding.index)))
   );
+}
+
+type RoleStatus = { closed: boolean; date: string | undefined };
+
+function recordRoleStatus(
+  statuses: Map<string, RoleStatus>,
+  role: string,
+  status: RoleStatus,
+) {
+  const previous = statuses.get(role);
+  if (
+    !previous ||
+    statusCanFollow(previous.date, status.date) ||
+    (status.closed && !statusCanFollow(status.date, previous.date))
+  ) {
+    statuses.set(role, {
+      closed: status.closed,
+      date: status.date ?? previous?.date,
+    });
+  }
 }
 
 function statusCanFollow(previous?: string, next?: string) {
@@ -651,9 +687,9 @@ export function linkedinJobHasRetraction(paragraphs: readonly string[]) {
     ]),
   ];
   if (advertisedRoles.length) {
-    const closedRoles = new Map<string, string | undefined>();
+    const roleStatuses = new Map<string, RoleStatus>();
     let lastClosedRole: string | undefined;
-    for (const { text } of passages) {
+    for (const [passageIndex, { text }] of passages.entries()) {
       const parts = text
         .split(ROLE_UPDATE_SEPARATOR)
         .map((part) => stripUpdateLabel(part.trim()));
@@ -662,17 +698,21 @@ export function linkedinJobHasRetraction(paragraphs: readonly string[]) {
         hiringFundingApplies(text, advertisedRoles) === true
       )
         return true;
-      for (const [index, update] of parts.entries()) {
+      for (const [index, part] of parts.entries()) {
+        const leadingDate = LEADING_ROLE_STATUS_DATE.exec(part);
+        const update = leadingDate ? part.slice(leadingDate[0].length) : part;
         const conditional = hiringFundingApplies(
           update,
           advertisedRoles,
           parts.length === 1,
         );
         if (conditional === true) return true;
-        const date = ROLE_STATUS_DATE.exec(update)?.[1]?.toLowerCase();
+        const date = (
+          leadingDate?.[1] ?? ROLE_STATUS_DATE.exec(update)?.[1]
+        )?.toLowerCase();
         const reopened =
-          REOPENED_ROLE_UPDATE.exec(update)?.[1] ??
-          ACTIVE_ROLE_REOPEN_UPDATE.exec(update)?.[1];
+          ACTIVE_ROLE_REOPEN_UPDATE.exec(update)?.[1] ??
+          REOPENED_ROLE_UPDATE.exec(update)?.[1];
         if (reopened) {
           if (
             !AMBIGUOUS_REOPENING.test(reopened) &&
@@ -684,17 +724,17 @@ export function linkedinJobHasRetraction(paragraphs: readonly string[]) {
               advertisedRoles,
             ) &&
             !isDetachedReopeningCondition(
-              parts[index + 1] ?? "",
+              parts[index + 1] ??
+                stripUpdateLabel(passages[passageIndex + 1]?.text ?? ""),
               advertisedRoles,
             )
           ) {
-            for (const [role, closedAt] of closedRoles) {
+            for (const role of advertisedRoles) {
               if (
-                statusCanFollow(closedAt, date) &&
-                ((reopened.toLowerCase() === "it" && role === lastClosedRole) ||
-                  refersToAdvertisedRole(reopened, [role]))
+                (reopened.toLowerCase() === "it" && role === lastClosedRole) ||
+                refersToAdvertisedRole(reopened, [role])
               )
-                closedRoles.delete(role);
+                recordRoleStatus(roleStatuses, role, { closed: false, date });
             }
           }
           lastClosedRole = undefined;
@@ -715,11 +755,8 @@ export function linkedinJobHasRetraction(paragraphs: readonly string[]) {
           );
           if (affected.length) {
             if (FUNDING_CONDITION.test(update)) return true;
-            for (const role of affected) {
-              const closedAt = closedRoles.get(role);
-              if (!closedAt || (date && statusCanFollow(closedAt, date)))
-                closedRoles.set(role, date);
-            }
+            for (const role of affected)
+              recordRoleStatus(roleStatuses, role, { closed: true, date });
             lastClosedRole = affected.length === 1 ? affected[0] : undefined;
             continue;
           }
@@ -735,7 +772,7 @@ export function linkedinJobHasRetraction(paragraphs: readonly string[]) {
           return true;
       }
     }
-    return closedRoles.size > 0;
+    return [...roleStatuses.values()].some(({ closed }) => closed);
   }
 
   const context = paragraphs.join(" ").replace(/\s+/gu, " ");

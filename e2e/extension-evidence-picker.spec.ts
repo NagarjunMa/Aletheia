@@ -509,10 +509,37 @@ test.describe("Store ZIP", () => {
     expect(await fill(250)).toMatchObject({ success: true });
     await expect(note).toHaveValue("x".repeat(250));
 
+    await page.locator("#counter").evaluate((counter) => {
+      const root = counter.getRootNode() as ShadowRoot;
+      root.querySelector<HTMLTextAreaElement>("#note")!.value = "Existing note";
+      counter.innerHTML =
+        '<span id="counter-host"><span aria-live="polite">13/300</span></span>';
+      const nested = counter
+        .querySelector("#counter-host")!
+        .attachShadow({ mode: "open" });
+      nested.innerHTML =
+        '<span aria-label="Team member count"><slot></slot></span>';
+    });
+    expect
+      .soft(await fill(250), "slotted unrelated counter")
+      .toMatchObject({ success: false });
+    await expect.soft(note).toHaveValue("Existing note", { timeout: 500 });
+    await page.locator("#counter").evaluate((counter) => {
+      const root = counter.getRootNode() as ShadowRoot;
+      root.querySelector<HTMLTextAreaElement>("#note")!.value = "Existing note";
+      counter.textContent = "13/300";
+    });
+
     for (const [selector, style, length] of [
       ["#note", "position:fixed;left:-10000px", 150],
       ["#counter", "position:fixed;left:-10000px", 250],
       ["#counter", "display:block;height:0;contain:paint", 250],
+      [
+        "#counter",
+        "display:block;width:3ch;overflow:hidden;white-space:nowrap;font-family:monospace;transform:scale(.4);transform-origin:top left",
+        250,
+      ],
+      ["#counter", "color:transparent", 250],
       ["#counter", "mask-image:linear-gradient(transparent,transparent)", 250],
     ] as const) {
       await note.evaluate(
@@ -532,8 +559,17 @@ test.describe("Store ZIP", () => {
         .evaluate((element) => element.removeAttribute("style"));
     }
     await page.locator("#counter").evaluate((counter) => {
+      counter.setAttribute(
+        "style",
+        "display:block;width:12ch;overflow:hidden;white-space:nowrap;transform:scale(.4);transform-origin:top left",
+      );
+    });
+    expect(await fill(250)).toMatchObject({ success: true });
+    await expect(note).toHaveValue("x".repeat(250));
+    await page.locator("#counter").evaluate((counter) => {
       const root = counter.getRootNode() as ShadowRoot;
       root.querySelector<HTMLTextAreaElement>("#note")!.value = "Existing note";
+      counter.removeAttribute("style");
       counter.setAttribute("aria-label", "Team member count");
       counter.innerHTML = '<span aria-live="polite">13/300</span>';
     });

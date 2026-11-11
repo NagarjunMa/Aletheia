@@ -384,6 +384,69 @@ describe("LinkedIn real target preparation through the HTTP boundary", () => {
           });
 
           it.each([
+            [
+              "Today, we closed the AI Engineer role. Yesterday, we reopened the AI Engineer role.",
+              422,
+            ],
+            [
+              "The AI Engineer role reopened today. The AI Engineer role was closed yesterday.",
+              200,
+            ],
+            [
+              "We reopened the AI Engineer role today. We paused the AI Engineer role yesterday.",
+              200,
+            ],
+            [
+              "The AI Engineer role was closed, but it has reopened — provided the Construction Engineer role depends on financing, we will revisit that search.",
+              200,
+            ],
+            [
+              "The AI Engineer role was closed, but it has reopened — if funding is secured, we'll hire Construction Engineers.",
+              200,
+            ],
+            [
+              "The AI Engineer role was closed, but it has reopened. Provided financing is secured, that is.",
+              422,
+            ],
+            [
+              "The AI Engineer role was closed today, and we reopened the AI Engineer role yesterday.",
+              422,
+            ],
+            [
+              "We closed the AI Engineer role and the Data Scientist role today, and reopened both roles yesterday.",
+              422,
+            ],
+            [
+              "The AI Engineer role was closed yesterday. We reopened the AI Engineer role today, if funding is received.",
+              422,
+            ],
+            [
+              "We closed the AI Engineer role yesterday. We have since reopened the AI Engineer role.",
+              200,
+            ],
+            [
+              "We closed the AI Engineer role yesterday. The AI Engineer role was reopened today.",
+              200,
+            ],
+          ] as const)(
+            "applies dated and conditional role updates %j expects %i",
+            async (update, expected) => {
+              await useRealPreparation();
+              const response = await generateSparse(
+                "We’re hiring for the following roles:\n- Data Scientist\n- AI Engineer\n\n" +
+                  update,
+                roleHeadline,
+                limit,
+              );
+              expect(response.status).toBe(expected);
+              if (expected === 422) {
+                expect(mockAnthropicCreate).not.toHaveBeenCalled();
+                expect(mockRpc).not.toHaveBeenCalled();
+              }
+            },
+          );
+
+          it.each([
             "Update: The roles have been filled.",
             "The AI Engineer opening already closed.",
             "The AI Engineer role closed yesterday.",
