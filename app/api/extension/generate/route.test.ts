@@ -247,6 +247,11 @@ describe("LinkedIn real target preparation through the HTTP boundary", () => {
           it.each([
             hiringList,
             "We’re hiring for the following roles:\n- Data Scientist\n- AI Engineer",
+            "We’re hiring for the following roles:\n- Data Scientist (Full-time, Remote)\n- AI Engineer (Part-time, Hybrid)",
+            "We’re hiring for the following roles:\n- Data Scientist\n- AI Engineer\n\nNone of these roles are closed.",
+            "We’re hiring for the following roles:\n- Data Scientist\n- AI Engineer\n\nThe AI Engineer role was closed, but it has reopened.",
+            "We’re hiring for the following roles:\n- Data Scientist\n- AI Engineer\n\nThe AI Engineer role was closed. It has reopened.",
+            "We’re hiring for the following roles:\n- Data Scientist\n- AI Engineer\n\nWe won’t hire Construction Engineers unless we raise financing.",
             "We’re hiring for the following roles:\n\n- Data Scientist\n\n- AI Engineer",
             "We’re hiring for the following roles:\n\n- Data Scientist\n\n- AI Engineer\n\nWe secured funding and are accepting applications for both roles.",
             "We’re hiring for the following roles:\n\n- Data Scientist\n\n- AI Engineer\n\nAll candidates are subject to background checks.",
@@ -373,6 +378,12 @@ describe("LinkedIn real target preparation through the HTTP boundary", () => {
 
           it.each([
             "Update: The roles have been filled.",
+            "The AI Engineer opening already closed.",
+            "AI Engineer — closed.",
+            "We won’t hire for these roles unless we raise financing.",
+            "The AI Engineer role was closed, but it has reopened only if we raise financing.",
+            "The AI Engineer role was closed, but it has reopened. Update: Both roles are paused.",
+            "The AI Engineer role was closed, but the Data Scientist role has reopened.",
             "Both have been filled.",
             "Both have now been filled.",
             "Both are no longer open.",
@@ -515,6 +526,8 @@ describe("LinkedIn real target preparation through the HTTP boundary", () => {
             ["pending funding", 422],
             ["remote - pending funding", 422],
             ["remote - hybrid", 200],
+            ["full-time, remote", 200],
+            ["remote, pending financing", 422],
             ["no longer open", 422],
             ["remote", 200],
           ] as const)(
@@ -537,6 +550,22 @@ describe("LinkedIn real target preparation through the HTTP boundary", () => {
               }
             },
           );
+
+          it.each([
+            "We have paused the technical co-founder search.",
+            "My team has found our technical co-founder.",
+            "The technical co-founder search already closed.",
+          ])("denies a retracted co-founder search (%s)", async (update) => {
+            await useRealPreparation([], [reviewed(qualifiedFact)]);
+            const response = await generateSparse(
+              "I’m looking for a technical co-founder.\n\n" + update,
+              sparseProfile,
+              limit,
+            );
+            expect(response.status).toBe(422);
+            expect(mockAnthropicCreate).not.toHaveBeenCalled();
+            expect(mockRpc).not.toHaveBeenCalled();
+          });
 
           it("keeps an affirmative opening alongside a candidate screening requirement", async () => {
             await useRealPreparation([], [reviewed(qualifiedFact)]);
