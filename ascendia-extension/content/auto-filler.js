@@ -36,7 +36,20 @@ import {
     )
       return false;
 
-    let { left, right, top, bottom } = box;
+    const viewport = document.documentElement;
+    let left = Math.max(box.left, 0);
+    let right = Math.min(box.right, viewport.clientWidth);
+    let top = Math.max(box.top, 0);
+    let bottom = Math.min(box.bottom, viewport.clientHeight);
+    const remainsVisible = () =>
+      left < right &&
+      top < bottom &&
+      (!fullyVisible ||
+        (left <= box.left + 0.5 &&
+          right >= box.right - 0.5 &&
+          top <= box.top + 0.5 &&
+          bottom >= box.bottom - 0.5));
+    if (!remainsVisible()) return false;
     let containingBlock;
     for (let node = element; node; node = composedParent(node)) {
       const style = getComputedStyle(node);
@@ -44,6 +57,7 @@ import {
         node.matches('[aria-hidden="true"], [aria-disabled="true"], [inert]') ||
         style.opacity === "0" ||
         style.contentVisibility === "hidden" ||
+        style.maskImage !== "none" ||
         style.clip !== "auto" ||
         (style.clipPath !== "none" &&
           !/^inset\(0(?:px|%)(?: 0(?:px|%)){0,3}\)$/u.test(style.clipPath))
@@ -52,8 +66,13 @@ import {
       if (style.display === "contents" || style.display === "inline") continue;
 
       if (node === containingBlock) containingBlock = undefined;
-      const clipsX = !containingBlock && style.overflowX !== "visible";
-      const clipsY = !containingBlock && style.overflowY !== "visible";
+      const paintContained = /\b(?:paint|strict|content)\b/u.test(
+        style.contain,
+      );
+      const clipsX =
+        paintContained || (!containingBlock && style.overflowX !== "visible");
+      const clipsY =
+        paintContained || (!containingBlock && style.overflowY !== "visible");
       if (clipsX || clipsY) {
         // Text ranges include pixels outside a clipping ancestor's scrollport.
         const bounds = node.getBoundingClientRect();
@@ -67,15 +86,7 @@ import {
           top = Math.max(top, start);
           bottom = Math.min(bottom, start + node.clientHeight);
         }
-        if (left >= right || top >= bottom) return false;
-        if (
-          fullyVisible &&
-          (left > box.left + 0.5 ||
-            right < box.right - 0.5 ||
-            top > box.top + 0.5 ||
-            bottom < box.bottom - 0.5)
-        )
-          return false;
+        if (!remainsVisible()) return false;
       }
 
       // Out-of-flow text can escape overflow below its containing block.
@@ -145,17 +156,24 @@ import {
     const root = field.getRootNode();
     const dialogSelector = '[role="dialog"], dialog[open]';
     const dialog = field.closest(dialogSelector);
-    const addCounter = (counter, association) => {
+    const addCounter = (counter, association, boundary = counter) => {
       if (counters.has(counter) || counter.closest(dialogSelector) !== dialog)
         return;
-      const label =
-        counter.getAttribute("aria-label") ||
-        counter
-          .getAttribute("aria-labelledby")
-          ?.split(/\s+/u)
-          .map((id) => root.getElementById(id)?.textContent)
-          .join(" ");
-      if (label?.trim() && !/\bcharacters?\b/iu.test(label)) return;
+      for (
+        let node = counter;
+        node && node !== dialog;
+        node = node.parentElement
+      ) {
+        const label =
+          node.getAttribute("aria-label") ||
+          node
+            .getAttribute("aria-labelledby")
+            ?.split(/\s+/u)
+            .map((id) => root.getElementById(id)?.textContent)
+            .join(" ");
+        if (label?.trim() && !/\bcharacters?\b/iu.test(label)) return;
+        if (node === boundary) break;
+      }
       counters.set(counter, association);
     };
     for (const id of (field.getAttribute("aria-describedby") ?? "").split(
@@ -165,7 +183,7 @@ import {
       if (!description) continue;
       addCounter(description, "linked");
       for (const counter of description.querySelectorAll(counterSelector))
-        addCounter(counter, "linked");
+        addCounter(counter, "linked", description);
     }
     // Some composers put a status label between the field and its counter.
     let sibling = field.nextElementSibling;
@@ -175,7 +193,7 @@ import {
       const association = dialog && offset === 0 ? "adjacent" : "nearby";
       if (sibling.matches(counterSelector)) addCounter(sibling, association);
       for (const counter of sibling.querySelectorAll(counterSelector))
-        addCounter(counter, association);
+        addCounter(counter, association, sibling);
       sibling = sibling.nextElementSibling;
     }
     const displayed = [];

@@ -508,6 +508,37 @@ test.describe("Store ZIP", () => {
     });
     expect(await fill(250)).toMatchObject({ success: true });
     await expect(note).toHaveValue("x".repeat(250));
+
+    for (const [selector, style, length] of [
+      ["#note", "position:fixed;left:-10000px", 150],
+      ["#counter", "position:fixed;left:-10000px", 250],
+      ["#counter", "display:block;height:0;contain:paint", 250],
+      ["#counter", "mask-image:linear-gradient(transparent,transparent)", 250],
+    ] as const) {
+      await note.evaluate(
+        (field, fixture) => {
+          (field as HTMLTextAreaElement).value = "Existing note";
+          const root = field.getRootNode() as ShadowRoot;
+          root
+            .querySelector(fixture.selector)!
+            .setAttribute("style", fixture.style);
+        },
+        { selector, style },
+      );
+      expect.soft(await fill(length)).toMatchObject({ success: false });
+      await expect.soft(note).toHaveValue("Existing note", { timeout: 500 });
+      await page
+        .locator(selector)
+        .evaluate((element) => element.removeAttribute("style"));
+    }
+    await page.locator("#counter").evaluate((counter) => {
+      const root = counter.getRootNode() as ShadowRoot;
+      root.querySelector<HTMLTextAreaElement>("#note")!.value = "Existing note";
+      counter.setAttribute("aria-label", "Team member count");
+      counter.innerHTML = '<span aria-live="polite">13/300</span>';
+    });
+    expect.soft(await fill(250)).toMatchObject({ success: false });
+    await expect.soft(note).toHaveValue("Existing note", { timeout: 500 });
     expect(await page.locator("#send").getAttribute("data-clicked")).toBeNull();
 
     await page.locator("body").evaluate((body) => {
