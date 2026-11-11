@@ -56,6 +56,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install extension dependencies for the Store packaging test
+        run: npm ci --prefix ascendia-extension
+
       - name: Run unit tests with coverage gate
         run: npm run test:coverage -- --run
 
@@ -136,6 +139,7 @@ jobs:
         run: |
           npm ci --prefix ascendia-extension
           npm --prefix ascendia-extension run build:ext
+          npm run build:extension
 
       - name: Start Server, Check Health & Landing
         env:

@@ -32,6 +32,8 @@ import {
   type CandidateFact,
 } from "@/lib/candidate-profile/fact-review";
 import {
+  isLinkedinCredentialTopic,
+  linkedinHiringWording,
   linkedinTargetHasContradiction,
   MAX_SUPPORTING_EXCERPT,
   type AtomicSource,
@@ -56,6 +58,16 @@ import {
 } from "../domain/outreach-grounding.types";
 
 const MIN_SOURCE_CHARS = 80;
+const HIRING_SIGNAL =
+  /\b(?:hiring|recruiting|looking for|seeking|openings?|vacanc(?:y|ies))\b/iu;
+
+function isLinkedinProfileRoleOnly(source: AtomicSource): boolean {
+  return (
+    source.rewrite === "linkedin_profile_interest" &&
+    (linkedinTargetWording(source)?.startsWith("I'm interested in your ") ??
+      false)
+  );
+}
 type DraftSource = CandidateGroundingSource & { rawContent: string };
 
 function normalizeText(value: string): string {
@@ -272,6 +284,7 @@ export function buildOutreachGroundingContext(input: {
     conversationContext: normalizeText(input.target.conversationContext),
   };
   const linkedin = target.category === "linkedin_connection";
+  const hiringSignal = linkedin && HIRING_SIGNAL.test(target.jobDescription);
   if (input.selectedEvidenceIds?.length) {
     assertSafeSelectionText(
       [
@@ -369,8 +382,18 @@ export function buildOutreachGroundingContext(input: {
       : undefined,
     target.category === "linkedin_connection"
       ? (pool) => {
+          const jobTargets = pool.filter(isLinkedinJobTarget);
+          const preferPastedOpening = jobTargets.some((source) => {
+            const kind = linkedinHiringWording(source.content)?.kind;
+            return kind === "cofounder" || kind === "list";
+          });
+          const matchingTargets = preferPastedOpening
+            ? jobTargets
+            : hiringSignal && !jobTargets.length
+              ? pool.filter((source) => !isLinkedinProfileRoleOnly(source))
+              : pool;
           const matchTargets = createLinkedinTargetMatcher(
-            pool,
+            matchingTargets,
             target.connectionNoteLimit,
           );
           let best:
@@ -433,18 +456,31 @@ export function buildOutreachGroundingContext(input: {
               };
             }
           }
-          if (!best) return pool;
+          if (!best) return matchingTargets;
           const targetId = best.match.source.id;
           return [
             best.match.source,
-            ...pool.filter((source) => source.id !== targetId),
+            ...matchingTargets.filter((source) => source.id !== targetId),
           ];
         }
       : undefined,
   );
+  let linkedinTargets = targets.sources;
+  const weakProfileOnly =
+    linkedin &&
+    linkedinTargets.length > 0 &&
+    linkedinTargets.every(
+      (source) =>
+        (source.rewrite === "linkedin_profile_interest" ||
+          source.rewrite === "linkedin_profile_topic") &&
+        (isLinkedinCredentialTopic(source.content) ||
+          isLinkedinProfileRoleOnly(source)),
+    );
+  const mayUseCandidateIntroduction =
+    !winningLinkedinFact && (!linkedinTargets.length || weakProfileOnly);
   const targetContradicted =
     linkedin &&
-    !targets.sources.length &&
+    mayUseCandidateIntroduction &&
     !injectionSafeMode &&
     linkedinTargetHasContradiction(
       target.profileMarkdown,
@@ -454,7 +490,7 @@ export function buildOutreachGroundingContext(input: {
     linkedin &&
     !explicit &&
     !injectionSafeMode &&
-    !targets.sources.length &&
+    mayUseCandidateIntroduction &&
     !targets.diagnostics.excluded &&
     !targets.diagnostics.unsafeWording &&
     !targetContradicted
@@ -483,6 +519,7 @@ export function buildOutreachGroundingContext(input: {
         fact,
         content: normalizeAtomicSourceText(fact.excerpt),
       };
+      linkedinTargets = [];
       break;
     }
   }
@@ -502,10 +539,10 @@ export function buildOutreachGroundingContext(input: {
           ? (winningLinkedinFact?.content ??
             reviewedLinkedinEvidence(
               entry.id,
-              targets.sources.length
+              linkedinTargets.length
                 ? (linkedinFacts?.get(entry.id) ?? [])
                 : [],
-              targets.sources,
+              linkedinTargets,
               target.connectionNoteLimit,
             ))
           : explicit
@@ -556,7 +593,7 @@ export function buildOutreachGroundingContext(input: {
       target.category !== "linkedin_connection" ||
       linkedinCandidateFits(
         source,
-        targets.sources,
+        linkedinTargets,
         target.connectionNoteLimit,
       ),
   );
@@ -611,10 +648,10 @@ export function buildOutreachGroundingContext(input: {
           ? "no_profile_context"
           : "no_resume_context";
 
-  const atomicSources = [...prepared.safeAtoms, ...targets.sources];
+  const atomicSources = [...prepared.safeAtoms, ...linkedinTargets];
   // With neither source available, composition records the explicit-selection denial.
   const noLinkedinTarget =
-    linkedin && !targets.sources.length && !winningLinkedinFact;
+    linkedin && !linkedinTargets.length && !winningLinkedinFact;
   if (
     requiredEvidenceRoots &&
     !noLinkedinTarget &&

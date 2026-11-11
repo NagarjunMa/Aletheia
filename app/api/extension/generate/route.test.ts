@@ -125,6 +125,7 @@ describe("LinkedIn real target preparation through the HTTP boundary", () => {
         profileMarkdown = sparseProfile,
         connectionNoteLimit: 200 | 300 = 300,
         conversationContext = "",
+        selectedEvidenceIds?: string[],
       ) {
         return POST(
           makeRequest({
@@ -137,6 +138,7 @@ describe("LinkedIn real target preparation through the HTTP boundary", () => {
               jd,
               connectionNoteLimit,
               conversationContext,
+              ...(selectedEvidenceIds ? { selectedEvidenceIds } : {}),
             },
           }),
         );
@@ -198,6 +200,420 @@ describe("LinkedIn real target preparation through the HTTP boundary", () => {
         expect(result.character_count).toBeLessThanOrEqual(300);
         expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
       });
+
+      describe.each([200, 300] as const)(
+        "ALE-46 audited note paths (%i)",
+        (limit) => {
+          const headline =
+            "Co-Founder at Example Startup | PhD in ML and Mentor at Example Labs";
+          const roleHeadline = "Co-Founder at Example Startup";
+          const hiringList =
+            "Fast-growing AI startup is HIRING! 🚀 One of my friends is building something exciting in AI and they’re looking for amazing people to join the team. They’re hiring across multiple roles (junior + senior): 💡 Data Scientist 🤖 AI Engineer 🌐 Fullstack Engineer 📊 Data Engineer 💼 Sales / Account Executive (AI Products)";
+
+          it.each([
+            ["", headline],
+            ["", roleHeadline],
+            [sparseDescription, roleHeadline],
+          ])(
+            "introduces the candidate from safe weak or unsupported context (%j)",
+            async (jd, target) => {
+              await useRealPreparation([], [reviewed(qualifiedFact)]);
+              const response = await generateSparse(jd, target, limit);
+              expect(response.status).toBe(200);
+              const result = await response.json();
+              expect(result.body).toBe(
+                `Hi there, ${qualifiedFact} Open to connecting? Thank you.`,
+              );
+              expect(result.evalMetadata.hasCandidateRelevance).toBe(true);
+              expect(result.character_count).toBeLessThanOrEqual(limit);
+              expect(
+                JSON.stringify(mockAnthropicCreate.mock.calls[0]),
+              ).not.toMatch(/Example Startup|Series A|target\.profile/);
+            },
+          );
+
+          it("does not substitute a current profile title for an unparsed hiring post", async () => {
+            await useRealPreparation();
+            const response = await generateSparse(
+              "We’re hiring for a role supporting our internal workflows.",
+              roleHeadline,
+              limit,
+            );
+            expect(response.status).toBe(422);
+            expect(mockAnthropicCreate).not.toHaveBeenCalled();
+            expect(mockRpc).not.toHaveBeenCalled();
+          });
+
+          it.each([
+            hiringList,
+            "We’re hiring for the following roles:\n- Data Scientist\n- AI Engineer",
+            "We’re hiring for the following roles:\n\n- Data Scientist\n\n- AI Engineer",
+            "We’re hiring for the following roles:\n\n- Data Scientist\n\n- AI Engineer\n\nWe secured funding and are accepting applications for both roles.",
+            "We’re hiring for the following roles:\n\n- Data Scientist\n\n- AI Engineer\n\nAll candidates are subject to background checks.",
+            "We’re hiring for the following roles:\n\n- Data Scientist\n\n- AI Engineer\n\nWe have not paused recruitment.",
+            "We’re hiring for the following roles:\n\n- Data Scientist\n\n- AI Engineer\n\nThe company will expand to Europe once funding is secured.",
+            "We’re hiring for the following roles:\n\n- Data Scientist\n\n- AI Engineer\n\nThe office move will proceed once funding is secured.",
+            "We’re hiring for the following roles:\n\n- Data Scientist\n\n- AI Engineer\n\nOnce funding is secured, we’ll expand to Europe.",
+            "We’re hiring for the following roles:\n\n- Data Scientist\n\n- AI Engineer\n\nOnce funding is secured, we’ll create construction jobs at the new office.",
+            "We’re hiring for the following roles:\n\n- Data Scientist\n\n- AI Engineer\n\nOnce funding is secured, we’re looking for office space.",
+            "We’re hiring for the following roles:\n\n- Data Scientist\n\n- AI Engineer\n\nOnce funding is secured, we’ll fill new positions on the construction crew.",
+            "We’re hiring for the following roles:\n\n- Data Scientist\n\n- AI Engineer\n\nConstruction jobs are on hold until funding is secured.",
+            "We’re hiring for the following roles:\n\n- Data Scientist\n\n- AI Engineer\n\nThere are no openings for construction engineers.",
+            "We’re hiring for the following roles:\n\n- Data Scientist\n\n- AI Engineer\n\nThere are no construction openings.",
+            "We’re hiring for the following roles:\n\n- Data Scientist\n\n- AI Engineer\n\nThe Construction Engineer role is hypothetical.",
+            "We’re hiring for the following roles:\n\n- Data Scientist\n\n- AI Engineer\n\nApplications are closed for the Construction Engineer role.",
+            "We’re hiring for the following roles:\n\n- Data Scientist\n\n- AI Engineer\n\nApplications are closed for the Construction Engineer role for now.",
+            "We’re hiring for the following roles:\n\n- Data Scientist\n\n- AI Engineer\n\nWe closed applications for the Construction Engineer role as of today.",
+            "We’re hiring for the following roles:\n\n- Data Scientist\n\n- AI Engineer\n\nWe paused recruitment for the Construction Engineer role for now.",
+            "We’re hiring for the following roles:\n\n- Data Scientist\n\n- AI Engineer\n\nThere are no openings for the Construction Engineer role as of today.",
+            "We’re hiring for the following roles:\n\n- Data Scientist\n\n- AI Engineer\n\nWe are currently not accepting applications for the Construction Engineer role.",
+            "We’re hiring for the following roles:\n\n- Data Scientist\n\n- AI Engineer\n\nApplications are not currently being accepted for the Construction Engineer role.",
+            "We’re hiring for the following roles:\n\n- Data Scientist\n\n- AI Engineer\n\nThe Construction Engineer role isn’t currently open.",
+            "We’re hiring for the following roles:\n\n- Data Scientist\n\n- AI Engineer\n\nThe Construction Engineer role is not currently a live opening.",
+            "We’re hiring for the following roles:\n\n- Data Scientist\n\n- AI Engineer\n\nThere are no openings currently for the Construction Engineer role.",
+            "We’re hiring for the following roles:\n\n- Data Scientist\n\n- AI Engineer\n\nRecruitment is on hold for the Construction Engineer role because funding has not been secured.",
+            "We’re hiring for the following roles:\n\n- Data Scientist\n\n- AI Engineer\n\nApplications are closed for the Construction Engineer role, as of today.",
+            "We’re hiring for the following roles:\n\n- Data Scientist\n\n- AI Engineer\n\nApplications are closed for the AI Engineer for Growth role for now.",
+            "We’re hiring for the following roles:\n\n- Data Scientist\n\n- AI Engineer\n\nRecruitment is on hold for the Construction Engineer role until funding is secured.",
+            "We’re hiring for the following roles:\n\n- Data Scientist\n\n- AI Engineer\n\nThe Machine Learning Engineer role is hypothetical.",
+            "We’re hiring for the following roles:\n\n- Data Scientist\n\n- AI Engineer\n\nThe Machine Learning Engineer role is not a live opening.",
+            "We’re hiring for the following roles:\n\n- Data Scientist\n\n- AI Engineer\n\nIf funding is secured, we’ll fill the Machine Learning Engineer role.",
+            "We’re hiring for the following roles:\n\n- Data Scientist\n\n- AI Engineer\n\nThe Construction Engineer role is not a live opening.",
+            "We’re hiring for the following roles:\n\n- Data Scientist\n\n- AI Engineer\n\nConstruction jobs will remain closed until funding is secured.",
+            "We’re hiring for the following roles:\n\n- Data Scientist\n\n- AI Engineer\n\nThere are no current openings for the Construction Engineer role.",
+            "We’re hiring for the following roles:\n\n- Data Scientist\n\n- AI Engineer\n\nNeither the Construction Engineer nor the Site Manager role is open.",
+            "We’re hiring for the following roles:\n\n- Data Scientist\n\n- AI Engineer\n\nConstruction Engineer applications are closed.",
+            "We’re hiring for the following roles:\n\n- Data Scientist\n\n- AI Engineer\n\nApplications for the Construction Engineer role have been closed.",
+            "We’re hiring for the following roles:\n\n- Data Scientist\n\n- AI Engineer\n\nWe have paused recruitment for the Construction Engineer role.",
+            "We’re hiring for the following roles:\n\n- Data Scientist\n\n- AI Engineer\n\nWe’re no longer hiring construction engineers.",
+            "We’re hiring for the following roles:\n\n- Data Scientist\n\n- AI Engineer\n\nWe’ve filled both roles on the construction crew.",
+            "We’re hiring for the following roles:\n\n- Data Scientist\n\n- AI Engineer\n\nThe AI Engineer role is subject to background checks.",
+            "We’re hiring for the following roles:\n\n- Data Scientist\n\n- AI Engineer\n\nConstruction Engineer position opens only if funding is secured.",
+            "We’re hiring for the following roles:\n\n- Data Scientist\n\n- AI Engineer\n\nThe AI Engineer and Data Scientist roles are open. The Construction Engineer role depends on funding.",
+          ])(
+            "uses the stated hiring list instead of the recipient's current title (%j)",
+            async (post) => {
+              await useRealPreparation([], [reviewed(qualifiedFact)]);
+              const response = await generateSparse(post, roleHeadline, limit);
+              expect(response.status).toBe(200);
+              const result = await response.json();
+              expect(result.body).toContain("roles mentioned in the post");
+              expect(result.body).not.toMatch(
+                /Co-Founder|your openings|refund agent/iu,
+              );
+              expect(result.character_count).toBeLessThanOrEqual(limit);
+            },
+          );
+
+          it("keeps a substantive profile topic when generic background offers no match", async () => {
+            await useRealPreparation(
+              [],
+              [reviewed("I improved SEO conversion.")],
+            );
+            const response = await generateSparse(
+              "We raised a Series A last week.",
+              "We build auditable AI agents for customer support.",
+              limit,
+            );
+            expect(response.status).toBe(200);
+            const result = await response.json();
+            expect(result.body).toContain("interested in discussing AI agents");
+            expect(result.body).not.toContain("SEO conversion");
+          });
+
+          it.each([
+            "Our team is recruiting for an exciting position.",
+            "We’re hiring across multiple roles: No Data Scientist, No AI Engineer.",
+            "I’m looking for a technical co-founder.\n\nThe opening has been filled.",
+          ])(
+            "does not substitute a bare title for an unsupported or closed search (%j)",
+            async (jd) => {
+              await useRealPreparation();
+              const response = await generateSparse(jd, roleHeadline, limit);
+              expect(response.status).toBe(422);
+              expect(mockAnthropicCreate).not.toHaveBeenCalled();
+              expect(mockRpc).not.toHaveBeenCalled();
+            },
+          );
+
+          it.each([hiringList, "I'm looking for a technical co-founder."])(
+            "does not silently drop a pasted opening to use a profile-only explicit story (%j)",
+            async (jd) => {
+              const selected = reviewed(qualifiedFact);
+              await useRealPreparation([], [selected]);
+              const response = await generateSparse(
+                jd,
+                "We build auditable AI agents for customer support.",
+                limit,
+                "",
+                [selected.id],
+              );
+              expect(response.status).toBe(422);
+              expect(await response.json()).toMatchObject({
+                code: "EVIDENCE_SELECTION_UNAVAILABLE",
+              });
+              expect(mockAnthropicCreate).not.toHaveBeenCalled();
+              expect(mockRpc).not.toHaveBeenCalled();
+            },
+          );
+
+          it("keeps a stated opening when the only matching fact is about the profile", async () => {
+            await useRealPreparation([], [reviewed(qualifiedFact)]);
+            const response = await generateSparse(
+              "I'm looking for a technical co-founder.",
+              "We build auditable AI agents for customer support.",
+              limit,
+            );
+            expect(response.status).toBe(200);
+            const result = await response.json();
+            expect(result.body).toContain("technical co-founder opening");
+            expect(result.body).not.toContain("refund agent");
+            expect(result.character_count).toBeLessThanOrEqual(limit);
+          });
+
+          it.each([
+            "Update: The roles have been filled.",
+            "Both have been filled.",
+            "Both have now been filled.",
+            "Both are no longer open.",
+            "Both are on hold.",
+            "Both are not open.",
+            "Neither is open anymore.",
+            "Neither of the openings remains available.",
+            "Applications for both roles are on hold.",
+            "We’re no longer accepting applications for either role.",
+            "We’re no longer accepting any applications.",
+            "Hiring has been paused.",
+            "Hiring is currently on hold.",
+            "We’ve put hiring on hold.",
+            "Both openings have been put on hold.",
+            "We have paused recruitment.",
+            "We are not filling either role anymore.",
+            "Once funding is secured, we will open applications for both roles.",
+            "Update: Once funding is secured, applications for these roles will open.",
+            "We’ll recruit only when funding is approved.",
+            "We’re only hiring for these roles once funding is secured.",
+            "We are no longer hiring for any of these roles.",
+            "All of the roles listed above are on hold.",
+            "All the advertised roles are on hold.",
+            "All currently advertised roles are closed.",
+            "No openings for the roles listed here.",
+            "Neither the Data Scientist nor the AI Engineer role is open.",
+            "None of the advertised roles are open.",
+            "There are no openings for the Data Scientist role.",
+            "There are currently no open positions.",
+            "There are no openings left.",
+            "There are no remaining openings.",
+            "Neither role is accepting new applications.",
+            "Neither role is currently accepting new applications.",
+            "Neither role is temporarily accepting applications.",
+            "Applications are closed for the AI Engineer role.",
+            "Applications are closed for the AI Engineer role for now.",
+            "We closed applications for the AI Engineer role for now.",
+            "We closed applications for the AI Engineer role as of today.",
+            "We closed applications for the AI Engineer role because funding has not been secured.",
+            "We paused recruitment for the AI Engineer role for now.",
+            "There are no openings for the AI Engineer role as of today.",
+            "We are currently not accepting applications for the AI Engineer role.",
+            "Applications are not currently being accepted for the AI Engineer role.",
+            "Applications are no longer currently being accepted for the AI Engineer role.",
+            "The AI Engineer role is not currently accepting applications.",
+            "The AI Engineer role is not currently open.",
+            "The AI Engineer role is not currently a live opening.",
+            "The AI Engineer role isn’t currently a live opening.",
+            "There are no openings currently for the AI Engineer role.",
+            "There are no openings currently for the AI Engineer role for now.",
+            "Applications aren’t currently being accepted for the AI Engineer role.",
+            "The AI Engineer role isn’t currently open.",
+            "Applications are not being currently accepted for the AI Engineer role.",
+            "We’re currently not accepting applications for the AI Engineer role.",
+            "We’re not currently accepting applications for the AI Engineer role.",
+            "Applications are closed for the AI Engineer role as of today.",
+            "Recruitment is on hold for the AI Engineer role because funding has not been secured.",
+            "Applications are closed for the AI Engineer role, due to a funding delay.",
+            "Applications are closed for the AI Engineer role for three weeks.",
+            "Applications are closed for the AI Engineer role for now because funding was delayed.",
+            "Recruitment is on hold for the Data Scientist role until funding is secured.",
+            "Applications are closed for the rest of the month.",
+            "All roles listed above will remain closed until funding is secured.",
+            "We have stopped accepting applications for the roles above.",
+            "The Data Scientist and AI Engineer positions are no longer accepting applications.",
+            "The AI Engineer role is hypothetical.",
+            "This post is for a training simulation.",
+            "Hiring for these roles has stopped.",
+            "We will not be hiring for these roles until funding is secured.",
+            "Only hiring for these roles once funding is secured.",
+            "This was only a hypothetical posting.",
+            "The advertised openings have been placed on hold.",
+            "The Data Scientist role is still awaiting funding.",
+            "Applications for these roles will reopen when the hiring budget is approved.",
+            "We’ll accept applications for one of the roles advertised here only if funding is secured.",
+            "We’re hiring for these roles, but only if we secure funding.",
+            "The construction positions are on hold, but we’re only hiring for these roles once funding is secured.",
+            "Once funding is secured, we’re only hiring for these roles.",
+            "The AI Engineer role is on hold until funding is secured.",
+            "Applications for the Data Scientist role are closed.",
+            "We’ll only recruit Data Scientists once funding is secured.",
+            "Once funding is secured, we’ll fill the AI Engineer role.",
+            "Construction jobs are on hold; the AI Engineer role is closed.",
+            "Construction recruitment paused, but the Data Scientist position is on hold.",
+            "The Data Scientist and AI Engineer roles are closed.",
+            "Both roles are temporarily on hold.",
+            "We’re no longer recruiting.",
+            "Applications won’t open until we have funding.",
+            "Once funding is secured, applications will open.",
+            "Applications are no longer being accepted.",
+            "Applications will only open if funding is approved.",
+            "Applications will open once funding is secured.",
+            "Applications will open after we’ve secured funding.",
+            "Update: Pending funding.",
+            "We’ve filled both roles.",
+            "The search is contingent on funding.",
+            "Applications will only open if we secure funding.",
+            "These roles are only examples.",
+            "They aren't taking any more applications.",
+          ])("denies an unavailable role list (%s)", async (update) => {
+            await useRealPreparation([], [reviewed(qualifiedFact)]);
+            const response = await generateSparse(
+              "We’re hiring for the following roles:\n\n- Data Scientist\n\n- AI Engineer\n\n" +
+                update,
+              sparseProfile,
+              limit,
+            );
+            expect(response.status).toBe(422);
+            expect(mockAnthropicCreate).not.toHaveBeenCalled();
+            expect(mockRpc).not.toHaveBeenCalled();
+          });
+
+          it.each([
+            ["Technical Co-Founder", 422],
+            ["Data Scientist", 200],
+          ] as const)(
+            "scopes a filled co-founder opening to the advertised list (%s)",
+            async (role, status) => {
+              await useRealPreparation([], [reviewed(qualifiedFact)]);
+              const response = await generateSparse(
+                `We’re hiring for the following roles:\n- ${role}\n- AI Engineer\n\nWe found our co-founder yesterday.`,
+                sparseProfile,
+                limit,
+              );
+              expect(response.status).toBe(status);
+              if (status === 422) {
+                expect(mockAnthropicCreate).not.toHaveBeenCalled();
+                expect(mockRpc).not.toHaveBeenCalled();
+              } else {
+                expect((await response.json()).body).toContain(
+                  "roles mentioned in the post",
+                );
+              }
+            },
+          );
+
+          it.each([
+            ["on hold", 422],
+            ["paused", 422],
+            ["pending funding", 422],
+            ["remote - pending funding", 422],
+            ["remote - hybrid", 200],
+            ["no longer open", 422],
+            ["remote", 200],
+          ] as const)(
+            "checks inline role qualifiers before generation (%s)",
+            async (qualifier, status) => {
+              await useRealPreparation([], [reviewed(qualifiedFact)]);
+              const response = await generateSparse(
+                `We’re hiring for the following roles:\n- Data Scientist (${qualifier})\n- AI Engineer (${qualifier})`,
+                sparseProfile,
+                limit,
+              );
+              expect(response.status).toBe(status);
+              if (status === 422) {
+                expect(mockAnthropicCreate).not.toHaveBeenCalled();
+                expect(mockRpc).not.toHaveBeenCalled();
+              } else {
+                expect((await response.json()).body).toContain(
+                  "roles mentioned in the post",
+                );
+              }
+            },
+          );
+
+          it("keeps an affirmative opening alongside a candidate screening requirement", async () => {
+            await useRealPreparation([], [reviewed(qualifiedFact)]);
+            const response = await generateSparse(
+              "We’re hiring an AI Engineer.\n\nAll candidates are subject to background checks.",
+              sparseProfile,
+              limit,
+            );
+            expect(response.status).toBe(200);
+            expect((await response.json()).body).toContain(
+              "AI Engineer opening",
+            );
+          });
+
+          it("denies a single opening subject to a later funding condition", async () => {
+            await useRealPreparation([], [reviewed(qualifiedFact)]);
+            const response = await generateSparse(
+              "We’re hiring an AI Engineer.\n\nApplications will only open if funding is approved.",
+              sparseProfile,
+              limit,
+            );
+            expect(response.status).toBe(422);
+            expect(mockAnthropicCreate).not.toHaveBeenCalled();
+            expect(mockRpc).not.toHaveBeenCalled();
+          });
+
+          it.each([
+            ["I’m looking for a technical co-founder.", false],
+            ["We’re hiring a technical cofounder.", false],
+            [
+              "Looking for a technical co-founder. We value curiosity and ownership.",
+              false,
+            ],
+            ["We’re hiring a technical co-founder.", true],
+          ] as const)(
+            "uses the stated co-founder opening (%s, reviewed: %s)",
+            async (jd, hasFact) => {
+              const fact =
+                "I was a technical co-founder at Example Labs; I did not lead fundraising.";
+              await useRealPreparation([], hasFact ? [reviewed(fact)] : []);
+              const response = await generateSparse(jd, roleHeadline, limit);
+              expect(response.status).toBe(200);
+              const result = await response.json();
+              expect(result.body).toMatch(/technical co-?founder opening/iu);
+              expect(result.body).not.toMatch(
+                /your Co-Founder|equity|Example Startup/iu,
+              );
+              expect(result.evalMetadata.hasCandidateRelevance).toBe(hasFact);
+              if (hasFact) expect(result.body).toContain(fact);
+              expect(result.character_count).toBeLessThanOrEqual(limit);
+            },
+          );
+
+          it.each([
+            "We’re no longer looking for a technical co-founder.",
+            "I’m no longer looking for a technical co-founder.",
+            "I’m looking for a technical co-founder. The opening has been filled.",
+            "We’re looking for a technical co-founder, but only if we secure funding.",
+            "I’m looking for a technical co-founder.\n\nThe search is contingent on funding.",
+            "I’m looking for a technical co-founder.\n\nWe will move forward only if we raise funding.",
+            "I’m looking for a technical co-founder.\n\nI’ve already found a technical co-founder.",
+            "I’m looking for a technical co-founder.\n\nWe found our co-founder yesterday.",
+            "I’m looking for a technical co-founder.\n\nUpdate: I’ve already found a technical co-founder.",
+            "I’m looking for a technical co-founder.\n\n- I’ve already found a technical co-founder.",
+            "I’m looking for a technical co-founder.\n\nThe job has been filled.",
+          ])(
+            "denies a withdrawn or conditional co-founder search (%s)",
+            async (jd) => {
+              await useRealPreparation([], [reviewed(qualifiedFact)]);
+              const response = await generateSparse(jd, sparseProfile, limit);
+              expect(response.status).toBe(422);
+              expect(mockAnthropicCreate).not.toHaveBeenCalled();
+              expect(mockRpc).not.toHaveBeenCalled();
+            },
+          );
+        },
+      );
 
       it.each([200, 300] as const)(
         "fits the intact reviewed fact only within the requested %i-character note",
@@ -532,19 +948,19 @@ ${long}`,
 
     it.each([
       {
-        target: unrelatedProfile,
+        target: "Engineering Manager at Example | Data Platform",
         jd: "The AI Agents team at Example is hiring Engineers!\n\nThe team is not hiring.",
       },
       {
-        target: unrelatedProfile,
+        target: "Engineering Manager at Example | Data Platform",
         jd: "The AI Agents team at Example is hiring Engineers!\n\nUpdate: The team has stopped hiring.",
       },
       {
-        target: unrelatedProfile,
+        target: "Engineering Manager at Example | Data Platform",
         jd: "The AI Agents team at Example is hiring Engineers!\n\nUpdate: The vacancy is closed.",
       },
       {
-        target: unrelatedProfile,
+        target: "Engineering Manager at Example | Data Platform",
         jd: "You will build AI agents.\n\nCorrection: This role excludes AI agents.",
       },
       {
@@ -560,7 +976,11 @@ ${long}`,
         const response = await generate(target, jd);
         expect(response.status).toBe(200);
         const result = await response.json();
-        expect(result.body).toContain("your Senior Security Engineer role");
+        expect(result.body).toContain(
+          jd
+            ? "your Engineering Manager role"
+            : "your Senior Security Engineer role",
+        );
         expect(result.body).not.toMatch(/hiring|openings|refund agent/u);
         expect(result.body.length).toBeLessThan(200);
       },

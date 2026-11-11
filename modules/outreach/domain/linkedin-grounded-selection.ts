@@ -271,7 +271,9 @@ export function buildLinkedinCompositions(
       ? [CTAS[2], CTAS[1], CTAS[0]]
       : (intent === "job_inquiry" || intent === "referral") &&
           target?.rewrite === "linkedin_job_interest" &&
-          linkedinHiringWording(target.content)?.kind !== "preference"
+          !["preference", "list"].includes(
+            linkedinHiringWording(target.content)?.kind ?? "",
+          )
         ? [CTAS[3], CTAS[1], CTAS[0]]
         : [CTAS[0], CTAS[1]];
   const matchTargets = createLinkedinTargetMatcher(targets, limit);

@@ -2,7 +2,10 @@ import * as esbuild from "esbuild";
 import { access, cp, mkdir, rm } from "node:fs/promises";
 
 const isWatch = process.argv.includes("--watch");
-const outdir = "dist";
+const artifactDir = process.argv
+  .find((argument) => argument.startsWith("--artifact-dir="))
+  ?.slice("--artifact-dir=".length);
+const outdir = artifactDir || "dist";
 
 const buildOptions = {
   entryPoints: [
@@ -17,7 +20,7 @@ const buildOptions = {
   outdir,
   format: "iife",
   target: "chrome120",
-  sourcemap: true,
+  sourcemap: !artifactDir,
   logLevel: "info",
 };
 
@@ -33,14 +36,13 @@ const staticPaths = [
 
 const requiredBuildFiles = [
   "manifest.json",
-  "background/service-worker.js",
+  ...buildOptions.entryPoints,
   "popup/popup.html",
   "popup/popup.css",
-  "popup/popup.js",
   "settings/settings.html",
   "settings/settings.css",
-  "settings/settings.js",
   "icons/icon-16.png",
+  "icons/icon-32.png",
   "icons/icon-48.png",
   "icons/icon-128.png",
 ];
@@ -67,7 +69,7 @@ if (isWatch) {
   await verifyLoadableBuild();
   console.log("Watching for changes...");
 } else {
-  await rm(outdir, { recursive: true, force: true });
+  if (!artifactDir) await rm(outdir, { recursive: true, force: true });
   await mkdir(outdir, { recursive: true });
   await esbuild.build(buildOptions);
   await copyStaticFiles();

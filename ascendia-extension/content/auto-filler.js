@@ -1,6 +1,6 @@
 import {
   LINKEDIN_CONNECTION_NOTE_LIMIT,
-  normalizeConnectionNoteLimit,
+  LINKEDIN_PREMIUM_CONNECTION_NOTE_LIMIT,
 } from "../lib/linkedin-connection-limit.js";
 
 // Apollo and LinkedIn Auto-fill Content Script
@@ -21,15 +21,66 @@ import {
   const LINKEDIN_NOTE_PLACEHOLDER = 'textarea[placeholder="Add a note" i]';
   const LINKEDIN_NOTE_SELECTOR = `${LINKEDIN_NOTE_PLACEHOLDER}, :is([role="dialog"], dialog[open]) textarea[name="message"]`;
 
-  function isVisible(element) {
+  function composedParent(element) {
+    if (element.assignedSlot) return element.assignedSlot;
+    if (element.parentElement) return element.parentElement;
+    const root = element.getRootNode();
+    return root instanceof ShadowRoot ? root.host : null;
+  }
+
+  function isVisible(element, textBox) {
     if (
-      !element.getClientRects().length ||
-      getComputedStyle(element).visibility !== "visible" ||
-      element.closest('[aria-hidden="true"], [aria-disabled="true"], [inert]')
+      (textBox
+        ? textBox.width <= 0 || textBox.height <= 0
+        : !element.getClientRects().length) ||
+      getComputedStyle(element).visibility !== "visible"
     )
       return false;
-    for (let node = element; node; node = node.parentElement) {
-      if (getComputedStyle(node).opacity === "0") return false;
+
+    let { left, right, top, bottom } = textBox ?? {};
+    let containingBlock;
+    for (let node = element; node; node = composedParent(node)) {
+      const style = getComputedStyle(node);
+      if (
+        node.matches('[aria-hidden="true"], [aria-disabled="true"], [inert]') ||
+        style.opacity === "0" ||
+        style.contentVisibility === "hidden" ||
+        style.clip === "rect(0px, 0px, 0px, 0px)" ||
+        style.clipPath === "inset(50%)"
+      )
+        return false;
+      if (
+        !textBox ||
+        style.display === "contents" ||
+        style.display === "inline"
+      )
+        continue;
+
+      if (node === containingBlock) containingBlock = undefined;
+      const clipsX = !containingBlock && style.overflowX !== "visible";
+      const clipsY = !containingBlock && style.overflowY !== "visible";
+      if (clipsX || clipsY) {
+        // Text ranges include pixels outside a clipping ancestor's scrollport.
+        const bounds = node.getBoundingClientRect();
+        if (clipsX) {
+          const start = bounds.left + node.clientLeft;
+          left = Math.max(left, start);
+          right = Math.min(right, start + node.clientWidth);
+        }
+        if (clipsY) {
+          const start = bounds.top + node.clientTop;
+          top = Math.max(top, start);
+          bottom = Math.min(bottom, start + node.clientHeight);
+        }
+        if (left >= right || top >= bottom) return false;
+      }
+
+      // Out-of-flow text can escape overflow below its containing block.
+      if (
+        !containingBlock &&
+        (style.position === "absolute" || style.position === "fixed")
+      )
+        containingBlock = node.offsetParent ?? document.documentElement;
     }
     return true;
   }
@@ -37,43 +88,76 @@ import {
   function isVisibleInvitationField(field) {
     if (field.matches(":disabled, [readonly]") || !isVisible(field))
       return false;
-    if (field.matches(LINKEDIN_NOTE_PLACEHOLDER)) return true;
+    const root = field.getRootNode();
     const dialog = field.closest('[role="dialog"], dialog[open]');
-    if (!dialog) return false;
+    if (!dialog)
+      return root === document && field.matches(LINKEDIN_NOTE_PLACEHOLDER);
     const labelledBy = (dialog.getAttribute("aria-labelledby") ?? "")
       .split(/\s+/u)
-      .map((id) => document.getElementById(id)?.textContent ?? "")
+      .map((id) => root.getElementById(id)?.textContent ?? "")
       .join(" ");
     const label =
       labelledBy.trim() ||
       dialog.getAttribute("aria-label") ||
       dialog.querySelector('h1, h2, h3, [role="heading"]')?.textContent ||
       "";
-    return /^(?:add a note|personalize your invitation|invite .+ to connect|send (?:an? )?invitation)\b/iu.test(
-      label.trim().replace(/\s+/gu, " "),
+    const invitationLabel = label.trim().replace(/\s+/gu, " ");
+    return (
+      /^(?:add a note to your invitation|personalize your invitation|invite .+ to connect|send (?:an? )?invitation to connect)\??$/iu.test(
+        invitationLabel,
+      ) ||
+      (root === document && /^add a note\??$/iu.test(invitationLabel))
     );
   }
 
-  function getComposerLimit(field) {
-    if (field.maxLength >= 0) return field.maxLength;
+  function readVisibleCounterLimit(counter) {
+    const textNodes = document.createTreeWalker(counter, NodeFilter.SHOW_TEXT);
+    const range = document.createRange();
+    let text = "";
+    for (let node = textNodes.nextNode(); node; node = textNodes.nextNode()) {
+      if (!node.textContent.trim()) continue;
+      range.selectNodeContents(node);
+      const parent = node.assignedSlot ?? node.parentElement;
+      // The text can render even when its linked wrapper has no box.
+      if ([...range.getClientRects()].some((box) => isVisible(parent, box)))
+        text += node.textContent;
+    }
+    return Number(text.match(/^\s*\d+\s*\/\s*(\d+)\s*$/u)?.[1]);
+  }
 
-    // LinkedIn's live invitation composer may show a counter without maxlength.
-    const counters = field.closest('[role="dialog"], dialog[open]')
-      ? Array.from(
-          field.nextElementSibling?.querySelectorAll(
-            'span[aria-live="polite"]',
-          ) ?? [],
-        ).filter(isVisible)
-      : [];
-    const displayedLimit =
-      counters.length === 1
-        ? Number(
-            counters[0].textContent.match(/^\s*\d+\s*\/\s*(\d+)\s*$/u)?.[1],
-          )
-        : NaN;
-    return displayedLimit <= LINKEDIN_CONNECTION_NOTE_LIMIT
-      ? displayedLimit
-      : normalizeConnectionNoteLimit(displayedLimit);
+  function getComposerLimit(field) {
+    const declared =
+      field.maxLength >= 0
+        ? Math.min(field.maxLength, LINKEDIN_PREMIUM_CONNECTION_NOTE_LIMIT)
+        : undefined;
+    const counterSelector = 'span[aria-live="polite"]';
+    const otherEditor = "textarea, input, [contenteditable]";
+    const counters = new Set();
+    const root = field.getRootNode();
+    for (const id of (field.getAttribute("aria-describedby") ?? "").split(
+      /\s+/u,
+    )) {
+      const description = root.getElementById(id);
+      if (!description) continue;
+      counters.add(description);
+      for (const counter of description.querySelectorAll(counterSelector))
+        counters.add(counter);
+    }
+    // Some composers put a status label between the field and its counter.
+    let sibling = field.nextElementSibling;
+    for (let offset = 0; sibling && offset < 3; offset++) {
+      if (sibling.matches(otherEditor) || sibling.querySelector(otherEditor))
+        break;
+      if (sibling.matches(counterSelector)) counters.add(sibling);
+      for (const counter of sibling.querySelectorAll(counterSelector))
+        counters.add(counter);
+      sibling = sibling.nextElementSibling;
+    }
+    const displayed = [...counters]
+      .map(readVisibleCounterLimit)
+      .filter((limit) => limit <= LINKEDIN_PREMIUM_CONNECTION_NOTE_LIMIT);
+    if (displayed.length) return Math.min(declared ?? Infinity, ...displayed);
+    return declared ?? LINKEDIN_CONNECTION_NOTE_LIMIT;
   }
 
   // Auto-fill configuration for different platforms
@@ -260,10 +344,14 @@ import {
 
   function fillField(selector, content, fieldName, connectionNote = false) {
     try {
+      const outlet = connectionNote
+        ? document.getElementById("interop-outlet")?.shadowRoot
+        : null;
       const visibleFields = connectionNote
-        ? Array.from(document.querySelectorAll(selector)).filter(
-            isVisibleInvitationField,
-          )
+        ? [
+            ...document.querySelectorAll(selector),
+            ...(outlet?.querySelectorAll(selector) ?? []),
+          ].filter(isVisibleInvitationField)
         : [];
       const element = connectionNote
         ? visibleFields.length === 1 && visibleFields[0]

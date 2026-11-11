@@ -1,11 +1,10 @@
 import { execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
-import path from "node:path";
+import { Script } from "node:vm";
 import JSZip from "jszip";
-import ts from "typescript";
 import { expect, it } from "vitest";
 
-it("packages the auth-draft helper and every relative runtime module dependency", async () => {
+it("packages loadable bundled scripts, manifest paths and required assets", async () => {
   execFileSync(process.execPath, ["scripts/build-extension-zip.mjs"], {
     cwd: process.cwd(),
     stdio: "pipe",
@@ -13,7 +12,28 @@ it("packages the auth-draft helper and every relative runtime module dependency"
   const zip = await JSZip.loadAsync(
     await readFile("ascendia-extension/dist/aletheia-extension.zip"),
   );
-  expect(zip.file("lib/application-auth-draft.js")).not.toBeNull();
+  const manifest = JSON.parse(
+    await zip.file("manifest.json")!.async("string"),
+  ) as {
+    content_scripts: { js: string[] }[];
+    background: { service_worker: string };
+    side_panel: { default_path: string };
+    options_page: string;
+  };
+  for (const entry of manifest.content_scripts.flatMap(({ js }) => js)) {
+    const source = await zip.file(entry)!.async("string");
+    expect(() => new Script(source, { filename: entry })).not.toThrow();
+  }
+  for (const entry of [
+    manifest.background.service_worker,
+    manifest.side_panel.default_path,
+    manifest.options_page,
+    "content/auth-bridge.js",
+    "popup/popup.js",
+    "settings/settings.js",
+  ]) {
+    expect(zip.file(entry), entry).not.toBeNull();
+  }
   expect(zip.file("assets/thinking-orbs-engine.js")).not.toBeNull();
   expect(zip.file("assets/LICENSE.thinking-orbs")).not.toBeNull();
   for (const size of [16, 32, 48, 128]) {
@@ -22,40 +42,9 @@ it("packages the auth-draft helper and every relative runtime module dependency"
       await readFile(`ascendia-extension/${iconPath}`),
     );
   }
-  expect(await zip.file("popup/generation-orb.js")!.async("string")).toContain(
-    "../assets/thinking-orbs-engine.js",
-  );
-  const missing: string[] = [];
-  for (const file of Object.values(zip.files)) {
-    if (file.dir || !file.name.endsWith(".js")) continue;
-    const source = ts.createSourceFile(
-      file.name,
-      await file.async("string"),
-      ts.ScriptTarget.Latest,
-      true,
-      ts.ScriptKind.JS,
-    );
-    for (const statement of source.statements) {
-      if (
-        !ts.isImportDeclaration(statement) &&
-        !ts.isExportDeclaration(statement)
-      )
-        continue;
-      const specifier = statement.moduleSpecifier;
-      if (
-        !specifier ||
-        !ts.isStringLiteral(specifier) ||
-        !specifier.text.startsWith(".")
-      )
-        continue;
-      const target = path.posix.normalize(
-        path.posix.join(path.posix.dirname(file.name), specifier.text),
-      );
-      if (!zip.file(target)) missing.push(`${file.name} -> ${target}`);
-    }
-  }
-  expect(missing).toEqual([]);
   expect(
-    Object.keys(zip.files).some((name) => /\.(test|spec)\.[jt]s$/.test(name)),
+    Object.keys(zip.files).some((name) =>
+      /(?:\.(?:test|spec)\.[jt]s|\.map)$/.test(name),
+    ),
   ).toBe(false);
 }, 20_000);
