@@ -469,6 +469,43 @@ test.describe("Store ZIP", () => {
     await page.locator("#counter").evaluate((counter) => {
       counter.textContent = "13/300";
     });
+    await page.locator("#counter").evaluate((counter) => {
+      counter.setAttribute("aria-label", "Team member count");
+    });
+    expect.soft(await fill(250)).toMatchObject({ success: false });
+    await expect.soft(note).toHaveValue("Existing note", { timeout: 500 });
+    await page.locator("#counter").evaluate((counter) => {
+      counter.removeAttribute("aria-label");
+      counter.setAttribute(
+        "style",
+        "display:block;width:3ch;overflow:hidden;white-space:nowrap",
+      );
+      (counter.getRootNode() as ShadowRoot).querySelector<HTMLTextAreaElement>(
+        "#note",
+      )!.value = "Existing note";
+    });
+    expect.soft(await fill(250)).toMatchObject({ success: false });
+    await expect.soft(note).toHaveValue("Existing note", { timeout: 500 });
+    await page.locator("#counter").evaluate((counter) => {
+      counter.removeAttribute("style");
+      const root = counter.getRootNode() as ShadowRoot;
+      root.querySelector<HTMLTextAreaElement>("#note")!.value = "Existing note";
+      const other = document.createElement("section");
+      other.setAttribute("role", "dialog");
+      counter.after(other);
+      other.append(counter);
+    });
+    expect.soft(await fill(250)).toMatchObject({ success: false });
+    await expect.soft(note).toHaveValue("Existing note", { timeout: 500 });
+    await page.locator("#counter").evaluate((counter) => {
+      const root = counter.getRootNode() as ShadowRoot;
+      const field = root.querySelector<HTMLTextAreaElement>("#note")!;
+      field.value = "Existing note";
+      field.style.clipPath = "inset(0)";
+      const other = counter.parentElement!;
+      other.before(counter);
+      other.remove();
+    });
     expect(await fill(250)).toMatchObject({ success: true });
     await expect(note).toHaveValue("x".repeat(250));
     expect(await page.locator("#send").getAttribute("data-clicked")).toBeNull();
@@ -484,6 +521,12 @@ test.describe("Store ZIP", () => {
       error: expect.stringContaining("200 characters"),
     });
     await expect.soft(note).toHaveValue("Existing note", { timeout: 500 });
+    await note.evaluate((field) => {
+      (field as HTMLTextAreaElement).value = "Existing note";
+      const counter = field.nextElementSibling!;
+      counter.textContent = "12/100";
+    });
+    expect(await fill(150)).toMatchObject({ success: true });
   });
 
   test("the packaged extension fills only the live-shaped LinkedIn shadow composer", async () => {
