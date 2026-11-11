@@ -194,10 +194,12 @@ const ROLE_MODIFIER =
   "(?:senior|staff|principal|lead|junior|founding|full[- ]stack|front[- ]?end|back[- ]?end|software|platform|data|product|security|infrastructure|systems?|site reliability|developer tools|machine learning|applied ai|ai|ml|research|ux)";
 const COFOUNDER = String.raw`co[\p{Pd} ]?founders?`;
 const FUNDING = "funding|financing|approval";
+const CONDITION_CONNECTOR =
+  "(?:if|unless|until|once|when|after|provided(?: that)?|assuming(?: that)?|as long as)";
 const RECENT_STATUS =
   "(?:today|yesterday|(?:this|last) (?:week|month)|(?:last|on) (?:monday|tuesday|wednesday|thursday|friday|saturday|sunday))";
 const FUNDING_CONDITION = new RegExp(
-  String.raw`\b(?:(?:pending|awaiting) (?:${FUNDING})|(?:contingent on|subject to|depends? on) (?:[\p{L}]+ ){0,3}(?:${FUNDING})|(?:if|unless|until|once|when|after) (?:(?:we|i|the (?:company|team))(?: (?:can|have) |['’]ve | )(?:secure(?:d)?|rais(?:e|ed)|obtain(?:ed)?|receiv(?:e|ed)|get|got|have) (?:[\p{L}]+ ){0,3}(?:${FUNDING})|(?:(?:the|our) )?(?:(?:new|additional) )?(?:${FUNDING}|(?:hiring )?budget) (?:comes through|(?:is|has been|can be) (?:approved|secured|confirmed|received|granted))))\b`,
+  String.raw`\b(?:(?:pending|awaiting) (?:${FUNDING})|(?:contingent on|subject to|depends? on) (?:[\p{L}]+ ){0,3}(?:${FUNDING})|${CONDITION_CONNECTOR} (?:(?:we|i|the (?:company|team))(?: (?:can|have) |['’]ve | )(?:secure(?:d)?|rais(?:e|ed)|obtain(?:ed)?|receiv(?:e|ed)|get|got|have) (?:[\p{L}]+ ){0,3}(?:${FUNDING})|(?:(?:the|our) )?(?:(?:new|additional) )?(?:${FUNDING}|(?:hiring )?budget) (?:comes through|(?:is|has been|can be) (?:approved|secured|confirmed|received|granted))))\b`,
   "iu",
 );
 const COFOUNDER_SEARCH = new RegExp(
@@ -278,7 +280,7 @@ const CLOSED_ROLE_UPDATE = new RegExp(
   "iu",
 );
 const ROLE_UPDATE_SEPARATOR = new RegExp(
-  String.raw`\s*(?:;|—(?!\s*${REVERSIBLE_ROLE_STATE}\b)|,?\s+\b(?:but|whereas)\s+|,?\s+and\s+(?=(?:we|they|the|these|those|both|neither)\b))`,
+  String.raw`\s*(?:;|—(?!\s*${REVERSIBLE_ROLE_STATE}\b)|,?\s+\b(?:but|whereas)\s+|,?\s+and\s+(?=(?:we|they|these|those|both|neither)\b|the [^.!?]{1,100}? (?:is|are|was|were|has|have|reopened|closed|paused|filled)\b))`,
   "iu",
 );
 const REOPENED_ROLE_UPDATE = new RegExp(
@@ -289,7 +291,7 @@ const NEGATED_ROLE_SUBJECT = /^(?:none|neither|no)\b/iu;
 const AMBIGUOUS_REOPENING =
   /^(?:none|neither|no|one|some|any|either|several)\b/iu;
 const DETACHED_REOPENING_CONDITION =
-  /^(?:only )?(?:if|unless|until|contingent on|subject to|depends? on|pending|awaiting)\b/iu;
+  /^(?:only )?(?:if|unless|until|provided|assuming|as long as|contingent on|subject to|depends? on|pending|awaiting)\b/iu;
 const NEGATED_OPENING_SUBJECT = new RegExp(
   String.raw`^(?<target>(?:neither|none|no)(?: .+?)?) (?:is|are|was|were|remain|remains) (?:${STATUS_ADVERB} )?(?:open|available|${APPLICATION_INTAKE})\b`,
   "iu",
@@ -297,7 +299,12 @@ const NEGATED_OPENING_SUBJECT = new RegExp(
 const NO_OPENING_STATEMENT =
   /^(?:there (?:is|are|was|were)(?: currently| now)? )?no (?<target>[^.!?]+)[.!?]?$/iu;
 const HIRING_STOP_ACTION = "(?:paused|suspended|halted|stopped|froze)";
-const ACTIVE_STATUS_ACTOR = String.raw`(?:(?:${HIRING_ACTOR}|(?:my|our) (?:team|company))(?:['’](?:ve|s)| (?:have|has))? )?`;
+const ACTIVE_STATUS_SUBJECT = String.raw`(?:${HIRING_ACTOR}|(?:my|our) (?:team|company))(?:['’](?:ve|s)| (?:have|has))?`;
+const ACTIVE_STATUS_ACTOR = String.raw`(?:${ACTIVE_STATUS_SUBJECT} )?`;
+const ACTIVE_ROLE_REOPEN_UPDATE = new RegExp(
+  String.raw`^${ACTIVE_STATUS_SUBJECT} (?:now )?reopened (.+?)(?: ${RECENT_STATUS})?[.!]?$`,
+  "iu",
+);
 const SCOPED_ACTIVE_STOP = new RegExp(
   String.raw`^${ACTIVE_STATUS_ACTOR}(?:${STATUS_ADVERB} )?(?:(?:${HIRING_STOP_ACTION}|${CLOSED_STATE}) (?<target>[^.!?]+)|put (?<onHold>.+?) (?:${STATUS_ADVERB} )?on (?:hold|pause))`,
   "iu",
@@ -320,7 +327,10 @@ const ROLE_STATUS_QUALIFIER = new RegExp(
   String.raw`,? ${TRAILING_STATUS_QUALIFIER}\b.*$`,
   "iu",
 );
-const ROLE_STATUS_DATE = new RegExp(String.raw`,? ${RECENT_STATUS}$`, "iu");
+const ROLE_STATUS_DATE = new RegExp(
+  String.raw`,? (${RECENT_STATUS})(?=[.!]?$)`,
+  "iu",
+);
 const TRAILING_ROLE_REFERENCE = /^ for ([^.!?]+)/iu;
 const STOPPED_ACTIVITY_SCOPE = String.raw`(?=\s*(?:[.!?]|$)| (?:at this time|right now|currently)\b| for ${OPENING_REFERENCE}\b)`;
 const HIRING_RETRACTION = new RegExp(
@@ -443,11 +453,33 @@ function stripUpdateLabel(text: string) {
   return text.replace(/^(?:update|correction):\s*/iu, "");
 }
 
-function isDetachedReopeningCondition(text: string) {
+function isDetachedReopeningCondition(
+  text: string,
+  advertisedRoles: readonly string[],
+) {
+  // A complete conditional about another named opening does not qualify this one.
+  const separateCondition =
+    /^(?:only )?(?:if|unless|until|once|when|after) ([^,]+),\s+(?:we|i|they|the (?:team|company))\s+(?:will|would|can|could|may)\s+\S/iu.exec(
+      text,
+    )?.[1];
+  const separateRole = separateCondition
+    ? DEPENDENT_OPENING.exec(separateCondition)?.groups?.target
+    : undefined;
+  if (separateRole && !refersToAdvertisedRole(separateRole, advertisedRoles))
+    return false;
   const funding = FUNDING_CONDITION.exec(text);
   return (
     DETACHED_REOPENING_CONDITION.test(text) ||
     (funding && HIRING_CONDITION_PREFIX.test(text.slice(0, funding.index)))
+  );
+}
+
+function statusCanFollow(previous?: string, next?: string) {
+  if (!previous || !next || previous === next) return true;
+  // Compare only relative dates with clear ordering. Undated updates retain
+  // narrative order; differently dated but ambiguous updates cannot reopen.
+  return (
+    next === "today" || (next === "yesterday" && previous.startsWith("last "))
   );
 }
 
@@ -619,7 +651,7 @@ export function linkedinJobHasRetraction(paragraphs: readonly string[]) {
     ]),
   ];
   if (advertisedRoles.length) {
-    const closedRoles = new Set<string>();
+    const closedRoles = new Map<string, string | undefined>();
     let lastClosedRole: string | undefined;
     for (const { text } of passages) {
       const parts = text
@@ -637,18 +669,30 @@ export function linkedinJobHasRetraction(paragraphs: readonly string[]) {
           parts.length === 1,
         );
         if (conditional === true) return true;
-        const reopened = REOPENED_ROLE_UPDATE.exec(update)?.[1];
+        const date = ROLE_STATUS_DATE.exec(update)?.[1]?.toLowerCase();
+        const reopened =
+          REOPENED_ROLE_UPDATE.exec(update)?.[1] ??
+          ACTIVE_ROLE_REOPEN_UPDATE.exec(update)?.[1];
         if (reopened) {
           if (
             !AMBIGUOUS_REOPENING.test(reopened) &&
             (!/^both\b/iu.test(reopened) || advertisedRoles.length === 2) &&
-            !isDetachedReopeningCondition(parts[index - 1] ?? "") &&
-            !isDetachedReopeningCondition(parts[index + 1] ?? "")
+            !ROLE_STATUS_QUALIFIER.test(reopened) &&
+            !FUNDING_CONDITION.test(update) &&
+            !isDetachedReopeningCondition(
+              parts[index - 1] ?? "",
+              advertisedRoles,
+            ) &&
+            !isDetachedReopeningCondition(
+              parts[index + 1] ?? "",
+              advertisedRoles,
+            )
           ) {
-            for (const role of closedRoles) {
+            for (const [role, closedAt] of closedRoles) {
               if (
-                (reopened.toLowerCase() === "it" && role === lastClosedRole) ||
-                refersToAdvertisedRole(reopened, [role])
+                statusCanFollow(closedAt, date) &&
+                ((reopened.toLowerCase() === "it" && role === lastClosedRole) ||
+                  refersToAdvertisedRole(reopened, [role]))
               )
                 closedRoles.delete(role);
             }
@@ -671,7 +715,11 @@ export function linkedinJobHasRetraction(paragraphs: readonly string[]) {
           );
           if (affected.length) {
             if (FUNDING_CONDITION.test(update)) return true;
-            for (const role of affected) closedRoles.add(role);
+            for (const role of affected) {
+              const closedAt = closedRoles.get(role);
+              if (!closedAt || (date && statusCanFollow(closedAt, date)))
+                closedRoles.set(role, date);
+            }
             lastClosedRole = affected.length === 1 ? affected[0] : undefined;
             continue;
           }
@@ -885,7 +933,11 @@ function linkedinHiringRoleList(content: string) {
       const qualifier = /\(([^()]*)\)$/u.exec(role)?.[1];
       return qualifier
         ?.split(/,\s*|\s+[-+&]\s+/u)
-        .some((part) => UNAVAILABLE_ROLE_QUALIFIER.test(part));
+        .some(
+          (part) =>
+            UNAVAILABLE_ROLE_QUALIFIER.test(part) ||
+            FUNDING_CONDITION.test(part),
+        );
     });
     if (
       roles.length >= 2 &&

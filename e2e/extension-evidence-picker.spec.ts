@@ -539,6 +539,24 @@ test.describe("Store ZIP", () => {
     });
     expect.soft(await fill(250)).toMatchObject({ success: false });
     await expect.soft(note).toHaveValue("Existing note", { timeout: 500 });
+    for (const structure of [
+      '<span aria-live="polite" aria-label="Team member count">13/300</span>',
+      '<span id="counter" aria-live="polite">13/300</span>',
+    ]) {
+      await page.locator("#counter").evaluate((counter, contents) => {
+        const root = counter.getRootNode() as ShadowRoot;
+        root.querySelector<HTMLTextAreaElement>("#note")!.value =
+          "Existing note";
+        counter.removeAttribute("aria-label");
+        if (contents.includes('id="counter"')) {
+          counter.removeAttribute("id");
+          counter.setAttribute("aria-label", "Team member count");
+        }
+        counter.innerHTML = contents;
+      }, structure);
+      expect.soft(await fill(250)).toMatchObject({ success: false });
+      await expect.soft(note).toHaveValue("Existing note", { timeout: 500 });
+    }
     expect(await page.locator("#send").getAttribute("data-clicked")).toBeNull();
 
     await page.locator("body").evaluate((body) => {

@@ -19,6 +19,7 @@ import {
   }
 
   const LINKEDIN_NOTE_PLACEHOLDER = 'textarea[placeholder="Add a note" i]';
+  const DIALOG_SELECTOR = '[role="dialog"], dialog[open]';
   const LINKEDIN_NOTE_SELECTOR = `${LINKEDIN_NOTE_PLACEHOLDER}, :is([role="dialog"], dialog[open]) textarea[name="message"]`;
 
   function composedParent(element) {
@@ -106,7 +107,7 @@ import {
     )
       return false;
     const root = field.getRootNode();
-    const dialog = field.closest('[role="dialog"], dialog[open]');
+    const dialog = field.closest(DIALOG_SELECTOR);
     if (!dialog)
       return root === document && field.matches(LINKEDIN_NOTE_PLACEHOLDER);
     const labelledBy = (dialog.getAttribute("aria-labelledby") ?? "")
@@ -127,7 +128,33 @@ import {
     );
   }
 
-  function readVisibleCounter(counter) {
+  function counterHasCharacterContext(element, dialog) {
+    if (element.closest(DIALOG_SELECTOR) !== dialog) return false;
+    const root = element.getRootNode();
+    for (
+      let node = element;
+      node && node !== dialog;
+      node = node.parentElement
+    ) {
+      const labels = [
+        node.getAttribute("aria-label"),
+        node
+          .getAttribute("aria-labelledby")
+          ?.split(/\s+/u)
+          .map((id) => root.getElementById(id)?.textContent)
+          .join(" "),
+      ];
+      if (
+        labels.some(
+          (label) => label?.trim() && !/\bcharacters?\b/iu.test(label),
+        )
+      )
+        return false;
+    }
+    return true;
+  }
+
+  function readVisibleCounter(counter, dialog) {
     const textNodes = document.createTreeWalker(counter, NodeFilter.SHOW_TEXT);
     const range = document.createRange();
     let text = "";
@@ -137,7 +164,11 @@ import {
       const parent = node.assignedSlot ?? node.parentElement;
       // The text can render even when its linked wrapper has no box.
       const boxes = [...range.getClientRects()];
-      if (!boxes.length || !boxes.every((box) => isVisible(parent, box, true)))
+      if (
+        !counterHasCharacterContext(parent, dialog) ||
+        !boxes.length ||
+        !boxes.every((box) => isVisible(parent, box, true))
+      )
         return undefined;
       text += node.textContent;
     }
@@ -154,27 +185,9 @@ import {
     const otherEditor = "textarea, input, [contenteditable]";
     const counters = new Map();
     const root = field.getRootNode();
-    const dialogSelector = '[role="dialog"], dialog[open]';
-    const dialog = field.closest(dialogSelector);
-    const addCounter = (counter, association, boundary = counter) => {
-      if (counters.has(counter) || counter.closest(dialogSelector) !== dialog)
-        return;
-      for (
-        let node = counter;
-        node && node !== dialog;
-        node = node.parentElement
-      ) {
-        const label =
-          node.getAttribute("aria-label") ||
-          node
-            .getAttribute("aria-labelledby")
-            ?.split(/\s+/u)
-            .map((id) => root.getElementById(id)?.textContent)
-            .join(" ");
-        if (label?.trim() && !/\bcharacters?\b/iu.test(label)) return;
-        if (node === boundary) break;
-      }
-      counters.set(counter, association);
+    const dialog = field.closest(DIALOG_SELECTOR);
+    const addCounter = (counter, association) => {
+      if (!counters.has(counter)) counters.set(counter, association);
     };
     for (const id of (field.getAttribute("aria-describedby") ?? "").split(
       /\s+/u,
@@ -183,7 +196,7 @@ import {
       if (!description) continue;
       addCounter(description, "linked");
       for (const counter of description.querySelectorAll(counterSelector))
-        addCounter(counter, "linked", description);
+        addCounter(counter, "linked");
     }
     // Some composers put a status label between the field and its counter.
     let sibling = field.nextElementSibling;
@@ -193,12 +206,12 @@ import {
       const association = dialog && offset === 0 ? "adjacent" : "nearby";
       if (sibling.matches(counterSelector)) addCounter(sibling, association);
       for (const counter of sibling.querySelectorAll(counterSelector))
-        addCounter(counter, association, sibling);
+        addCounter(counter, association);
       sibling = sibling.nextElementSibling;
     }
     const displayed = [];
     for (const [counter, association] of counters) {
-      const counts = readVisibleCounter(counter);
+      const counts = readVisibleCounter(counter, dialog);
       if (!counts || counts.limit > LINKEDIN_PREMIUM_CONNECTION_NOTE_LIMIT)
         continue;
       const raisesLimit =
