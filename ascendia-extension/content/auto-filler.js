@@ -28,7 +28,7 @@ import {
     return root instanceof ShadowRoot ? root.host : null;
   }
 
-  function isVisible(element, box) {
+  function isVisible(element, box, fullyVisible = false) {
     if (
       box.width <= 0 ||
       box.height <= 0 ||
@@ -45,7 +45,8 @@ import {
         style.opacity === "0" ||
         style.contentVisibility === "hidden" ||
         style.clip !== "auto" ||
-        style.clipPath !== "none"
+        (style.clipPath !== "none" &&
+          !/^inset\(0(?:px|%)(?: 0(?:px|%)){0,3}\)$/u.test(style.clipPath))
       )
         return false;
       if (style.display === "contents" || style.display === "inline") continue;
@@ -67,6 +68,14 @@ import {
           bottom = Math.min(bottom, start + node.clientHeight);
         }
         if (left >= right || top >= bottom) return false;
+        if (
+          fullyVisible &&
+          (left > box.left + 0.5 ||
+            right < box.right - 0.5 ||
+            top > box.top + 0.5 ||
+            bottom < box.bottom - 0.5)
+        )
+          return false;
       }
 
       // Out-of-flow text can escape overflow below its containing block.
@@ -116,8 +125,10 @@ import {
       range.selectNodeContents(node);
       const parent = node.assignedSlot ?? node.parentElement;
       // The text can render even when its linked wrapper has no box.
-      if ([...range.getClientRects()].some((box) => isVisible(parent, box)))
-        text += node.textContent;
+      const boxes = [...range.getClientRects()];
+      if (!boxes.length || !boxes.every((box) => isVisible(parent, box, true)))
+        return undefined;
+      text += node.textContent;
     }
     const counts = /^\s*(\d+)\s*\/\s*(\d+)\s*$/u.exec(text);
     if (counts) return { used: Number(counts[1]), limit: Number(counts[2]) };
@@ -132,45 +143,57 @@ import {
     const otherEditor = "textarea, input, [contenteditable]";
     const counters = new Map();
     const root = field.getRootNode();
+    const dialogSelector = '[role="dialog"], dialog[open]';
+    const dialog = field.closest(dialogSelector);
+    const addCounter = (counter, association) => {
+      if (counters.has(counter) || counter.closest(dialogSelector) !== dialog)
+        return;
+      const label =
+        counter.getAttribute("aria-label") ||
+        counter
+          .getAttribute("aria-labelledby")
+          ?.split(/\s+/u)
+          .map((id) => root.getElementById(id)?.textContent)
+          .join(" ");
+      if (label?.trim() && !/\bcharacters?\b/iu.test(label)) return;
+      counters.set(counter, association);
+    };
     for (const id of (field.getAttribute("aria-describedby") ?? "").split(
       /\s+/u,
     )) {
       const description = root.getElementById(id);
       if (!description) continue;
-      counters.set(description, true);
+      addCounter(description, "linked");
       for (const counter of description.querySelectorAll(counterSelector))
-        counters.set(counter, true);
+        addCounter(counter, "linked");
     }
-    const dialog = field.closest('[role="dialog"], dialog[open]');
-    const addNearbyCounter = (counter, adjacent) => {
-      if (counters.has(counter)) return;
-      const label = counter.getAttribute("aria-label");
-      if (label && !/\bcharacters?\b/iu.test(label)) return;
-      counters.set(counter, Boolean(dialog && adjacent));
-    };
     // Some composers put a status label between the field and its counter.
     let sibling = field.nextElementSibling;
     for (let offset = 0; sibling && offset < 3; offset++) {
       if (sibling.matches(otherEditor) || sibling.querySelector(otherEditor))
         break;
-      if (sibling.matches(counterSelector))
-        addNearbyCounter(sibling, offset === 0);
+      const association = dialog && offset === 0 ? "adjacent" : "nearby";
+      if (sibling.matches(counterSelector)) addCounter(sibling, association);
       for (const counter of sibling.querySelectorAll(counterSelector))
-        addNearbyCounter(counter, offset === 0);
+        addCounter(counter, association);
       sibling = sibling.nextElementSibling;
     }
     const displayed = [];
-    for (const [counter, associated] of counters) {
+    for (const [counter, association] of counters) {
       const counts = readVisibleCounter(counter);
       if (!counts || counts.limit > LINKEDIN_PREMIUM_CONNECTION_NOTE_LIMIT)
         continue;
-      // Raising the fallback requires a linked or adjacent dialog counter
-      // that agrees with the note's current character count.
+      const raisesLimit =
+        counts.limit > (declared ?? LINKEDIN_CONNECTION_NOTE_LIMIT);
+      // An unlinked counter must track this field. Only linked or adjacent
+      // dialog counters can establish that the composer supports a higher cap.
+      if (raisesLimit && association === "nearby") continue;
       if (
-        counts.limit <= (declared ?? LINKEDIN_CONNECTION_NOTE_LIMIT) ||
-        (associated && counts.used === field.value.length)
+        (raisesLimit || association !== "linked") &&
+        counts.used !== field.value.length
       )
-        displayed.push(counts.limit);
+        continue;
+      displayed.push(counts.limit);
     }
     if (displayed.length) return Math.min(declared ?? Infinity, ...displayed);
     return declared ?? LINKEDIN_CONNECTION_NOTE_LIMIT;
