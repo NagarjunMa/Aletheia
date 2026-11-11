@@ -235,6 +235,7 @@ const CONDITIONAL_OPENING = new RegExp(
   "iu",
 );
 const HIRING_ACTOR = String.raw`(?:we|i|they|the (?:team|company))`;
+const STATUS_ACTOR = String.raw`(?:${HIRING_ACTOR}|(?:my|our) (?:team|company))`;
 const CONDITIONAL_RECRUITMENT = new RegExp(
   String.raw`^(?:(?:${HIRING_ACTOR})(?: ${HIRING_MODAL}|['’]ll (?:only |not |then )?))?(?:open|reopen|accept|take|start|resume|begin|fill|post|hire|recruit|(?:be )?(?:hiring|recruiting))(?: (?<target>[^.!?]+))?[.!?]?$|^(?:${HIRING_ACTOR}(?: (?:are|am|is) |['’](?:re|m|s) ))?(?:only )?(?:hiring|recruiting|looking for|seeking)(?: (?<progressiveTarget>[^.!?]+))?[.!?]?$`,
   "iu",
@@ -243,6 +244,7 @@ const CONDITIONAL_FOLLOWUP_SCOPE = new RegExp(
   String.raw`^${HIRING_ACTOR}(?: ${HIRING_MODAL}|['’]ll )(?:interview|revisit) ([^.!?]+)[.!?]?$`,
   "iu",
 );
+const FOLLOWUP_CANDIDATES_FOR = /^(?:candidates|applicants|people) for /iu;
 const ROLE_REFERENCE = new RegExp(
   String.raw`^(?:${OPENING_REFERENCE}|${OPENING}|this|(?:this|the) (?:post|list)|(?:any|each|every) ${OPENING}|(?:the |our )?(?:${HIRING_ACTIVITY}|job applications)|(?:all|any|both|each|either|neither|none|one|some)(?: of (?:them|these|those))?)$`,
   "iu",
@@ -284,7 +286,7 @@ const CLOSED_ROLE_UPDATE = new RegExp(
   "iu",
 );
 const ROLE_UPDATE_SEPARATOR = new RegExp(
-  String.raw`\s*(?:;|—(?!\s*${REVERSIBLE_ROLE_STATE}\b)|,?\s+\b(?:but|whereas)\s+|,?\s+and\s+(?=(?:${RECENT_STATUS},?\s+)?(?:(?:we|they|these|those|both|neither)\b|the [^.!?]{1,100}? (?:is|are|was|were|has|have|reopened|closed|paused|filled)\b)))`,
+  String.raw`\s*(?:;|—(?!\s*${REVERSIBLE_ROLE_STATE}\b)|,?\s+\b(?:but|whereas)\s+|,?\s+and\s+(?=(?:${RECENT_STATUS},?\s+)?(?:(?:${STATUS_ACTOR}|these|those|both|neither)\b|the [^.!?]{1,100}? (?:is|are|was|were|has|have|reopened|closed|paused|filled)\b)))`,
   "iu",
 );
 const REOPENED_ROLE_UPDATE = new RegExp(
@@ -303,7 +305,7 @@ const NEGATED_OPENING_SUBJECT = new RegExp(
 const NO_OPENING_STATEMENT =
   /^(?:there (?:is|are|was|were)(?: currently| now)? )?no (?<target>[^.!?]+)[.!?]?$/iu;
 const HIRING_STOP_ACTION = "(?:paused|suspended|halted|stopped|froze)";
-const ACTIVE_STATUS_SUBJECT = String.raw`(?:${HIRING_ACTOR}|(?:my|our) (?:team|company))(?:['’](?:ve|s)| (?:have|has))?`;
+const ACTIVE_STATUS_SUBJECT = String.raw`${STATUS_ACTOR}(?:['’](?:ve|s)| (?:have|has))?`;
 const ACTIVE_STATUS_ACTOR = String.raw`(?:${ACTIVE_STATUS_SUBJECT} )?`;
 const ACTIVE_ROLE_REOPEN_UPDATE = new RegExp(
   String.raw`^${ACTIVE_STATUS_SUBJECT} (?:(?:now|since) )?reopened (.+?)(?: ${RECENT_STATUS})?[.!]?$`,
@@ -480,11 +482,12 @@ function isDetachedReopeningCondition(
       separate.consequent,
     )?.groups;
     const opening = CONDITIONAL_OPENING.exec(separate.consequent)?.groups;
-    const followup = CONDITIONAL_FOLLOWUP_SCOPE.exec(separate.consequent)?.[1];
+    const followup = CONDITIONAL_FOLLOWUP_SCOPE.exec(
+      separate.consequent,
+    )?.[1]?.replace(FOLLOWUP_CANDIDATES_FOR, "");
     const namedFollowup =
       followup &&
-      !/^that\b/iu.test(followup) &&
-      !ROLE_REFERENCE.test(normalizeRoleReference(followup))
+      LISTED_ROLE.test(openingTitle(normalizeRoleReference(followup)))
         ? followup
         : undefined;
     const actionRole =
@@ -496,7 +499,11 @@ function isDetachedReopeningCondition(
     const premiseRole = DEPENDENT_OPENING.exec(separate.premise)?.groups
       ?.target;
     const separateRole = actionRole ?? premiseRole;
-    if (separateRole && !refersToAdvertisedRole(separateRole, advertisedRoles))
+    if (
+      separateRole &&
+      LISTED_ROLE.test(openingTitle(normalizeRoleReference(separateRole))) &&
+      !refersToAdvertisedRole(separateRole, advertisedRoles)
+    )
       return false;
   }
   const funding = FUNDING_CONDITION.exec(condition);
