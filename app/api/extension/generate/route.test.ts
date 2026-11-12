@@ -164,6 +164,277 @@ describe("LinkedIn real target preparation through the HTTP boundary", () => {
         },
       );
 
+      const traitsOnlyPost =
+        "We're looking for curious, pragmatic engineers who take ownership and enjoy solving ambiguous problems.";
+      const credentialHeadline =
+        "Co-Founder at Example Startup | PhD in ML and Mentor at Example Labs";
+
+      it.each([
+        [
+          "",
+          "On the frontend, I built an audit dashboard; I did not own its API.",
+        ],
+        [traitsOnlyPost, qualifiedFact],
+        [traitsOnlyPost + "\n\nApply now.", qualifiedFact],
+        [
+          traitsOnlyPost,
+          "On the backend, I built an audit API; I did not deploy it.",
+        ],
+      ])(
+        "preserves a complete reviewed experience in a Premium note (%j, %j)",
+        async (jd, fact) => {
+          await useRealPreparation([], [reviewed(fact)]);
+          const response = await generateSparse(jd, credentialHeadline);
+          expect(response.status).toBe(200);
+          const result = await response.json();
+          expect(result.body).toContain(fact);
+          expect(result.body).toContain("Open to connecting? Thank you.");
+          expect(result.body).not.toMatch(
+            /discussing the role|My background includes:/,
+          );
+          expect(result.character_count).toBe(result.body.length);
+          expect(result.character_count).toBeLessThanOrEqual(300);
+          expect(result.evalMetadata.hasCandidateRelevance).toBe(true);
+          expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
+          expect(JSON.stringify(result)).not.toMatch(
+            /supporting_excerpt|evidence:/,
+          );
+        },
+      );
+
+      it("ranks a scoped reviewed action against a concrete opening", async () => {
+        const fact =
+          "On the backend, I built an auditable AI refund agent; I did not deploy it.";
+        await useRealPreparation([], [reviewed(fact)]);
+        const response = await generateSparse(
+          "You will design AI agents for refund workflows.",
+          credentialHeadline,
+        );
+        expect(response.status).toBe(200);
+        const result = await response.json();
+        expect(result.body).toContain(fact);
+        expect(result.body).toContain("discussing AI agents");
+        expect(result.character_count).toBeLessThanOrEqual(300);
+      });
+
+      it.each([
+        ["backend", "Backend"],
+        ["back-end", "Backend"],
+        ["front-end", "Frontend"],
+        ["front end", "Frontend"],
+        ["frontend", "Front-end"],
+      ])(
+        "uses the reviewed %s scope when matching a %s role",
+        async (scope, role) => {
+          const fact = "On the " + scope + ", I implemented an audit API.";
+          await useRealPreparation([], [reviewed(fact)]);
+          const response = await generateSparse(
+            "Hiring: " + role + " Engineers.",
+            credentialHeadline,
+          );
+          expect(response.status).toBe(200);
+          const result = await response.json();
+          expect(result.body).toContain(fact);
+          expect(result.body).toContain(role + " Engineers");
+        },
+      );
+
+      it("keeps a scoped assertion intact when it fits Premium but exceeds Basic", async () => {
+        const fact =
+          "On the backend, I built and tested an audit API that records policy decisions, request states, and retry outcomes for a customer support prototype using only synthetic requests; I did not deploy it or measure live results.";
+        await useRealPreparation([], [reviewed(fact)]);
+        const premium = await generateSparse(
+          traitsOnlyPost,
+          credentialHeadline,
+        );
+        expect(premium.status).toBe(200);
+        const result = await premium.json();
+        expect(result.body).toContain(fact);
+        expect(result.character_count).toBeGreaterThan(200);
+        expect(result.character_count).toBeLessThanOrEqual(300);
+
+        await useRealPreparation([], [reviewed(fact)]);
+        const basic = await generateSparse(
+          traitsOnlyPost,
+          credentialHeadline,
+          200,
+        );
+        expect(basic.status).toBe(200);
+        expect(await basic.json()).toMatchObject({
+          body: expect.not.stringContaining("I built and tested an audit API"),
+          character_count: expect.any(Number),
+          evalMetadata: { hasCandidateRelevance: false },
+        });
+      });
+
+      it.each(
+        [
+          "On the frontend, I wanted to build a dashboard.",
+          "On the backend, I did not build an audit API.",
+          "On the backend, our team built an audit API.",
+          "On the backend, I absolutely did not build an audit API.",
+          "On the backend, I did absolutely no implementation work.",
+          "On the backend, I’ll build an audit API next quarter.",
+          "On the backend, I am planning to build an audit API.",
+          "On the backend, I built absolutely no audit API.",
+          "On the backend, I built neither an audit API nor a refund workflow.",
+        ].flatMap((fact) =>
+          [traitsOnlyPost, "Hiring: Backend Engineers."].map((jd) => ({
+            fact,
+            jd,
+          })),
+        ),
+      )(
+        "does not use a scoped non-experience ($fact) with $jd",
+        async ({ fact, jd }) => {
+          await useRealPreparation([], [reviewed(fact)]);
+          const response = await generateSparse(jd, credentialHeadline);
+          expect(response.status).toBe(200);
+          const result = await response.json();
+          expect(result.body).not.toContain(fact);
+          expect(result.evalMetadata.hasCandidateRelevance).toBe(false);
+        },
+      );
+
+      it.each([
+        "On the backend, I designed, built, and tested an audit API; I did not deploy it.",
+        "On the backend, I successfully implemented an audit API; I did not deploy it.",
+      ])(
+        "uses complete compound or qualified reviewed work (%j)",
+        async (fact) => {
+          await useRealPreparation([], [reviewed(fact)]);
+          const response = await generateSparse(
+            "Hiring: Backend Engineers.",
+            credentialHeadline,
+          );
+          expect(response.status).toBe(200);
+          const result = await response.json();
+          expect(result.body).toContain(fact);
+          expect(result.body).toContain("Backend Engineers");
+        },
+      );
+
+      it.each([
+        "Hiring: Senior Product Managers.",
+        "We are looking for a Senior Product Manager.",
+        traitsOnlyPost + " Hiring: Senior Product Managers.",
+      ])(
+        "does not drop a concrete opening when no job atom survives (%j)",
+        async (jd) => {
+          await useRealPreparation([], [reviewed(qualifiedFact)]);
+          const response = await generateSparse(jd, credentialHeadline);
+          expect([200, 422]).toContain(response.status);
+          const result = await response.json();
+          if (response.status === 200) {
+            expect(result.body).not.toContain(qualifiedFact);
+            expect(result.evalMetadata.hasCandidateRelevance).toBe(false);
+          } else {
+            expect(mockAnthropicCreate).not.toHaveBeenCalled();
+          }
+        },
+      );
+
+      it.each(
+        [
+          "The International Pharmaceutical Biotechnology Manufacturing Commercialization Operations Administration Technology Telecommunications Infrastructure team at International Organizational Development Transformation Telecommunications Corporation is hiring Principal Pharmaceutical Commercialization Telecommunications Administration Interoperability Engineers.",
+          "You will build AI observability tools in collaboration with " +
+            "our research team and infrastructure specialists, ".repeat(12) +
+            "our research leadership.",
+        ].flatMap((jd) =>
+          ([200, 300] as const).map((limit) => ({ jd, limit })),
+        ),
+      )(
+        "does not substitute unrelated evidence for overlength concrete work at $limit",
+        async ({ limit, jd }) => {
+          const fact =
+            "On the frontend, I implemented an audit dashboard; I did not own its API.";
+          await useRealPreparation([], [reviewed(fact)]);
+          const response = await generateSparse(jd, credentialHeadline, limit);
+          expect([200, 422]).toContain(response.status);
+          if (response.status === 200) {
+            const result = await response.json();
+            expect(result.body).not.toContain(fact);
+            expect(result.evalMetadata.hasCandidateRelevance).toBe(false);
+          } else {
+            expect(mockAnthropicCreate).not.toHaveBeenCalled();
+          }
+        },
+      );
+
+      it.each([
+        ["Hiring: Backend Engineers.", "Backend Engineers"],
+        [
+          "Hiring: Senior Product Managers.",
+          "discussing curiosity and ownership",
+        ],
+      ])(
+        "keeps a concrete unrelated role target-only (%s)",
+        async (opening, expected) => {
+          await useRealPreparation([], [reviewed(qualifiedFact)]);
+          const response = await generateSparse(
+            [opening, traitsOnlyPost].join("\n\n"),
+            credentialHeadline,
+          );
+          expect(response.status).toBe(200);
+          const result = await response.json();
+          expect(result.body).toContain(expected);
+          expect(result.body).not.toContain(qualifiedFact);
+          expect(result.evalMetadata.hasCandidateRelevance).toBe(false);
+        },
+      );
+
+      it("retains related scoped application monitoring without claiming AI observability experience", async () => {
+        const fact =
+          "On the backend, I built application monitoring infrastructure.";
+        await useRealPreparation([], [reviewed(fact)]);
+        const response = await generateSparse(
+          "You will build AI observability tools.",
+          credentialHeadline,
+        );
+        expect(response.status).toBe(200);
+        const result = await response.json();
+        expect(result.body).toContain(fact);
+        expect(result.body).toContain("discussing AI observability");
+        expect(result.body).not.toContain("I built AI observability");
+      });
+
+      it.each([200, 300] as const)(
+        "keeps an exact 'with no' qualification at %i characters",
+        async (limit) => {
+          const fact =
+            "On the backend, I built application monitoring infrastructure with no downtime.";
+          await useRealPreparation([], [reviewed(fact)]);
+          const response = await generateSparse(
+            "You will build AI observability tools.",
+            credentialHeadline,
+            limit,
+          );
+          expect(response.status).toBe(200);
+          const result = await response.json();
+          expect(result.body).toContain(fact);
+          expect(result.body).toContain("discussing AI observability");
+          expect(result.character_count).toBeLessThanOrEqual(limit);
+        },
+      );
+
+      it.each([
+        ["You will build AI observability tools.", false],
+        ["Hiring: Backend Engineers.", true],
+      ])(
+        "does not rank scoped experience from a future assertion (%j)",
+        async (jd, paired) => {
+          const fact =
+            "On the backend, I implemented an audit API. I will build AI observability tools next quarter.";
+          await useRealPreparation([], [reviewed(fact)]);
+          const response = await generateSparse(jd, credentialHeadline);
+          expect(response.status).toBe(200);
+          const result = await response.json();
+          expect(result.evalMetadata.hasCandidateRelevance).toBe(paired);
+          if (paired) expect(result.body).toContain(fact);
+          else expect(result.body).not.toContain("I will build");
+        },
+      );
+
       it.each([
         [
           "We're hiring a Founding AI Engineer.",

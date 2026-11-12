@@ -16,9 +16,12 @@ import type { CandidateGroundingSource } from "@/modules/candidate-context/domai
 import type { OutreachGroundingContext } from "./outreach-grounding.types";
 import {
   isFirstPersonAssertion,
+  isLinkedinImplementationAction,
   allowedClaimTexts,
   linkedinDiscussionTopic,
   linkedinHiringWording,
+  linkedinScopedAction,
+  normalizeClaimText,
   type AtomicSource,
 } from "@/modules/grounding/domain/atomic-claim";
 import {
@@ -101,6 +104,12 @@ function minimumNoteLength(target: string, candidate?: string): number {
   );
 }
 
+function linkedinCandidateText(source: AtomicSource): string {
+  return source.kind === "action" && linkedinScopedAction(source.content)
+    ? normalizeClaimText(source.content)
+    : allowedClaimTexts(source).at(-1)!;
+}
+
 export function linkedinTargetFits(
   source: AtomicSource,
   limit: LinkedinConnectionNoteLimit = LINKEDIN_CONNECTION_MAX_CHARACTERS,
@@ -125,10 +134,10 @@ export function linkedinCandidateFits(
             linkedinTargetFits(target, limit) &&
             minimumNoteLength(
               allowedClaimTexts(target).at(-1)!,
-              allowedClaimTexts(candidate).at(-1)!,
+              linkedinCandidateText(candidate),
             ) <= limit,
         )
-      : minimumNoteLength("", allowedClaimTexts(candidate).at(-1)!) <= limit)
+      : minimumNoteLength("", linkedinCandidateText(candidate)) <= limit)
   );
 }
 const selectionSchema = z
@@ -143,6 +152,10 @@ export function linkedinTargetWording(
   return allowedClaimTexts(source).find((text) =>
     text.startsWith("I'm interested in "),
   );
+}
+
+function normalizeImplementationScope(text: string) {
+  return text.replace(/\b(front|back)[ -]end\b/giu, "$1end");
 }
 
 export function createLinkedinTargetMatcher(
@@ -160,18 +173,25 @@ export function createLinkedinTargetMatcher(
         isLinkedinJobTarget(source)
           ? linkedinDiscussionTopic(source.content, isLinkedinJobTarget(source))
           : undefined;
-      return (
-        topic?.replace(/^intelligent agents?$/iu, "AI agents") ?? source.content
+      return normalizeImplementationScope(
+        topic?.replace(/^intelligent agents?$/iu, "AI agents") ??
+          source.content,
       );
     }),
-    eligible.map(({ source }) => source.content),
+    eligible.map(({ source }) => normalizeImplementationScope(source.content)),
   );
   return (candidate: AtomicSource) => {
     if (candidate.scope !== "candidate") return [];
-    const text = allowedClaimTexts(candidate).at(-1)!;
+    const text = linkedinCandidateText(candidate);
+    const contribution =
+      candidate.kind === "action"
+        ? (linkedinScopedAction(candidate.content) ?? candidate.content)
+        : candidate.content;
     // Separate sentences may describe unrelated work. Score each on its own.
-    const ranked = affirmativeExperience(candidate.content)
-      .flatMap((sentence) => rank(candidate.content, sentence))
+    const ranked = affirmativeExperience(candidate)
+      .flatMap((sentence) =>
+        rank(contribution, normalizeImplementationScope(sentence)),
+      )
       .sort(
         (a, b) =>
           Number(a.related) - Number(b.related) ||
@@ -361,7 +381,7 @@ export function isLinkedinJobTarget(source: AtomicSource): boolean {
   );
 }
 
-const UNFINISHED_WORK = String.raw`(?:(?:failed|attempted|tried) (?:to|(?=[\p{L}]+ing\b))|(?:trying|attempting|unable|yet|want|hope|plan) to|attempts? (?:to|at))`;
+const UNFINISHED_WORK = String.raw`(?:(?:failed|attempted|tried) (?:to|(?=[\p{L}]+ing\b))|(?:trying|attempting|unable|yet|want(?:ed)?|hop(?:e|ed)|plan(?:ned)?) to|attempts? (?:to|at))`;
 const NON_COMPLETING_ASSERTION = new RegExp(
   String.raw`^I(?:\s+|['’](?:ve|m|d|ll)\s+)(?:(?:have|had|do|did|am|was|would|could|can)\s+)?(?:never|not|no|zero|0|lack|stopped|${UNFINISHED_WORK}|[\p{L}]+n['’]t)\b`,
   "iu",
@@ -371,14 +391,23 @@ const AFFIRMATIVE_BOUNDARY = new RegExp(
   "iu",
 );
 
-function affirmativeExperience(content: string): string[] {
+function affirmativeExperience({
+  kind,
+  content,
+}: Pick<AtomicSource, "kind" | "content">): string[] {
+  const scoped = kind === "action" && linkedinScopedAction(content);
   // Each first-person sentence can contribute. Render all reviewed text intact.
   return content
     .split(/(?<=[.!?])\s+/u)
-    .filter(
-      (part) =>
-        isFirstPersonAssertion(part) && !NON_COMPLETING_ASSERTION.test(part),
-    )
+    .filter((part) => {
+      const assertion =
+        kind === "action" ? (linkedinScopedAction(part) ?? part) : part;
+      return (
+        isFirstPersonAssertion(assertion) &&
+        (!scoped || isLinkedinImplementationAction(assertion)) &&
+        !NON_COMPLETING_ASSERTION.test(assertion)
+      );
+    })
     .map((part) => part.split(AFFIRMATIVE_BOUNDARY, 1)[0]!)
     .filter(Boolean);
 }
@@ -386,10 +415,12 @@ function affirmativeExperience(content: string): string[] {
 export function isLinkedinExperience(
   source: Pick<AtomicSource, "kind" | "content">,
 ) {
+  const { kind, content } = source;
   return (
-    source.kind !== "preference" &&
-    isFirstPersonAssertion(source.content) &&
-    affirmativeExperience(source.content).length > 0
+    kind !== "preference" &&
+    (isFirstPersonAssertion(content) ||
+      (kind === "action" && Boolean(linkedinScopedAction(content)))) &&
+    affirmativeExperience(source).length > 0
   );
 }
 

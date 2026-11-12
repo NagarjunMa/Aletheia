@@ -15,6 +15,7 @@ import {
   linkedinProfileHeadlineTopics,
   linkedinProfileRetractedTopics,
   linkedinProfileTopicIsRetracted,
+  linkedinScopedAction,
   MAX_SUPPORTING_EXCERPT,
   type AtomicSource,
   type ClaimKind,
@@ -38,6 +39,7 @@ export function buildAtomicCandidateSources(
   candidate: CandidateGroundingData,
   selected: readonly CandidateGroundingSource[],
   preparedFacts?: ReadonlyMap<string, readonly CandidateFact[]>,
+  channel?: "linkedin_connection",
 ): AtomicSource[] {
   const result: AtomicSource[] = [];
   let remaining = MAX_TOTAL_CHARS;
@@ -46,7 +48,6 @@ export function buildAtomicCandidateSources(
     id: string,
     kind: ClaimKind,
     raw: string,
-    rewrite?: "current_role",
   ) => {
     const content = normalizeAtomicSourceText(raw);
     if (
@@ -64,7 +65,11 @@ export function buildAtomicCandidateSources(
       scope: "candidate",
       kind,
       content,
-      ...(rewrite ? { rewrite } : {}),
+      ...(channel === "linkedin_connection" &&
+      kind === "action" &&
+      linkedinScopedAction(content)
+        ? { rewrite: "linkedin_scoped_action" as const }
+        : {}),
     });
     remaining -= content.length;
   };
