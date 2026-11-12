@@ -33,7 +33,9 @@ import {
 } from "@/lib/candidate-profile/fact-review";
 import {
   isLinkedinCredentialTopic,
+  isLinkedinTraitOnlyPost,
   linkedinHiringWording,
+  linkedinJobHasConcreteWork,
   linkedinTargetHasContradiction,
   MAX_SUPPORTING_EXCERPT,
   type AtomicSource,
@@ -477,7 +479,10 @@ export function buildOutreachGroundingContext(input: {
           isLinkedinProfileRoleOnly(source)),
     );
   const mayUseCandidateIntroduction =
-    !winningLinkedinFact && (!linkedinTargets.length || weakProfileOnly);
+    !winningLinkedinFact &&
+    (!linkedinTargets.length ||
+      weakProfileOnly ||
+      (linkedin && isLinkedinTraitOnlyPost(target.jobDescription)));
   const targetContradicted =
     linkedin &&
     mayUseCandidateIntroduction &&
@@ -493,6 +498,7 @@ export function buildOutreachGroundingContext(input: {
     mayUseCandidateIntroduction &&
     !targets.diagnostics.excluded &&
     !targets.diagnostics.unsafeWording &&
+    !linkedinJobHasConcreteWork(target.jobDescription) &&
     !targetContradicted
   ) {
     const entries = allowedEvidence
@@ -588,6 +594,7 @@ export function buildOutreachGroundingContext(input: {
     winningLinkedinFact
       ? new Map([[winningLinkedinFact.entryId, [winningLinkedinFact.fact]]])
       : (linkedinFacts ?? reviewedEvidence),
+    linkedin ? "linkedin_connection" : undefined,
   ).filter(
     (source) =>
       target.category !== "linkedin_connection" ||

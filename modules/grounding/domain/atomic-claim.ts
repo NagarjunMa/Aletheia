@@ -48,6 +48,7 @@ export type AtomicClaim = z.infer<typeof atomicClaimSchema>;
 
 export const ATOMIC_SOURCE_REWRITES = [
   "current_role",
+  "linkedin_scoped_action",
   "linkedin_profile_interest",
   "linkedin_job_interest",
   "linkedin_profile_topic",
@@ -118,6 +119,34 @@ export function normalizeClaimText(value: string): string {
 /** Recognize an explicit actor without expanding contractions or changing the source. */
 export function isFirstPersonAssertion(value: string): boolean {
   return /^I(?:\s|['’](?:m|ve|d|ll)\s)/u.test(normalizeClaimText(value));
+}
+
+const IMPLEMENTED_ACTION =
+  "built|developed|implemented|designed|created|maintained|tested|operated|deployed|monitored|wrote|shipped|configured|integrated|added|refactored|optimized|set up|helped build";
+const SCOPED_IMPLEMENTATION = new RegExp(
+  String.raw`^(?:(?:I (?:have )?|I['’]ve )(?:(?:successfully|personally|directly|independently|jointly) )?(?:${IMPLEMENTED_ACTION})(?:\s+|,\s+(?=(?:${IMPLEMENTED_ACTION})\b))|(?:I am |I['’]m )(?:building|developing|implementing|designing|maintaining|testing|operating|monitoring)\s+)\S`,
+  "u",
+);
+
+export function linkedinScopedAction(value: string): string | undefined {
+  const action = /^On the (?:front|back)[ -]?end,\s+(.+)$/isu.exec(
+    normalizeClaimText(value),
+  )?.[1];
+  return action && isLinkedinImplementationAction(action) ? action : undefined;
+}
+
+export function isLinkedinImplementationAction(action: string): boolean {
+  const mainClause = action.split(
+    /;|[.!?](?=\s|$)|,?\s+(?:but|however|although)\b/iu,
+    1,
+  )[0]!;
+  const implementation = mainClause.replace(/\s+with no\s+.+$/iu, "");
+  return (
+    SCOPED_IMPLEMENTATION.test(implementation) &&
+    !/\b(?:no|not|never|nothing|neither|nor|zero)\b|n['’]t\b/iu.test(
+      implementation,
+    )
+  );
 }
 
 // Only named fields may move out of a headline suffix; free text can qualify
@@ -1061,6 +1090,40 @@ export function linkedinHiringWording(content: string) {
   };
 }
 
+export function isLinkedinTraitOnlyPost(value: string): boolean {
+  const passages = linkedinJobParagraphs(value)
+    .flatMap((paragraph) => linkedinPassages(paragraph, true))
+    .filter(({ content }) => content && !/^apply now[.!]?$/iu.test(content));
+  return (
+    passages.length > 0 &&
+    passages.every(
+      ({ content }) => linkedinHiringWording(content)?.kind === "preference",
+    )
+  );
+}
+
+const NAMED_HIRING_ROLE =
+  /^(?:(?:(?:we|they)(?: are|['’]re)|i(?: am|['’]m)) )?(?:hiring|recruiting|looking for|seeking):?\s+(?:an?\s+)?(.+?)[.!?]?$/iu;
+const TEAM_HIRING_ROLE =
+  /^(The [\p{L}\p{N}&+/-]+(?: [\p{L}\p{N}&+/-]+){0,9} team at [\p{L}\p{N}&+/-]+(?: [\p{L}\p{N}&+/-]+){0,5}) is hiring ((?:[A-Z][\p{L}\p{N}+#/-]* ){0,6}(?:Engineers|Developers|Designers|Researchers))[.!]?$/u;
+
+export function linkedinJobHasConcreteWork(value: string): boolean {
+  return linkedinJobParagraphs(value).some(
+    (paragraph) =>
+      linkedinHiringRoleList(paragraph) ||
+      linkedinPassages(paragraph, true).some(({ content, text }) => {
+        const wording = linkedinHiringWording(content);
+        if (wording) return wording.kind !== "preference";
+        const role = NAMED_HIRING_ROLE.exec(text)?.[1];
+        return (
+          TEAM_HIRING_ROLE.test(text) ||
+          RESPONSIBILITY_TOPIC.test(text) ||
+          (role !== undefined && LISTED_ROLE.test(role))
+        );
+      }),
+  );
+}
+
 function hasNegatedHiringSearch(value: string): boolean {
   if (!/\b(?:looking for|seeking)\b/iu.test(value)) return false;
   return linkedinPassages(value, true).some(({ text }) => {
@@ -1107,7 +1170,13 @@ export function allowedClaimTexts(source: AtomicSource): string[] {
       : `My background includes: "${excerpt}"`;
   const forms = [quoted];
   // Already explicit first-person candidate assertions need no actor inference.
-  if (source.scope === "candidate" && isFirstPersonAssertion(excerpt))
+  if (
+    source.scope === "candidate" &&
+    (isFirstPersonAssertion(excerpt) ||
+      (source.kind === "action" &&
+        source.rewrite === "linkedin_scoped_action" &&
+        linkedinScopedAction(excerpt)))
+  )
     forms.push(excerpt);
   if (
     source.scope === "candidate" &&
@@ -1150,10 +1219,7 @@ export function allowedClaimTexts(source: AtomicSource): string[] {
     if (source.rewrite === "linkedin_job_interest") {
       // Only this complete positive hiring grammar permits rearranging the roles.
       // Qualifications, negation and additional sentences retain the whole quote.
-      const hiring =
-        /^(The [\p{L}\p{N}&+/-]+(?: [\p{L}\p{N}&+/-]+){0,9} team at [\p{L}\p{N}&+/-]+(?: [\p{L}\p{N}&+/-]+){0,5}) is hiring ((?:[A-Z][\p{L}\p{N}+#/-]* ){0,6}(?:Engineers|Developers|Designers|Researchers))[.!]?$/u.exec(
-          structuredExcerpt,
-        );
+      const hiring = TEAM_HIRING_ROLE.exec(structuredExcerpt);
       return [
         hiring
           ? `I'm interested in the openings for ${hiring[2]} with ${hiring[1]!.replace(/^The /u, "the ")}.`
