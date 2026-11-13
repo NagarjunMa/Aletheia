@@ -38,68 +38,31 @@ import {
   questions,
 } from "./grounded-response-hosted-fixture";
 
-const modes = ["off", "on"] as const;
-type Mode = (typeof modes)[number];
-const bypassHeader = "x-vercel-protection-bypass";
-const shaPattern = /^[a-f0-9]{40}$/u;
-const projectPattern = /^prj_[a-z0-9_]+$/iu;
-const vercelHost = /^[a-z0-9][a-z0-9-]*\.vercel\.app$/u;
-const supabaseHost = /^[a-z0-9]+\.supabase\.co$/u;
+import {
+  bypassHeader,
+  GateError,
+  readHostedPreviewConfig,
+} from "./hosted-preview-config";
 
-class GateError extends Error {}
+type Mode = "off" | "on";
 
 export function readHostedGateConfig(
   env: Readonly<Record<string, string | undefined>>,
 ) {
+  const preview = readHostedPreviewConfig(env);
+
   function required(key: string) {
     const value = env[`GROUNDED_GATE_${key}`];
     if (!value?.trim()) throw new GateError(`Missing configuration: ${key}`);
     return value;
   }
 
-  function origin(key: string, hostPattern: RegExp) {
-    const value = required(key);
-    const url = URL.parse(value);
-    if (
-      !url ||
-      url.protocol !== "https:" ||
-      !hostPattern.test(url.hostname) ||
-      (value !== url.origin && value !== `${url.origin}/`)
-    )
-      throw new GateError(`Invalid origin: ${key}`);
-    return url;
-  }
-
-  if (required("CONFIRM") !== "yes")
-    throw new GateError("Isolation confirmation required");
-  const sha = required("SHA");
-  if (!shaPattern.test(sha)) throw new GateError("Full workflow SHA required");
-
-  const projectId = required("PROJECT_ID");
-  const productionProjectId = required("PRODUCTION_PROJECT_ID");
-  if (
-    !projectPattern.test(projectId) ||
-    !projectPattern.test(productionProjectId) ||
-    projectId.toLowerCase() === productionProjectId.toLowerCase()
-  )
-    throw new GateError("Isolated Vercel project identity required");
-
-  const productionApp = origin("PRODUCTION_APP_URL", /^[a-z0-9.-]+[a-z0-9]$/u);
-  const supabase = origin("SUPABASE_URL", supabaseHost);
-  const productionSupabase = origin("PRODUCTION_SUPABASE_URL", supabaseHost);
-  if (supabase.origin === productionSupabase.origin)
-    throw new GateError("Production Supabase project is forbidden");
-
   const publishableKey = required("SUPABASE_PUBLISHABLE_KEY");
   if (!/^sb_publishable_[\w-]+$/u.test(publishableKey))
     throw new GateError("Supabase publishable key required");
 
-  const targets = modes.map((mode) => {
+  const targets = preview.targets.map(({ mode, url }) => {
     const prefix = mode.toUpperCase();
-    const url = origin(`${prefix}_URL`, vercelHost);
-    if (url.hostname === productionApp.hostname)
-      throw new GateError("Production application is forbidden");
-
     const userId = required(`${prefix}_USER_ID`);
     const email = required(`${prefix}_EMAIL`);
     if (
@@ -116,22 +79,14 @@ export function readHostedGateConfig(
     };
   });
   if (
-    new Set(targets.map(({ url }) => url.origin)).size !== modes.length ||
     new Set(targets.map(({ userId }) => userId.toLowerCase())).size !==
-      modes.length ||
+      targets.length ||
     new Set(targets.map(({ email }) => email.toLowerCase())).size !==
-      modes.length
+      targets.length
   )
-    throw new GateError("Distinct Preview deployments and accounts required");
+    throw new GateError("Distinct synthetic accounts required");
 
-  return {
-    sha,
-    projectId,
-    supabase,
-    publishableKey,
-    targets,
-    bypass: required("VERCEL_BYPASS"),
-  };
+  return { ...preview, publishableKey, targets };
 }
 
 const profile = { profileMarkdown };
