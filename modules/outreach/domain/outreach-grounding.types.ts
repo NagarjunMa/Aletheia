@@ -1,4 +1,5 @@
 import type { LinkedinConnectionNoteLimit } from "@/lib/ai/output-constraints";
+import type { EmailMode } from "@/lib/ai/email-formatter";
 import type {
   CandidateIdentity,
   CandidateGroundingSource,
@@ -69,6 +70,7 @@ export type OutreachGroundingInput = {
   jobDescription: string;
   conversationContext: string;
   connectionNoteLimit?: LinkedinConnectionNoteLimit;
+  emailMode?: EmailMode;
 };
 
 /**
@@ -97,6 +99,10 @@ export type OutreachGroundingContext = {
   atomicSources?: AtomicSource[];
   /** Server-only set of reviewed facts that individually match the prose target. */
   proseRelevantFactIds?: ReadonlySet<string>;
+  /** Initial cold email can introduce the candidate without a recipient assertion. */
+  domainAwareEmail?: boolean;
+  /** Exact target duties, with candidate fact IDs that support that duty. */
+  emailDutyFactIds?: ReadonlyMap<string, ReadonlySet<string>>;
   excludedClaims?: string[];
   /** Internal counters only; not part of public eval metadata. */
   targetDiagnostics?: {

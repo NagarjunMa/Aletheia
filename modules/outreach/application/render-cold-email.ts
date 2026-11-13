@@ -14,6 +14,7 @@ export function renderColdEmail(input: {
   draft: ColdEmailDraft;
   identity: CandidateIdentity;
   mode: EmailMode;
+  omitSignature?: boolean;
 }): {
   subject: string;
   body: string;
@@ -26,9 +27,12 @@ export function renderColdEmail(input: {
   const blocks = [
     `Hi ${normalizeSection(input.draft.greeting)},`,
     [
-      normalizeSection(input.draft.target_opening),
+      input.draft.target_opening &&
+        normalizeSection(input.draft.target_opening),
       normalizeSection(input.draft.candidate_positioning),
-    ].join(" "),
+    ]
+      .filter(Boolean)
+      .join(" "),
     proof.length ? ["A quick look at my background:", ...proof].join("\n") : "",
     `${normalizeSection(input.draft.value_statement)} ${normalizeSection(input.draft.cta)}`,
   ].filter(Boolean);
@@ -47,7 +51,9 @@ export function renderColdEmail(input: {
         `${normalizeSection(input.draft.value_statement)} ${normalizeSection(input.draft.cta)}`,
       ]
     : blocks;
-  const body = [...plannedBlocks, signature].filter(Boolean).join("\n\n");
+  const body = [...plannedBlocks, input.omitSignature ? "" : signature]
+    .filter(Boolean)
+    .join("\n\n");
   return {
     subject: normalizeSection(input.draft.subject_line),
     body,

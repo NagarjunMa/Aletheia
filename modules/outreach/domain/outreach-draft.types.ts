@@ -29,7 +29,7 @@ export const coldEmailDraftSchema = z
   .object({
     subject_line: boundedSection(EMAIL_SUBJECT_MAX_CHARACTERS),
     greeting: boundedSection(80),
-    target_opening: boundedSection(500),
+    target_opening: boundedSection(500).optional(),
     candidate_positioning: boundedSection(500),
     proof_points: z
       .array(coldEmailProofPointSchema)

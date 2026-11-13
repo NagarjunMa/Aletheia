@@ -66,6 +66,13 @@ function tokens(value: string): Set<string> {
   return result;
 }
 
+// A shared literal acronym can identify the work even when the surrounding nouns differ.
+function dutyAcronyms(value: string): string[] {
+  return (value.match(/\b[A-Z]{2,8}\b/gu) ?? []).filter(
+    (word) => !AI_TOPIC_TERMS.has(word.toLowerCase()),
+  );
+}
+
 function hasAiObservabilityTopic(value: string): boolean {
   return normalizeMatchingText(value)
     .split(/\n\s*\n/u)
@@ -134,6 +141,7 @@ function match(
   let score = 0;
   let domainScore = 0;
   let supported = false;
+  let sharedDomainTerms = 0;
   const hasDomain = [...target].some((term) => !AI_TOPIC_TERMS.has(term));
   const agentHasAiSupport =
     !target.has("ai") || contribution.has("ai") || labels.has("ai");
@@ -153,6 +161,8 @@ function match(
     const weighted = weight * (term === "ai" ? 1 : 2);
     score += weighted;
     if (!AI_TOPIC_TERMS.has(term)) domainScore += weighted;
+    if (contribution.has(term) && !AI_TOPIC_TERMS.has(term))
+      sharedDomainTerms++;
     if (
       weight >= 2 &&
       (!hasDomain || !AI_TOPIC_TERMS.has(term)) &&
@@ -163,26 +173,61 @@ function match(
   }
   // A related capability is eligible for ranking but below a direct domain match.
   if (relatedObservability && !contribution.has("observability"))
-    return { score: 1, domainScore: 1, supported: true, related: true };
-  return { score, domainScore, supported, related: false };
+    return {
+      score: 1,
+      domainScore: 1,
+      supported: true,
+      related: true,
+      sharedDomainTerms,
+    };
+  return { score, domainScore, supported, related: false, sharedDomainTerms };
 }
 
 /** Rank complete LinkedIn target units against a reviewed assertion. */
 export function createEvidenceTargetRanker(
   targets: readonly string[],
   context: readonly string[] = targets,
+  {
+    requireAiAgent = false,
+    duty = false,
+  }: { requireAiAgent?: boolean; duty?: boolean } = {},
 ) {
-  const preparedTargets = targets.map(tokens);
+  const incidentalDutyTerms =
+    /^(?:automated|automation|cloud|enterprise|internal|external|technical|production|operations?|application|platform|services?|\d+)$/u;
+  const preparedTargets = targets.map((target) => {
+    const terms = tokens(target);
+    return duty
+      ? new Set([...terms].filter((term) => !incidentalDutyTerms.test(term)))
+      : terms;
+  });
   const preparedContext = context.map((text, index) =>
     text === targets[index] ? undefined : tokens(text),
   );
+  const domainTermCounts = preparedTargets.map(
+    (terms) => [...terms].filter((term) => !AI_TOPIC_TERMS.has(term)).length,
+  );
+  const targetAcronyms = duty ? targets.map(dutyAcronyms) : undefined;
   const observabilityTargets = new Set(
     targets.flatMap((target, index) =>
       hasAiObservabilityTopic(target) ? [index] : [],
     ),
   );
   const byTerm = new Map<string, number[]>();
+  const distinct = new Set<string>();
   preparedTargets.forEach((target, index) => {
+    if (duty) {
+      const key = JSON.stringify([
+        [...target].sort(),
+        [...(preparedContext[index] ?? [])].sort(),
+        observabilityTargets.has(index),
+        targetAcronyms?.[index]?.slice().sort(),
+      ]);
+      if (distinct.has(key)) {
+        observabilityTargets.delete(index);
+        return;
+      }
+      distinct.add(key);
+    }
     for (const term of target) {
       const indices = byTerm.get(term) ?? [];
       indices.push(index);
@@ -192,6 +237,12 @@ export function createEvidenceTargetRanker(
   const empty = new Set<string>();
   return (contribution: string, affirmative = contribution) => {
     const prepared = tokens(affirmative);
+    const acronyms = targetAcronyms
+      ? new Set(dutyAcronyms(affirmative))
+      : undefined;
+    const explicitAgent =
+      requireAiAgent &&
+      AI_AGENT_PATTERN.test(normalizeMatchingText(affirmative));
     const candidates = new Set(
       [...prepared].flatMap((term) => byTerm.get(term) ?? []),
     );
@@ -209,7 +260,18 @@ export function createEvidenceTargetRanker(
           relatedMonitoring && observabilityTargets.has(index),
         ),
       }))
-      .filter((item) => item.supported)
+      .filter(
+        ({ supported, index, related, sharedDomainTerms }) =>
+          supported &&
+          (!duty ||
+            related ||
+            sharedDomainTerms >= Math.min(2, domainTermCounts[index]!) ||
+            targetAcronyms?.[index]?.some((word) => acronyms?.has(word))) &&
+          (!requireAiAgent ||
+            explicitAgent ||
+            !preparedTargets[index]!.has("ai") ||
+            !preparedTargets[index]!.has("agent")),
+      )
       .map((item) => {
         const terms = preparedContext[item.index];
         if (!terms || item.related) return item;
