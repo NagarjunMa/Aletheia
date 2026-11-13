@@ -35,6 +35,7 @@ import {
   parseEvidenceChoices,
   serializeGenerationError,
 } from "./generation-core.js";
+import { normalizeMessageFocus } from "../lib/message-focus.js";
 import { generateWithAuthRecovery } from "./generate-auth-recovery.js";
 import {
   createExtensionLogger,
@@ -68,6 +69,13 @@ let usageMutation = Promise.resolve();
 let usageEpoch = 0;
 let personalStorageMutation = Promise.resolve();
 let logoutInProgress = false;
+let focusAccountRevision = 0;
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  const auth = area === "local" ? changes.aletheia_auth : undefined;
+  if (auth && auth.oldValue?.user?.id !== auth.newValue?.user?.id)
+    focusAccountRevision++;
+});
 
 // Recover from service worker restart during login
 (async function recoverPendingLogin() {
@@ -282,6 +290,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
 
+  if (message.action === "getMessageFocusCapability") {
+    if (!isStoryPickerSender(sender)) {
+      sendResponse({ messageFocus: false });
+      return false;
+    }
+    getEffectiveApiUrl()
+      .then((url) =>
+        makeAPIRequest(
+          "/api/extension/config",
+          { cache: "no-store", redirect: "error" },
+          url,
+          operationId,
+          { maxAttempts: 1, timeoutMs: 5000 },
+        ),
+      )
+      .then((config) =>
+        sendResponse({
+          messageFocus: config.capabilities?.messageFocus === true,
+        }),
+      )
+      .catch(() => sendResponse({ messageFocus: false }));
+    return true;
+  }
+
   if (message.action === "listEvidence") {
     if (!isStoryPickerSender(sender)) {
       sendResponse({ success: false, code: "EVIDENCE_LIST_UNAVAILABLE" });
@@ -293,13 +325,36 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.action === "generate") {
     if (
-      message.payload?.selectedEvidenceIds?.length &&
+      (message.payload?.selectedEvidenceIds?.length ||
+        message.payload?.messageFocus !== undefined) &&
       !isStoryPickerSender(sender)
     ) {
       sendResponse({ success: false, code: "EVIDENCE_SELECTION_UNAVAILABLE" });
       return false;
     }
-    handleGenerateRequest(message.payload, operationId, message.requesterId)
+    const focus = normalizeMessageFocus(message.payload?.messageFocus);
+    if (
+      focus === null ||
+      (message.payload?.category === "yc_application" &&
+        message.payload?.messageFocus !== undefined)
+    ) {
+      sendResponse({
+        success: false,
+        code: "INVALID_REQUEST",
+        message: "Enter a valid Message focus.",
+      });
+      return false;
+    }
+    const payload =
+      message.payload?.messageFocus === undefined
+        ? message.payload
+        : { ...message.payload, messageFocus: focus || undefined };
+    handleGenerateRequest(
+      payload,
+      operationId,
+      message.requesterId,
+      message.focusTarget,
+    )
       .then((result) => {
         log.info("runtime.message.complete", {
           operationId,
@@ -702,13 +757,15 @@ async function readStoryAccount(requesterId, epoch) {
   return auth;
 }
 
-async function readStoryAccessToken(requesterId, epoch) {
+async function readStoryAccessToken(requesterId, epoch, focused = false) {
   const auth = await readStoryAccount(requesterId, epoch);
   // These new paths only read auth. An asynchronous refresh could replace a
   // different account's session while a story request is in progress.
   if (!isTokenValid(auth)) {
     const error = new Error(
-      "Please reconnect the extension to use selected stories.",
+      focused
+        ? "Reconnect to Aletheia, then re-enter Message focus."
+        : "Please reconnect the extension to use selected stories.",
     );
     error.code = "AUTH_REQUIRED";
     error.status = 401;
@@ -746,8 +803,23 @@ async function handleEvidenceList(requesterId, operationId) {
   return { success: false, code: "EVIDENCE_LIST_UNAVAILABLE" };
 }
 
-async function handleGenerateRequest(payload, operationId, requesterId) {
+async function handleGenerateRequest(
+  payload,
+  operationId,
+  requesterId,
+  focusTarget,
+) {
   const generationUsageEpoch = usageEpoch;
+  const focused = Boolean(payload.messageFocus);
+  const accountRevision = focused ? focusAccountRevision : 0;
+  const assertFocusAccount = () => {
+    if (
+      logoutInProgress ||
+      generationUsageEpoch !== usageEpoch ||
+      accountRevision !== focusAccountRevision
+    )
+      throw authAccountChanged();
+  };
   const complete = startExtensionTimedStage(log, "generation.workflow", {
     operationId,
   });
@@ -756,6 +828,21 @@ async function handleGenerateRequest(payload, operationId, requesterId) {
     const { aletheia_auth } = await chrome.storage.local.get("aletheia_auth");
 
     const explicit = payload.selectedEvidenceIds?.length > 0;
+    if (focused && new URL(url).protocol !== "https:")
+      return { success: false, code: "MESSAGE_FOCUS_UNAVAILABLE" };
+    const assertFocusTarget = async () => {
+      if (!payload.messageFocus) return;
+      const tab = Number.isInteger(focusTarget?.id)
+        ? await chrome.tabs.get(focusTarget.id).catch(() => null)
+        : null;
+      if (!tab?.active || tab.url !== focusTarget.url) {
+        const error = new Error(
+          "The active profile changed. Review the context and generate again.",
+        );
+        error.code = "MESSAGE_FOCUS_CONTEXT_CHANGED";
+        throw error;
+      }
+    };
     const getGenerationAuth = async () => {
       const expected = await getAuthSnapshot();
       if (
@@ -832,7 +919,7 @@ async function handleGenerateRequest(payload, operationId, requesterId) {
           endpoint,
           {
             method: "POST",
-            ...(endpoint === EVIDENCE_ENDPOINT ? { redirect: "error" } : {}),
+            ...(explicit || focused ? { redirect: "error" } : {}),
             headers: {
               "Content-Type": "application/json",
               Authorization: `Bearer ${accessToken}`,
@@ -849,10 +936,11 @@ async function handleGenerateRequest(payload, operationId, requesterId) {
               ? { timeoutMs: 120000 }
               : {}),
             assertBeforeAttempt: async () => {
-              const activeAuth = explicit
-                ? await readStoryAccount(requesterId, generationUsageEpoch)
-                : (await chrome.storage.local.get("aletheia_auth"))
-                    .aletheia_auth;
+              const activeAuth =
+                explicit || focused
+                  ? await readStoryAccount(requesterId, generationUsageEpoch)
+                  : (await chrome.storage.local.get("aletheia_auth"))
+                      .aletheia_auth;
               if (
                 !isMatchingAccountToken(requesterId, accessToken, activeAuth)
               ) {
@@ -861,6 +949,10 @@ async function handleGenerateRequest(payload, operationId, requesterId) {
                 );
                 error.code = "AUTH_ACCOUNT_CHANGED";
                 throw error;
+              }
+              if (focused) {
+                await assertFocusTarget();
+                assertFocusAccount();
               }
             },
           },
@@ -892,13 +984,30 @@ async function handleGenerateRequest(payload, operationId, requesterId) {
         return result;
       },
     };
-    // A reconnect can invalidate an explicit selection in the side panel.
-    const response = explicit
-      ? await workflow.generate(
-          await readStoryAccessToken(requesterId, generationUsageEpoch),
-        )
-      : await generateWithAuthRecovery(workflow);
-    if (explicit) await readStoryAccount(requesterId, generationUsageEpoch);
+    // Reconnection can invalidate an explicit story or recipient-bound focus.
+    const response =
+      explicit || focused
+        ? await workflow.generate(
+            await readStoryAccessToken(
+              requesterId,
+              generationUsageEpoch,
+              focused,
+            ),
+          )
+        : await generateWithAuthRecovery(workflow);
+    if (explicit || focused)
+      await readStoryAccount(requesterId, generationUsageEpoch);
+    if (focused) {
+      await assertFocusTarget();
+      assertFocusAccount();
+      if (response.success && response.selectionStatus !== "matched") {
+        return {
+          success: false,
+          code: "MESSAGE_FOCUS_UNAVAILABLE",
+          message: "Clear Message focus to use automatic generation.",
+        };
+      }
+    }
 
     if (!response.success) {
       complete("failure", {
@@ -1059,7 +1168,12 @@ async function makeAPIRequest(
         );
       }
 
-      if (error.code === "AUTH_ACCOUNT_CHANGED") throw error;
+      if (
+        ["AUTH_ACCOUNT_CHANGED", "MESSAGE_FOCUS_CONTEXT_CHANGED"].includes(
+          error.code,
+        )
+      )
+        throw error;
 
       if (
         error.status === 402 ||

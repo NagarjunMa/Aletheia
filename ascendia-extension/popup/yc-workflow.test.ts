@@ -171,6 +171,7 @@ describe("outreach feedback acknowledgement", () => {
     const send = vi.fn().mockResolvedValue({ success: true });
     const context = {
       currentOutput: draft,
+      focusedDraftTarget: null,
       currentProfile: { name: "Original recipient" },
       currentUserId: "user-1",
       popupAuthenticated: true,
@@ -181,7 +182,7 @@ describe("outreach feedback acknowledgement", () => {
         getElementById: (id: string) =>
           id === "reject-reason"
             ? reasonPicker
-            : { value: "linkedin_connection" },
+            : { value: id === "messageFocus" ? "" : "linkedin_connection" },
         querySelectorAll: () => [control],
       },
       chrome: {
@@ -239,6 +240,24 @@ describe("outreach feedback acknowledgement", () => {
       expect(context.generateMessage).toHaveBeenCalledTimes(
         type === "reject" ? 1 : 0,
       );
+    },
+  );
+
+  it.each([true, false])(
+    "never generates after rejecting a focused draft or with unsent focus (focused=%s)",
+    async (focused) => {
+      const { context, feedback, send } = setup();
+      if (focused) {
+        Object.assign(context, { focusedDraftTarget: { id: 1 } });
+      } else {
+        const getElement = context.document.getElementById;
+        context.document.getElementById = (id) =>
+          id === "messageFocus" ? { value: "Unsent focus" } : getElement(id);
+      }
+      await feedback("reject", "too_generic");
+      expect(send).toHaveBeenCalledOnce();
+      expect(send.mock.calls[0][0].payload).not.toHaveProperty("messageFocus");
+      expect(context.generateMessage).not.toHaveBeenCalled();
     },
   );
 
@@ -362,6 +381,8 @@ it.each([
     const context = {
       feedbackInFlight: false,
       generationInFlight: false,
+      messageFocusSupported: false,
+      focusContextRevision: 0,
       storyPicker: { snapshot: () => ({ ids: [] }) },
       popupAuthenticated: true,
       currentUserId: "user-1",
@@ -371,6 +392,7 @@ it.each([
       document: { getElementById: () => ({ value: "linkedin_connection" }) },
       validateGenerationInput: () => ({ valid: true }),
       createOperationId: () => "11111111-1111-4111-8111-111111111111",
+      dismissMessageFocusRecovery: vi.fn(),
       setGeneratingState: vi.fn(),
       setGenerationPhase: vi.fn(),
       chrome: {
@@ -413,6 +435,8 @@ describe("ALE-38 popup elapsed time", () => {
         popupAuthenticated: true,
         feedbackInFlight: false,
         generationInFlight: false,
+        messageFocusSupported: false,
+        focusContextRevision: 0,
         storyPicker: { snapshot: () => ({ ids: [] }) },
         YC_APPLICATION_CATEGORY: "yc_application",
         PROFILE_EXTRACTION_CONSENT_KEY: "profileExtractionConsent",
@@ -420,6 +444,7 @@ describe("ALE-38 popup elapsed time", () => {
         currentProfile: { name: "Original recipient" },
         currentUserId: "user-1",
         validateGenerationInput: () => ({ valid: true }),
+        dismissMessageFocusRecovery: vi.fn(),
         setGeneratingState: vi.fn(),
         setGenerationPhase: vi.fn(),
         chrome: {

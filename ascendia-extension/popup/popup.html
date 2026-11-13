@@ -244,6 +244,23 @@
           </div>
         </div>
 
+        <div id="messageFocusGroup" class="input-group hidden">
+          <label for="messageFocus">Message focus (optional)</label>
+          <textarea
+            id="messageFocus"
+            spellcheck="false"
+            rows="2"
+            maxlength="500"
+            aria-describedby="messageFocusHelp messageFocusCount messageFocusStatus"
+            placeholder="Example: Emphasize my evaluation and reliability work"
+          ></textarea>
+          <p id="messageFocusHelp" class="input-help">
+            Choose what to emphasize from your confirmed experience.
+          </p>
+          <div id="messageFocusCount" class="char-count">0/500</div>
+          <p id="messageFocusStatus" class="input-help" role="status"></p>
+        </div>
+
         <!-- YC application question -->
         <div id="ycQuestionGroup" class="input-group hidden">
           <label for="ycQuestionInput">Application Questions</label>
@@ -493,6 +510,22 @@ Why are you a strong candidate for this role?</textarea>
           <div class="error-content">
             <span id="errorText">Something went wrong. Please try again.</span>
             <ul id="errorDetails" class="error-details hidden"></ul>
+            <div id="messageFocusRecovery" class="hidden">
+              <button
+                type="button"
+                id="editMessageFocus"
+                class="action-btn secondary"
+              >
+                Edit Message focus
+              </button>
+              <button
+                type="button"
+                id="clearMessageFocus"
+                class="action-btn secondary"
+              >
+                Clear Message focus
+              </button>
+            </div>
             <a
               id="errorAction"
               class="error-action hidden"

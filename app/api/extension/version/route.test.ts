@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { makeRequest } from "@/__tests__/helpers/request";
+import manifest from "@/ascendia-extension/manifest.json";
 import { GET, OPTIONS } from "./route";
 
 const ORIGINAL_COMMIT_SHA = process.env.VERCEL_GIT_COMMIT_SHA;
@@ -35,7 +36,7 @@ describe("GET /api/extension/version", () => {
     expect(res.status).toBe(200);
     expect(body).toMatchObject({
       appVersion: "0.1.0",
-      extensionVersion: "1.0.26",
+      extensionVersion: manifest.version,
       sha: "local",
       builtAt: "local",
       chromeWebStoreUrl:
@@ -45,7 +46,7 @@ describe("GET /api/extension/version", () => {
         supportedVersions: ["1"],
       },
       extension: {
-        latestSourceVersion: "1.0.26",
+        latestSourceVersion: manifest.version,
         publishedVersion: "1.0.2",
         minimumSupportedVersion: "1.0.2",
         chromeWebStoreUrl:
@@ -69,13 +70,13 @@ describe("GET /api/extension/version", () => {
     expect(res.status).toBe(200);
     expect(body).toMatchObject({
       appVersion: "0.1.0",
-      extensionVersion: "1.0.26",
+      extensionVersion: manifest.version,
       sha: "1234567890ab",
       chromeWebStoreUrl:
         "https://chromewebstore.google.com/detail/aletheia/example",
     });
     expect(body.extension).toMatchObject({
-      latestSourceVersion: "1.0.26",
+      latestSourceVersion: manifest.version,
       publishedVersion: "1.0.2",
       minimumSupportedVersion: "1.0.1",
     });

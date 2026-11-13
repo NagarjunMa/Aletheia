@@ -1,3 +1,7 @@
+import {
+  MESSAGE_FOCUS_MAX_LENGTH,
+  normalizeMessageFocus,
+} from "../lib/message-focus.js";
 import { createEvidencePicker } from "./evidence-picker.js";
 import { saveApplicationAuthDraft } from "../lib/application-auth-draft.js";
 import { isValidOperationId } from "../lib/logger-core.js";
@@ -56,6 +60,46 @@ let storyPicker;
 let profileRead = 0;
 let profileWindowId;
 let profileTab = null;
+let messageFocusSupported = false;
+let focusContextRevision = 0;
+let focusedDraftTarget = null;
+let errorDismissalTimer;
+
+function resetMessageFocus() {
+  focusContextRevision++;
+  if (focusedDraftTarget) {
+    focusedDraftTarget = null;
+    currentOutput = null;
+    document.getElementById("output")?.classList.add("hidden");
+    document.getElementById("reject-reason")?.classList.add("hidden");
+    document.getElementById("messageText")?.replaceChildren();
+    document.getElementById("subjectText")?.replaceChildren();
+  }
+  const field = document.getElementById("messageFocus");
+  if (field) field.value = "";
+  dismissMessageFocusRecovery();
+  updateMessageFocus();
+}
+
+function updateMessageFocus() {
+  const field = document.getElementById("messageFocus");
+  if (!field) return;
+  const visible =
+    popupAuthenticated &&
+    messageFocusSupported &&
+    document.getElementById("category")?.value !== YC_APPLICATION_CATEGORY;
+  document
+    .getElementById("messageFocusGroup")
+    .classList.toggle("hidden", !visible);
+  field.disabled = generationInFlight;
+  const invalid = visible && normalizeMessageFocus(field.value) === null;
+  field.setAttribute("aria-invalid", String(invalid));
+  document.getElementById("messageFocusCount").textContent =
+    `${field.value.length}/${MESSAGE_FOCUS_MAX_LENGTH}`;
+  document.getElementById("messageFocusStatus").textContent = invalid
+    ? "Keep Message focus within 500 characters after normalization."
+    : "";
+}
 
 function normalizeApiUrl(apiUrl) {
   let value = String(apiUrl || "").trim();
@@ -154,6 +198,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       // A visible draft belongs to the authenticated account that created it.
       if (before?.user?.id !== after?.user?.id) {
         storyPicker.resetAccount();
+        resetMessageFocus();
         // Storage events can arrive after a refresh has already restored the
         // same account, so decide using the latest stored auth state.
         const { aletheia_auth: latestAuth } =
@@ -174,6 +219,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
         if (!latestId) {
           popupAuthenticated = false;
+          updateMessageFocus();
           document.getElementById("evidencePicker")?.classList.add("hidden");
           document.getElementById("output")?.classList.add("hidden");
           document.getElementById("applicationFeedbackDialog")?.close?.();
@@ -290,6 +336,14 @@ async function initializePopup() {
   document.getElementById("evidencePicker")?.classList.remove("hidden");
   // Show connected user badge
   showUserBadge(authStatus.user);
+  const configOwner = currentUserId;
+  void sendBackgroundMessage({ action: "getMessageFocusCapability" }).then(
+    (config) => {
+      if (currentUserId !== configOwner || !popupAuthenticated) return;
+      messageFocusSupported = config?.messageFocus === true;
+      updateMessageFocus();
+    },
+  );
 
   // Load usage stats
   await updateUsageStats();
@@ -432,23 +486,42 @@ function setupEventListeners() {
       }
     });
 
+  document.getElementById("messageFocus")?.addEventListener("input", () => {
+    updateMessageFocus();
+    updateGenerateAvailability();
+  });
+  document.getElementById("editMessageFocus")?.addEventListener("click", () => {
+    document.getElementById("messageFocus")?.focus();
+  });
+  document
+    .getElementById("clearMessageFocus")
+    ?.addEventListener("click", () => {
+      resetMessageFocus();
+      updateGenerateAvailability();
+      document.getElementById("generateBtn")?.focus();
+    });
+
   // Category change handler
   document.getElementById("category")?.addEventListener("change", async () => {
     storyPicker.resetContext();
+    resetMessageFocus();
     updateUIForCategory();
     await checkLinkedInProfile();
   });
   document.getElementById("emailMode")?.addEventListener("change", () => {
     storyPicker.resetContext();
+    resetMessageFocus();
     updateUIForCategory();
   });
-  document
-    .getElementById("intent")
-    ?.addEventListener("change", storyPicker.resetContext);
+  document.getElementById("intent")?.addEventListener("change", () => {
+    storyPicker.resetContext();
+    resetMessageFocus();
+  });
 
   // JD input change handler
   document.getElementById("jdInput")?.addEventListener("input", () => {
     storyPicker.resetContext();
+    resetMessageFocus();
     updateCharacterCount();
     updateGenerateAvailability();
   });
@@ -518,6 +591,8 @@ function showUserBadge(user) {
 
 function showAuthRequired(authStatus) {
   storyPicker?.resetAccount();
+  messageFocusSupported = false;
+  resetMessageFocus();
   document.getElementById("evidencePicker")?.classList.add("hidden");
   // Show auth prompt instead of main content
   const mainContent = document.getElementById("mainContent");
@@ -672,8 +747,10 @@ function setCurrentProfile(profile, tab = null) {
     profile?.profileMarkdown !== currentProfile?.profileMarkdown ||
     tab?.id !== profileTab?.id ||
     tab?.url !== profileTab?.url
-  )
+  ) {
     storyPicker?.resetContext();
+    resetMessageFocus();
+  }
   currentProfile = profile;
   profileTab = profile && tab ? { id: tab.id, url: tab.url } : null;
 }
@@ -819,6 +896,15 @@ async function generateMessage() {
   const profile = currentProfile;
   const category = document.getElementById("category").value;
   const contextValue = document.getElementById("jdInput").value.trim();
+  const messageFocus =
+    messageFocusSupported && category !== YC_APPLICATION_CATEGORY
+      ? normalizeMessageFocus(document.getElementById("messageFocus")?.value)
+      : "";
+  if (messageFocus === null) return;
+  const focusRevision = focusContextRevision;
+  const focusTarget = messageFocus ? profileTab : undefined;
+  const focusIsCurrent = () =>
+    !messageFocus || focusRevision === focusContextRevision;
   const questionValue = document
     .getElementById("ycQuestionInput")
     ?.value.trim();
@@ -855,6 +941,7 @@ async function generateMessage() {
   }
   try {
     log.info("generation.start", { operationId, category, clientVersion });
+    dismissMessageFocusRecovery();
     setGeneratingState(true);
 
     const intent = document.getElementById("intent").value;
@@ -873,7 +960,7 @@ async function generateMessage() {
       return;
     }
 
-    if (selected && category !== YC_APPLICATION_CATEGORY) {
+    if ((selected || messageFocus) && category !== YC_APPLICATION_CATEGORY) {
       const [activeTab] = await chrome.tabs.query({
         active: true,
         currentWindow: true,
@@ -886,12 +973,16 @@ async function generateMessage() {
         invalidateProfile();
         void checkLinkedInProfile();
         showError(
-          "The active profile changed. Choose a story for the current profile.",
+          "The active profile changed. Review the context and generate again.",
         );
         return;
       }
     }
-    if (selected && !storyPicker.isCurrent(storySelection)) return;
+    if (
+      !focusIsCurrent() ||
+      (selected && !storyPicker.isCurrent(storySelection))
+    )
+      return;
 
     const relevantExamples = filterOwnedAccepted(
       accepted,
@@ -915,11 +1006,13 @@ async function generateMessage() {
     setGenerationPhase("generating");
     const response = await sendBackgroundMessage({
       action: "generate",
-      payload,
+      payload: messageFocus ? { ...payload, messageFocus } : payload,
+      ...(focusTarget ? { focusTarget } : {}),
       requesterId,
       operationId,
     });
 
+    if (!focusIsCurrent()) return;
     if (selected && !storyPicker.isCurrent(storySelection)) {
       showError(
         "Draft context changed. Generate again for the current context.",
@@ -937,12 +1030,16 @@ async function generateMessage() {
       ) {
         throw new Error("The connected account changed during generation.");
       }
-      if (selected && !storyPicker.isCurrent(storySelection)) return;
+      if (
+        !focusIsCurrent() ||
+        (selected && !storyPicker.isCurrent(storySelection))
+      )
+        return;
       const validatedResponse = parseGenerationResponse(
         response,
         payload.questions,
       );
-      displayOutput(validatedResponse);
+      displayOutput(validatedResponse, focusTarget);
       generationCompleted = true;
       generationRequestId = isValidOperationId(response.requestId)
         ? response.requestId.toLowerCase()
@@ -955,7 +1052,7 @@ async function generateMessage() {
         requestId: response.requestId,
         clientVersion,
       });
-      if (!selected) await storeGeneration(validatedResponse);
+      if (!selected && !messageFocus) await storeGeneration(validatedResponse);
       await updateUsageStats();
       generationOutcome = "success";
     } else {
@@ -979,7 +1076,31 @@ async function generateMessage() {
       }
       const presentation = getGenerationErrorPresentation(response);
       const errMsg = presentation.message;
-      if (isAuthError(response.code) || isAuthError(errMsg)) {
+      if (
+        ["MESSAGE_FOCUS_NO_MATCH", "MESSAGE_FOCUS_UNAVAILABLE"].includes(
+          response.code,
+        )
+      ) {
+        const unavailable = response.code === "MESSAGE_FOCUS_UNAVAILABLE";
+        showGenerationError({
+          ...presentation,
+          message: unavailable
+            ? "Clear Message focus to use automatic generation."
+            : "Edit or clear Message focus, or confirm a matching fact.",
+          ...(unavailable
+            ? {}
+            : {
+                actionLabel: "Review confirmed experience",
+                actionUrl: `${DEFAULT_API_URL}/profile/application`,
+              }),
+        });
+        document
+          .getElementById("messageFocusRecovery")
+          ?.classList.remove("hidden");
+        document
+          .getElementById("editMessageFocus")
+          ?.classList.toggle("hidden", unavailable);
+      } else if (isAuthError(response.code) || isAuthError(errMsg)) {
         await persistAuthenticationDraft();
         showAuthRequired();
         showAuthError(errMsg);
@@ -1025,7 +1146,7 @@ async function generateMessage() {
   }
 }
 
-function displayOutput(output) {
+function displayOutput(output, target = null) {
   const outputSection = document.getElementById("output");
   const messageText = document.getElementById("messageText");
   const subjectLine = document.getElementById("subjectLine");
@@ -1033,13 +1154,13 @@ function displayOutput(output) {
 
   const processedOutput = parseGenerationResponse(output);
   const application = processedOutput.category === YC_APPLICATION_CATEGORY;
-  document.getElementById("rejectLabel").textContent = application
-    ? "Report issue"
-    : "Regenerate";
+  document.getElementById("rejectLabel").textContent =
+    application || target ? "Report issue" : "Regenerate";
   document
     .getElementById("regenerateApplicationBtn")
     .classList.toggle("hidden", !application);
   currentOutput = processedOutput;
+  focusedDraftTarget = target;
 
   const messageBody = processedOutput.body || processedOutput.message || "";
   messageText.replaceChildren();
@@ -1121,6 +1242,7 @@ function updateCharacterCountDisplay(text, category) {
 
 function setGeneratingState(isGenerating) {
   storyPicker.setBusy(isGenerating);
+  updateMessageFocus();
   const generateBtn = document.getElementById("generateBtn");
   const generateText = document.getElementById("generateText");
   const progress = document.getElementById("generationProgress");
@@ -1207,7 +1329,7 @@ function updateGenerationProgress() {
 
 function handleCopyClick(event) {
   const copyBtn = event.target.closest(".copy-btn");
-  if (!copyBtn) return;
+  if (!copyBtn || !currentOutput) return;
 
   const copyType = copyBtn.getAttribute("data-copy");
   let textToCopy = "";
@@ -1351,7 +1473,9 @@ function showCopyError(buttonElement, message) {
 }
 
 async function autoFillMessage() {
-  if (!currentOutput) return;
+  const output = currentOutput;
+  const target = focusedDraftTarget;
+  if (!output) return;
 
   try {
     const [tab] = await chrome.tabs.query({
@@ -1359,9 +1483,18 @@ async function autoFillMessage() {
       currentWindow: true,
     });
 
+    if (
+      target &&
+      (currentOutput !== output ||
+        tab?.id !== target.id ||
+        tab.url !== target.url)
+    ) {
+      return;
+    }
     const response = await chrome.tabs.sendMessage(tab.id, {
       action: "autoFill",
-      data: currentOutput,
+      data: target ? output : currentOutput,
+      ...(target ? { expectedUrl: target.url } : {}),
     });
 
     if (!response?.success) {
@@ -1465,6 +1598,8 @@ async function handleFeedback(type, rejectionReason, summary) {
     regenerate =
       !application &&
       !approved &&
+      !focusedDraftTarget &&
+      !document.getElementById("messageFocus")?.value?.trim() &&
       inputs.category === category &&
       currentProfile === profile &&
       inputIds.every((id) => document.getElementById(id)?.value === inputs[id]);
@@ -1517,6 +1652,7 @@ function updateUIForCategory() {
   const emailMode =
     document.getElementById("emailMode")?.value || "initial_outreach";
   const uiState = getCategoryUiState(category, emailMode);
+  updateMessageFocus();
   const intentGroup = document.getElementById("intentGroup");
   const emailModeGroup = document.getElementById("emailModeGroup");
   const ycQuestionGroup = document.getElementById("ycQuestionGroup");
@@ -1605,7 +1741,13 @@ function updateGenerateAvailability() {
     questionValue: document.getElementById("ycQuestionInput")?.value || "",
   });
 
-  button.disabled = generationInFlight || feedbackInFlight || !validation.valid;
+  const focusField = document.getElementById("messageFocus");
+  const invalidFocus =
+    messageFocusSupported &&
+    category !== YC_APPLICATION_CATEGORY &&
+    normalizeMessageFocus(focusField?.value) === null;
+  button.disabled =
+    generationInFlight || feedbackInFlight || !validation.valid || invalidFocus;
   const applicationMode = category === "yc_application";
   const inputStatus = document.getElementById("applicationInputStatus");
   if (inputStatus)
@@ -1679,6 +1821,7 @@ async function openDashboard() {
 }
 
 function showError(message) {
+  hideError();
   const errorEl = document.getElementById("errorMessage");
   const errorText = document.getElementById("errorText");
 
@@ -1689,7 +1832,7 @@ function showError(message) {
     if (authErrorEl && authErrorText) {
       authErrorText.textContent = message;
       authErrorEl.classList.remove("hidden");
-      setTimeout(() => authErrorEl.classList.add("hidden"), 5000);
+      errorDismissalTimer = setTimeout(hideError, 5000);
     } else {
       console.warn("showError: error elements not in DOM:", message);
     }
@@ -1701,10 +1844,11 @@ function showError(message) {
   document.getElementById("errorAction")?.classList.add("hidden");
   errorEl.classList.remove("hidden");
 
-  setTimeout(hideError, 5000);
+  errorDismissalTimer = setTimeout(hideError, 5000);
 }
 
 function showGenerationError(presentation) {
+  hideError();
   const errorEl = document.getElementById("errorMessage");
   const errorText = document.getElementById("errorText");
   const details = document.getElementById("errorDetails");
@@ -1758,7 +1902,14 @@ function isTrustedAletheiaUrl(value) {
   }
 }
 
+function dismissMessageFocusRecovery() {
+  const recovery = document.getElementById("messageFocusRecovery");
+  if (recovery && !recovery.classList.contains("hidden")) hideError();
+}
+
 function hideError() {
+  clearTimeout(errorDismissalTimer);
+  document.getElementById("messageFocusRecovery")?.classList.add("hidden");
   document.getElementById("errorMessage")?.classList.add("hidden");
   document.getElementById("errorDetails")?.classList.add("hidden");
   document.getElementById("errorAction")?.classList.add("hidden");
@@ -1766,6 +1917,7 @@ function hideError() {
 }
 
 function showAuthError(message) {
+  hideError();
   const errorEl =
     document.getElementById("errorMessage") ||
     document.getElementById("authError");
