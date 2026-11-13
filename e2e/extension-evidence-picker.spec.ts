@@ -38,10 +38,11 @@ declare const chrome: {
     sendMessage: (_tabId: number, _message: unknown) => Promise<unknown>;
   };
   storage: {
-    session: { get: (_key: string) => Promise<Record<string, unknown>> };
+    session: { get: (_key: string | null) => Promise<Record<string, unknown>> };
+    sync: { get: (_key: string | null) => Promise<Record<string, unknown>> };
     local: {
       set: (_values: Record<string, unknown>) => Promise<void>;
-      get: (_key: string) => Promise<Record<string, unknown>>;
+      get: (_key: string | null) => Promise<Record<string, unknown>>;
     };
   };
 };
@@ -136,6 +137,336 @@ async function openPanel(worker: Worker) {
   await expect(page.locator("#userBadge")).toBeVisible();
   return page;
 }
+
+test.describe("Message Focus worker boundary", () => {
+  async function openFocusPanel(
+    supported: boolean | undefined,
+    onFocusedRequest?: (_route: Route) => Promise<void>,
+  ) {
+    const target = "https://www.linkedin.com/in/message-focus-fixture";
+    const requests: Record<string, unknown>[] = [];
+    await browser.route(target, (route) =>
+      route.fulfill({
+        contentType: "text/html",
+        body: "<title>Alex Example | LinkedIn</title><main>Alex Example leads policy evaluation and data platform tooling at Example Labs.</main>",
+      }),
+    );
+    await browser.route(
+      "https://www.aletheia.live/api/extension/config",
+      (route) =>
+        route.fulfill({
+          json:
+            supported === undefined
+              ? {}
+              : { capabilities: { messageFocus: supported } },
+        }),
+    );
+    await browser.route(
+      "https://www.aletheia.live/api/extension/generate",
+      async (route) => {
+        if (route.request().method() !== "POST")
+          return route.fulfill({ json: {} });
+        const payload = route.request().postDataJSON() as Record<
+          string,
+          unknown
+        >;
+        requests.push(payload);
+        if (payload.messageFocus && onFocusedRequest)
+          return onFocusedRequest(route);
+        return payload.messageFocus
+          ? route.fulfill({
+              status: 422,
+              json: {
+                success: false,
+                code: "MESSAGE_FOCUS_NO_MATCH",
+                error: "No eligible reviewed experience matches this focus",
+                message:
+                  "Edit or clear Message focus, or confirm a matching fact.",
+              },
+            })
+          : route.fulfill({
+              json: {
+                success: true,
+                category: "linkedin_connection",
+                body: "Hi Alex, I'm interested in your data platform work. Open to connecting? Thanks.",
+              },
+            });
+      },
+    );
+    const worker =
+      browser.serviceWorkers()[0] ??
+      (await browser.waitForEvent("serviceworker"));
+    await signIn(worker, "user-a");
+    const profile = await browser.newPage();
+    await profile.goto(target);
+    const panel = await browser.newPage();
+    await profile.bringToFront();
+    await panel.goto(
+      `chrome-extension://${new URL(worker.url()).host}/popup/popup.html`,
+    );
+    await expect(panel.locator("#profileName")).toHaveText("Alex Example");
+    return { panel, profile, requests, worker };
+  }
+
+  for (const supported of [undefined, false]) {
+    test(`hides focus and omits it from the request when capability is ${supported}`, async () => {
+      const { panel, requests } = await openFocusPanel(supported);
+      await expect(
+        panel.getByRole("textbox", { name: /message focus/i }),
+      ).toBeHidden();
+      await panel.locator("#jdInput").fill(jd);
+      await panel.locator("#generateBtn").click();
+      await expect.poll(() => requests.length).toBe(1);
+      expect(requests[0]).toMatchObject({ jd });
+      expect(requests[0]).not.toHaveProperty("messageFocus");
+    });
+  }
+
+  test("sends normalized focus, clears it explicitly after no match, and keeps it out of storage", async () => {
+    const { panel, profile, requests, worker } = await openFocusPanel(true);
+    const field = panel.getByRole("textbox", { name: /message focus/i });
+    const canary = "ＦｏｃｕｓＰｒｉｖａｔｅＣａｎａｒｙ";
+    await expect(field).toBeVisible();
+    await expect(field).toHaveAttribute("maxlength", "500");
+    await expect(field).toHaveJSProperty("spellcheck", false);
+    await panel.locator("#jdInput").fill(jd);
+    await field.fill(`  ${canary}  `);
+    await panel.locator("#generateBtn").click();
+    await expect(
+      panel.getByText(
+        "Edit or clear Message focus, or confirm a matching fact.",
+      ),
+    ).toBeVisible();
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({
+      jd,
+      messageFocus: "FocusPrivateCanary",
+    });
+    await panel.getByRole("button", { name: /clear message focus/i }).click();
+    await expect(field).toHaveValue("");
+    await expect(panel.locator("#jdInput")).toHaveValue(jd);
+    expect(requests).toHaveLength(1);
+    await panel.locator("#generateBtn").click();
+    await expect.poll(() => requests.length).toBe(2);
+    expect(requests[1]).not.toHaveProperty("messageFocus");
+
+    await field.fill(canary);
+    await panel.close();
+    await profile.bringToFront();
+    const reopened = await openPanel(worker);
+    await expect(
+      reopened.getByRole("textbox", { name: /message focus/i }),
+    ).toHaveValue("");
+    const storage = await worker.evaluate(async () =>
+      JSON.stringify([
+        await chrome.storage.local.get(null),
+        await chrome.storage.session.get(null),
+        await chrome.storage.sync.get(null),
+      ]),
+    );
+    expect(storage.normalize("NFKC")).not.toContain("FocusPrivateCanary");
+  });
+  test("dismisses old recovery actions while a new focused draft is pending", async () => {
+    let pending: Route | undefined;
+    const { panel, requests } = await openFocusPanel(true, async (route) => {
+      if (route.request().postDataJSON().messageFocus === "Evaluation") {
+        pending = route;
+        return;
+      }
+      await route.fulfill({
+        status: 422,
+        json: { code: "MESSAGE_FOCUS_NO_MATCH" },
+      });
+    });
+    const field = panel.getByRole("textbox", { name: /message focus/i });
+    const clear = panel.getByRole("button", { name: /clear message focus/i });
+    const edit = panel.getByRole("button", { name: /edit message focus/i });
+    await field.fill("Unmatched topic");
+    await panel.locator("#generateBtn").click();
+    await expect(clear).toBeVisible();
+    await edit.click();
+    await field.fill("Evaluation");
+    await panel.locator("#generateBtn").click();
+    await expect.poll(() => pending !== undefined).toBe(true);
+    await expect(panel.locator("#errorMessage")).toBeHidden();
+    await expect(clear).toBeHidden();
+    await expect(edit).toBeHidden();
+    await pending!.fulfill({
+      json: {
+        success: true,
+        category: "linkedin_connection",
+        selectionStatus: "matched",
+        body: "Hi Alex, I built policy evaluation tools. Open to connecting?",
+      },
+    });
+    await expect(panel.locator("#messageText")).toContainText(
+      "policy evaluation",
+    );
+    await expect(field).toHaveValue("Evaluation");
+    expect(requests).toHaveLength(2);
+  });
+
+  test("dismisses the focus error when the job description changes", async () => {
+    const { panel, requests } = await openFocusPanel(true);
+    const field = panel.getByRole("textbox", { name: /message focus/i });
+    await field.fill("Unmatched topic");
+    await panel.locator("#generateBtn").click();
+    await expect(panel.locator("#messageFocusRecovery")).toBeVisible();
+    await panel.locator("#jdInput").fill(jd);
+    await expect(field).toHaveValue("");
+    await expect(panel.locator("#errorMessage")).toBeHidden();
+    expect(requests).toHaveLength(1);
+  });
+
+  test("keeps focus recovery visible after an earlier Auto-Fill error expires", async () => {
+    const { panel, requests } = await openFocusPanel(true);
+    const generate = panel.locator("#generateBtn");
+    const error = panel.locator("#errorMessage");
+    const clear = panel.getByRole("button", { name: /clear message focus/i });
+
+    await generate.click();
+    await expect(panel.locator("#fillBtn")).toBeVisible();
+    await panel.clock.install();
+    await panel.locator("#fillBtn").click();
+    await expect(error).toBeVisible();
+    await panel
+      .getByRole("textbox", { name: /message focus/i })
+      .fill("Unmatched topic");
+    await generate.click();
+    await expect(clear).toBeVisible();
+    // The earlier five-second timer must not dismiss this persistent response.
+    await panel.clock.fastForward(5_500);
+    await expect(clear).toBeVisible();
+    await clear.click();
+    await expect(error).toBeHidden();
+    expect(requests).toHaveLength(2);
+  });
+
+  test("rejects normalized overflow and clears on category changes", async () => {
+    const { panel, requests } = await openFocusPanel(true);
+    const field = panel.getByRole("textbox", { name: /message focus/i });
+    await field.fill("ﬃ".repeat(167));
+    await expect(field).toHaveAttribute("aria-invalid", "true");
+    await expect(panel.locator("#generateBtn")).toBeDisabled();
+    await expect(panel.getByText(/within 500 characters/)).toBeVisible();
+    await panel.locator("#category").selectOption("yc_application");
+    await expect(field).toBeHidden();
+    await expect(panel.locator("#messageFocus")).toHaveValue("");
+    expect(requests).toHaveLength(0);
+  });
+
+  for (const matched of [false, true]) {
+    test(`accepts only a focus-confirmed response from the backend (matched=${matched})`, async () => {
+      const { panel, requests, worker } = await openFocusPanel(true, (route) =>
+        route.fulfill({
+          json: {
+            success: true,
+            category: "linkedin_connection",
+            ...(matched ? { selectionStatus: "matched" } : {}),
+            body: "Hi Alex, I built policy evaluation tools. Open to connecting? Thanks.",
+          },
+        }),
+      );
+      const field = panel.getByRole("textbox", { name: /message focus/i });
+      await field.fill("FocusPrivateCanary");
+      await panel.locator("#generateBtn").click();
+      if (matched) {
+        await expect(panel.locator("#messageText")).toContainText(
+          "I built policy evaluation tools.",
+        );
+        expect(
+          await worker.evaluate(
+            async () =>
+              (await chrome.storage.local.get("lastGeneration")).lastGeneration,
+          ),
+        ).toBeUndefined();
+      } else {
+        await expect(
+          panel.getByText("Clear Message focus to use automatic generation."),
+        ).toBeVisible();
+        await expect(panel.locator("#output")).toBeHidden();
+      }
+      expect(requests).toHaveLength(1);
+    });
+  }
+
+  test("removes a displayed focused draft and its actions after switching recipients", async () => {
+    const { panel, profile } = await openFocusPanel(true, (route) =>
+      route.fulfill({
+        json: {
+          success: true,
+          category: "linkedin_connection",
+          selectionStatus: "matched",
+          body: "Hi Alex, I built policy evaluation tools. Open to connecting?",
+        },
+      }),
+    );
+    await panel
+      .getByRole("textbox", { name: /message focus/i })
+      .fill("Evaluation");
+    await panel.locator("#generateBtn").click();
+    await expect(panel.locator("#output")).toBeVisible();
+    await expect(panel.locator("#fillBtn")).toBeVisible();
+    const next = "https://www.linkedin.com/in/next-focus-recipient";
+    await browser.route(next, (route) =>
+      route.fulfill({
+        contentType: "text/html",
+        body: "<title>Jamie Example | LinkedIn</title><main>Jamie Example leads policy evaluation and data platform tooling at Example Labs.</main>",
+      }),
+    );
+    await profile.bringToFront();
+    await profile.goto(next);
+    await expect(panel.locator("#profileBanner")).toBeVisible();
+    await expect(panel.locator("#profileName")).toHaveText("Jamie Example");
+    await expect(panel.locator("#output")).toBeHidden();
+    await expect(panel.locator("#messageText")).toBeEmpty();
+    await expect(panel.locator("#fillBtn")).toBeHidden();
+  });
+
+  for (const change of ["recipient", "account"] as const) {
+    test(`discards a pending focused draft after the ${change} changes`, async () => {
+      let pending: Route | undefined;
+      const { panel, profile, requests, worker } = await openFocusPanel(
+        true,
+        async (route) => {
+          pending = route;
+        },
+      );
+      const field = panel.getByRole("textbox", { name: /message focus/i });
+      await field.fill("FocusPrivateCanary");
+      await panel.locator("#generateBtn").click();
+      await expect.poll(() => requests.length).toBe(1);
+      if (change === "recipient") {
+        const next = "https://www.linkedin.com/in/other-focus-fixture";
+        await browser.route(next, (route) =>
+          route.fulfill({
+            contentType: "text/html",
+            body: "<title>Jamie Example | LinkedIn</title><main>Jamie Example leads policy evaluation and data platform tooling at Example Labs.</main>",
+          }),
+        );
+        await profile.goto(next);
+        await expect(panel.locator("#profileName")).toHaveText("Jamie Example");
+      } else {
+        await signIn(worker, "user-b");
+        await expect(panel.locator("#userBadge")).toContainText(
+          "user-b@example.test",
+        );
+      }
+      await pending!.fulfill({
+        json: {
+          success: true,
+          category: "linkedin_connection",
+          selectionStatus: "matched",
+          body: "Old recipient draft",
+        },
+      });
+      await expect(panel.locator("#generateBtn")).toBeEnabled();
+      await expect(field).toHaveValue("");
+      await expect(panel.getByText("Old recipient draft")).toBeHidden();
+      expect(requests).toHaveLength(1);
+    });
+  }
+});
 
 test("the packaged extension leaves a LinkedIn composer untouched when the draft exceeds its limit", async () => {
   const url = "https://www.linkedin.com/in/composer-fixture";

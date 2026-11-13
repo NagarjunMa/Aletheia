@@ -2020,6 +2020,24 @@ No new cost, model judge, acceptance waiver or release approved.
 - An explicitly posted role can take precedence over a conflicting LinkedIn profile hint at both composer limits. A company description without an advertised duty stays eligible for a reviewed-experience introduction. Detailed initial email uses a matching duty for any additional context it needs. The hosted synthetic fixture now supplies enough same-domain reviewed material for the existing email word floor.
 - All 44 focused duty tests and the offline grounded-response preflight passed. Branch publication uses the completed independent review and local regressions per the user. Hosted drafting, live composer fit, and feedback are still pending. Keep ALE-46 In Progress. Roll back by reverting the backend commit and redeploying.
 
+2026-11-13 — ALE-62 browser contract preparation.
+- Risk: Critical for the eventual popup-to-worker implementation because focus can carry private request data across accounts or targets. This checkpoint adds mocked browser tests against main 23201b9.
+- On a freshly built unpacked extension, both absent/false capability controls passed. The true-capability test failed at the missing Message Focus textbox after the fixture loaded the synthetic LinkedIn profile. Its remaining assertions cover normalized worker requests, fixed no-match guidance, explicit clear without retry, JD preservation, popup reset, and a storage canary.
+- ALE-60 is the runtime dependency. Its current main route rejects populated focus with 409 before generation. Real backend integration, UI implementation, and release remain open.
+
+2026-11-13 — ALE-62 Stage 4 extension Message Focus (Critical).
+- Extension 1.0.27 exposes an optional 500-unit preference for capable backends and supported outreach. Focus stays in popup memory; it clears when context changes. No match offers edit, clear and evidence actions without a retry. No change to permissions or YC.
+- Independent review confirmed the fixes for a delayed account/recipient preflight, feedback triggering regeneration, and Auto-Fill carrying a focused draft across recipients. The worker fences account and tab context before dispatch; the popup invalidates focused output and Auto-Fill checks the bound recipient URL again before editing.
+- Passed: extension CI with 283 tests, types, lint, dependency audit, package/version checks, and nine distinct Message Focus scenarios on the built Chromium extension across runs. Full Chromium runs had intermittent timeouts; hosted compatibility, manual accessibility acceptance and PR CI are pending.
+- Keep In Progress. Merge the backend contract first, use the isolated ALE-59 gate before rollout, and disable the server flag to hide the field and restore automatic generation.
+- All 22 built-extension Chromium cases passed across the full-suite run and a five-case targeted rerun of the timeouts and failures; no single full Chromium run was green.
+
+2026-11-13 — ALE-62 recovery and spellcheck corrections (Critical).
+- ALE62-V1: the built extension dismisses the whole focus recovery error at generation start and on a focus-context reset. The delayed second request and JD-change regressions both failed before the correction and now pass. Clear still requires a user action and does not start generation.
+- ALE62-V2: the Message Focus field disables browser spellcheck. The Chromium DOM property assertion failed before the correction and passes after packaging. No spelling service was contacted.
+- Node 24: extension CI passed all 283 tests and the full built-extension Chromium run passed all 24 cases. The Store ZIP builds at 1.0.27. Hosted compatibility and rollback remain in ALE-59.
+- ALE62-V3: a prior Auto-Fill error's timer dismissed the newer focus recovery. Reproduced in Chromium. The shared popup error state now cancels its pending timer before showing a replacement or hiding the current error. A regression advances the browser clock and confirms the new recovery remains actionable.
+
 2026-11-13 — ALE-61 Stage 2 fixture refresh.
 - Local main and production health identify 2f387a2, the merged ALE-46 duty and completed-work change. Fast-forwarded the existing Stage 2 branch and preserved its local notes and tests.
 - The positive ranking fixture uses two actual duties so both reviewed stories are eligible for initial cold email under the merged policy. The LinkedIn cap fixture keeps its own context. Two characterization controls pass and 11 assertions fail for the missing focus behavior on the merged baseline. Separately, 992 existing selector, preparation, focus-contract, and generation-route tests passed.

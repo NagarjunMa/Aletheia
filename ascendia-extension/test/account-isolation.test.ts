@@ -329,7 +329,7 @@ describe("extension account isolation", () => {
     const makeAPIRequest = vi.fn().mockResolvedValue({ success: true });
     const generate = section(
       workerSource,
-      "async function handleGenerateRequest(payload, operationId, requesterId)",
+      "async function handleGenerateRequest(",
       "\nasync function makeAPIRequest(",
     );
     const sandbox = {
@@ -398,6 +398,88 @@ describe("extension account isolation", () => {
     ).rejects.toThrow(/account changed/);
     expect(makeAPIRequest).not.toHaveBeenCalled();
   });
+
+  it.each(["recipient", "account"] as const)(
+    "blocks a focused POST when the %s changes during preflight",
+    async (change) => {
+      const generate = section(
+        workerSource,
+        "async function handleGenerateRequest(",
+        "\nasync function makeAPIRequest(",
+      );
+      const auth = { access_token: "token-b", user: { id: "user-b" } };
+      const target = { id: 1, url: "https://www.linkedin.com/in/original" };
+      let tabUrl = target.url;
+      let preflight = false;
+      let focusAccountRevision = 0;
+      const readAccount = async () => {
+        if (preflight && change === "recipient")
+          tabUrl = "https://www.linkedin.com/in/next";
+        return auth;
+      };
+      const post = vi.fn();
+      await expect(
+        runInNewContext(
+          `(${generate})({ category: "cold_email", messageFocus: "Evaluation" }, "op", "user-b", target)`,
+          {
+            URL,
+            target,
+            usageEpoch: 0,
+            logoutInProgress: false,
+            get focusAccountRevision() {
+              return focusAccountRevision;
+            },
+            authAccountChanged: () =>
+              Object.assign(new Error("Account changed"), {
+                code: "AUTH_ACCOUNT_CHANGED",
+              }),
+            startExtensionTimedStage: () => vi.fn(),
+            log: {},
+            getEffectiveApiUrl: async () => "https://example.test",
+            chrome: {
+              tabs: {
+                get: async () => {
+                  if (preflight && change === "account") focusAccountRevision++;
+                  return { active: true, url: tabUrl };
+                },
+              },
+              storage: {
+                local: {
+                  get: async () => ({ aletheia_auth: await readAccount() }),
+                },
+              },
+            },
+            readStoryAccessToken: async () => auth.access_token,
+            readStoryAccount: readAccount,
+            filterOwnedAccepted,
+            isMatchingAccountToken,
+            buildGenerationRequestData,
+            generationEndpoint,
+            EVIDENCE_ENDPOINT,
+            makeAPIRequest: async (
+              _endpoint: string,
+              _options: unknown,
+              _url: string,
+              _operation: string,
+              policy: { assertBeforeAttempt: () => Promise<void> },
+            ) => {
+              preflight = true;
+              await policy.assertBeforeAttempt();
+              post();
+              return { success: true, selectionStatus: "matched" };
+            },
+            getSafeErrorCode: () => "MESSAGE_FOCUS_CONTEXT_CHANGED",
+          },
+        ),
+      ).rejects.toMatchObject({
+        code:
+          change === "recipient"
+            ? "MESSAGE_FOCUS_CONTEXT_CHANGED"
+            : "AUTH_ACCOUNT_CHANGED",
+      });
+      expect(post).not.toHaveBeenCalled();
+    },
+  );
 
   it("removes personal caches on explicit logout", async () => {
     const remove = vi.fn();
@@ -500,6 +582,8 @@ describe("extension account isolation", () => {
       PROFILE_EXTRACTION_CONSENT_KEY: "profileExtractionConsent",
       storyPicker: { resetAccount: vi.fn() },
       invalidateProfile: vi.fn(),
+      resetMessageFocus: vi.fn(),
+      updateMessageFocus: vi.fn(),
       generationInFlight: true,
       generationRequesterId: "user-a",
       currentUserId: "user-a",

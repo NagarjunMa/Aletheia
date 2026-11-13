@@ -314,6 +314,11 @@ import {
     }
 
     try {
+      if (message.expectedUrl && window.location.href !== message.expectedUrl) {
+        throw new Error(
+          "The active profile changed. Generate for the current profile.",
+        );
+      }
       const result = performAutoFill(message.data);
       reportDiagnostic("auto_filler.complete", {
         outcome: "success",
