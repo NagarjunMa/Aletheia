@@ -26,19 +26,31 @@ afterEach(() => {
 
 describe("GET /api/extension/config", () => {
   it.each([undefined, "false", "true"])(
-    "keeps Message focus unavailable even with flag %s",
+    "advertises Message Focus according to flag %s",
     async (flag) => {
       vi.stubEnv("MESSAGE_FOCUS_ENABLED", flag);
+      vi.stubEnv("DEBUG", undefined);
       try {
         const res = await GET(makeRequest({ method: "GET" }));
         expect((await res.json()).capabilities).toEqual({
-          messageFocus: false,
+          messageFocus: flag === "true",
         });
       } finally {
         vi.unstubAllEnvs();
       }
     },
   );
+
+  it("keeps Message Focus unavailable during provider wire debugging", async () => {
+    vi.stubEnv("MESSAGE_FOCUS_ENABLED", "true");
+    vi.stubEnv("DEBUG", "true");
+    try {
+      const res = await GET(makeRequest({ method: "GET" }));
+      expect((await res.json()).capabilities.messageFocus).toBe(false);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
 
   it("returns 200 with supabase_url and supabase_anon_key from env", async () => {
     const res = await GET(makeRequest({ method: "GET" }));

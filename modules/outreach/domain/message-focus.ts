@@ -3,9 +3,12 @@ import { z } from "zod";
 // JavaScript string length: UTF-16 code units, matching the future popup counter.
 export const MESSAGE_FOCUS_MAX_LENGTH = 500;
 
-// ALE-63 is contract-only. An environment flag cannot enable an unimplemented
-// selection/generation pipeline. Stage 3 must explicitly replace this gate.
-export const MESSAGE_FOCUS_SUPPORTED = false;
+export function messageFocusEnabled(): boolean {
+  // The current Anthropic SDK logs raw request bodies in wire debug mode.
+  return (
+    process.env.MESSAGE_FOCUS_ENABLED === "true" && process.env.DEBUG !== "true"
+  );
+}
 
 export const messageFocusSchema = z
   .string()
