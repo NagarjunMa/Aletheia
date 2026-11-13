@@ -115,6 +115,7 @@ export function buildAtomicTargetSources(
     | undefined,
   channel?: "linkedin_connection",
   prioritize?: (_sources: readonly AtomicSource[]) => readonly AtomicSource[],
+  emailDutyExcerpts?: ReadonlyMap<number, ReadonlySet<string>>,
 ) {
   const result: AtomicSource[] = [];
   const diagnostics = {
@@ -199,14 +200,20 @@ export function buildAtomicTargetSources(
           ? new Set(linkedinHiringPassages(content))
           : undefined;
       const projected = topicOnly || Boolean(hiring?.size);
-      const excerpts = projected
-        ? [
-            ...new Set([
-              ...(hiring ?? []),
-              ...discussion.map(({ content }) => content),
-            ]),
-          ]
-        : [content];
+      const projectEmailDuties =
+        !channel && name === "jobDescription" && emailDutyExcerpts;
+      const excerpts = projectEmailDuties
+        ? [...(projectEmailDuties.get(index) ?? [])].filter(
+            (excerpt) => content === excerpt || content.includes(excerpt),
+          )
+        : projected
+          ? [
+              ...new Set([
+                ...(hiring ?? []),
+                ...discussion.map(({ content }) => content),
+              ]),
+            ]
+          : [content];
       for (const [part, excerpt] of excerpts.entries()) {
         const topic = discussion[part]?.topic;
         const profileTopics = topic
@@ -224,9 +231,10 @@ export function buildAtomicTargetSources(
           continue;
         }
         const source: AtomicSource = {
-          id: projected
-            ? `target.${name}.${index}.${part}`
-            : `target.${name}.${index}`,
+          id:
+            projected || projectEmailDuties
+              ? `target.${name}.${index}.${part}`
+              : `target.${name}.${index}`,
           scope: "target",
           kind: "target_observation",
           content: excerpt,

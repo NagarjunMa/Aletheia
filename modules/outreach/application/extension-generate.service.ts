@@ -487,6 +487,7 @@ async function handlePost(
           profileMarkdown: validatedData.profileMarkdown,
           jobDescription: validatedData.jd ?? "",
           connectionNoteLimit,
+          emailMode: validatedData.emailMode,
           conversationContext: validatedData.conversationContext ?? "",
         },
       });
@@ -618,8 +619,10 @@ async function handlePost(
     const candidateOnlyConnection = linkedinCompositions?.some(
       ({ draft }) => draft.target_observation === null,
     );
+    const candidateOnlyOutreach =
+      candidateOnlyConnection || preparedGrounding.domainAwareEmail;
     let styleProfile: StylePatterns | undefined;
-    if (!candidateOnlyConnection) {
+    if (!candidateOnlyOutreach) {
       timing.enter("styleLoad");
       // 2. Fetch user style profile (non-blocking — failure just skips learned style)
       const completeStyle = startTimedStage(
@@ -891,29 +894,33 @@ async function handlePost(
 
     const systemPrompt = `${getSystemPrompt(category, rhetoricalPlans)}\n\n${getAtomicProvenanceInstructions(category, rhetoricalPlans)}`;
     const promptInput: GenerateInput = {
-      profileMarkdown: candidateOnlyConnection ? "" : cleanMarkdown,
-      resume: candidateOnlyConnection ? "" : resumeForPrompt,
-      jd: candidateOnlyConnection ? "" : jdForPrompt,
-      conversationContext: candidateOnlyConnection
+      profileMarkdown: candidateOnlyOutreach ? "" : cleanMarkdown,
+      resume: candidateOnlyOutreach ? "" : resumeForPrompt,
+      jd: candidateOnlyOutreach ? "" : jdForPrompt,
+      conversationContext: candidateOnlyOutreach
         ? ""
         : sanitizedConversationContext,
       category,
       intent: intent || "networking",
       emailMode,
-      acceptedExamples: candidateOnlyConnection ? [] : sanitizedExamples || [],
+      acceptedExamples: candidateOnlyOutreach ? [] : sanitizedExamples || [],
     };
     let promptAtomicSources = preparedGrounding.atomicSources ?? [];
     if (
-      linkedinCompositions &&
-      (preparedGrounding.requiredEvidenceRoots ||
-        basicConnectionNote ||
-        candidateOnlyConnection)
+      (linkedinCompositions &&
+        (preparedGrounding.requiredEvidenceRoots ||
+          basicConnectionNote ||
+          candidateOnlyConnection)) ||
+      preparedGrounding.domainAwareEmail
     ) {
       const offered = new Set(
-        linkedinCompositions.flatMap(
+        (linkedinCompositions ?? []).flatMap(
           ({ draft }) => draft.claims?.map(({ source_id }) => source_id) ?? [],
         ),
       );
+      if (preparedGrounding.domainAwareEmail)
+        for (const option of proseCompositions ?? [])
+          for (const { source_id } of option.claims) offered.add(source_id);
       promptAtomicSources = promptAtomicSources.filter(({ id }) =>
         offered.has(id),
       );

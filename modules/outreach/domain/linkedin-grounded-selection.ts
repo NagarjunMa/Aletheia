@@ -154,7 +154,7 @@ export function linkedinTargetWording(
   );
 }
 
-function normalizeImplementationScope(text: string) {
+export function normalizeImplementationScope(text: string) {
   return text.replace(/\b(front|back)[ -]end\b/giu, "$1end");
 }
 
@@ -382,19 +382,26 @@ export function isLinkedinJobTarget(source: AtomicSource): boolean {
 }
 
 const UNFINISHED_WORK = String.raw`(?:(?:failed|attempted|tried) (?:to|(?=[\p{L}]+ing\b))|(?:trying|attempting|unable|yet|want(?:ed)?|hop(?:e|ed)|plan(?:ned)?) to|attempts? (?:to|at))`;
+const NON_EXPERIENCE = String.raw`(?:(?:will|would|might|could|can|may|should|intend|expect|aim)\b|(?:learn(?:ed|ing)?|prepar(?:e|ed|ing)|train(?:ed|ing)?)\s+to\b|(?:able|qualified|ready)\s+to\b)`;
+const EXPERIENCE_SUBJECT = String.raw`I(?:\s+(?:(?:have|had|am|was|have been|had been)\s+)?|['’](?:m|ve|d)\s+(?:been\s+)?)`;
+const NON_EXPERIENCE_START = new RegExp(
+  String.raw`^(?:${EXPERIENCE_SUBJECT}(?:\p{L}+ly\s+)*${NON_EXPERIENCE}|I['’]ll\s)`,
+  "iu",
+);
 const NON_COMPLETING_ASSERTION = new RegExp(
-  String.raw`^I(?:\s+|['’](?:ve|m|d|ll)\s+)(?:(?:have|had|do|did|am|was|would|could|can)\s+)?(?:never|not|no|zero|0|lack|stopped|${UNFINISHED_WORK}|[\p{L}]+n['’]t)\b`,
+  String.raw`^I(?:\s+|['’](?:ve|m|d|ll)\s+)(?:(?:have|had|do|did|am|was|would|could|can)\s+)?(?:never|not|no|zero|0|lack|stopped|interested in|an interest in|curious about|${UNFINISHED_WORK}|[\p{L}]+n['’]t)\b`,
   "iu",
 );
 const AFFIRMATIVE_BOUNDARY = new RegExp(
-  String.raw`;|\b(?:no|zero|lack(?:ing)?)\s+|\b(?:${UNFINISHED_WORK}|but|however|although|except|excluding|nothing|neither|nor|besides|apart\s+from|other\s+than|rather\s+than|instead\s+of|without|not|never|[\p{L}]+n['’]t)\b`,
+  String.raw`;|\b(?:and|or)\s+(?:${EXPERIENCE_SUBJECT}|(?:(?:am|was|have|had)(?:\s+been)?\s+))?(?:\p{L}+ly\s+)*${NON_EXPERIENCE}|\bI['’]ll\s|\b(?:to (?:prepare|learn|qualify|train|practice)|in preparation for|(?:an?|(?:the )?first) step (?:toward|towards|to)|interested in|an interest in|curious about)\b|\b(?:no|zero|lack(?:ing)?)\s+|\b(?:${UNFINISHED_WORK}|but|however|although|except|excluding|nothing|neither|nor|besides|apart\s+from|other\s+than|rather\s+than|instead\s+of|without|not|never|[\p{L}]+n['’]t)\b`,
   "iu",
 );
 
-function affirmativeExperience({
+export function affirmativeExperience({
   kind,
   content,
 }: Pick<AtomicSource, "kind" | "content">): string[] {
+  if (kind === "preference") return [];
   const scoped = kind === "action" && linkedinScopedAction(content);
   // Each first-person sentence can contribute. Render all reviewed text intact.
   return content
@@ -405,6 +412,7 @@ function affirmativeExperience({
       return (
         isFirstPersonAssertion(assertion) &&
         (!scoped || isLinkedinImplementationAction(assertion)) &&
+        !NON_EXPERIENCE_START.test(assertion) &&
         !NON_COMPLETING_ASSERTION.test(assertion)
       );
     })

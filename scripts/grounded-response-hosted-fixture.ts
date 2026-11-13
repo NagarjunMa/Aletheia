@@ -14,9 +14,9 @@ export const evidence = [
     title: "Evaluation reliability checks",
     context: shortFact,
     actions:
-      "I built reliability checks for an evaluation service that compared model outputs against expected behaviors, recorded reproducible failures with their test conditions, and reran those checks after each evaluation change.",
+      "I built reliability checks for an evaluation service that compared model outputs against expected behaviors, recorded reproducible failures with their test conditions, and reran those checks after each evaluation change. I captured the input, expected outcome, and model response for each failure so an engineer could replay the evaluation in a separate environment.",
     outcome:
-      "I used the reliability checks to separate recurring evaluation failures from new regressions and documented the findings so another engineer could reproduce the same cases before a release.",
+      "I used the reliability checks to separate recurring evaluation failures from new regressions and documented the findings so another engineer could reproduce the same cases before a release. The report distinguished failures that could be reproduced from cases that needed investigation and preserved the original evaluation inputs for the next run.",
   },
   {
     kind: "ai_usage",

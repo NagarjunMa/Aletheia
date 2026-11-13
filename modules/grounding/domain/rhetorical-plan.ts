@@ -76,11 +76,7 @@ export function buildRhetoricalPlan(input: {
   });
   const candidates = facts.filter((s) => s.scope === "candidate");
   const targets = facts.filter((s) => s.scope === "target");
-  if (
-    category === "yc_application"
-      ? !candidates.length
-      : !targets.length && category === "cold_email"
-  )
+  if (category === "yc_application" && !candidates.length)
     throw new Error("Invalid plan scope");
   const eligible: RhetoricalPlan["archetype"][] = !candidates.length
     ? ["target_only"]

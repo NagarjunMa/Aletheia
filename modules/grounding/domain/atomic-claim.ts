@@ -137,13 +137,13 @@ export function linkedinScopedAction(value: string): string | undefined {
 
 export function isLinkedinImplementationAction(action: string): boolean {
   const mainClause = action.split(
-    /;|[.!?](?=\s|$)|,?\s+(?:but|however|although)\b/iu,
+    /;|[.!?](?=\s|$)|,?\s+(?:but|however|although|and I)\b/iu,
     1,
   )[0]!;
   const implementation = mainClause.replace(/\s+with no\s+.+$/iu, "");
   return (
     SCOPED_IMPLEMENTATION.test(implementation) &&
-    !/\b(?:no|not|never|nothing|neither|nor|zero)\b|n['’]t\b/iu.test(
+    !/\b(?:no(?!-cost\b)|not|never|nothing|neither|nor|zero)\b|n['’]t\b/iu.test(
       implementation,
     )
   );
@@ -1107,21 +1107,162 @@ const NAMED_HIRING_ROLE =
 const TEAM_HIRING_ROLE =
   /^(The [\p{L}\p{N}&+/-]+(?: [\p{L}\p{N}&+/-]+){0,9} team at [\p{L}\p{N}&+/-]+(?: [\p{L}\p{N}&+/-]+){0,5}) is hiring ((?:[A-Z][\p{L}\p{N}+#/-]* ){0,6}(?:Engineers|Developers|Designers|Researchers))[.!]?$/u;
 
-export function linkedinJobHasConcreteWork(value: string): boolean {
-  return linkedinJobParagraphs(value).some(
-    (paragraph) =>
-      linkedinHiringRoleList(paragraph) ||
-      linkedinPassages(paragraph, true).some(({ content, text }) => {
-        const wording = linkedinHiringWording(content);
-        if (wording) return wording.kind !== "preference";
-        const role = NAMED_HIRING_ROLE.exec(text)?.[1];
-        return (
-          TEAM_HIRING_ROLE.test(text) ||
+const DUTY_HEADING =
+  /^(?:key |core |day-to-day )?(?:responsibilities|duties|what you(?: will|['’]ll) do|what you(?: will|['’]ll) work on)\s*:?\s*$/iu;
+const DUTY_PREFIX =
+  /^(?:you(?: will|['’]ll)|(?:the|this) (?:role|candidate) (?:will|focuses on)|responsible for)\s+/iu;
+const DUTY_ACTION =
+  /^(?:build|develop|design|implement|maintain|operate|monitor|manage|lead|own|create|write|review|evaluate|test|ship|deploy|support|investigate|improve|research|analyze|analyse|document|negotiate|work on|coordinate|reconcile|audit|conduct|perform|administer|oversee|deliver|prepare|resolve|run|process|handle|ensure|collaborate|facilitate|verify|assess|provide|train|publish|enforce)\s+/iu;
+const DUTY_EXCLUSION =
+  /\b(?:rather than|instead of|other than|excluding|except)\b/iu;
+const OUT_OF_SCOPE_DUTY =
+  /(?:;|[—–]|,\s*(?:but\s+)?)\s*(?:not\s+|with no (?:responsibility|ownership)\s+for\b|[^;.!?]{1,240}\b(?:out(?:side)? (?:of )?(?:the )?scope|not (?:part|a duty|a responsibility)|not required)\b)|\s+(?:and|or|but)\s+(?:you\s+)?(?:will\s+(?:not|never)|won['’]t|do\s+not|don['’]t|will\s+have\s+no\s+(?:responsibility|ownership))\b/iu;
+const DUTY_NEED = /^(?:(?:we|the team) need(?:s)?)\s+.+?\s+to\s+/iu;
+const NON_DUTY_HEADING =
+  /^(?:benefits|perks|compensation|about us|who we are|nice to have|preferred qualifications|location|salary)\s*:?\s*$/iu;
+const HIRING_TEAM_ROLE = /^(?:the )?(.+?) team at .+? is hiring (.+?)[.!]?$/iu;
+const ROLE_LABEL = /^(?:open role|job title|position|role)\s*:\s*(.+?)[.!]?$/iu;
+const ROLE_LOGISTICS =
+  /(?:\s+\([^()]+\)|\s+(?:based in|located in|in|at)\s+[\p{Lu}][\p{L} .'-]*(?:,\s*[\p{Lu}][\p{L} .'-]*)?|\s*[,–—-]\s*(?:remote|hybrid|onsite|on-site))$/u;
+const GENERIC_ROLE =
+  /^(?:(?:senior|staff|junior|lead|principal|software|engineering)\s+)*(?:engineers?|developers?|designers?|researchers?|co[- ]?founders?)$/iu;
+const POST_BACKGROUND =
+  /^(?:I (?:work at|share)|we(?: are|['’]re) (?:a\b|growing\b|expanding\b|(?:looking for|seeking) (?:a (?:great |curious |motivated )?teammate|curious|pragmatic|collaborative|proactive|resourceful|adaptable|motivated)\b)|we (?:value|welcome|encourage)\b|interested\?|please (?:reach out|apply)|apply now|follow me)|\b(?:startup|start-up)\b.*\b(?:series [a-f]|funded|funding|backed)\b|\b(?:series [a-f]|funded|funding|backed)\b.*\b(?:startup|start-up)\b/iu;
+const COMPANY_DESCRIPTION =
+  /^(?:[Ww]e|[Oo]ur (?:company|team)|[\p{Lu}][\p{L}\p{N}&+'-]*(?:\s+[\p{Lu}][\p{L}\p{N}&+'-]*){0,5})\s+(?:make|makes|build|builds|help|helps|serve|serves|provide|provides|sell|sells|offer|offers)\b/u;
+const NON_SPECIFIC_WORK =
+  /^(?:you(?: will|['’]ll) )?(?:work (?:without (?:close )?supervision|independently|with (?:others|the team))|take ownership|solve ambiguous problems)[.!]?$/iu;
+const NON_AFFIRMATIVE_DUTY =
+  /^(?:(?:you|(?:the|this) (?:role|candidate))\s+(?:will not|won['’]t|will never|do not|don['’]t)|(?:you['’]ll|responsible for)\s+(?:not|never))\b/iu;
+
+function dutyTopic(text: string) {
+  return (
+    WORK_TOPIC.exec(text)?.[1] ?? RESPONSIBILITY_TOPIC.exec(text)?.[1]
+  )?.replace(/^intelligent agents?$/iu, "AI agents");
+}
+
+function affirmativeDuty(text: string) {
+  return text.split(DUTY_EXCLUSION, 1)[0]!.split(OUT_OF_SCOPE_DUTY, 1)[0]!;
+}
+
+function dutyTerms(text: string) {
+  return affirmativeDuty(text)
+    .replace(DUTY_NEED, "")
+    .replace(DUTY_PREFIX, "")
+    .replace(DUTY_ACTION, "")
+    .replace(/^and (?:maintain|develop|design|operate|manage|support)\s+/iu, "")
+    .trim();
+}
+
+/** Selection signals do not grant permission to render a recipient claim. */
+export function outreachJobSignals(value: string) {
+  const duties: {
+    text: string;
+    terms: string;
+    topic: string | undefined;
+    paragraph: number;
+  }[] = [];
+  const roles: string[] = [];
+  let hasOtherDetail = false;
+  let hasNamedOpening = false;
+  let hasDuties = false;
+  let inOtherSection = false;
+  for (const paragraph of linkedinJobParagraphs(value)) {
+    const list = linkedinHiringRoleList(paragraph);
+    if (list) {
+      hasNamedOpening = true;
+      roles.push(...list.titles.filter((title) => !GENERIC_ROLE.test(title)));
+    }
+  }
+  for (const [index, paragraph] of value.split(/\n\s*\n/u).entries()) {
+    // Headings and bullets can share a paragraph or appear on their own lines.
+    for (const line of paragraph.split("\n")) {
+      const raw = line
+        .replace(JD_BULLET_START, "")
+        .trim()
+        .replace(/^#{1,6}\s+/u, "")
+        .replace(/^\*\*(.+?)\*\*(?=\s|:|$)/u, "$1");
+      const heading = /^([^:]+):\s*([\s\S]*)$/u.exec(raw);
+      const dutyHeading = DUTY_HEADING.test(heading?.[1] ?? raw);
+      const otherHeading = NON_DUTY_HEADING.test(heading?.[1] ?? raw);
+      const mixedHeading = /^(?:requirements|qualifications)$/iu.test(
+        heading?.[1] ?? raw,
+      );
+      if (dutyHeading || otherHeading || mixedHeading)
+        inOtherSection = otherHeading;
+      const content =
+        dutyHeading || otherHeading || mixedHeading
+          ? (heading?.[2] ?? "")
+          : raw;
+      for (const { text, content: excerpt } of linkedinPassages(
+        content,
+        true,
+      )) {
+        const explicitDuty =
+          DUTY_PREFIX.test(text) ||
+          DUTY_NEED.test(text) ||
           RESPONSIBILITY_TOPIC.test(text) ||
-          (role !== undefined && LISTED_ROLE.test(role))
-        );
-      }),
-  );
+          NON_AFFIRMATIVE_DUTY.test(text);
+        if (inOtherSection && !explicitDuty) continue;
+        if (
+          !text ||
+          NON_SPECIFIC_WORK.test(text) ||
+          linkedinHiringWording(text)?.kind === "preference"
+        )
+          continue;
+        const team = HIRING_TEAM_ROLE.exec(text);
+        const rawRole =
+          team?.[2] ??
+          ROLE_LABEL.exec(text)?.[1] ??
+          NAMED_HIRING_ROLE.exec(text)?.[1] ??
+          (LISTED_ROLE.test(text.replace(/[.!]$/u, ""))
+            ? text.replace(/[.!]$/u, "")
+            : undefined);
+        const role =
+          rawRole &&
+          (LISTED_ROLE.test(rawRole)
+            ? rawRole
+            : rawRole.replace(ROLE_LOGISTICS, ""));
+        if (role && LISTED_ROLE.test(role)) {
+          if (team || !GENERIC_ROLE.test(role)) {
+            hasNamedOpening = true;
+            roles.push(team ? `${role} ${team[1]}` : role);
+          }
+          continue;
+        }
+        if (
+          role &&
+          /\b(?:engineers?|developers?|designers?|researchers?|managers?|analysts?|roles?|positions?|co[- ]?founders?)\b/iu.test(
+            role,
+          )
+        )
+          hasNamedOpening = true;
+        if (explicitDuty || DUTY_ACTION.test(text)) {
+          if (!OPTIONAL_EXPERIENCE.test(text) && !JD_LOGISTICS.test(text)) {
+            hasDuties = true;
+            if (!NON_AFFIRMATIVE_DUTY.test(text)) {
+              const terms = dutyTerms(text);
+              if (terms)
+                duties.push({
+                  text: excerpt,
+                  terms,
+                  topic: dutyTopic(affirmativeDuty(text)),
+                  paragraph: index,
+                });
+            }
+          }
+        } else if (
+          !POST_BACKGROUND.test(text) &&
+          !COMPANY_DESCRIPTION.test(text) &&
+          !JD_LOGISTICS.test(text) &&
+          !OPTIONAL_EXPERIENCE.test(text)
+        ) {
+          hasOtherDetail = true;
+        }
+      }
+    }
+  }
+  return { duties, roles, hasDuties, hasOtherDetail, hasNamedOpening };
 }
 
 function hasNegatedHiringSearch(value: string): boolean {

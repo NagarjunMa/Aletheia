@@ -73,8 +73,6 @@ describe("ALE-46 admissible LinkedIn composition", () => {
       "I’ve built policy evaluation tools.",
       "I'd built policy evaluation tools in a prototype; I did not deploy it.",
       "I’d built policy evaluation tools in a prototype; I did not deploy it.",
-      "I'll build policy evaluation tools; I have not started the prototype.",
-      "I’ll build policy evaluation tools; I have not started the prototype.",
     ].flatMap((fact) => [true, false].map((withJd) => ({ fact, withJd }))),
   )(
     "retains the exact reviewed contraction in every option (JD=$withJd): $fact",

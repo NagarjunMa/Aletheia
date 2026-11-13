@@ -15,6 +15,7 @@ import {
 } from "@/modules/grounding/domain/excluded-claims";
 import {
   createEvidenceRanker,
+  createEvidenceTargetRanker,
   createReviewedFactMatcher,
 } from "@/modules/candidate-context/application/rank-evidence";
 import { deriveSafeCandidateSummary } from "@/lib/ai/candidate-summary";
@@ -35,18 +36,23 @@ import {
   isLinkedinCredentialTopic,
   isLinkedinTraitOnlyPost,
   linkedinHiringWording,
-  linkedinJobHasConcreteWork,
+  linkedinJobHasRetraction,
+  linkedinJobParagraphs,
+  linkedinScopedAction,
   linkedinTargetHasContradiction,
+  outreachJobSignals,
   MAX_SUPPORTING_EXCERPT,
   type AtomicSource,
 } from "@/modules/grounding/domain/atomic-claim";
 import {
+  affirmativeExperience,
   linkedinCandidateFits,
   createLinkedinTargetMatcher,
   isLinkedinExperience,
   isLinkedinJobTarget,
   linkedinTargetFits,
   linkedinTargetWording,
+  normalizeImplementationScope,
 } from "../domain/linkedin-grounded-selection";
 import type { CandidateEvidenceRecord } from "@/lib/candidate-profile/service";
 import type {
@@ -62,6 +68,18 @@ import {
 const MIN_SOURCE_CHARS = 80;
 const HIRING_SIGNAL =
   /\b(?:hiring|recruiting|looking for|seeking|openings?|vacanc(?:y|ies))\b/iu;
+
+type Relevance = ReturnType<
+  ReturnType<typeof createEvidenceTargetRanker>
+>[number];
+function compareRelevance(a?: Relevance, b?: Relevance): number {
+  if (!a || !b) return Number(Boolean(b)) - Number(Boolean(a));
+  return (
+    Number(a.related) - Number(b.related) ||
+    b.domainScore - a.domainScore ||
+    b.score - a.score
+  );
+}
 
 function isLinkedinProfileRoleOnly(source: AtomicSource): boolean {
   return (
@@ -286,6 +304,74 @@ export function buildOutreachGroundingContext(input: {
     conversationContext: normalizeText(input.target.conversationContext),
   };
   const linkedin = target.category === "linkedin_connection";
+  const initialEmail =
+    target.category === "cold_email" &&
+    (target.emailMode ?? "initial_outreach") === "initial_outreach" &&
+    !target.conversationContext;
+  const job =
+    linkedin || initialEmail
+      ? outreachJobSignals(target.jobDescription)
+      : undefined;
+  const duties = job?.duties ?? [];
+  const hasDuties = Boolean(job?.hasDuties);
+  const roleHints = job?.roles ?? [];
+  const roleSpecified = roleHints.length > 0 || Boolean(job?.hasNamedOpening);
+  const sparseEmail =
+    initialEmail && (!job?.hasOtherDetail || roleSpecified) && !hasDuties;
+  const rankedEmail = initialEmail && (sparseEmail || hasDuties);
+  // A repeated duty must not multiply comparisons with every reviewed fact.
+  const distinctDuties = [
+    ...new Map(
+      duties.map((duty) => [`${duty.terms}\0${duty.topic ?? ""}`, duty]),
+    ).values(),
+  ];
+  const dutyRank = createEvidenceTargetRanker(
+    distinctDuties.map(({ terms }) => normalizeImplementationScope(terms)),
+    undefined,
+    { requireAiAgent: initialEmail, duty: true },
+  );
+  const dutyTopicRank = createEvidenceTargetRanker(
+    distinctDuties.map(({ topic }) =>
+      normalizeImplementationScope(topic ?? ""),
+    ),
+    distinctDuties.map(({ terms }) => normalizeImplementationScope(terms)),
+    { requireAiAgent: initialEmail },
+  );
+  const roleRank = createEvidenceTargetRanker(
+    roleHints.map(normalizeImplementationScope),
+  );
+  const profileRank = createEvidenceTargetRanker([
+    normalizeImplementationScope(target.profileMarkdown),
+  ]);
+  const rankIntroduction = hasDuties
+    ? dutyRank
+    : roleSpecified
+      ? roleRank
+      : profileRank;
+  const allowUnmatchedIntroduction = !hasDuties && !roleSpecified;
+  const rankFact = (
+    rank: ReturnType<typeof createEvidenceTargetRanker>,
+    fact: CandidateFact,
+    units = affirmativeExperience({ kind: fact.kind, content: fact.excerpt }),
+  ) =>
+    units
+      .flatMap((text) =>
+        rank(
+          linkedinScopedAction(fact.excerpt) ?? fact.excerpt,
+          normalizeImplementationScope(text),
+        ),
+      )
+      .sort(compareRelevance)[0];
+  const dutyMatches = new Map<CandidateFact, Relevance | undefined>();
+  const matchDuty = (fact: CandidateFact) => {
+    if (dutyMatches.has(fact)) return dutyMatches.get(fact);
+    const direct = rankFact(dutyRank, fact);
+    const topical = direct ? undefined : rankFact(dutyTopicRank, fact);
+    const result =
+      direct ?? (topical ? { ...topical, related: true } : undefined);
+    dutyMatches.set(fact, result);
+    return result;
+  };
   const hiringSignal = linkedin && HIRING_SIGNAL.test(target.jobDescription);
   if (input.selectedEvidenceIds?.length) {
     assertSafeSelectionText(
@@ -298,7 +384,7 @@ export function buildOutreachGroundingContext(input: {
   }
   const claims = excludedClaims(input.candidate.profile.excludedClaims);
   const injectionScan = scanForInjection(
-    linkedin
+    linkedin || initialEmail
       ? [
           target.profileMarkdown,
           target.jobDescription,
@@ -307,6 +393,10 @@ export function buildOutreachGroundingContext(input: {
       : target.profileMarkdown,
   );
   const injectionSafeMode = injectionScan.triggered;
+  const emailContextBlocked =
+    rankedEmail &&
+    (linkedinJobHasRetraction(linkedinJobParagraphs(target.jobDescription)) ||
+      containsExcludedClaim(target.jobDescription, claims));
   const allowedEvidence = injectionSafeMode
     ? []
     : input.candidate.confirmedEvidence.filter(
@@ -340,16 +430,71 @@ export function buildOutreachGroundingContext(input: {
       target.profileMarkdown,
     secondary: `${target.profileMarkdown} ${target.conversationContext}`,
   };
+  const emailMatches = new Map<string, ReadonlySet<string>>();
+  const emailSelection =
+    !rankedEmail || injectionSafeMode || explicit || emailContextBlocked
+      ? undefined
+      : allowedEvidence
+          .flatMap((entry) => {
+            const facts = reviewedEvidence?.get(entry.id) ?? [];
+            const eligible = facts
+              .flatMap((fact) => {
+                const units = affirmativeExperience({
+                  kind: fact.kind,
+                  content: fact.excerpt,
+                });
+                if (!units.length) return [];
+                const match = rankFact(rankIntroduction, fact, units);
+                return match || allowUnmatchedIntroduction
+                  ? [{ fact, match }]
+                  : [];
+              })
+              .sort((a, b) => compareRelevance(a.match, b.match));
+            if (!eligible.length) return [];
+            const best = eligible[0]?.match;
+            emailMatches.set(
+              entry.id,
+              new Set(eligible.map(({ fact }) => fact.id)),
+            );
+            return [{ entry, match: best }];
+          })
+          .sort(
+            (a, b) =>
+              compareRelevance(a.match, b.match) ||
+              a.entry.sortOrder - b.entry.sortOrder ||
+              a.entry.id.localeCompare(b.entry.id),
+          );
   const selection =
-    injectionSafeMode || explicit || linkedin
+    injectionSafeMode || explicit || linkedin || rankedEmail
       ? undefined
       : createEvidenceRanker(allowedEvidence, (entry) =>
           (reviewedEvidence?.get(entry.id) ?? []).map(({ excerpt }) => excerpt),
         )(relevanceTarget);
-  let selectedEvidence = explicit ?? selection?.evidence ?? [];
+  let selectedEvidence =
+    explicit ??
+    (emailSelection
+      ? emailSelection.map(({ entry }) => entry)
+      : selection?.evidence) ??
+    [];
   let winningLinkedinFact:
-    { entryId: string; fact: CandidateFact; content: string } | undefined;
-  let selectionDiagnostics = selection?.diagnostics;
+    | {
+        entryId: string;
+        fact: CandidateFact;
+        content: string;
+        dutyMatch?: Relevance | undefined;
+      }
+    | undefined;
+  let selectionDiagnostics = emailSelection
+    ? {
+        outcome: (emailSelection.some(({ match }) => match)
+          ? "matched"
+          : allowedEvidence.length
+            ? "no_match"
+            : "no_evidence") as "matched" | "no_match" | "no_evidence",
+        consideredCount: allowedEvidence.length,
+        matchedCount: emailSelection.filter(({ match }) => match).length,
+      }
+    : selection?.diagnostics;
   const linkedinFacts =
     linkedin && !injectionSafeMode
       ? new Map(
@@ -359,6 +504,19 @@ export function buildOutreachGroundingContext(input: {
           ]),
         )
       : undefined;
+  const emailDutyExcerpts =
+    rankedEmail && hasDuties && !explicit
+      ? new Map<number, Set<string>>()
+      : undefined;
+  for (const { text, paragraph } of duties) {
+    if (!emailDutyExcerpts) break;
+    const excerpts = emailDutyExcerpts.get(paragraph) ?? new Set<string>();
+    excerpts.add(normalizeAtomicSourceText(text));
+    emailDutyExcerpts.set(paragraph, excerpts);
+  }
+  const isEmailDutyTarget = (source: AtomicSource) =>
+    source.id.startsWith("target.jobDescription.") &&
+    Boolean(emailDutyExcerpts);
   const targets = buildAtomicTargetSources(
     injectionSafeMode
       ? {}
@@ -404,6 +562,7 @@ export function buildOutreachGroundingContext(input: {
                 fact: CandidateFact;
                 content: string;
                 match: ReturnType<typeof matchTargets>[number];
+                dutyMatch: Relevance | undefined;
               }
             | undefined;
           let matchedCount = 0;
@@ -417,6 +576,14 @@ export function buildOutreachGroundingContext(input: {
                 !isGroundedTextSafe(content, "linkedin")
               )
                 continue;
+              const dutyMatch = explicit
+                ? undefined
+                : hasDuties
+                  ? matchDuty(fact)
+                  : roleSpecified
+                    ? rankFact(roleRank, fact)
+                    : undefined;
+              if (hasDuties && !explicit && !dutyMatch) continue;
               for (const match of matchTargets({
                 id: fact.id,
                 scope: "candidate",
@@ -426,15 +593,16 @@ export function buildOutreachGroundingContext(input: {
                 matched = true;
                 if (
                   !best ||
-                  (Number(isLinkedinJobTarget(match.source)) -
-                    Number(isLinkedinJobTarget(best.match.source)) ||
+                  (compareRelevance(best.dutyMatch, dutyMatch) ||
+                    Number(isLinkedinJobTarget(match.source)) -
+                      Number(isLinkedinJobTarget(best.match.source)) ||
                     Number(best.match.related) - Number(match.related) ||
                     match.domainScore - best.match.domainScore ||
                     match.score - best.match.score ||
                     best.entry.sortOrder - entry.sortOrder ||
                     best.entry.id.localeCompare(entry.id)) > 0
                 )
-                  best = { entry, fact, content, match };
+                  best = { entry, fact, content, match, dutyMatch };
               }
             }
             if (matched) matchedCount++;
@@ -455,6 +623,7 @@ export function buildOutreachGroundingContext(input: {
                 entryId: best.entry.id,
                 fact: best.fact,
                 content: best.content,
+                dutyMatch: best.dutyMatch,
               };
             }
           }
@@ -465,9 +634,23 @@ export function buildOutreachGroundingContext(input: {
             ...matchingTargets.filter((source) => source.id !== targetId),
           ];
         }
-      : undefined,
+      : emailDutyExcerpts
+        ? (pool) =>
+            [...pool].sort(
+              (a, b) =>
+                Number(isEmailDutyTarget(b)) - Number(isEmailDutyTarget(a)),
+            )
+        : undefined,
+    emailDutyExcerpts,
   );
   let linkedinTargets = targets.sources;
+  const hasJobTarget = linkedinTargets.some(isLinkedinJobTarget);
+  const hasRoleTarget = linkedinTargets.some(
+    (source) =>
+      isLinkedinJobTarget(source) &&
+      linkedinHiringWording(source.content)?.kind !== "list" &&
+      /\bteam at .+ is hiring\b/iu.test(source.content),
+  );
   const weakProfileOnly =
     linkedin &&
     linkedinTargets.length > 0 &&
@@ -479,10 +662,13 @@ export function buildOutreachGroundingContext(input: {
           isLinkedinProfileRoleOnly(source)),
     );
   const mayUseCandidateIntroduction =
-    !winningLinkedinFact &&
-    (!linkedinTargets.length ||
-      weakProfileOnly ||
-      (linkedin && isLinkedinTraitOnlyPost(target.jobDescription)));
+    hasDuties ||
+    (roleSpecified && winningLinkedinFact && !winningLinkedinFact.dutyMatch) ||
+    (!winningLinkedinFact &&
+      ((roleSpecified && (!hasJobTarget || hasRoleTarget)) ||
+        !linkedinTargets.length ||
+        weakProfileOnly ||
+        (linkedin && isLinkedinTraitOnlyPost(target.jobDescription))));
   const targetContradicted =
     linkedin &&
     mayUseCandidateIntroduction &&
@@ -498,35 +684,51 @@ export function buildOutreachGroundingContext(input: {
     mayUseCandidateIntroduction &&
     !targets.diagnostics.excluded &&
     !targets.diagnostics.unsafeWording &&
-    !linkedinJobHasConcreteWork(target.jobDescription) &&
     !targetContradicted
   ) {
-    const entries = allowedEvidence
-      .slice()
-      .sort((a, b) => a.sortOrder - b.sortOrder || a.id.localeCompare(b.id));
-    for (const entry of entries) {
-      const fact = linkedinFacts?.get(entry.id)?.find((fact) => {
-        const content = normalizeAtomicSourceText(fact.excerpt);
-        return (
-          content.length <= MAX_SUPPORTING_EXCERPT &&
-          isLinkedinExperience({ kind: fact.kind, content }) &&
-          isGroundedTextSafe(content, "linkedin") &&
-          linkedinCandidateFits(
-            { id: fact.id, kind: fact.kind, scope: "candidate", content },
-            [],
-            target.connectionNoteLimit,
-          )
-        );
-      });
-      if (!fact) continue;
+    const introductions = allowedEvidence
+      .flatMap((entry) =>
+        (linkedinFacts?.get(entry.id) ?? []).flatMap((fact) => {
+          const content = normalizeAtomicSourceText(fact.excerpt);
+          if (!(
+            content.length <= MAX_SUPPORTING_EXCERPT &&
+            isLinkedinExperience({ kind: fact.kind, content }) &&
+            isGroundedTextSafe(content, "linkedin") &&
+            linkedinCandidateFits(
+              { id: fact.id, kind: fact.kind, scope: "candidate", content },
+              [],
+              target.connectionNoteLimit,
+            )
+          ))
+            return [];
+          const match = hasDuties
+            ? matchDuty(fact)
+            : rankFact(rankIntroduction, fact);
+          if (!match && !allowUnmatchedIntroduction) return [];
+          return [{ entry, fact, content, match }];
+        }),
+      )
+      .sort(
+        (a, b) =>
+          compareRelevance(a.match, b.match) ||
+          a.entry.sortOrder - b.entry.sortOrder ||
+          a.entry.id.localeCompare(b.entry.id),
+      );
+    const winner = introductions[0];
+    if (
+      winner &&
+      (!winningLinkedinFact ||
+        ((hasDuties || roleSpecified) &&
+          compareRelevance(winner.match, winningLinkedinFact.dutyMatch) < 0))
+    ) {
+      const { entry, fact, content } = winner;
       selectedEvidence = [entry];
       winningLinkedinFact = {
         entryId: entry.id,
         fact,
-        content: normalizeAtomicSourceText(fact.excerpt),
+        content,
       };
       linkedinTargets = [];
-      break;
     }
   }
   let drafts: DraftSource[];
@@ -619,6 +821,12 @@ export function buildOutreachGroundingContext(input: {
     // Match original reviewed wording so markup escaping cannot add keywords.
     proseRelevantFactIds = new Set(
       selectedEvidence.flatMap((entry) => {
+        if (rankedEmail && !explicit) {
+          const root = `evidence:${entry.id}`;
+          return [...(emailMatches.get(entry.id) ?? [])]
+            .map((id) => candidateEvidenceFactId(root, id))
+            .filter((id) => survivingFactIds.has(id));
+        }
         const facts = reviewedEvidence
           ? (reviewedEvidence.get(entry.id) ?? [])
           : readFactReview(entry, entry.factReview);
@@ -656,6 +864,32 @@ export function buildOutreachGroundingContext(input: {
           : "no_resume_context";
 
   const atomicSources = [...prepared.safeAtoms, ...linkedinTargets];
+  const emailDutyFactIds = emailDutyExcerpts
+    ? new Map(
+        linkedinTargets.filter(isEmailDutyTarget).map((source) => {
+          const exact = duties.find(
+            ({ text }) => normalizeAtomicSourceText(text) === source.content,
+          );
+          const rank = createEvidenceTargetRanker(
+            exact ? [exact.terms] : [],
+            undefined,
+            { requireAiAgent: true, duty: true },
+          );
+          const matching = selectedEvidence.flatMap((entry) =>
+            (reviewedEvidence?.get(entry.id) ?? []).flatMap((fact) => {
+              const id = candidateEvidenceFactId(
+                `evidence:${entry.id}`,
+                fact.id,
+              );
+              return proseRelevantFactIds?.has(id) && rankFact(rank, fact)
+                ? [id]
+                : [];
+            }),
+          );
+          return [source.id, new Set(matching)] as const;
+        }),
+      )
+    : undefined;
   // With neither source available, composition records the explicit-selection denial.
   const noLinkedinTarget =
     linkedin && !linkedinTargets.length && !winningLinkedinFact;
@@ -675,6 +909,10 @@ export function buildOutreachGroundingContext(input: {
     ...(requiredEvidenceRoots ? { requiredEvidenceRoots } : {}),
     sources,
     atomicSources,
+    ...(rankedEmail && !explicit && !emailContextBlocked
+      ? { domainAwareEmail: true }
+      : {}),
+    ...(emailDutyFactIds?.size ? { emailDutyFactIds } : {}),
     ...(proseRelevantFactIds ? { proseRelevantFactIds } : {}),
     targetDiagnostics: {
       ...targets.diagnostics,
