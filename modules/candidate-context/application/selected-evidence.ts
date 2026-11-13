@@ -71,10 +71,15 @@ function budgetReviewedStoryFacts(
   entry: CandidateEvidenceRecord,
   platform: StoryPlatform,
   maxChars: number,
+  rank?: (_fact: CandidateFact) => number,
 ) {
   const facts: CandidateFact[] = [];
   let remaining = maxChars;
-  for (const fact of readFactReview(entry, entry.factReview)) {
+  const reviewed = readFactReview(entry, entry.factReview);
+  const ordered = rank
+    ? [...reviewed].sort((a, b) => rank(b) - rank(a))
+    : reviewed;
+  for (const fact of ordered) {
     const escaped = escapeForXmlTag(normalizeClaimText(fact.excerpt));
     const content = normalizeClaimText(escaped);
     const size = escaped.length + (facts.length ? 1 : 0);
@@ -110,11 +115,12 @@ export function prepareReviewedStoryFacts(
   entries: readonly CandidateEvidenceRecord[],
   platform: StoryPlatform,
   maxChars: number,
+  rank?: (_fact: CandidateFact) => number,
 ) {
   return new Map(
     entries.map((entry) => [
       entry.id,
-      budgetReviewedStoryFacts(entry, platform, maxChars),
+      budgetReviewedStoryFacts(entry, platform, maxChars, rank),
     ]),
   );
 }

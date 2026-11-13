@@ -337,6 +337,18 @@ export function createReviewedFactMatcher(target: {
     bestReviewedMatch(terms, [prepareReviewedExcerpt(excerpt)]).supported;
 }
 
+/** Score distinct focus terms with the same weights and AI-agent rules as reviewed evidence. */
+export function createReviewedFactFocusRanker(focus: string) {
+  const terms = tokens(focus);
+  return (assertions: readonly string[]): number => {
+    const result = bestReviewedMatch(
+      terms,
+      assertions.map(prepareReviewedExcerpt),
+    );
+    return result.supported ? result.score : 0;
+  };
+}
+
 /**
  * An excerpt array ranks only individual reviewed facts by default. LinkedIn
  * retains record labels and context while checking related work per excerpt.

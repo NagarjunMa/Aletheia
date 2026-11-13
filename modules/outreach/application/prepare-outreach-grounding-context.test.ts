@@ -98,6 +98,34 @@ describe("prepareOutreachGroundingContext", () => {
     );
   });
 
+  it("passes focus through the existing caller load and keeps it out of preparation logs", async () => {
+    const loadCandidateData = vi.fn().mockResolvedValue(candidate);
+    const info = vi.fn();
+    const messageFocus = "synthetic private evaluation focus";
+    const result = await prepareOutreachGroundingContext(
+      {
+        caller,
+        target,
+        messageFocus,
+        logger: {
+          info,
+          warn: vi.fn(),
+          error: vi.fn(),
+          debug: vi.fn(),
+          child: vi.fn(),
+        },
+      },
+      { loadCandidateData },
+    );
+    expect(loadCandidateData).toHaveBeenCalledExactlyOnceWith({
+      userId: caller.userId,
+      accessToken: caller.accessToken,
+    });
+    expect(result.focusSelection).toEqual({ outcome: "no_match" });
+    expect(JSON.stringify(info.mock.calls)).not.toContain(messageFocus);
+    expect(JSON.stringify(result)).not.toContain(messageFocus);
+  });
+
   it("maps all candidate-context failures to the stable preparation error", async () => {
     await expect(
       prepareOutreachGroundingContext(

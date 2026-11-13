@@ -28,6 +28,7 @@ export async function prepareOutreachGroundingContext(
     caller: AuthenticatedExtensionUser;
     target: OutreachGroundingInput;
     selectedEvidenceIds?: readonly string[];
+    messageFocus?: string;
     timing?: GenerationTiming;
     logger?: SafeLogger;
   },
@@ -51,6 +52,7 @@ export async function prepareOutreachGroundingContext(
     )({
       candidate,
       target: input.target,
+      ...(input.messageFocus ? { messageFocus: input.messageFocus } : {}),
       ...(input.selectedEvidenceIds
         ? { selectedEvidenceIds: input.selectedEvidenceIds }
         : {}),
