@@ -1037,9 +1037,9 @@ export function buildOutreachGroundingContext(input: {
     rankFocus && linkedin && linkedinTargets.length
       ? createLinkedinTargetMatcher(linkedinTargets, target.connectionNoteLimit)
       : undefined;
-  const matchedFocus =
+  const survivingFocusFacts =
     rankFocus &&
-    prepared.safeAtoms.some(
+    prepared.safeAtoms.filter(
       (source) =>
         focusFactScores.has(source.id) &&
         (linkedin
@@ -1050,17 +1050,21 @@ export function buildOutreachGroundingContext(input: {
     );
   const focusSelection: OutreachGroundingContext["focusSelection"] = focus
     ? {
-        outcome: matchedFocus
-          ? "matched"
-          : explicit
-            ? "selection_conflict"
-            : "no_match",
+        outcome:
+          survivingFocusFacts && survivingFocusFacts.length
+            ? "matched"
+            : explicit
+              ? "selection_conflict"
+              : "no_match",
       }
     : undefined;
 
   return {
     identity: input.candidate.identity,
     ...(focusSelection ? { focusSelection } : {}),
+    ...(survivingFocusFacts && survivingFocusFacts.length
+      ? { focusFactIds: new Set(survivingFocusFacts.map(({ id }) => id)) }
+      : {}),
     ...(selectionDiagnostics ? { selectionDiagnostics } : {}),
     ...(requiredEvidenceRoots ? { requiredEvidenceRoots } : {}),
     sources,

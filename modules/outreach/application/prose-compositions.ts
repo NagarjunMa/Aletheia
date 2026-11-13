@@ -70,6 +70,7 @@ export function buildProseCompositions(input: {
   const { category, emailMode, context } = input;
   const sources = context.atomicSources ?? [];
   const relevantFactIds = context.proseRelevantFactIds;
+  const focusFactIds = context.focusFactIds;
   const domainAwareEmail =
     category === "cold_email" &&
     context.domainAwareEmail &&
@@ -78,10 +79,16 @@ export function buildProseCompositions(input: {
     throw new ProseGroundingUnavailableError();
   const selected = new Set(context.sources.map((s) => s.id));
   const seen = new Set<string>();
-  const candidates = sources
+  const candidateSources = sources.filter(
+    (source) => source.scope === "candidate",
+  );
+  if (focusFactIds)
+    candidateSources.sort(
+      (a, b) => Number(focusFactIds.has(b.id)) - Number(focusFactIds.has(a.id)),
+    );
+  const candidates = candidateSources
     .filter(
       (s) =>
-        s.scope === "candidate" &&
         !!s.rootId &&
         selected.has(s.rootId) &&
         (!domainAwareEmail || relevantFactIds.has(s.id)),
@@ -135,6 +142,7 @@ export function buildProseCompositions(input: {
         context.sources,
         sources,
         [...relevantFactIds],
+        ...(focusFactIds ? [[...focusFactIds].sort()] : []),
         context.excludedClaims,
       ]),
     )
@@ -178,6 +186,11 @@ export function buildProseCompositions(input: {
     if ((!target || domainAwareEmail) && options.length) break;
     for (const facts of combinations(candidates)) {
       if (!facts.some(({ source }) => relevantFactIds.has(source.id))) continue;
+      if (
+        focusFactIds &&
+        !facts.some(({ source }) => focusFactIds.has(source.id))
+      )
+        continue;
       if (
         domainAwareEmail &&
         target &&

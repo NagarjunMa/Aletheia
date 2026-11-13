@@ -15,6 +15,10 @@ if (isErrorReportingEnabled && SENTRY_DSN) {
 
     tracesSampleRate: process.env.NODE_ENV === "development" ? 1.0 : 0.1,
 
+    // Anthropic tracing records tool descriptions that contain private drafts.
+    integrations: (defaults) =>
+      defaults.filter(({ name }) => name !== "Anthropic_AI"),
+
     // Defense-in-depth: scrub auth headers / tokens / PII fields from every
     // event and breadcrumb before they leave the function.
     beforeSend: sentryBeforeSend,
