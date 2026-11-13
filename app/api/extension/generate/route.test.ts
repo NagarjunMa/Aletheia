@@ -4307,11 +4307,165 @@ describe("ALE-55 evidence selection before generation", () => {
   });
 });
 
-describe("ALE-63 unavailable Message focus boundary", () => {
-  it.each(["linkedin_connection", "cold_email", "linkedin_inmail"])(
-    "rejects focus for %s before private context or any reservation",
+describe("ALE-60 focus generation", () => {
+  it.each([
+    ["linkedin_connection", "initial_outreach"],
+    ["cold_email", "initial_outreach"],
+    ["cold_email", "follow_up"],
+    ["linkedin_inmail", "initial_outreach"],
+    ["linkedin_inmail", "follow_up"],
+  ] as const)(
+    "uses reviewed focus in %s %s and separates intent from proof",
+    async (category, emailMode) => {
+      vi.stubEnv("MESSAGE_FOCUS_ENABLED", "true");
+      try {
+        const action =
+          category === "linkedin_connection"
+            ? "I built policy evaluation tooling in a simulated environment."
+            : proseFixture(category, emailMode).action;
+        const outcome =
+          category === "linkedin_connection"
+            ? ""
+            : proseFixture(category, emailMode).outcome;
+        const record = {
+          id: "11111111-1111-4111-8111-111111111111",
+          kind: "technical_project" as const,
+          title: "Synthetic reviewed project",
+          context: "",
+          actions: action,
+          outcome,
+          metrics: [],
+          skills: [],
+          links: [],
+          confirmed: true,
+          sortOrder: 0,
+        };
+        const prepare = await vi.importActual<
+          typeof import("@/modules/outreach/application/prepare-outreach-grounding-context")
+        >("@/modules/outreach/application/prepare-outreach-grounding-context");
+        mockPrepareOutreachGroundingContext.mockImplementationOnce((input) =>
+          prepare.prepareOutreachGroundingContext(input, {
+            loadCandidateData: async () => ({
+              identity: { fullName: "Synthetic", linkedinUrl: "" },
+              profile: candidateProfileInputSchema.parse({}),
+              confirmedEvidence: [
+                {
+                  ...record,
+                  factReview: prepareFactReview(
+                    record,
+                    [action, outcome].filter(Boolean).map((excerpt, index) => ({
+                      id: `22222222-2222-4222-8222-22222222222${index}`,
+                      kind: index === 0 ? "action" : "outcome",
+                      excerpt,
+                      confirmed: true,
+                    })),
+                  ),
+                },
+              ],
+              resume: { text: "", source: "none" },
+            }),
+          }),
+        );
+        const response = await POST(
+          makeRequest({
+            method: "POST",
+            headers: { Authorization: "Bearer test-token" },
+            body: {
+              category,
+              emailMode,
+              ...(category === "linkedin_connection"
+                ? { connectionNoteLimit: 200 }
+                : {}),
+              profileMarkdown:
+                "Engineering Manager at Example | Policy Evaluation",
+              jd:
+                emailMode === "follow_up"
+                  ? ""
+                  : "You will build policy evaluation tooling for agent decisions and review examples to compare expected results and report findings.",
+              conversationContext:
+                emailMode === "follow_up"
+                  ? "We discussed policy evaluation and the prototype."
+                  : "",
+              messageFocus: "evaluation & SyntheticFocusMarker",
+            },
+          }),
+        );
+        const result = await response.json();
+        expect(response.status, JSON.stringify(result)).toBe(200);
+        expect(result).toMatchObject({ selectionStatus: "matched" });
+        expect(result.body).toContain("policy evaluation");
+        expect(result.character_count).toBe(result.body.length);
+        if (category === "linkedin_connection")
+          expect(result.character_count).toBeLessThanOrEqual(200);
+        expect(JSON.stringify(result)).not.toContain("SyntheticFocusMarker");
+        expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
+        const request = mockAnthropicCreate.mock.calls[0]![0];
+        expect(request.system).not.toContain("SyntheticFocusMarker");
+        expect(request.messages[0].content).toContain(
+          '<message_focus>"evaluation \\u0026 SyntheticFocusMarker"</message_focus>',
+        );
+        expect(JSON.stringify(request.tools)).not.toContain(
+          "SyntheticFocusMarker",
+        );
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    },
+  );
+
+  it.each(["linkedin_connection", "cold_email", "linkedin_inmail"] as const)(
+    "rejects unusable %s focus before paid work",
     async (category) => {
       vi.stubEnv("MESSAGE_FOCUS_ENABLED", "true");
+      try {
+        const prepare = await vi.importActual<
+          typeof import("@/modules/outreach/application/prepare-outreach-grounding-context")
+        >("@/modules/outreach/application/prepare-outreach-grounding-context");
+        mockPrepareOutreachGroundingContext.mockImplementationOnce((input) =>
+          prepare.prepareOutreachGroundingContext(input, {
+            loadCandidateData: async () => ({
+              identity: { fullName: "", linkedinUrl: "" },
+              profile: candidateProfileInputSchema.parse({}),
+              confirmedEvidence: [],
+              resume: { text: "", source: "none" },
+            }),
+          }),
+        );
+        const response = await POST(
+          makeRequest({
+            method: "POST",
+            headers: { Authorization: "Bearer test-token" },
+            body: {
+              ...validPayload,
+              category,
+              messageFocus: "SyntheticPrivateCanary",
+            },
+          }),
+        );
+        expect(response.status).toBe(422);
+        const body = await response.json();
+        expect(body).toMatchObject({ code: "MESSAGE_FOCUS_NO_MATCH" });
+        expect(JSON.stringify(body)).not.toContain("SyntheticPrivateCanary");
+        expect(mockRpc).not.toHaveBeenCalled();
+        expect(mockAnthropicCreate).not.toHaveBeenCalled();
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    },
+  );
+});
+
+describe("ALE-63 unavailable Message focus boundary", () => {
+  it.each([
+    ["linkedin_connection", "false", undefined],
+    ["cold_email", "false", undefined],
+    ["linkedin_inmail", "false", undefined],
+    ["linkedin_connection", "true", "true"],
+  ])(
+    "rejects focus for %s before private context or any reservation (flag=%s, debug=%s)",
+    async (category, flag, debug) => {
+      vi.stubEnv("MESSAGE_FOCUS_ENABLED", flag);
+      vi.stubEnv("DEBUG", debug);
       const log = {
         info: vi.fn(),
         debug: vi.fn(),

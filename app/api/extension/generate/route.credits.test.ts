@@ -178,6 +178,94 @@ describe("ALE-63 focus rejection with credit billing enabled", () => {
   );
 });
 
+describe("ALE-60 focus accounting", () => {
+  it("rejects a matched fact with no valid option before reserving credits or quota", async () => {
+    vi.stubEnv("MESSAGE_FOCUS_ENABLED", "true");
+    const context = proseFixture("cold_email", "initial_outreach").context;
+    const focusFact = [...context.proseRelevantFactIds!][0]!;
+    mockPrepareOutreachGroundingContext.mockResolvedValueOnce({
+      ...context,
+      // A partial evidence pool cannot meet the 120-word initial email minimum.
+      atomicSources: context.atomicSources?.filter(
+        ({ id }) => id === focusFact,
+      ),
+      domainAwareEmail: true,
+      focusSelection: { outcome: "matched" },
+      focusFactIds: new Set([focusFact]),
+    });
+    const { POST } = await importRouteWithBillingEnabled();
+    const response = await POST(
+      makeRequest({
+        method: "POST",
+        headers: { Authorization: "Bearer test-token" },
+        body: {
+          ...validPayload,
+          category: "cold_email",
+          messageFocus: "evaluation",
+        },
+      }),
+    );
+    expect(response.status).toBe(422);
+    expect(await response.json()).toMatchObject({
+      code: "MESSAGE_FOCUS_NO_MATCH",
+    });
+    expect(mockRpc).not.toHaveBeenCalled();
+    expect(mockAnthropicCreate).not.toHaveBeenCalled();
+  });
+
+  it("releases credit and quota reservations when the provider returns an invalid focused option", async () => {
+    vi.stubEnv("MESSAGE_FOCUS_ENABLED", "true");
+    const context = proseFixture("linkedin_inmail", "follow_up").context;
+    mockPrepareOutreachGroundingContext.mockResolvedValueOnce({
+      ...context,
+      focusSelection: { outcome: "matched" },
+      focusFactIds: new Set(context.proseRelevantFactIds),
+    });
+    mockAnthropicCreate.mockImplementationOnce(async (request) => ({
+      stop_reason: "tool_use",
+      usage: { input_tokens: 100, output_tokens: 40 },
+      content: [
+        {
+          type: "tool_use",
+          name: request.tools[0]!.name,
+          input: {
+            option_id: "unknown",
+            body: "Invented recipient achievement",
+          },
+        },
+      ],
+    }));
+    const { POST } = await importRouteWithBillingEnabled();
+    const response = await POST(
+      makeRequest({
+        method: "POST",
+        headers: { Authorization: "Bearer test-token" },
+        body: {
+          ...validPayload,
+          category: "linkedin_inmail",
+          emailMode: "follow_up",
+          messageFocus: "evaluation",
+        },
+      }),
+    );
+    expect(response.status).toBe(502);
+    expect(await response.json()).toMatchObject({
+      code: "PARSE_FAILED",
+      billing: "refunded",
+      quotaRestoration: "released",
+    });
+    expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
+    expect(mockRpc.mock.calls.map(([name]) => name)).toEqual(
+      expect.arrayContaining([
+        "start_generation_attempt",
+        "finish_generation_attempt",
+        "refund_generation_credits",
+        "release_generation_daily_slot",
+      ]),
+    );
+  });
+});
+
 async function importRouteWithBillingEnabled() {
   vi.resetModules();
   vi.stubEnv("CREDIT_BILLING_ENABLED", "true");

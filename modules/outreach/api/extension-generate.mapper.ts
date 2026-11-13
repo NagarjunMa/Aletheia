@@ -74,6 +74,18 @@ export function messageFocusUnavailableResponse(
   );
 }
 
+export function messageFocusNoMatchResponse(headers: Record<string, string>) {
+  return NextResponse.json(
+    {
+      success: false,
+      error: "No eligible reviewed experience matches this focus",
+      code: "MESSAGE_FOCUS_NO_MATCH",
+      message: "Edit or clear Message focus, or confirm a matching fact.",
+    },
+    { status: 422, headers },
+  );
+}
+
 export function evidenceSelectionUnavailableResponse(
   headers: Record<string, string>,
 ) {

@@ -38,6 +38,7 @@ const METRICS = [
   "itemCount",
 ] as const;
 const CONFIG_ENUMS = {
+  messageFocus: ["enabled"],
   intent: ["networking", "referral", "mentorship", "job_inquiry"],
   mode: [
     "initial_outreach",
@@ -77,6 +78,7 @@ export const GENERATION_FAILURE_CODES = [
   "OUTPUT_VALIDATION_FAILED",
   "INPUT_VALIDATION_FAILED",
   "MESSAGE_FOCUS_UNAVAILABLE",
+  "MESSAGE_FOCUS_NO_MATCH",
   "EVIDENCE_SELECTION_UNAVAILABLE",
   "GROUNDING_CONTEXT_UNAVAILABLE",
   "INSUFFICIENT_GROUNDING",
