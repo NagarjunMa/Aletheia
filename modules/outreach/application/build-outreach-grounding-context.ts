@@ -1,4 +1,8 @@
 import {
+  countOutputUnits,
+  resolveOutputConstraint,
+} from "@/lib/ai/output-constraints";
+import {
   assertSafeSelectionText,
   budgetReviewedStory,
   includesSelectedEvidence,
@@ -17,6 +21,7 @@ import {
   createEvidenceRanker,
   createEvidenceTargetRanker,
   createReviewedFactMatcher,
+  createReviewedFactFocusRanker,
 } from "@/modules/candidate-context/application/rank-evidence";
 import { deriveSafeCandidateSummary } from "@/lib/ai/candidate-summary";
 import {
@@ -38,6 +43,7 @@ import {
   linkedinHiringWording,
   linkedinJobHasRetraction,
   linkedinJobParagraphs,
+  allowedClaimTexts,
   linkedinScopedAction,
   linkedinTargetHasContradiction,
   outreachJobSignals,
@@ -296,6 +302,7 @@ export function buildOutreachGroundingContext(input: {
   target: OutreachGroundingInput;
   candidate: CandidateGroundingData;
   selectedEvidenceIds?: readonly string[];
+  messageFocus?: string;
 }): OutreachGroundingContext {
   const target = {
     ...input.target,
@@ -415,14 +422,6 @@ export function buildOutreachGroundingContext(input: {
   const requiredEvidenceRoots = explicit?.map(
     (entry) => `evidence:${entry.id}`,
   );
-  const reviewedEvidence =
-    !explicit && !injectionSafeMode && !linkedin
-      ? prepareReviewedStoryFacts(
-          allowedEvidence,
-          target.category === "cold_email" ? "email" : "linkedin",
-          OUTREACH_GROUNDING_BUDGETS[target.category].maxSourceChars,
-        )
-      : undefined;
   const relevanceTarget = {
     primary:
       target.jobDescription ||
@@ -430,6 +429,78 @@ export function buildOutreachGroundingContext(input: {
       target.profileMarkdown,
     secondary: `${target.profileMarkdown} ${target.conversationContext}`,
   };
+  const focus = input.messageFocus?.trim();
+  const rankFocus =
+    focus && !injectionSafeMode && !scanForInjection(focus).triggered
+      ? createReviewedFactFocusRanker(focus)
+      : undefined;
+  const proseLimit =
+    rankFocus && !linkedin
+      ? resolveOutputConstraint({
+          category: target.category,
+          emailMode: target.emailMode ?? "initial_outreach",
+        })
+      : undefined;
+  const focusScores = new Map<CandidateFact, number>();
+  const focusScore = (fact: CandidateFact): number => {
+    if (!rankFocus) return 0;
+    const cached = focusScores.get(fact);
+    if (cached !== undefined) return cached;
+    const content = normalizeClaimText(fact.excerpt);
+    const score =
+      proseLimit &&
+      countOutputUnits(
+        allowedClaimTexts({
+          id: fact.id,
+          scope: "candidate",
+          kind: fact.kind,
+          content,
+        }).at(-1)!,
+        proseLimit.unit,
+      ) >= proseLimit.maximum
+        ? 0
+        : rankFocus(affirmativeExperience({ kind: fact.kind, content }));
+    focusScores.set(fact, score);
+    return score;
+  };
+  const focusFactScores = new Map<string, number>();
+  const recordFocusMatch = (
+    entry: CandidateEvidenceRecord,
+    fact: CandidateFact,
+  ) => {
+    const score = focusScore(fact);
+    if (score)
+      focusFactScores.set(
+        candidateEvidenceFactId(`evidence:${entry.id}`, fact.id),
+        score,
+      );
+    return score;
+  };
+  const matchesProseTarget = linkedin
+    ? undefined
+    : createReviewedFactMatcher(relevanceTarget);
+  const proseFocusPriority =
+    rankFocus && !linkedin
+      ? (fact: CandidateFact) => {
+          const score = focusScore(fact);
+          if (!score) return 0;
+          if (rankedEmail && !explicit)
+            return allowUnmatchedIntroduction ||
+              rankFact(rankIntroduction, fact)
+              ? score
+              : 0;
+          return matchesProseTarget?.(fact.excerpt) ? score : 0;
+        }
+      : undefined;
+  const reviewedEvidence =
+    !injectionSafeMode && !linkedin && (!explicit || proseFocusPriority)
+      ? prepareReviewedStoryFacts(
+          explicit ?? allowedEvidence,
+          target.category === "cold_email" ? "email" : "linkedin",
+          OUTREACH_GROUNDING_BUDGETS[target.category].maxSourceChars,
+          proseFocusPriority,
+        )
+      : undefined;
   const emailMatches = new Map<string, ReadonlySet<string>>();
   const emailSelection =
     !rankedEmail || injectionSafeMode || explicit || emailContextBlocked
@@ -446,20 +517,27 @@ export function buildOutreachGroundingContext(input: {
                 if (!units.length) return [];
                 const match = rankFact(rankIntroduction, fact, units);
                 return match || allowUnmatchedIntroduction
-                  ? [{ fact, match }]
+                  ? [{ fact, match, focusScore: recordFocusMatch(entry, fact) }]
                   : [];
               })
-              .sort((a, b) => compareRelevance(a.match, b.match));
+              .sort(
+                (a, b) =>
+                  b.focusScore - a.focusScore ||
+                  compareRelevance(a.match, b.match),
+              );
             if (!eligible.length) return [];
             const best = eligible[0]?.match;
             emailMatches.set(
               entry.id,
               new Set(eligible.map(({ fact }) => fact.id)),
             );
-            return [{ entry, match: best }];
+            return [
+              { entry, match: best, focusScore: eligible[0]?.focusScore ?? 0 },
+            ];
           })
           .sort(
             (a, b) =>
+              b.focusScore - a.focusScore ||
               compareRelevance(a.match, b.match) ||
               a.entry.sortOrder - b.entry.sortOrder ||
               a.entry.id.localeCompare(b.entry.id),
@@ -470,11 +548,26 @@ export function buildOutreachGroundingContext(input: {
       : createEvidenceRanker(allowedEvidence, (entry) =>
           (reviewedEvidence?.get(entry.id) ?? []).map(({ excerpt }) => excerpt),
         )(relevanceTarget);
+  const rankedProse =
+    selection && rankFocus
+      ? selection.evidence
+          .map((entry) => ({
+            entry,
+            score: Math.max(
+              0,
+              ...(reviewedEvidence?.get(entry.id) ?? []).map((fact) =>
+                matchesProseTarget?.(fact.excerpt)
+                  ? recordFocusMatch(entry, fact)
+                  : 0,
+              ),
+            ),
+          }))
+          .sort((a, b) => b.score - a.score)
+          .map(({ entry }) => entry)
+      : selection?.evidence;
   let selectedEvidence =
     explicit ??
-    (emailSelection
-      ? emailSelection.map(({ entry }) => entry)
-      : selection?.evidence) ??
+    (emailSelection ? emailSelection.map(({ entry }) => entry) : rankedProse) ??
     [];
   let winningLinkedinFact:
     | {
@@ -482,6 +575,7 @@ export function buildOutreachGroundingContext(input: {
         fact: CandidateFact;
         content: string;
         dutyMatch?: Relevance | undefined;
+        focusScore: number;
       }
     | undefined;
   let selectionDiagnostics = emailSelection
@@ -563,6 +657,7 @@ export function buildOutreachGroundingContext(input: {
                 content: string;
                 match: ReturnType<typeof matchTargets>[number];
                 dutyMatch: Relevance | undefined;
+                focusScore: number;
               }
             | undefined;
           let matchedCount = 0;
@@ -584,6 +679,7 @@ export function buildOutreachGroundingContext(input: {
                     ? rankFact(roleRank, fact)
                     : undefined;
               if (hasDuties && !explicit && !dutyMatch) continue;
+              const score = recordFocusMatch(entry, fact);
               for (const match of matchTargets({
                 id: fact.id,
                 scope: "candidate",
@@ -593,7 +689,8 @@ export function buildOutreachGroundingContext(input: {
                 matched = true;
                 if (
                   !best ||
-                  (compareRelevance(best.dutyMatch, dutyMatch) ||
+                  (score - best.focusScore ||
+                    compareRelevance(best.dutyMatch, dutyMatch) ||
                     Number(isLinkedinJobTarget(match.source)) -
                       Number(isLinkedinJobTarget(best.match.source)) ||
                     Number(best.match.related) - Number(match.related) ||
@@ -602,7 +699,14 @@ export function buildOutreachGroundingContext(input: {
                     best.entry.sortOrder - entry.sortOrder ||
                     best.entry.id.localeCompare(entry.id)) > 0
                 )
-                  best = { entry, fact, content, match, dutyMatch };
+                  best = {
+                    entry,
+                    fact,
+                    content,
+                    match,
+                    dutyMatch,
+                    focusScore: score,
+                  };
               }
             }
             if (matched) matchedCount++;
@@ -624,6 +728,7 @@ export function buildOutreachGroundingContext(input: {
                 fact: best.fact,
                 content: best.content,
                 dutyMatch: best.dutyMatch,
+                focusScore: best.focusScore,
               };
             }
           }
@@ -705,11 +810,20 @@ export function buildOutreachGroundingContext(input: {
             ? matchDuty(fact)
             : rankFact(rankIntroduction, fact);
           if (!match && !allowUnmatchedIntroduction) return [];
-          return [{ entry, fact, content, match }];
+          return [
+            {
+              entry,
+              fact,
+              content,
+              match,
+              focusScore: recordFocusMatch(entry, fact),
+            },
+          ];
         }),
       )
       .sort(
         (a, b) =>
+          b.focusScore - a.focusScore ||
           compareRelevance(a.match, b.match) ||
           a.entry.sortOrder - b.entry.sortOrder ||
           a.entry.id.localeCompare(b.entry.id),
@@ -718,7 +832,9 @@ export function buildOutreachGroundingContext(input: {
     if (
       winner &&
       (!winningLinkedinFact ||
-        ((hasDuties || roleSpecified) &&
+        winner.focusScore > winningLinkedinFact.focusScore ||
+        (winner.focusScore === winningLinkedinFact.focusScore &&
+          (hasDuties || roleSpecified) &&
           compareRelevance(winner.match, winningLinkedinFact.dutyMatch) < 0))
     ) {
       const { entry, fact, content } = winner;
@@ -727,6 +843,7 @@ export function buildOutreachGroundingContext(input: {
         entryId: entry.id,
         fact,
         content,
+        focusScore: winner.focusScore,
       };
       linkedinTargets = [];
     }
@@ -753,7 +870,7 @@ export function buildOutreachGroundingContext(input: {
               linkedinTargets,
               target.connectionNoteLimit,
             ))
-          : explicit
+          : explicit && !proseFocusPriority
             ? budgetReviewedStory(
                 entry,
                 target.category === "cold_email" ? "email" : "linkedin",
@@ -816,7 +933,6 @@ export function buildOutreachGroundingContext(input: {
   const { sources } = prepared;
   let proseRelevantFactIds: ReadonlySet<string> | undefined;
   if (target.category !== "linkedin_connection") {
-    const matches = createReviewedFactMatcher(relevanceTarget);
     const survivingFactIds = new Set(prepared.safeAtoms.map(({ id }) => id));
     // Match original reviewed wording so markup escaping cannot add keywords.
     proseRelevantFactIds = new Set(
@@ -832,9 +948,23 @@ export function buildOutreachGroundingContext(input: {
           : readFactReview(entry, entry.factReview);
         return facts.flatMap((fact) => {
           const id = candidateEvidenceFactId(`evidence:${entry.id}`, fact.id);
-          return survivingFactIds.has(id) && matches(fact.excerpt) ? [id] : [];
+          return survivingFactIds.has(id) && matchesProseTarget?.(fact.excerpt)
+            ? [id]
+            : [];
         });
       }),
+    );
+  }
+  if (explicit && rankFocus) {
+    for (const entry of explicit)
+      for (const fact of readFactReview(entry, entry.factReview))
+        recordFocusMatch(entry, fact);
+  }
+  if (rankFocus && proseRelevantFactIds?.size) {
+    proseRelevantFactIds = new Set(
+      [...proseRelevantFactIds].sort(
+        (a, b) => (focusFactScores.get(b) ?? 0) - (focusFactScores.get(a) ?? 0),
+      ),
     );
   }
   const evidenceCount = sources.filter(
@@ -903,8 +1033,34 @@ export function buildOutreachGroundingContext(input: {
   )
     throw new SelectedEvidenceUnavailableError();
 
+  const matchFinalLinkedinTargets =
+    rankFocus && linkedin && linkedinTargets.length
+      ? createLinkedinTargetMatcher(linkedinTargets, target.connectionNoteLimit)
+      : undefined;
+  const matchedFocus =
+    rankFocus &&
+    prepared.safeAtoms.some(
+      (source) =>
+        focusFactScores.has(source.id) &&
+        (linkedin
+          ? (!matchFinalLinkedinTargets ||
+              matchFinalLinkedinTargets(source).length > 0) &&
+            isLinkedinExperience(source)
+          : proseRelevantFactIds?.has(source.id)),
+    );
+  const focusSelection: OutreachGroundingContext["focusSelection"] = focus
+    ? {
+        outcome: matchedFocus
+          ? "matched"
+          : explicit
+            ? "selection_conflict"
+            : "no_match",
+      }
+    : undefined;
+
   return {
     identity: input.candidate.identity,
+    ...(focusSelection ? { focusSelection } : {}),
     ...(selectionDiagnostics ? { selectionDiagnostics } : {}),
     ...(requiredEvidenceRoots ? { requiredEvidenceRoots } : {}),
     sources,

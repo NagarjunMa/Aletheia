@@ -88,6 +88,8 @@ export type OutreachGroundingMetadata = {
 };
 
 export type OutreachGroundingContext = {
+  /** Internal outcome for an explicit focus request, with no text or identifiers. */
+  focusSelection?: { outcome: "matched" | "no_match" | "selection_conflict" };
   /** Server-only roots that must be used in the result. */
   requiredEvidenceRoots?: readonly string[];
   /** Private selection status; never included in public eval metadata. */
