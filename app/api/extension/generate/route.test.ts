@@ -4840,20 +4840,26 @@ describe("POST /api/extension/generate", () => {
     expect(mockFrom).not.toHaveBeenCalled();
   });
 
-  it("rejects invalid YC input before legacy rate limiting", async () => {
+  it.each([
+    ["jd", { jd: "😀".repeat(39) + "x" }],
+    ["question", { question: "😀".repeat(4) + "x" }],
+    ["questions.1", { questions: ["Why this role?", "😀".repeat(4) + "x"] }],
+  ])("rejects invalid YC input at %s before dispatch", async (field, input) => {
     const res = await POST(
       makeRequest({
         method: "POST",
         headers: { authorization: "Bearer verified-token" },
-        body: { category: "yc_application", jd: "too short" },
+        body: { category: "yc_application", jd: "😀".repeat(40), ...input },
       }),
     );
 
     expect(res.status).toBe(400);
     await expect(res.json()).resolves.toMatchObject({
       code: "INVALID_REQUEST",
+      details: [expect.objectContaining({ field })],
     });
     expect(mockGenerateYcApplication).not.toHaveBeenCalled();
+    expect(mockAnthropicCreate).not.toHaveBeenCalled();
     expect(mockRpc).not.toHaveBeenCalled();
     expect(mockFrom).not.toHaveBeenCalled();
   });
