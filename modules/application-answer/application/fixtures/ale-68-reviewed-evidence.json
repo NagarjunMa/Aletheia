@@ -1,0 +1,26 @@
+{
+  "storyTitle": "Fictional internal platform pilot",
+  "jobDescription": "An internal engineering team needs help with Kubernetes deployments, billing reconciliation, keyboard accessibility, analytics events, and employee onboarding. The role involves implementation, testing, and documentation.",
+  "cases": [
+    {
+      "question": "How did you verify Kubernetes deployment and rollback?",
+      "reviewedAction": "I tested Kubernetes deployment and rollback behavior in a fictional staging cluster by preparing a small service, rolling out a configuration change to a limited set of pods, checking the readiness probes after every step, and documenting the commands and rollback expectations so another engineer could repeat the exercise during our internal pilot."
+    },
+    {
+      "question": "How did you reconcile duplicate billing ledger entries?",
+      "reviewedAction": "I tested billing reconciliation in a fictional sandbox by creating synthetic invoices and ledger entries, introducing duplicate records with the same reference, comparing the resulting totals against a hand checked table, and documenting the discrepancy cases so another engineer could repeat the reconciliation without relying on any customer, payment, or production data."
+    },
+    {
+      "question": "How did you check keyboard accessibility and focus in a dialog?",
+      "reviewedAction": "I evaluated keyboard accessibility in a fictional settings dialog by starting with the trigger focused, moving through every field with Tab and Shift Tab, dismissing the dialog with Escape, checking that focus returned to the trigger, and recording the expected behavior alongside the test cases for the team maintaining the interface."
+    },
+    {
+      "question": "How did you validate analytics event naming and payloads?",
+      "reviewedAction": "I validated analytics events in a fictional reporting prototype by writing a table of expected event names, exercising each interaction with synthetic inputs, comparing the payloads to the table, and recording the differences for the team so we could agree on naming and remove incorrect fields before the next internal review."
+    },
+    {
+      "question": "How did you document employee onboarding for a new teammate?",
+      "reviewedAction": "I documented employee onboarding for a fictional engineering team by drafting a first week checklist, separating required setup from optional background reading, testing the steps in a clean local environment, and asking a teammate to review the wording so future participants could identify which actions they could complete independently and which needed help."
+    }
+  ]
+}

@@ -4,7 +4,7 @@
   "fixtureFingerprint": "d5f62e0944578e5d2682a7c4df3f9ecbe978377ab6fb7c41a52f951edd2ef289",
   "configuration": {
     "outreachPromptVersion": "6.1.0",
-    "applicationPromptVersion": "yc-2.2.0",
+    "applicationPromptVersion": "yc-2.3.0",
     "model": "claude-sonnet-4-6",
     "temperatures": {
       "outreach": 0.8,

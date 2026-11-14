@@ -229,7 +229,7 @@ describe("paired hosted workload", () => {
         promptVersion: isYc
           ? enabled
             ? "yc-3.1.0"
-            : "yc-2.2.0"
+            : "yc-2.3.0"
           : enabled && defect !== "wrong-prompt"
             ? "7.1.0"
             : "6.1.0",
