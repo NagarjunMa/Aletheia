@@ -40,7 +40,7 @@ try {
       "-l",
       join(root, "server.log"),
       "-o",
-      `-h '' -k ${root} -p 55454`,
+      `-h '' -k ${root} -p 55454 -c timezone=UTC`,
       "start",
     ],
     { stdio: "pipe" },
@@ -55,6 +55,7 @@ try {
     "20260618164022_credit_based_billing.sql",
     "20260815180105_add_yc_application_billing_category.sql",
     "20260921012453_refund_review_queue.sql",
+    "20261114050948_refund_receipt_payload_retention.sql",
   ])
     sql(readFileSync(resolve("supabase/migrations", file), "utf8"));
   sql(
@@ -82,11 +83,13 @@ try {
       const child = spawn(pg("psql"), args, {
         stdio: ["pipe", "pipe", "pipe"],
       });
-      let error = "";
+      let output = "",
+        error = "";
+      child.stdout.on("data", (v) => (output += v));
       child.stderr.on("data", (v) => (error += v));
       child.on("error", reject);
       child.on("close", (code) =>
-        code === 0 ? resolve() : reject(new Error(error)),
+        code === 0 ? resolve(output) : reject(new Error(error)),
       );
       child.stdin.end(input);
     });
@@ -141,7 +144,7 @@ try {
       `BEGIN; SELECT refund_generation_credits('${user}',4,'${debit2}','{}'); UPDATE credit_ledger SET created_at='${anchor}'::timestamptz+interval '2 days' WHERE related_ledger_id='${debit2}'; SELECT 'READY_LATE';\n`,
     );
   });
-  const before = sql(`SELECT prepare_next_refund_week('${anchor}');`).trim();
+  sql(`SELECT prepare_next_refund_week('${anchor}');`);
   lateChild.stdin.end("COMMIT;");
   await lateDone;
   const after = sql(
@@ -163,6 +166,70 @@ try {
   console.log(
     "Late-commit regression passed: subsequent and caught-up runs expose reconciliation without modifying frozen receipts.",
   );
+
+  const competingClaims = await Promise.all(
+    Array.from({ length: 6 }, () =>
+      concurrent("SET ROLE service_role; SELECT claim_refund_receipt();"),
+    ),
+  );
+  const claimed = competingClaims.flatMap((output) =>
+    output
+      .split("\n")
+      .filter((line) => line.startsWith("{"))
+      .map(JSON.parse),
+  );
+  if (claimed.length !== 1)
+    throw new Error(
+      "Overlapping receipt workers did not acquire exactly one lease",
+    );
+  const activeReceiptId = claimed[0].receipt.id;
+  const leaseState = sql(
+    `SELECT attempts, lease_id FROM refund_receipt_delivery WHERE receipt_id='${activeReceiptId}';`,
+  ).trim();
+  if (leaseState !== `1|${claimed[0].leaseId}`)
+    throw new Error("A concurrent receipt claim replaced the original lease");
+  console.log("Concurrent receipt workers acquired the available lease once.");
+
+  // An aged prefix must not hide a later eligible receipt.
+  const nextClaim = JSON.parse(
+    sql(`BEGIN;
+      UPDATE refund_receipt_delivery
+      SET first_attempt_at=now()-interval '23 hours'+interval '50 milliseconds',
+          next_attempt_at=now()-interval '1 minute', lease_id=NULL, lease_until=NULL,
+          payload='{"to":["synthetic@example.test"]}'::jsonb
+      WHERE receipt_id='${activeReceiptId}';
+      UPDATE refund_receipts SET delivery_status='uncertain' WHERE id='${activeReceiptId}';
+      INSERT INTO refund_receipts(id,user_id,period_start,period_end,credits,generation_count,created_at)
+      VALUES ('33333333-3333-4333-8333-333333333333','${user}',now()-interval '42 days',now()-interval '35 days',4,1,now()+interval '1 second');
+      SELECT pg_sleep(0.1);
+      SELECT claim_refund_receipt();
+      COMMIT;`)
+      .split("\n")
+      .find((line) => line.startsWith("{")) ?? "null",
+  );
+  if (nextClaim?.receipt.id !== "33333333-3333-4333-8333-333333333333")
+    throw new Error(
+      "A receipt at its retry cutoff hid the next queued receipt",
+    );
+
+  // A freeze that arrives after lease expiry must leave the redacted row empty.
+  sql(`BEGIN;
+    UPDATE refund_receipt_delivery
+    SET first_attempt_at=now()-interval '23 hours', lease_until=now()+interval '50 milliseconds',
+        lease_id='44444444-4444-4444-8444-444444444444', payload=NULL
+    WHERE receipt_id='${activeReceiptId}';
+    SELECT pg_sleep(0.1);
+    DO $$
+    BEGIN
+      PERFORM freeze_refund_receipt_payload(
+        '${activeReceiptId}', '44444444-4444-4444-8444-444444444444',
+        '{"from":"test@example.test","to":["synthetic@example.test"],"subject":"Receipt","text":"Synthetic credits"}'::jsonb
+      );
+      RAISE EXCEPTION 'Expired lease froze a replacement payload';
+    EXCEPTION WHEN raise_exception THEN
+      IF SQLERRM <> 'Receipt lease expired' THEN RAISE; END IF;
+    END $$;
+    ROLLBACK;`);
 
   console.log(
     "Refund database checks passed: role denial, capture deduplication, ownership, review, idempotency and concurrent automatic/manual restoration.",

@@ -740,6 +740,10 @@ export type Database = {
     };
     Functions: {
       prepare_next_refund_week: { Args: { p_anchor: string }; Returns: Json };
+      clear_expired_refund_receipt_payloads: {
+        Args: Record<string, never>;
+        Returns: number;
+      };
       claim_refund_receipt: { Args: Record<string, never>; Returns: Json };
       freeze_refund_receipt_payload: {
         Args: { p_id: string; p_lease: string; p_payload: Json };

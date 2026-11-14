@@ -71,3 +71,55 @@ The subsequent evaluation found two P2 receipt-completeness defects, superseding
 Both are corrected locally. Scheduled preparation independently detects unassociated historical refunds, including on caught-up runs; reports a bounded count/overflow warning for manual reconciliation; never rewrites frozen receipts or credits. Worker backlog includes preparation state and uses the latest reconciliation snapshot without double-counting across passes. Added a partial refund timestamp index to the still-unreleased additive migration.
 
 Red evidence: two worker assertions failed against the old implementation; real PostgreSQL concurrent late-commit test failed with “Late refund silently lost after cursor advance.” Green database tests include separate uncommitted/refund transaction, no-existing-receipt cases, 101-record warning cap, repeated caught-up detection, manual preparation resolution and unchanged balances/frozen receipts. Fresh final CI/review evidence is recorded in ale-53-review.md. Unchanged UI browser evidence remains the preceding audit's passing run. Release prerequisites remain unchanged.
+
+## Scheduling and delivery-payload retention — 2026-11-14
+
+Critical. This slice starts from merged main at `7919607` and reuses the
+authenticated weekly-digest route and PostgreSQL outbox. Vercel runs the route three
+times a day using separate daily expressions. The reporting cursor still
+prepares only closed seven-day periods. Spaced ticks give transient sends two
+more opportunities within the 23-hour provider deduplication window during
+normal operation. Missed ticks, backlog and delivery uncertainty stay visible.
+
+The worker drains up to three batches of three attempts per invocation. It
+stops starting new batches before the function deadline or when claiming
+fails, reports remaining work, and keeps per-receipt leases authoritative.
+The database must recheck eligibility before renewing a lease under contention.
+The route logs aggregate counts and static error codes. The existing
+`CRON_SECRET` protects both operations. Delivery and retention each default
+off and can be enabled independently after isolated validation.
+
+Retention clears frozen recipient and message payloads once all three attempts
+are spent or the 23-hour window closes, after the active lease expires. Keep
+credit balances, ledger rows, receipt and refund links, review and audit history,
+and delivery reconciliation metadata under existing account-deletion rules.
+Deleting a delivery row would erase its idempotency history. This slice bounds
+the private email payload lifetime under normal scheduler operation.
+
+| Check                                      | Expected outcome                                                                                                                                                       | Regression it catches                                                                                  |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Route configuration and cron               | Daily expressions invoke the secret-protected route. Disabling email still permits opt-in retention.                                                                   | Scheduler cannot retry within 23 hours or cleanup depends on provider configuration.                   |
+| Outbox draining                            | A backlog advances over bounded batches. Claim failure or time limit leaves a backlog signal.                                                                          | A single three-receipt pass or repeated work past the deadline.                                        |
+| Real PostgreSQL roles, state and retention | Service-only cleanup is batched and preserves active leases, retryable payloads, reconciliation metadata and credits. A concurrent claim cannot replace a fresh lease. | Early redaction, indefinite abandoned payloads, regenerated receipts or duplicate lease authorization. |
+
+Use the existing refund worker and route suites and the disposable PostgreSQL
+harness before rollout. The hosted session will verify the scheduler, provider
+delivery and logs in isolation. Roll back with both flags disabled and redeploy.
+
+### Local verification
+
+- Node 24 reported 3,054 passing tests with 91.62% line coverage. Type
+  checks, formatting, engineering policy, lint, 15 guardrails, the
+  high-severity dependency gate, and a placeholder production build passed.
+  The dependency audit still reports 11 moderate advisories.
+- The built route rejected a request without the cron secret and returned
+  the disabled response for an authenticated request with both flags off.
+- The disposable PostgreSQL 17 harness verified service-only cleanup,
+  200-row batches, eligibility and lock handling, audit and ledger
+  preservation, exclusive claims, late refunds, and elapsed UTC reporting
+  across daylight saving. An older transaction could claim after the
+  23-hour cutoff before the fix. The regression passes with a wall-clock
+  eligibility check after locking. Additional regressions cover an expired
+  row ahead of eligible work and reject freezing a new payload after expiry.
+- Actual Vercel cron delivery, hosted migration and email delivery are
+  pending. No production settings were changed.

@@ -156,3 +156,47 @@ it("exposes capped late-refund warnings without an endless backlog loop", async 
     possiblyMore: false,
   });
 });
+
+it("drains at most nine queued sends without preparing new weeks per batch", async () => {
+  repository.claim.mockReset().mockResolvedValue(claim);
+  const send = vi.fn().mockResolvedValue(id);
+  const result = await deliverRefundReceipts(config, repository, send);
+  expect(result).toMatchObject({ sent: 9, possiblyMore: true });
+  expect(send).toHaveBeenCalledTimes(9);
+  expect(repository.prepare).toHaveBeenCalledTimes(1);
+  expect(repository.expire).toHaveBeenCalledTimes(1);
+});
+
+it("stops starting batches near the deadline and exposes the backlog", async () => {
+  repository.claim.mockReset().mockResolvedValue(claim);
+  const clock = vi
+    .spyOn(performance, "now")
+    .mockReturnValueOnce(0)
+    .mockReturnValue(31_000);
+  try {
+    const send = vi.fn().mockResolvedValue(id);
+    expect(await deliverRefundReceipts(config, repository, send)).toMatchObject(
+      {
+        sent: 0,
+        possiblyMore: true,
+      },
+    );
+    expect(repository.claim).not.toHaveBeenCalled();
+  } finally {
+    clock.mockRestore();
+  }
+});
+
+it("stops after a claim failure and reports that work may remain", async () => {
+  repository.claim
+    .mockReset()
+    .mockResolvedValue(null)
+    .mockRejectedValueOnce(new Error("Database unavailable"));
+  const send = vi.fn();
+  expect(await deliverRefundReceipts(config, repository, send)).toMatchObject({
+    uncertain: 1,
+    possiblyMore: true,
+  });
+  expect(repository.claim).toHaveBeenCalledTimes(3);
+  expect(send).not.toHaveBeenCalled();
+});

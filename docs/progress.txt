@@ -2080,3 +2080,9 @@ No new cost, model judge, acceptance waiver or release approved.
 - Based on main 8a65fef. The operator CLI requires two protected same-SHA isolated previews, verifies extension versions and signs in to two distinct synthetic accounts. Sixteen fixed requests cover five matched paths, two legacy requests and four expected denials. Both request and token caps are checked before networking.
 - Fixture and transport regressions exercise the real composers, wrong deployment/account/version, the switched LinkedIn fact and focused prose fact order, privacy canaries and first-failure stopping. Both Preview arms must attest that provider wire debug is off. Reports retain request IDs, timing, status and counts. No live calls or configuration changes in this slice.
 - See docs/operations/message-focus-rollout.md for approved execution and remaining hosted acceptance. Keep ALE-59 In Progress and Message Focus off in production.
+
+2026-11-14 — ALE-53 refund receipt scheduling and payload retention.
+- Synchronized main to 7919607 after ALE-59 merged. Started an isolated ALE-53 worktree.
+- Added a protected Vercel schedule for closed UTC reporting weeks and bounded backlog draining. Receipt claims retain their own leases and provider idempotency keys.
+- Added opt-in cleanup for frozen delivery payloads after their retry window or attempt budget is exhausted. The cleanup retains financial and delivery audit records.
+- ALE-53 and ALE-59 stay In Progress. ALE-53 hosted scheduler and provider checks remain pending. See the refund review runbook for rollout and recovery.
