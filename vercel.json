@@ -7,6 +7,18 @@
     {
       "path": "/api/internal/quality/cleanup",
       "schedule": "37 3 * * *"
+    },
+    {
+      "path": "/api/internal/refunds/weekly-digest",
+      "schedule": "17 4 * * *"
+    },
+    {
+      "path": "/api/internal/refunds/weekly-digest",
+      "schedule": "17 12 * * *"
+    },
+    {
+      "path": "/api/internal/refunds/weekly-digest",
+      "schedule": "17 20 * * *"
     }
   ]
 }

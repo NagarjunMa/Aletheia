@@ -81,8 +81,62 @@ DO $$ DECLARE anchor timestamptz:=date_trunc('day',now())-interval '14 days'; d 
  ASSERT (result->>'lateRefunds')::int=0 AND NOT (result->>'lateRefundsMore')::boolean;
  ASSERT (SELECT balance FROM public.user_credit_accounts WHERE user_id='22222222-2222-4222-8222-222222222222')=40, 'reconciliation changed balance';
 END $$;
+-- Scheduled periods use elapsed weeks even when the caller crosses DST.
+SET LOCAL TIME ZONE 'America/New_York';
+DO $$ DECLARE dst_anchor timestamptz:='2026-10-26T00:00:00Z'; result jsonb; BEGIN
+ UPDATE public.refund_receipt_schedule SET anchor=dst_anchor, next_start=dst_anchor WHERE singleton;
+ result:=public.prepare_next_refund_week(dst_anchor);
+ ASSERT (SELECT next_start FROM public.refund_receipt_schedule WHERE singleton)='2026-11-02T00:00:00Z'::timestamptz, 'scheduled period shifted at DST';
+ ASSERT (result->>'prepared')::int=0;
+END $$;
+SET LOCAL TIME ZONE 'UTC';
+-- Retire expired private payloads without erasing leases, outcomes or receipt links.
+DO $$
+DECLARE sample uuid; retained uuid; active uuid; aged uuid; kept uuid; claimed jsonb; late_lease uuid:=gen_random_uuid();
+ item_count integer; ledger_count integer; refund_count integer;
+BEGIN
+ SELECT count(*) INTO item_count FROM public.refund_receipt_items;
+ SELECT count(*) INTO ledger_count FROM public.credit_ledger;
+ SELECT count(*) INTO refund_count FROM public.refund_review_cases;
+ INSERT INTO public.refund_receipts(user_id,period_start,period_end,credits,generation_count,delivery_status)
+ SELECT '11111111-1111-4111-8111-111111111111', now()-make_interval(days => n+7),
+   now()-make_interval(days => n), 4, 1, 'uncertain' FROM generate_series(30,234) n;
+ INSERT INTO public.refund_receipt_delivery(receipt_id,first_attempt_at,attempts,payload,last_code)
+ SELECT id, now()-interval '25 hours', 1, jsonb_build_object('to',jsonb_build_array('private@example.test')), 'EMAIL_UNCONFIRMED'
+ FROM public.refund_receipts WHERE period_end<=now()-interval '30 days';
+ SELECT id INTO sample FROM public.refund_receipts WHERE period_end=now()-interval '30 days';
+ SELECT id INTO retained FROM public.refund_receipts WHERE period_end=now()-interval '31 days';
+ SELECT id INTO active FROM public.refund_receipts WHERE period_end=now()-interval '32 days';
+ SELECT id INTO aged FROM public.refund_receipts WHERE period_end=now()-interval '33 days';
+ SELECT id INTO kept FROM public.refund_receipts WHERE period_end=now()-interval '34 days';
+ UPDATE public.refund_receipt_delivery SET first_attempt_at=now()-interval '2 hours', attempts=3 WHERE receipt_id=sample;
+ UPDATE public.refund_receipt_delivery SET first_attempt_at=now()-interval '22 hours' WHERE receipt_id=retained;
+ UPDATE public.refund_receipt_delivery SET lease_id=gen_random_uuid(),lease_until=now()+interval '1 minute' WHERE receipt_id=active;
+ UPDATE public.refund_receipt_delivery SET first_attempt_at=now()-interval '23 hours',lease_until=now(),lease_id=late_lease WHERE receipt_id=aged;
+ UPDATE public.refund_receipt_delivery SET first_attempt_at=now()-interval '2 hours', attempts=2 WHERE receipt_id=kept;
+ ASSERT public.clear_expired_refund_receipt_payloads()=200, 'retention did not cap first pass';
+ ASSERT public.clear_expired_refund_receipt_payloads()=2, 'retention did not drain eligible rows';
+ ASSERT public.clear_expired_refund_receipt_payloads()=0, 'retention did not converge';
+ ASSERT (SELECT count(*) FROM public.refund_receipt_delivery WHERE receipt_id IN(retained,active,kept) AND payload IS NOT NULL)=3, 'lost active or retryable payload';
+ ASSERT (SELECT count(*) FROM public.refund_receipt_delivery WHERE receipt_id IN(sample,aged) AND payload IS NULL AND last_code='EMAIL_UNCONFIRMED')=2, 'terminal state or payload not preserved correctly';
+ ASSERT (SELECT count(*) FROM public.refund_receipt_items)=item_count, 'retention removed a receipt association';
+ ASSERT (SELECT count(*) FROM public.credit_ledger)=ledger_count, 'retention changed ledger rows';
+ ASSERT (SELECT count(*) FROM public.refund_review_cases)=refund_count, 'retention changed review cases';
+ ASSERT EXISTS (SELECT 1 FROM public.refund_receipts WHERE id=sample AND delivery_status='uncertain');
+ claimed:=public.claim_refund_receipt();
+ ASSERT claimed IS NULL OR (claimed->'receipt'->>'id')::uuid NOT IN(sample,aged), 'expired receipt reclaimed after redaction';
+ ASSERT public.finish_refund_receipt(aged,late_lease,gen_random_uuid(),NULL), 'retention lost the provider acknowledgement lease';
+ ASSERT EXISTS (SELECT 1 FROM public.refund_receipts WHERE id=aged AND delivery_status='sent');
+ ASSERT EXISTS (SELECT 1 FROM public.refund_receipt_delivery WHERE receipt_id=aged AND provider_id IS NOT NULL AND payload IS NULL);
+
+END $$;
+SET LOCAL ROLE anon;
+DO $$ BEGIN
+ BEGIN PERFORM public.clear_expired_refund_receipt_payloads(); RAISE EXCEPTION 'unauthorized cleanup'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
 SET LOCAL ROLE authenticated;
 DO $$ BEGIN
+ BEGIN PERFORM public.clear_expired_refund_receipt_payloads(); RAISE EXCEPTION 'unauthorized cleanup'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
  BEGIN PERFORM public.prepare_refund_receipts(now()-interval '14 days',now()-interval '7 days'); RAISE EXCEPTION 'unauthorized receipt'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
  BEGIN PERFORM * FROM public.refund_review_cases; RAISE EXCEPTION 'unauthorized read'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
  BEGIN PERFORM public.list_refund_cases('{}'); RAISE EXCEPTION 'unauthorized RPC'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;

@@ -11,9 +11,13 @@ export type DeliveryConfig = z.infer<typeof deliveryConfigSchema>;
 /** This worker has no credit mutation capability. Mail outcomes cannot re-credit. */
 export async function deliverRefundReceipts(
   config: DeliveryConfig,
-  repository = createReceiptRepository(),
+  repository: Omit<
+    ReturnType<typeof createReceiptRepository>,
+    "clearExpiredPayloads"
+  > = createReceiptRepository(),
   send = sendRefundEmail,
 ) {
+  const startedAt = performance.now();
   deliveryConfigSchema.parse(config);
   let lateRefunds = 0;
   let lateRefundsMore = false;
@@ -72,22 +76,33 @@ export async function deliverRefundReceipts(
       return "uncertain";
     }
   }
-  // Three leased deliveries in parallel bound per-run work. Saturation tells the
-  // scheduler/operator to run again; a weekly trigger alone cannot drain a backlog.
-  const results = await Promise.allSettled([
-    deliverOne(),
-    deliverOne(),
-    deliverOne(),
-  ]);
-  const outcomes = results.map((r) =>
-    r.status === "fulfilled" ? r.value : "uncertain",
-  );
-  return {
-    sent: outcomes.filter((v) => v === "sent").length,
-    uncertain: outcomes.filter((v) => v === "uncertain").length,
-    failed: outcomes.filter((v) => v === "failed").length,
-    lateRefunds,
-    lateRefundsMore,
-    possiblyMore: preparationPending || !outcomes.includes("empty"),
-  };
+  const totals = { sent: 0, uncertain: 0, failed: 0 };
+  let possiblyMore = true;
+  for (let batch = 0; batch < 3; batch++) {
+    // A batch has up to 23 seconds of sequential I/O on each parallel lane.
+    if (performance.now() - startedAt >= 30_000) break;
+    const results = await Promise.allSettled([
+      deliverOne(),
+      deliverOne(),
+      deliverOne(),
+    ]);
+    let empty = false;
+    let unconfirmed = false;
+    for (const result of results) {
+      if (result.status === "rejected") {
+        totals.uncertain++;
+        unconfirmed = true;
+      } else if (result.value === "empty") {
+        empty = true;
+      } else {
+        totals[result.value]++;
+      }
+    }
+    if (unconfirmed) break;
+    if (empty) {
+      possiblyMore = preparationPending;
+      break;
+    }
+  }
+  return { ...totals, lateRefunds, lateRefundsMore, possiblyMore };
 }

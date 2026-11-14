@@ -32,6 +32,13 @@ export function createReceiptRepository() {
         .abortSignal(AbortSignal.timeout(3000));
       if (error) throw new Error("RECEIPT_RECOVERY_FAILED");
     },
+    async clearExpiredPayloads() {
+      const { data, error } = await db
+        .rpc("clear_expired_refund_receipt_payloads", {})
+        .abortSignal(AbortSignal.timeout(3000));
+      if (error) throw new Error("RECEIPT_RETENTION_UNCONFIRMED");
+      return z.number().int().min(0).max(200).parse(data);
+    },
     async claim() {
       const { data, error } = await db
         .rpc("claim_refund_receipt", {})
