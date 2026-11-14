@@ -1,3 +1,4 @@
+import acceptanceFixture from "./fixtures/ale-68-reviewed-evidence.json";
 import { allowedClaimTexts } from "@/modules/grounding/domain/atomic-claim";
 import { describe, expect, it, vi } from "vitest";
 import { SelectedEvidenceUnavailableError } from "@/modules/candidate-context/application/selected-evidence";
@@ -23,7 +24,10 @@ import { buildYcGroundingContext } from "./build-yc-grounding-context";
 import { buildYcPlannedTool } from "../infrastructure/yc-planned-tool";
 import { planSelection } from "@/modules/grounding/domain/rhetorical-plan";
 import { startGenerationAttempt } from "@/modules/outreach/infrastructure/extension-generate.repository";
-import { candidateProfileInputSchema } from "@/lib/candidate-profile/schema";
+import {
+  candidateEvidenceInputSchema,
+  candidateProfileInputSchema,
+} from "@/lib/candidate-profile/schema";
 
 it("rejects unusable bounded evidence before any quota, credit or model request", async () => {
   const context = buildYcGroundingContext({
@@ -651,7 +655,7 @@ describe("generateYcApplication", () => {
       creditsRemaining: 36,
       evalMetadata: {
         generationId: "33333333-3333-4333-8333-333333333333",
-        promptVersion: "yc-2.2.0",
+        promptVersion: "yc-2.3.0",
         model: "claude-test-model",
         category: "yc_application",
         profileFieldCount: 2,
@@ -955,13 +959,16 @@ describe("ALE-37 batch orchestration", () => {
   const run = (
     deps: GenerateYcApplicationDependencies,
     submittedQuestions = questions,
+    jd = request.jd,
+    rhetoricalPlans = false,
   ) =>
     generateYcApplication(
       {
         caller,
+        rhetoricalPlans,
         request: {
           category: "yc_application",
-          jd: request.jd,
+          jd,
           questions: submittedQuestions,
         },
         corsHeaders: {},
@@ -1017,11 +1024,13 @@ describe("ALE-37 batch orchestration", () => {
       submittedQuestions: string[],
       factIndices: number[][],
       reviewedExcerpts = excerpts,
+      jobDescription = request.jd,
+      title = "Internal pilot",
     ) {
       const record = {
         id: "11111111-1111-4111-8111-111111111111",
         kind: "technical_project" as const,
-        title: "Internal pilot",
+        title,
         context: "",
         actions: reviewedExcerpts.join("\n"),
         outcome: "",
@@ -1040,7 +1049,7 @@ describe("ALE-37 batch orchestration", () => {
       const context = buildYcGroundingContext({
         question: submittedQuestions[0]!,
         questions: submittedQuestions,
-        jobDescription: request.jd,
+        jobDescription,
         candidate: {
           identity: { fullName: "", linkedinUrl: "" },
           profile: candidateProfileInputSchema.parse({
@@ -1048,7 +1057,13 @@ describe("ALE-37 batch orchestration", () => {
           }),
           resume: { text: "", source: "none" },
           confirmedEvidence: [
-            { ...record, factReview: prepareFactReview(record, facts) },
+            {
+              ...record,
+              factReview: prepareFactReview(
+                candidateEvidenceInputSchema.parse(record),
+                facts,
+              ),
+            },
           ],
         },
       });
@@ -1101,6 +1116,148 @@ describe("ALE-37 batch orchestration", () => {
         ]);
       }
     });
+
+    it("rejects a single relevant but too-short reviewed fact before admission", async () => {
+      const { question, reviewedAction } = acceptanceFixture.cases[0]!;
+      const shortFact = reviewedAction.split(" by ")[0] + ".";
+      const deps = withReviewedFacts(
+        [question],
+        [[0]],
+        [shortFact, acceptanceFixture.cases[1]!.reviewedAction],
+        acceptanceFixture.jobDescription,
+        acceptanceFixture.storyTitle,
+      );
+
+      const response = await run(
+        deps,
+        [question],
+        acceptanceFixture.jobDescription,
+      );
+
+      expect(response.status).toBe(422);
+      expect(await response.json()).toMatchObject({
+        code: "INSUFFICIENT_GROUNDING",
+        billing: "none",
+      });
+      expect(deps.checkRateLimit).not.toHaveBeenCalled();
+      expect(deps.reserveCredits).not.toHaveBeenCalled();
+      expect(deps.createMessage).not.toHaveBeenCalled();
+    });
+
+    it("accepts a feasible reviewed fact when the best lexical match is too short", async () => {
+      const question =
+        "How did you verify Kubernetes deployment and rollback behavior?";
+      const shortFact =
+        "I checked Kubernetes deployment and rollback behavior in a fictional sandbox by setting up a disposable service, reviewing its readiness status, and recording the commands used to restore its previous configuration during a rehearsal with the platform team.";
+      const completeFact =
+        "I recovered a Kubernetes pod from a bad change in a fictional training cluster by inspecting its status and selecting the previous container image. I checked each stage against the written exercise, compared the new pod state with the original notes, and saved the steps in the training guide. Another engineer then repeated the exercise without help to check that the guide covered the whole procedure. I added instructions for identifying the affected service, recording the original image, reporting results, and resetting the training cluster for the next participant without touching production.";
+      const deps = withReviewedFacts(
+        [question],
+        [[1]],
+        [shortFact, completeFact],
+      );
+
+      const response = await run(deps, [question]);
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({
+        answers: [{ question, body: completeFact }],
+      });
+    });
+
+    it.each([
+      [1, false],
+      [5, false],
+      [1, true],
+      [5, true],
+    ] as const)(
+      "uses the acceptance fixture to answer %i distinct questions (planned=%s)",
+      async (count, rhetoricalPlans) => {
+        const cases = acceptanceFixture.cases.slice(0, count);
+        const questions = cases.map(({ question }) => question);
+        const facts = acceptanceFixture.cases.map(
+          ({ reviewedAction }) => reviewedAction,
+        );
+        const deps = withReviewedFacts(
+          questions,
+          cases.map((_, index) => [index]),
+          facts,
+          acceptanceFixture.jobDescription,
+          acceptanceFixture.storyTitle,
+        );
+
+        if (rhetoricalPlans) {
+          vi.mocked(deps.createMessage).mockImplementation(
+            async ({ plannedOptions }) => {
+              const answers = plannedOptions!.map(
+                ({ questionId, options }, index) => {
+                  const option = options.find(
+                    ({ body }) => body === cases[index]!.reviewedAction,
+                  )!;
+                  return {
+                    questionId,
+                    option_id: option.id,
+                    rhetorical_plan: planSelection(option.rhetoricalPlan),
+                  };
+                },
+              );
+              return {
+                stop_reason: "tool_use",
+                content: [
+                  {
+                    type: "tool_use",
+                    name: "return_application_answers",
+                    input: { answers },
+                  },
+                ],
+                usage: { input_tokens: 120, output_tokens: 80 },
+              } as Awaited<
+                ReturnType<GenerateYcApplicationDependencies["createMessage"]>
+              >;
+            },
+          );
+        }
+
+        const response = await run(
+          deps,
+          questions,
+          acceptanceFixture.jobDescription,
+          rhetoricalPlans,
+        );
+
+        expect(response.status).toBe(200);
+        const payload = await response.json();
+        expect(payload.answers).toEqual(
+          cases.map(({ question, reviewedAction }, index) => ({
+            questionId: `q${index + 1}`,
+            question,
+            body: reviewedAction,
+            word_count: reviewedAction.split(/\s+/u).length,
+            character_count: reviewedAction.length,
+          })),
+        );
+        expect(
+          new Set(payload.answers.map(({ body }: { body: string }) => body))
+            .size,
+        ).toBe(count);
+        expect(deps.createMessage).toHaveBeenCalledTimes(1);
+        const [{ userPrompt }] = vi.mocked(deps.createMessage).mock.calls[0]!;
+        expect(
+          Array.from(
+            userPrompt.matchAll(
+              /<application_question id="q\d" source_ids="([^"]*)"/gu,
+            ),
+            ([, ids]) => ids,
+          ),
+        ).toEqual(
+          cases.map((_, index) =>
+            expect.stringMatching(
+              new RegExp(`^evidence:[^ ]+22222222222${index}$`),
+            ),
+          ),
+        );
+      },
+    );
 
     it("rejects a reviewed but unrelated fact from the same story", async () => {
       const submitted = [topicQuestions[0]!, topicQuestions[1]!];
@@ -2566,11 +2723,15 @@ it.each([
   "selected",
   "too-short",
   "excluded",
+  "legacy-too-short",
+  "legacy-excluded",
 ] as const)("handles sparse approved YC evidence (%s)", async (mode) => {
-  const actions =
-    mode === "too-short"
-      ? "The platform team improved TypeScript deployment reliability."
-      : "The platform team implemented a TypeScript rollout for the customer dashboard, introduced a deployment checklist, compared reliability metrics after release, documented recovery steps for other engineers, coordinated stakeholder feedback, and reviewed every production change with the on-call engineer before gradually enabling the new dashboard.";
+  const legacy = mode.startsWith("legacy");
+  const tooShort = mode.endsWith("too-short");
+  const excluded = mode.endsWith("excluded");
+  const actions = tooShort
+    ? "The platform team improved TypeScript deployment reliability."
+    : "The platform team implemented a TypeScript rollout for the customer dashboard, introduced a deployment checklist, compared reliability metrics after release, documented recovery steps for other engineers, coordinated stakeholder feedback, and reviewed every production change with the on-call engineer before gradually enabling the new dashboard.";
   const record = {
     id: "11111111-1111-4111-8111-111111111111",
     kind: "technical_project" as const,
@@ -2598,14 +2759,14 @@ it.each([
   const courtesy = "Thank you for considering my application.";
   const context = buildYcGroundingContext({
     question,
-    ...(mode !== "legacy" && { questions }),
+    ...(!legacy && { questions }),
     ...(selectedEvidenceIds && { selectedEvidenceIds }),
     jobDescription: jd,
     candidate: {
       identity: { fullName: "", linkedinUrl: "" },
       profile: candidateProfileInputSchema.parse({
         currentRole: "Platform Engineer",
-        ...(mode === "excluded" && { excludedClaims: [courtesy] }),
+        ...(excluded && { excludedClaims: [courtesy] }),
       }),
       resume: { text: "", source: "none" },
       confirmedEvidence: [
@@ -2644,18 +2805,16 @@ it.each([
       content: [
         {
           type: "tool_use",
-          name:
-            mode === "legacy"
-              ? "return_yc_application_answer"
-              : "return_application_answers",
-          input:
-            mode === "legacy"
-              ? { claims }
-              : {
-                  answers: questions
-                    .map((_, i) => ({ questionId: `q${i + 1}`, claims }))
-                    .reverse(),
-                },
+          name: legacy
+            ? "return_yc_application_answer"
+            : "return_application_answers",
+          input: legacy
+            ? { claims }
+            : {
+                answers: questions
+                  .map((_, i) => ({ questionId: `q${i + 1}`, claims }))
+                  .reverse(),
+              },
         },
       ],
       usage: { input_tokens: 120, output_tokens: 80 },
@@ -2666,15 +2825,14 @@ it.each([
   const response = await generateYcApplication(
     {
       caller,
-      request:
-        mode === "legacy"
-          ? { category: "yc_application", jd, question }
-          : {
-              category: "yc_application",
-              jd,
-              questions,
-              ...(selectedEvidenceIds && { selectedEvidenceIds }),
-            },
+      request: legacy
+        ? { category: "yc_application", jd, question }
+        : {
+            category: "yc_application",
+            jd,
+            questions,
+            ...(selectedEvidenceIds && { selectedEvidenceIds }),
+          },
       corsHeaders: {},
       applicationBaseUrl: "https://example.test",
       rhetoricalPlans: false,
@@ -2683,8 +2841,20 @@ it.each([
     deps,
   );
   const payload = await response.json();
+  if (!legacy && (tooShort || excluded)) {
+    expect(response.status).toBe(422);
+    expect(payload).toMatchObject({
+      code: "INSUFFICIENT_GROUNDING",
+      billing: "none",
+    });
+    expect(warn).not.toHaveBeenCalled();
+    expect(deps.checkRateLimit).not.toHaveBeenCalled();
+    expect(deps.reserveCredits).not.toHaveBeenCalled();
+    expect(deps.createMessage).not.toHaveBeenCalled();
+    return;
+  }
   expect(deps.createMessage).toHaveBeenCalledTimes(1);
-  if (mode === "too-short" || mode === "excluded") {
+  if (tooShort || excluded) {
     expect(response.status).toBe(502);
     expect(payload).toMatchObject({
       code: "YC_OUTPUT_INVALID",
@@ -2692,13 +2862,12 @@ it.each([
     });
     expect(warn).toHaveBeenCalledWith(
       expect.objectContaining({
-        validationCode:
-          mode === "too-short" ? "OUTPUT_LIMIT" : "CLAIM_EXCLUDED",
+        validationCode: tooShort ? "OUTPUT_LIMIT" : "CLAIM_EXCLUDED",
         itemIndex: 1,
       }),
       expect.any(String),
     );
-    if (mode === "too-short") {
+    if (tooShort) {
       expect(deps.sanitizeOutput).toHaveBeenCalledWith(
         expect.objectContaining({ body: text }),
       );
@@ -2708,7 +2877,7 @@ it.each([
   }
   expect(response.status).toBe(200);
   const body = `${text}\n${courtesy}`;
-  if (mode === "legacy") {
+  if (legacy) {
     expect(payload).toMatchObject({ body, word_count: 53 });
   } else {
     expect(payload.answers).toEqual(

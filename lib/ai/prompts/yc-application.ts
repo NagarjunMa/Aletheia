@@ -11,7 +11,7 @@ import {
   type YcGroundingContext,
 } from "@/modules/application-answer/domain/yc-grounding.types";
 
-export const YC_APPLICATION_PROMPT_VERSION = "yc-2.2.0";
+export const YC_APPLICATION_PROMPT_VERSION = "yc-2.3.0";
 export const RHETORICAL_YC_PROMPT_VERSION = "yc-3.1.0";
 
 export const YC_APPLICATION_SYSTEM_PROMPT = `You write concise answers for startup job application forms.
@@ -91,7 +91,9 @@ export function buildYcApplicationPrompt(
           : "") +
         ((context.questions?.length ?? 0) > 1
           ? "\nFor each question, use at least one of its leading_source_ids as direct evidence. Share relevant claims where needed. Questions with the same question_group may reuse an answer. Different groups must use different sets of reviewed excerpts; reordering or using another approved wording of an excerpt does not make it different."
-          : ""),
+          : context.questions?.[0]?.leadingFactIds
+            ? "\nUse at least one of the question’s leading_source_ids as direct evidence."
+            : ""),
     userPrompt: [
       buildAtomicProvenancePrompt(atomicSources),
       ...selectedStories,

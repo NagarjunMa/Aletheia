@@ -113,8 +113,13 @@ describe("YC application prompt", () => {
     const listed = prompt.userPrompt
       .match(/source_ids="([^"]*)"/u)?.[1]
       ?.split(" ");
-    expect(listed).toEqual(context.atomicSources?.map((source) => source.id));
-    expect(listed).toContain(`evidence:policy.fact.${factId}`);
+    expect(listed).toEqual([`evidence:policy.fact.${factId}`]);
+    expect(prompt.userPrompt).toContain(
+      `leading_source_ids="evidence:policy.fact.${factId}"`,
+    );
+    expect(prompt.systemPrompt).toContain(
+      "leading_source_ids as direct evidence",
+    );
     expect(listed).not.toContain("profile.current_role.value");
   });
   it("scans later batch questions and binds their server IDs to selected sources", () => {
@@ -163,7 +168,7 @@ describe("YC application prompt", () => {
   });
 
   it("freezes a dedicated prompt version and grounded output rules", () => {
-    expect(YC_APPLICATION_PROMPT_VERSION).toBe("yc-2.2.0");
+    expect(YC_APPLICATION_PROMPT_VERSION).toBe("yc-2.3.0");
     expect(YC_APPLICATION_SYSTEM_PROMPT).toContain("50 to 150 words");
     expect(YC_APPLICATION_SYSTEM_PROMPT).toContain("source_ids");
     expect(YC_APPLICATION_SYSTEM_PROMPT).toContain(
@@ -243,7 +248,7 @@ describe("YC application prompt", () => {
 
 it("gives the actual singular atomic claim contract precedence over background labels", () => {
   const { systemPrompt } = buildYcApplicationPrompt(groundingContext());
-  expect(YC_APPLICATION_PROMPT_VERSION).toBe("yc-2.2.0");
+  expect(YC_APPLICATION_PROMPT_VERSION).toBe("yc-2.3.0");
   expect(systemPrompt).toContain("candidate_sources is background context");
   expect(systemPrompt).toContain("source_id");
   expect(systemPrompt).toContain("supporting_excerpt");
