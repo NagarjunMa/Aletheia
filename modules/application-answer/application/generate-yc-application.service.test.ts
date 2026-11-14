@@ -20,6 +20,8 @@ import { createLogger } from "@/lib/logger";
 import { sanitizeLogFields } from "@/lib/logging-core";
 import { prepareFactReview } from "@/lib/candidate-profile/fact-review";
 import { buildYcGroundingContext } from "./build-yc-grounding-context";
+import { buildYcPlannedTool } from "../infrastructure/yc-planned-tool";
+import { planSelection } from "@/modules/grounding/domain/rhetorical-plan";
 import { startGenerationAttempt } from "@/modules/outreach/infrastructure/extension-generate.repository";
 import { candidateProfileInputSchema } from "@/lib/candidate-profile/schema";
 
@@ -321,43 +323,61 @@ function dependencies(
 }
 
 describe("ALE-56 server-owned YC admission", () => {
-  it("charges an exact five-question batch eight work units before any model call", async () => {
-    const deps = dependencies({
-      startAttempt: vi.fn().mockResolvedValue({
-        allowed: false,
-        unavailable: false,
-        code: "WORK_BUDGET_REACHED",
-        retryTime: Date.now() + 60_000,
-      }),
-    });
-    const response = await generateYcApplication(
-      {
-        caller,
-        request: {
-          category: "yc_application",
-          jd: request.jd,
-          questions: Array.from(
-            { length: 5 },
-            (_, index) => `Why does experience ${index + 1} fit this role?`,
-          ),
+  it.each([
+    [undefined, 1],
+    [1, 2],
+    [2, 4],
+    [3, 5],
+    [4, 7],
+    [5, 8],
+  ])(
+    "checks YC question count %s at %i work units before the provider",
+    async (questionCount, workUnits) => {
+      const deps = dependencies({
+        startAttempt: vi.fn().mockResolvedValue({
+          allowed: false,
+          unavailable: false,
+          code: "WORK_BUDGET_REACHED",
+          retryTime: Date.now() + 60_000,
+        }),
+      });
+      const response = await generateYcApplication(
+        {
+          caller,
+          request: {
+            category: "yc_application",
+            jd: request.jd,
+            ...(questionCount === undefined
+              ? { question: request.question }
+              : {
+                  questions: Array.from(
+                    { length: questionCount },
+                    (_, index) =>
+                      `Why does experience ${index + 1} fit this role?`,
+                  ),
+                }),
+          },
+          corsHeaders: {},
+          applicationBaseUrl: "https://aletheia.live",
         },
-        corsHeaders: {},
-        applicationBaseUrl: "https://aletheia.live",
-      },
-      deps,
-    );
-    expect(response.status).toBe(429);
-    expect(response.headers.get("Retry-After")).toMatch(/^\d+$/u);
-    expect(deps.startAttempt).toHaveBeenCalledWith(
-      caller.userId,
-      expect.any(String),
-      8,
-      expect.any(Object),
-    );
-    expect(deps.createMessage).not.toHaveBeenCalled();
-    expect(deps.releaseRateLimit).toHaveBeenCalledTimes(1);
-    expect(deps.refundCredits).toHaveBeenCalledTimes(1);
-  });
+        deps,
+      );
+      expect(response.status).toBe(429);
+      expect(await response.json()).toMatchObject({
+        code: "WORK_BUDGET_REACHED",
+      });
+      expect(response.headers.get("Retry-After")).toMatch(/^\d+$/u);
+      expect(deps.startAttempt).toHaveBeenCalledWith(
+        caller.userId,
+        expect.any(String),
+        workUnits,
+        expect.any(Object),
+      );
+      expect(deps.createMessage).not.toHaveBeenCalled();
+      expect(deps.releaseRateLimit).toHaveBeenCalledTimes(1);
+      expect(deps.refundCredits).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it("compensates a delayed real-SDK admission without calling the YC model", async () => {
     let elapsed = 0;
@@ -631,7 +651,7 @@ describe("generateYcApplication", () => {
       creditsRemaining: 36,
       evalMetadata: {
         generationId: "33333333-3333-4333-8333-333333333333",
-        promptVersion: "yc-2.1.0",
+        promptVersion: "yc-2.2.0",
         model: "claude-test-model",
         category: "yc_application",
         profileFieldCount: 2,
@@ -927,11 +947,23 @@ describe("ALE-37 batch orchestration", () => {
     "Why are you a strong candidate?",
     "Describe your production experience?",
   ];
-  const run = (deps: GenerateYcApplicationDependencies) =>
+  const fiveQuestions = Array.from(
+    { length: 5 },
+    (_, index) =>
+      `Describe your relevant experience for question ${index + 1}?`,
+  );
+  const run = (
+    deps: GenerateYcApplicationDependencies,
+    submittedQuestions = questions,
+  ) =>
     generateYcApplication(
       {
         caller,
-        request: { category: "yc_application", jd: request.jd, questions },
+        request: {
+          category: "yc_application",
+          jd: request.jd,
+          questions: submittedQuestions,
+        },
         corsHeaders: {},
         applicationBaseUrl: "https://aletheia.live",
       },
@@ -965,6 +997,338 @@ describe("ALE-37 batch orchestration", () => {
       }),
     });
   }
+  describe("question-specific reviewed facts in one story", () => {
+    const topics = [
+      "Kubernetes",
+      "Billing",
+      "Accessibility",
+      "Analytics",
+      "Onboarding",
+    ];
+    const topicQuestions = topics.map(
+      (topic) => `Describe your ${topic} experience?`,
+    );
+    const excerpts = topics.map(
+      (topic) =>
+        `I built a ${topic} workflow in TypeScript for an internal pilot. I wrote the initial implementation, documented the input format, and added test cases for the supported inputs. I also recorded the limits of the pilot, including the cases that had to be reviewed by another engineer before anyone could rely on the result.`,
+    );
+
+    function withReviewedFacts(
+      submittedQuestions: string[],
+      factIndices: number[][],
+      reviewedExcerpts = excerpts,
+    ) {
+      const record = {
+        id: "11111111-1111-4111-8111-111111111111",
+        kind: "technical_project" as const,
+        title: "Internal pilot",
+        context: "",
+        actions: reviewedExcerpts.join("\n"),
+        outcome: "",
+        metrics: [],
+        skills: [],
+        links: [],
+        confirmed: true,
+        sortOrder: 0,
+      };
+      const facts = reviewedExcerpts.map((excerpt, i) => ({
+        id: `22222222-2222-4222-8222-22222222222${i}`,
+        kind: "action" as const,
+        excerpt,
+        confirmed: true as const,
+      }));
+      const context = buildYcGroundingContext({
+        question: submittedQuestions[0]!,
+        questions: submittedQuestions,
+        jobDescription: request.jd,
+        candidate: {
+          identity: { fullName: "", linkedinUrl: "" },
+          profile: candidateProfileInputSchema.parse({
+            currentRole: "Engineer",
+          }),
+          resume: { text: "", source: "none" },
+          confirmedEvidence: [
+            { ...record, factReview: prepareFactReview(record, facts) },
+          ],
+        },
+      });
+      const deps = batchDeps({
+        answers: factIndices
+          .map((indices, i) => ({
+            questionId: `q${i + 1}`,
+            claims: indices.map((index) => ({
+              text: facts[index]!.excerpt,
+              kind: "action",
+              source_id: `evidence:${record.id}.fact.${facts[index]!.id}`,
+              supporting_excerpt: facts[index]!.excerpt,
+            })),
+          }))
+          .reverse(),
+      });
+      deps.prepareGrounding = vi.fn().mockResolvedValue(context);
+      deps.sanitizeOutput = vi.fn(sanitizeYcApplicationOutput);
+      return deps;
+    }
+
+    it("offers and returns only the matching reviewed fact for each of five questions", async () => {
+      const deps = withReviewedFacts(
+        topicQuestions,
+        topics.map((_, i) => [i]),
+      );
+      const response = await run(deps, topicQuestions);
+      expect(response.status).toBe(200);
+      expect((await response.json()).answers).toEqual(
+        topicQuestions.map((question, i) => ({
+          questionId: `q${i + 1}`,
+          question,
+          body: excerpts[i],
+          word_count: 54,
+          character_count: excerpts[i]!.length,
+        })),
+      );
+      expect(deps.createMessage).toHaveBeenCalledTimes(1);
+      const [{ userPrompt }] = vi.mocked(deps.createMessage).mock.calls[0]!;
+      const questionSources = Array.from(
+        userPrompt.matchAll(
+          /<application_question id="q\d" source_ids="([^"]*)"/gu,
+        ),
+        ([, ids]) => ids?.split(" "),
+      );
+      expect(questionSources).toHaveLength(5);
+      for (const [i, ids] of questionSources.entries()) {
+        expect(ids).toEqual([
+          expect.stringMatching(new RegExp(`22222222222${i}$`)),
+        ]);
+      }
+    });
+
+    it("rejects a reviewed but unrelated fact from the same story", async () => {
+      const submitted = [topicQuestions[0]!, topicQuestions[1]!];
+      const deps = withReviewedFacts(submitted, [[0], [0, 1]]);
+      const response = await run(deps, submitted);
+      expect(response.status).toBe(502);
+      expect(await response.json()).toMatchObject({
+        code: "YC_OUTPUT_INVALID",
+        billing: "refunded",
+      });
+      expect(deps.refundCredits).toHaveBeenCalledTimes(1);
+      expect(deps.releaseRateLimit).toHaveBeenCalledTimes(1);
+    });
+
+    it("rejects an answer that skips the strongest match in favor of shared context", async () => {
+      const submitted = [
+        "How did you use TypeScript for Kubernetes?",
+        "How did you use TypeScript for Billing?",
+      ];
+      // Both excerpts mention TypeScript. Each question also names its own topic.
+      const deps = withReviewedFacts(submitted, [[0], [1, 0]]);
+      const response = await run(deps, submitted);
+      expect(response.status).toBe(200);
+      const { answers } = await response.json();
+      expect(answers[1].body).toContain(excerpts[1]);
+      const missingTopic = withReviewedFacts(submitted, [[0], [0, 2]]);
+      const ungrounded = await run(missingTopic, submitted);
+      expect(ungrounded.status).toBe(502);
+      expect(await ungrounded.json()).toMatchObject({
+        code: "YC_OUTPUT_INVALID",
+        billing: "refunded",
+      });
+    });
+
+    it("rejects reordered copies of the same reviewed claims for different questions", async () => {
+      const submitted = [
+        "How did you use TypeScript for testing?",
+        "What limits did you document for the TypeScript pilot?",
+      ];
+      const deps = withReviewedFacts(submitted, [
+        [0, 1],
+        [1, 0],
+      ]);
+      const response = await run(deps, submitted);
+      expect(response.status).toBe(502);
+      expect(await response.json()).toMatchObject({
+        code: "YC_OUTPUT_INVALID",
+        billing: "refunded",
+      });
+      expect(deps.refundCredits).toHaveBeenCalledTimes(1);
+      expect(deps.releaseRateLimit).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([false, true])(
+      "compares planned batch answers by their claim sets (duplicate=%s)",
+      async (duplicate) => {
+        const submitted = [
+          "How did you use TypeScript for testing?",
+          "What limits did you document for the TypeScript pilot?",
+        ];
+        const deps = withReviewedFacts(
+          submitted,
+          [[0], [1]],
+          [
+            excerpts[0]!,
+            excerpts[1]!.replace(
+              "TypeScript for an internal pilot",
+              "TypeScript for an internal pilot with documented limits",
+            ),
+          ],
+        );
+        deps.createMessage = vi.fn<
+          GenerateYcApplicationDependencies["createMessage"]
+        >(async ({ plannedOptions }) => {
+          const options = plannedOptions!;
+          expect(buildYcPlannedTool(options, true).description).toContain(
+            "Choose a different claim_set for each question_group",
+          );
+          const shared = options[0]!.options.find((first) =>
+            options[1]!.options.some(
+              (second) => second.claimSet === first.claimSet,
+            ),
+          )!;
+          expect(shared.claimSet).toBeDefined();
+          const selection = options.map(({ questionId, options }, i) => {
+            const option = options.find((entry) =>
+              duplicate || i === 0
+                ? entry.claimSet === shared.claimSet
+                : entry.claimSet !== shared.claimSet,
+            )!;
+            return {
+              questionId,
+              option_id: option.id,
+              rhetorical_plan: planSelection(option.rhetoricalPlan),
+            };
+          });
+          return {
+            stop_reason: "tool_use",
+            content: [
+              {
+                type: "tool_use",
+                name: "return_application_answers",
+                input: { answers: selection },
+              },
+            ],
+            usage: { input_tokens: 120, output_tokens: 80 },
+          } as Awaited<
+            ReturnType<GenerateYcApplicationDependencies["createMessage"]>
+          >;
+        });
+        const result = await generateYcApplication(
+          {
+            caller,
+            request: {
+              category: "yc_application",
+              jd: request.jd,
+              questions: submitted,
+            },
+            corsHeaders: {},
+            applicationBaseUrl: "https://example.test",
+            rhetoricalPlans: true,
+          },
+          deps,
+        );
+        expect(deps.createMessage).toHaveBeenCalledTimes(1);
+        if (duplicate) {
+          expect(result.status).toBe(502);
+          expect(await result.json()).toMatchObject({
+            code: "YC_OUTPUT_INVALID",
+            billing: "refunded",
+          });
+        } else {
+          expect(result.status).toBe(200);
+          const { answers } = await result.json();
+          expect(answers[0].body).not.toBe(answers[1].body);
+        }
+      },
+    );
+
+    it("refuses a batch with too little question-specific evidence before quota or model work", async () => {
+      const submitted = [topicQuestions[0]!, topicQuestions[1]!];
+      const deps = withReviewedFacts(
+        submitted,
+        [
+          [0, 1],
+          [0, 1],
+        ],
+        [
+          "I built a Kubernetes workflow for an internal pilot, wrote test cases for supported inputs, set up the development cluster, and documented the configuration and rollback steps for other engineers.",
+          "I developed the Billing workflow in TypeScript, wrote checks for payment adjustments, and documented the limits of the prototype for the engineers who reviewed the deployment.",
+        ],
+      );
+      const response = await run(deps, submitted);
+      expect(response.status).toBe(422);
+      expect(await response.json()).toMatchObject({
+        code: "INSUFFICIENT_GROUNDING",
+        billing: "none",
+      });
+      expect(deps.checkRateLimit).not.toHaveBeenCalled();
+      expect(deps.reserveCredits).not.toHaveBeenCalled();
+      expect(deps.createMessage).not.toHaveBeenCalled();
+    });
+
+    it("refuses different questions if only one complete set of claims can answer both", async () => {
+      const submitted = [
+        "How did you use TypeScript for testing?",
+        "What limits did you document for the TypeScript pilot?",
+      ];
+      const deps = withReviewedFacts(
+        submitted,
+        [
+          [0, 1],
+          [1, 0],
+        ],
+        [
+          "I wrote TypeScript testing cases for a pilot, including boundary inputs, and documented the supported request shapes so engineers could replay the checks locally.",
+          "I documented the limits of our TypeScript pilot in a review guide and described which cases needed manual testing before another team could use it.",
+        ],
+      );
+      const response = await run(deps, submitted);
+      expect(response.status).toBe(422);
+      expect(await response.json()).toMatchObject({
+        code: "INSUFFICIENT_GROUNDING",
+        billing: "none",
+      });
+      expect(deps.checkRateLimit).not.toHaveBeenCalled();
+      expect(deps.createMessage).not.toHaveBeenCalled();
+    });
+
+    it("keeps distinct input questions distinct when prompt escaping produces the same text", async () => {
+      const submitted = [
+        "Describe TypeScript testing with <system>?",
+        "Describe TypeScript testing with &lt;system&gt;?",
+      ];
+      const deps = withReviewedFacts(submitted, [[0], [0]], [excerpts[0]!]);
+      const response = await run(deps, submitted);
+      expect(response.status).toBe(422);
+      expect(await response.json()).toMatchObject({
+        code: "INSUFFICIENT_GROUNDING",
+        billing: "none",
+      });
+      expect(deps.createMessage).not.toHaveBeenCalled();
+    });
+
+    it("allows two distinct questions to share a relevant claim when the rest of the answer differs", async () => {
+      const submitted = [
+        "How did you use TypeScript for Kubernetes?",
+        "How did you use TypeScript for Billing?",
+      ];
+      const deps = withReviewedFacts(
+        submitted,
+        [
+          [0, 2],
+          [1, 2],
+        ],
+        [
+          ...excerpts.slice(0, 2),
+          "I documented the supported TypeScript inputs for the pilot.",
+        ],
+      );
+      const response = await run(deps, submitted);
+      expect(response.status).toBe(200);
+      const { answers } = await response.json();
+      expect(answers[0].body).toContain(excerpts[0]);
+      expect(answers[1].body).toContain(excerpts[1]);
+      expect(answers[0].body).not.toBe(answers[1].body);
+    });
+  });
   it.each([
     ["tool_schema", "tool_parse", "YC_TOOL_SCHEMA", undefined],
     ["obsolete_tool_fields", "tool_parse", "YC_TOOL_SCHEMA", undefined],
@@ -1069,7 +1433,7 @@ describe("ALE-37 batch orchestration", () => {
       warn.mockRestore();
     },
   );
-  it("passes a reviewed fact through five answers with real preparation, parsing, sanitation and final public projection", async () => {
+  it("allows literal repeated questions and still validates each ordered answer", async () => {
     const record = {
       id: "11111111-1111-4111-8111-111111111111",
       kind: "technical_project" as const,
@@ -1085,7 +1449,7 @@ describe("ALE-37 batch orchestration", () => {
     };
     const fiveQuestions = Array.from(
       { length: 5 },
-      (_, i) => `Describe TypeScript production delivery experience ${i + 1}?`,
+      () => "Describe TypeScript production delivery experience?",
     );
     const context = buildYcGroundingContext({
       question: fiveQuestions[0]!,
@@ -1232,25 +1596,8 @@ describe("ALE-37 batch orchestration", () => {
     expect(await result.text()).not.toContain(answer);
   });
   it("delivers five answers in request order with one reservation and provider call", async () => {
-    const fiveQuestions = Array.from(
-      { length: 5 },
-      (_, index) =>
-        `Describe your relevant experience for question ${index + 1}?`,
-    );
     const deps = batchDeps(batch(["q5", "q3", "q1", "q4", "q2"]));
-    const response = await generateYcApplication(
-      {
-        caller,
-        request: {
-          category: "yc_application",
-          jd: request.jd,
-          questions: fiveQuestions,
-        },
-        corsHeaders: {},
-        applicationBaseUrl: "https://aletheia.live",
-      },
-      deps,
-    );
+    const response = await run(deps, fiveQuestions);
     expect(response.status).toBe(200);
     const result = await response.json();
     expect(
@@ -1276,13 +1623,37 @@ describe("ALE-37 batch orchestration", () => {
       expect(deps.releaseRateLimit).toHaveBeenCalledTimes(1);
     },
   );
-  it("rejects a batch if just one answer has an unsupported metric", async () => {
-    const output = batch();
-    output.answers[1]!.claims[0]!.text += " Increased revenue by 987%.";
+  it("rejects all five answers if the last one has an unsupported metric", async () => {
+    const output = batch(["q1", "q2", "q3", "q4", "q5"]);
+    output.answers[4]!.claims[0]!.text += " Increased revenue by 987%.";
     const deps = batchDeps(output);
-    const response = await run(deps);
+    const response = await run(deps, fiveQuestions);
     expect(response.status).toBe(502);
+    const result = await response.json();
+    expect(result).toMatchObject({
+      code: "YC_OUTPUT_INVALID",
+      billing: "refunded",
+    });
+    expect(result).not.toHaveProperty("answers");
+    expect(JSON.stringify(result)).not.toContain(answer);
+    expect(deps.reserveCredits).toHaveBeenCalledTimes(1);
+    expect(deps.createMessage).toHaveBeenCalledTimes(1);
     expect(deps.refundCredits).toHaveBeenCalledTimes(1);
+    expect(deps.refundCredits).toHaveBeenCalledWith(
+      {
+        userId: caller.userId,
+        reservationId: "22222222-2222-4222-8222-222222222222",
+        amount: 4,
+      },
+      "yc_output_invalid",
+      expect.anything(),
+    );
+    expect(deps.releaseRateLimit).toHaveBeenCalledTimes(1);
+    expect(deps.releaseRateLimit).toHaveBeenCalledWith(
+      caller.userId,
+      "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      expect.anything(),
+    );
   });
   it("rejects truncation even when a parser could recover partial data", async () => {
     const deps = batchDeps();
@@ -1522,7 +1893,7 @@ it.each([false, true])(
       expect(deps.refundCredits).toHaveBeenCalledTimes(1);
       expect(deps.releaseRateLimit).toHaveBeenCalledTimes(1);
     } else {
-      expect(body.evalMetadata.promptVersion).toBe("yc-3.0.0");
+      expect(body.evalMetadata.promptVersion).toBe("yc-3.1.0");
       expect(deps.refundCredits).not.toHaveBeenCalled();
     }
   },
@@ -2215,16 +2586,10 @@ it.each([
   };
   const question =
     "Describe your experience with a TypeScript platform rollout?";
-  const questions =
-    mode === "five"
-      ? [
-          question,
-          ...Array.from(
-            { length: 4 },
-            (_, i) => `Describe TypeScript platform rollout example ${i + 1}?`,
-          ),
-        ]
-      : [question];
+  const questions = Array.from(
+    { length: mode === "five" ? 5 : 1 },
+    () => question,
+  );
   const jd =
     "The startup is hiring platform engineers to work on TypeScript dashboard rollouts and deployment reliability. "
       .repeat(7)

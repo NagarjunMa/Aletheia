@@ -24,6 +24,8 @@ export class YcApplicationOutputValidationError extends Error {
     | "CLAIM_EXCLUDED"
     | "YC_LEDGER_REQUIRED"
     | "YC_SELECTED_EVIDENCE_MISSING"
+    | "YC_REPEATED_ANSWER"
+    | "YC_QUESTION_EVIDENCE_MISSING"
     | "YC_CHARACTER_LIMIT";
   constructor(
     message: string,
@@ -98,6 +100,19 @@ export function validateYcApplicationOutput(input: {
     sources: input.context.atomicSources ?? [],
     excludedClaims: input.context.excludedClaims,
   });
+
+  if (
+    input.context.leadingFactIds &&
+    !input.output.claims.some(
+      ({ source_id }) =>
+        source_id && input.context.leadingFactIds?.includes(source_id),
+    )
+  ) {
+    throw new YcApplicationOutputValidationError(
+      "Answer omits the most relevant reviewed evidence",
+      "YC_QUESTION_EVIDENCE_MISSING",
+    );
+  }
 
   if (input.context.requiredEvidenceRoots) {
     const cited = new Set(input.output.claims.map((claim) => claim.source_id));

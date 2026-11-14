@@ -51,6 +51,21 @@ it("builds complete current question-local planned answers", () => {
   expect(result[0]!.options[0]!.body).toBe(context.atomicSources![0]!.content);
   expect(buildYcPlannedOptions(context)).toEqual(result);
 });
+
+it("preserves the single-answer feasibility rules for two explicitly selected stories", () => {
+  const context = plannedYcFixture();
+  const fact =
+    "I built and tested a local evaluation tool using synthetic records and documented the reproducible checks for another engineer on the project team.";
+  context.requiredEvidenceRoots = ["root1", "root2"];
+  context.atomicSources = context.requiredEvidenceRoots.map((rootId) => ({
+    id: `${rootId}.fact`,
+    rootId,
+    scope: "candidate",
+    kind: "action",
+    content: fact,
+  }));
+  expect(() => assertYcSelectionFeasible(context)).not.toThrow();
+});
 it("rejects questions without eligible evidence or a complete bounded answer", () => {
   const context = plannedYcFixture();
   context.questions = [

@@ -8,7 +8,10 @@ import {
   SelectedEvidenceUnavailableError,
 } from "@/modules/candidate-context/application/selected-evidence";
 import { normalizeClaimText } from "@/modules/grounding/domain/atomic-claim";
-import { createEvidenceRanker } from "@/modules/candidate-context/application/rank-evidence";
+import {
+  createEvidenceRanker,
+  createReviewedFactRanker,
+} from "@/modules/candidate-context/application/rank-evidence";
 import {
   normalizeForExclusion,
   containsExcludedClaim,
@@ -269,6 +272,7 @@ export function buildYcGroundingContext(input: {
     primary: normalizeText(question),
     secondary: normalizedJobDescription,
   }));
+  const questionTexts = targets.map(({ primary }) => primary);
   const selections = rankEvidence ? targets.map(rankEvidence) : [];
   const rankedByQuestion = explicit
     ? questions.map(() => explicit)
@@ -366,6 +370,34 @@ export function buildYcGroundingContext(input: {
         );
       })
     : rankedByQuestion;
+  const reviewedFactsByQuestion =
+    questions.length > 1
+      ? targets.map((target, index) => {
+          const rank = createReviewedFactRanker(target);
+          const rankedFacts = (availableByQuestion[index] ?? []).flatMap(
+            (entry) =>
+              (reviewedEvidence.get(entry.id) ?? []).flatMap(
+                ({ id, excerpt }) => {
+                  const factId = candidateEvidenceFactId(
+                    `evidence:${entry.id}`,
+                    id,
+                  );
+                  if (!survivingFactIds.has(factId)) return [];
+                  const score = rank(excerpt);
+                  return score ? [{ factId, score }] : [];
+                },
+              ),
+          );
+          const highest = Math.max(0, ...rankedFacts.map(({ score }) => score));
+          return {
+            reviewedFactIds: rankedFacts.map(({ factId }) => factId),
+            questionGroup: questionTexts.indexOf(target.primary) + 1,
+            leadingFactIds: rankedFacts
+              .filter(({ score }) => score === highest)
+              .map(({ factId }) => factId),
+          };
+        })
+      : undefined;
   const usableRoots = new Set(
     availableByQuestion.flatMap((ranked) =>
       ranked
@@ -448,6 +480,7 @@ export function buildYcGroundingContext(input: {
           questions: input.questions.map((question, index) => ({
             questionId: `q${index + 1}`,
             question: escapeForXmlTag(normalizeText(question)),
+            ...reviewedFactsByQuestion?.[index],
             sourceIds: sources
               .filter(
                 (source) =>
