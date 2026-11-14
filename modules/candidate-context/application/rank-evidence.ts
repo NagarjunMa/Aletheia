@@ -327,14 +327,23 @@ function bestReviewedMatch(
   return best;
 }
 
-export function createReviewedFactMatcher(target: {
+export function createReviewedFactRanker(target: {
   primary: string;
   secondary?: string;
 }) {
   const primary = tokens(target.primary);
   const terms = primary.size ? primary : tokens(target.secondary ?? "");
-  return (excerpt: string) =>
-    bestReviewedMatch(terms, [prepareReviewedExcerpt(excerpt)]).supported;
+  return (excerpt: string) => {
+    const result = bestReviewedMatch(terms, [prepareReviewedExcerpt(excerpt)]);
+    return result.supported ? result.score : 0;
+  };
+}
+
+export function createReviewedFactMatcher(
+  target: Parameters<typeof createReviewedFactRanker>[0],
+) {
+  const rank = createReviewedFactRanker(target);
+  return (excerpt: string) => rank(excerpt) > 0;
 }
 
 /** Score distinct focus terms with the same weights and AI-agent rules as reviewed evidence. */

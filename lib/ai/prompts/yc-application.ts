@@ -6,10 +6,13 @@ import {
 import { RHETORICAL_PLAN_INSTRUCTIONS } from "@/modules/grounding/domain/rhetorical-plan";
 import { buildAtomicProvenancePrompt } from "./atomic-provenance";
 import { scanForInjection } from "./injection-heuristic";
-import type { YcGroundingContext } from "@/modules/application-answer/domain/yc-grounding.types";
+import {
+  applicationQuestionSources,
+  type YcGroundingContext,
+} from "@/modules/application-answer/domain/yc-grounding.types";
 
-export const YC_APPLICATION_PROMPT_VERSION = "yc-2.1.0";
-export const RHETORICAL_YC_PROMPT_VERSION = "yc-3.0.0";
+export const YC_APPLICATION_PROMPT_VERSION = "yc-2.2.0";
+export const RHETORICAL_YC_PROMPT_VERSION = "yc-3.1.0";
 
 export const YC_APPLICATION_SYSTEM_PROMPT = `You write concise answers for startup job application forms.
 
@@ -85,6 +88,9 @@ export function buildYcApplicationPrompt(
           : YC_APPLICATION_SYSTEM_PROMPT) +
         (selectedStories.length
           ? "\nEvery answer must include at least one claim from each selected evidence story. Each selected_evidence_story lists the approved atomic source IDs for that story."
+          : "") +
+        ((context.questions?.length ?? 0) > 1
+          ? "\nFor each question, use at least one of its leading_source_ids as direct evidence. Share relevant claims where needed. Questions with the same question_group may reuse an answer. Different groups must use different sets of reviewed excerpts; reordering or using another approved wording of an excerpt does not make it different."
           : ""),
     userPrompt: [
       buildAtomicProvenancePrompt(atomicSources),
@@ -93,16 +99,14 @@ export function buildYcApplicationPrompt(
       ...(context.questions
         ? context.questions.map(
             (entry) =>
-              `<application_question id="${entry.questionId}" source_ids="${(
-                context.atomicSources ?? []
+              `<application_question id="${entry.questionId}" source_ids="${applicationQuestionSources(
+                atomicSources,
+                entry,
               )
-                .filter(
-                  (source) =>
-                    source.scope === "target" ||
-                    entry.sourceIds.includes(source.rootId ?? source.id),
-                )
                 .map((source) => source.id)
-                .join(" ")}">${entry.question}</application_question>`,
+                .join(
+                  " ",
+                )}"${entry.leadingFactIds ? ` leading_source_ids="${entry.leadingFactIds.join(" ")}"` : ""}${entry.questionGroup === undefined ? "" : ` question_group="${entry.questionGroup}"`}>${entry.question}</application_question>`,
           )
         : [`<application_question>${context.question}</application_question>`]),
       `<job_description>${context.jobDescription}</job_description>`,

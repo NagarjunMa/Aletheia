@@ -15,6 +15,10 @@ declare global {
   }
 }
 
+const fixtureAnswers = Array.from({ length: 5 }, (_, index) =>
+  Array.from({ length: 50 }, () => `experience${index + 1}`).join(" "),
+);
+
 async function openPopup(page: Page, authenticated = true) {
   await page.setViewportSize({ width: 400, height: 800 });
   await page.route("**/*", async (route) => {
@@ -38,7 +42,7 @@ async function openPopup(page: Page, authenticated = true) {
     }
   });
   await page.addInitScript(
-    ({ authenticated }) => {
+    ({ authenticated, fixtureAnswers }) => {
       window.aleTest = {
         messages: [],
         copied: "",
@@ -153,23 +157,23 @@ async function openPopup(page: Page, authenticated = true) {
               )
                 response = { success: false };
               if (message.action === "generate") {
-                const body = Array.from(
-                  { length: 50 },
-                  () => "experience",
-                ).join(" ");
-                response = {
-                  success: true,
-                  category: "yc_application",
-                  body,
-                  answers: (message.payload?.questions ?? []).map(
-                    (question, index) => ({
+                const answers = (message.payload?.questions ?? []).map(
+                  (question, index) => {
+                    const body = fixtureAnswers[index]!;
+                    return {
                       questionId: `q${index + 1}`,
                       question,
                       body,
                       word_count: 50,
                       character_count: body.length,
-                    }),
-                  ),
+                    };
+                  },
+                );
+                response = {
+                  success: true,
+                  category: "yc_application",
+                  body: answers[0]?.body,
+                  answers,
                   evalMetadata: {
                     generationId: "33333333-3333-4333-8333-333333333333",
                     category: "yc_application",
@@ -198,7 +202,7 @@ async function openPopup(page: Page, authenticated = true) {
         },
       });
     },
-    { authenticated },
+    { authenticated, fixtureAnswers },
   );
   await page.goto("http://127.0.0.1:45678/extension/popup/popup.html");
   await expect(page.locator("#mainContent")).toBeVisible();
@@ -220,15 +224,28 @@ test("ordered answers, copy controls and report modal work without persisting in
   await page.click("#generateBtn");
   await expect(page.locator(".application-answer")).toHaveCount(5);
   await expect(page.locator(".application-answer h3")).toHaveText(questions);
-  await page
-    .getByRole("button", { name: "Copy answer 3", exact: true })
-    .click();
-  expect(await page.evaluate(() => window.aleTest.copied)).not.toContain(
-    "PRIVATE",
+  await expect(page.locator(".application-answer p")).toHaveText(
+    fixtureAnswers,
+  );
+  const copyAnswer = (index: number) =>
+    page.getByRole("button", { name: `Copy answer ${index}`, exact: true });
+  await copyAnswer(1).focus();
+  for (let index = 2; index <= 5; index++) {
+    await page.keyboard.press("Tab");
+    const button = copyAnswer(index);
+    await expect(button).toBeFocused();
+    await expect(button).toHaveCSS("outline-style", "solid");
+    await expect(button).toHaveCSS("outline-width", "2px");
+  }
+  await copyAnswer(3).click();
+  expect(await page.evaluate(() => window.aleTest.copied)).toBe(
+    fixtureAnswers[2],
   );
   await page.click("#copyAllBtn");
-  expect(await page.evaluate(() => window.aleTest.copied)).toContain(
-    `**${questions[0]}**\n`,
+  expect(await page.evaluate(() => window.aleTest.copied)).toBe(
+    questions
+      .map((question, index) => `**${question}**\n${fixtureAnswers[index]}`)
+      .join("\n\n"),
   );
   await page.screenshot({
     path: "/tmp/ale37-application-review.png",
@@ -264,7 +281,7 @@ test("ordered answers, copy controls and report modal work without persisting in
   const reports = persisted.messages.filter(
     (message) => message.action === "sendFeedback",
   );
-  expect(JSON.stringify(reports)).not.toMatch(/PRIVATE|experience experience/);
+  expect(JSON.stringify(reports)).not.toMatch(/PRIVATE|experience[1-5]/);
   expect(
     persisted.messages.filter((message) => message.action === "generate"),
   ).toHaveLength(1);
@@ -284,18 +301,14 @@ test("ordered answers, copy controls and report modal work without persisting in
 test("signed-out application draft survives authentication and is consumed once @smoke", async ({
   page,
 }) => {
+  const question = "PRIVATE QUESTION: Describe your experience?";
   await openPopup(page, false);
   await page.fill("#jdInput", jd);
-  await page.fill(
-    "#ycQuestionInput",
-    "PRIVATE QUESTION: Describe your experience?",
-  );
+  await page.fill("#ycQuestionInput", question);
   await page.click("#connectBtn");
   await expect(page.locator("#connectBtn")).toHaveCount(0);
   await expect(page.locator("#jdInput")).toHaveValue(jd);
-  await expect(page.locator("#ycQuestionInput")).toHaveValue(
-    "PRIVATE QUESTION: Describe your experience?",
-  );
+  await expect(page.locator("#ycQuestionInput")).toHaveValue(question);
   expect(
     await page.evaluate(
       () =>
@@ -308,6 +321,13 @@ test("signed-out application draft survives authentication and is consumed once 
   ).not.toContain("PRIVATE");
   await page.click("#generateBtn");
   await expect(page.locator(".application-answer")).toHaveCount(1);
+  await expect(page.locator(".application-answer h3")).toHaveText(question);
+  await page
+    .getByRole("button", { name: "Copy answer 1", exact: true })
+    .click();
+  expect(await page.evaluate(() => window.aleTest.copied)).toBe(
+    fixtureAnswers[0],
+  );
   await page.click("#rejectBtn");
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).not.toBeVisible();
@@ -342,6 +362,41 @@ test("invalid question input explains how to recover without a request @smoke", 
       ),
     ),
   ).toHaveLength(0);
+});
+
+test("insufficient reviewed evidence preserves the batch for recovery @smoke", async ({
+  page,
+}) => {
+  await openPopup(page);
+  await page.selectOption("#category", "yc_application");
+  const questions = [
+    "Describe your approach to planning a project.",
+    "How did you measure the outcome?",
+  ].join("\n");
+  await page.fill("#jdInput", jd);
+  await page.fill("#ycQuestionInput", questions);
+  await page.evaluate(() => {
+    window.aleTest.holdGeneration = true;
+  });
+  await page.click("#generateBtn");
+  await expect(page.locator("#generationProgress")).toBeVisible();
+  await page.evaluate(() => {
+    window.aleTest.generationCallback?.({
+      success: false,
+      status: 422,
+      code: "GROUNDING_PROFILE_INCOMPLETE",
+      missingFields: ["confirmed_evidence"],
+      applicationProfileUrl: "https://www.aletheia.live/profile/application",
+    });
+  });
+  await expect(page.locator("#errorMessage")).toBeFocused();
+  await expect(page.locator("#errorAction")).toHaveText(
+    "Complete application profile",
+  );
+  await expect(page.locator(".application-answer")).toHaveCount(0);
+  await expect(page.locator("#jdInput")).toHaveValue(jd);
+  await expect(page.locator("#ycQuestionInput")).toHaveValue(questions);
+  await expect(page.locator("#generateBtn")).toBeEnabled();
 });
 
 test("ZIP-source popup paints the orb, reports elapsed time, and stops after success @smoke", async ({

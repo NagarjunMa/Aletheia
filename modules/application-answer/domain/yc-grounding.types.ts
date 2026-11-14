@@ -22,6 +22,8 @@ export type YcGroundingReadiness = {
 export type YcGroundingContext = {
   /** Server-only roots that must be used in the result. */
   requiredEvidenceRoots?: readonly string[];
+  /** Strongest reviewed fact IDs in the current answer scope. */
+  leadingFactIds?: readonly string[];
   /** Private per-question outcomes, separate from public metadata. */
   selectionDiagnostics?: EvidenceSelectionDiagnostics[];
   question: string;
@@ -29,6 +31,11 @@ export type YcGroundingContext = {
     questionId: string;
     question: string;
     sourceIds: string[];
+    /** Exact reviewed fact IDs for multi-question answers. */
+    reviewedFactIds?: readonly string[];
+    leadingFactIds?: readonly string[];
+    /** Ordinal of the first identical input question, before prompt escaping. */
+    questionGroup?: number;
   }>;
   jobDescription: string;
   sources: YcGroundingSource[];
@@ -41,3 +48,18 @@ export type YcGroundingContext = {
     resumeSource: CandidateResumeSource;
   };
 };
+
+export function applicationQuestionSources(
+  sources: readonly AtomicSource[],
+  question: NonNullable<YcGroundingContext["questions"]>[number],
+): AtomicSource[] {
+  if (question.reviewedFactIds) {
+    const allowed = new Set(question.reviewedFactIds);
+    return sources.filter((source) => allowed.has(source.id));
+  }
+  return sources.filter(
+    (source) =>
+      source.scope === "target" ||
+      question.sourceIds.includes(source.rootId ?? source.id),
+  );
+}

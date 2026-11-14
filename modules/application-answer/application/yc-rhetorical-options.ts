@@ -1,6 +1,7 @@
 import {
   APPLICATION_ANSWER_MIN_CLAIM_WORDS,
   renderYcAnswer,
+  ycClaimSignature,
 } from "../domain/render-yc-answer";
 import { includesSelectedEvidence } from "@/modules/candidate-context/application/selected-evidence";
 import {
@@ -20,7 +21,10 @@ import {
   planSelection,
   type RhetoricalPlan,
 } from "@/modules/grounding/domain/rhetorical-plan";
-import type { YcGroundingContext } from "../domain/yc-grounding.types";
+import {
+  applicationQuestionSources,
+  type YcGroundingContext,
+} from "../domain/yc-grounding.types";
 import {
   validateYcApplicationOutput,
   YcApplicationOutputValidationError,
@@ -44,6 +48,7 @@ export type YcPlannedOptions = Array<{
     body: string;
     claims: AtomicClaim[];
     rhetoricalPlan: RhetoricalPlan;
+    claimSet?: number;
   }>;
 }>;
 /** Same question-local source boundary is used before the call and after sanitation. */
@@ -61,10 +66,12 @@ export function ycQuestionContext(
   return {
     ...context,
     question: selection.question,
-    atomicSources: (context.atomicSources ?? []).filter(
-      (s) =>
-        s.scope === "target" ||
-        (!!s.rootId && selection.sourceIds.includes(s.rootId)),
+    ...(selection.leadingFactIds && {
+      leadingFactIds: selection.leadingFactIds,
+    }),
+    atomicSources: applicationQuestionSources(
+      context.atomicSources ?? [],
+      selection,
     ),
     sources: context.sources.filter((s) => selection.sourceIds.includes(s.id)),
   };
@@ -98,25 +105,60 @@ function isValidAnswer(
   }
 }
 
-/** Check that selected facts can make a complete answer with the default renderer. */
-export function assertYcSelectionFeasible(context: YcGroundingContext) {
-  const required = context.requiredEvidenceRoots;
-  if (!required) return;
+/** A bounded matching check ensures distinct questions have distinct options. */
+function assertDistinctClaimSets(claimSets: readonly Set<string>[]) {
+  const owners = new Map<string, number>();
+  const assign = (question: number, visited: Set<string>): boolean => {
+    for (const signature of claimSets[question]!) {
+      if (visited.has(signature)) continue;
+      visited.add(signature);
+      const owner = owners.get(signature);
+      if (owner === undefined || assign(owner, visited)) {
+        owners.set(signature, question);
+        return true;
+      }
+    }
+    return false;
+  };
+  if (claimSets.some((_, index) => !assign(index, new Set())))
+    throw new YcPlanUnavailableError();
+}
 
-  const questions = context.questions ?? [{ questionId: "q1" }];
-  for (const { questionId } of questions) {
+/** Check that scoped facts can make complete answers before a provider call. */
+export function assertYcSelectionFeasible(context: YcGroundingContext) {
+  const required = context.requiredEvidenceRoots ?? [];
+  const questions: NonNullable<YcGroundingContext["questions"]> =
+    context.questions ?? [
+      { questionId: "q1", question: context.question, sourceIds: [] },
+    ];
+  const claimSetsByQuestion = new Map<string | number, Set<string>>();
+  const distinctQuestionCount = new Set(
+    questions.map(({ question, questionGroup }) => questionGroup ?? question),
+  ).size;
+  for (const question of questions) {
+    const { questionId } = question;
+    const questionGroup = question.questionGroup ?? question.question;
+    const scopedFacts = "reviewedFactIds" in question;
+    if (!required.length && !scopedFacts) continue;
+    if (scopedFacts && claimSetsByQuestion.has(questionGroup)) continue;
+    const signatures = new Set<string>();
+    const signatureLimit = scopedFacts ? distinctQuestionCount : 1;
     const scoped = ycQuestionContext(context, questionId, true);
     const sources = scoped.atomicSources ?? [];
     if (sources.length > 64) throw new YcPlanUnavailableError();
+    const leading = new Set(scoped.leadingFactIds);
+    if (scopedFacts && !leading.size) throw new YcPlanUnavailableError();
     if (
+      required.length &&
       sources.filter(({ scope }) => scope === "candidate").length >
-      required.length * MAX_REVIEWED_FACTS
+        required.length * MAX_REVIEWED_FACTS
     )
       throw new YcPlanUnavailableError();
     const candidates = sources
       .flatMap((source) => {
         const index = required.indexOf(source.rootId ?? "");
-        if (source.scope === "candidate" && index < 0) return [];
+        if (required.length && source.scope === "candidate" && index < 0)
+          return [];
         return allowedClaimTexts(source).flatMap((text) => {
           try {
             inspectGroundedText(text, "general");
@@ -126,7 +168,8 @@ export function assertYcSelectionFeasible(context: YcGroundingContext) {
           }
           return [
             {
-              rootBit: source.scope === "candidate" ? 1 << index : 0,
+              rootBit: index >= 0 ? 1 << index : 0,
+              leads: leading.has(source.id),
               words: countOutputUnits(text, "words"),
               claim: {
                 text,
@@ -140,6 +183,7 @@ export function assertYcSelectionFeasible(context: YcGroundingContext) {
       })
       .sort(
         (a, b) =>
+          Number(b.leads) - Number(a.leads) ||
           Number(Boolean(b.rootBit)) - Number(Boolean(a.rootBit)) ||
           b.words - a.words,
       );
@@ -153,7 +197,7 @@ export function assertYcSelectionFeasible(context: YcGroundingContext) {
       remainingWords[i] = remainingWords[i + 1]! + candidates[i]!.words;
       remainingRoots[i] = remainingRoots[i + 1]! | candidates[i]!.rootBit;
     }
-    const hasAnswer = (minimumWords: number, maximumWords: number) => {
+    const collectAnswers = (minimumWords: number, maximumWords: number) => {
       let visits = 0;
       let validations = 0;
       const exhausted = () => visits >= 4096 || validations >= 256;
@@ -166,8 +210,10 @@ export function assertYcSelectionFeasible(context: YcGroundingContext) {
         if (words >= minimumWords && roots === requiredMask) {
           validations++;
           const claims = group.map(({ claim }) => claim);
-          if (isValidAnswer(scoped, renderYcAnswer(claims), claims))
-            return true;
+          if (isValidAnswer(scoped, renderYcAnswer(claims), claims)) {
+            signatures.add(ycClaimSignature(claims));
+            if (signatures.size >= signatureLimit) return true;
+          }
         }
         if (group.length >= MAX_ATOMIC_CLAIMS) return false;
         for (
@@ -183,7 +229,10 @@ export function assertYcSelectionFeasible(context: YcGroundingContext) {
             group.some(
               ({ claim }) =>
                 claim.source_id === candidate.claim.source_id ||
-                claim.text === candidate.claim.text,
+                (scopedFacts
+                  ? claim.supporting_excerpt ===
+                    candidate.claim.supporting_excerpt
+                  : claim.text === candidate.claim.text),
             )
           )
             continue;
@@ -198,22 +247,28 @@ export function assertYcSelectionFeasible(context: YcGroundingContext) {
     };
     // Sparse candidates must never spend the regular answer search budget.
     if (
-      !hasAnswer(APPLICATION_ANSWER_MIN_WORDS, APPLICATION_ANSWER_MAX_WORDS) &&
-      !hasAnswer(
-        APPLICATION_ANSWER_MIN_CLAIM_WORDS,
-        APPLICATION_ANSWER_MIN_WORDS - 1,
+      !collectAnswers(
+        APPLICATION_ANSWER_MIN_WORDS,
+        APPLICATION_ANSWER_MAX_WORDS,
       )
     )
-      throw new YcPlanUnavailableError();
+      collectAnswers(
+        APPLICATION_ANSWER_MIN_CLAIM_WORDS,
+        APPLICATION_ANSWER_MIN_WORDS - 1,
+      );
+    if (!signatures.size) throw new YcPlanUnavailableError();
+    if (scopedFacts) claimSetsByQuestion.set(questionGroup, signatures);
   }
+  assertDistinctClaimSets([...claimSetsByQuestion.values()]);
 }
 
 export function buildYcPlannedOptions(
   context: YcGroundingContext,
 ): YcPlannedOptions {
-  const questions = context.questions ?? [
-    { questionId: "q1", question: context.question },
-  ];
+  const questions: NonNullable<YcGroundingContext["questions"]> =
+    context.questions ?? [
+      { questionId: "q1", question: context.question, sourceIds: [] },
+    ];
   if (
     questions.length < 1 ||
     questions.length > 5 ||
@@ -221,14 +276,21 @@ export function buildYcPlannedOptions(
   )
     throw new YcPlanUnavailableError();
 
-  return questions.map((question, questionIndex) => {
+  const claimSetsByQuestion = new Map<string | number, Set<string>>();
+  const claimSetIds = new Map<string, number>();
+  const planned = questions.map((question, questionIndex) => {
+    const questionGroup = question.questionGroup ?? question.question;
+    const scopedFacts = "reviewedFactIds" in question;
     const scoped = ycQuestionContext(context, question.questionId, true);
     const selected = new Set(scoped.sources.map((s) => s.id));
     const sources = scoped.atomicSources ?? [];
     if (sources.length > 64) throw new YcPlanUnavailableError();
-    const facts = sources.filter(
-      (s) => s.scope === "candidate" && !!s.rootId && selected.has(s.rootId),
-    );
+    const leading = new Set(scoped.leadingFactIds);
+    const facts = sources
+      .filter(
+        (s) => s.scope === "candidate" && !!s.rootId && selected.has(s.rootId),
+      )
+      .sort((a, b) => Number(leading.has(b.id)) - Number(leading.has(a.id)));
     const claims = facts.map((s) => ({
       text: allowedClaimTexts(s).at(-1)!,
       source_id: s.id,
@@ -243,14 +305,19 @@ export function buildYcPlannedOptions(
     const options: YcPlannedOptions[number]["options"] = [];
     let previewBytes = 0;
     let attempts = 0;
-    search: for (const size of [3, 2, 1]) {
-      if (options.length) break;
+    search: for (const size of scopedFacts ? [1, 2, 3] : [3, 2, 1]) {
+      if (options.length && !scopedFacts) break;
       for (let i = 0; i < claims.length; i++)
         for (let j = i; j < claims.length; j++)
           for (let k = j; k < claims.length; k++) {
             const indices = [...new Set([i, j, k])];
             const group = indices.map((index) => claims[index]!);
             if (group.length !== size) continue;
+            if (
+              scopedFacts &&
+              !group.some(({ source_id }) => leading.has(source_id))
+            )
+              continue;
             if (
               scoped.requiredEvidenceRoots &&
               !includesSelectedEvidence(
@@ -278,29 +345,54 @@ export function buildYcPlannedOptions(
             const ordered = orderedPlanClaims(rhetoricalPlan, group);
             const body = ordered.map((c) => c.text).join(" ");
             if (!isValidAnswer(scoped, body, ordered)) continue;
-            if (options.some((o) => o.body === body)) continue;
+            const signature = scopedFacts
+              ? ycClaimSignature(ordered)
+              : undefined;
+            const claimSet =
+              signature === undefined
+                ? undefined
+                : (claimSetIds.get(signature) ?? claimSetIds.size + 1);
+            if (
+              options.some((o) =>
+                claimSet === undefined
+                  ? o.body === body
+                  : o.claimSet === claimSet,
+              )
+            )
+              continue;
             const option = {
               id: `yc.${prefix}.${options.length + 1}`,
               body,
               claims: ordered,
               rhetoricalPlan,
+              ...(claimSet !== undefined && { claimSet }),
             };
             const bytes = Buffer.byteLength(
               JSON.stringify({
                 id: option.id,
                 body,
                 rhetorical_plan: planSelection(rhetoricalPlan),
+                ...(claimSet !== undefined && { claim_set: claimSet }),
               }),
               "utf8",
             );
             if (previewBytes + bytes > Math.floor(24000 / questions.length))
               continue;
+            if (signature !== undefined && claimSet !== undefined)
+              claimSetIds.set(signature, claimSet);
             previewBytes += bytes;
             options.push(option);
             if (options.length === 8) break search;
           }
     }
     if (!options.length) throw new YcPlanUnavailableError();
+    if (scopedFacts && !claimSetsByQuestion.has(questionGroup))
+      claimSetsByQuestion.set(
+        questionGroup,
+        new Set(options.map(({ claims }) => ycClaimSignature(claims))),
+      );
     return { questionId: question.questionId, options };
   });
+  assertDistinctClaimSets([...claimSetsByQuestion.values()]);
+  return planned;
 }

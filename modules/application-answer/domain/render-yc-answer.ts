@@ -14,6 +14,21 @@ export const APPLICATION_ANSWER_MIN_CLAIM_WORDS =
   APPLICATION_ANSWER_MIN_WORDS -
   countOutputUnits(APPLICATION_ANSWER_COURTESY, "words");
 
+/** Ignore ordering, approved wording variants and duplicate source records. */
+export function ycClaimSignature(
+  claims: readonly { supporting_excerpt?: string }[],
+): string {
+  return JSON.stringify(
+    [
+      ...new Set(
+        claims.map(({ supporting_excerpt }) =>
+          normalizeClaimText(supporting_excerpt ?? "").replace(/\s+/gu, " "),
+        ),
+      ),
+    ].sort(),
+  );
+}
+
 function claimBoundary(
   text: string,
   remaining: string,

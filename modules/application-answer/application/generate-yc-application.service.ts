@@ -15,6 +15,7 @@ import { rhetoricalPlansEnabled } from "@/modules/grounding/domain/rhetorical-pl
 import { GroundedOutputLimitError } from "@/modules/grounding/application/finalize-grounded-output";
 import { GroundedTextSanitizationError } from "@/lib/ai/sanitizer";
 import { AtomicClaimValidationError } from "@/modules/grounding/application/validate-atomic-claims";
+import { ycClaimSignature } from "../domain/render-yc-answer";
 import { randomUUID } from "node:crypto";
 import type { GenerationTiming } from "@/lib/generation-timing";
 import { NextResponse } from "next/server";
@@ -614,6 +615,7 @@ export async function generateYcApplication(
       ),
     });
     const validatedAnswers = [];
+    const questionByClaims = new Map<string, number>();
     for (const [index, question] of questions.entries()) {
       const questionId = `q${index + 1}`;
       const parsed = byId.get(questionId);
@@ -634,6 +636,20 @@ export async function generateYcApplication(
         context: answerContext,
         output: sanitized.output,
       });
+      const questionGroup = context.questions?.[index]?.questionGroup;
+      if (questionGroup !== undefined) {
+        const signature = ycClaimSignature(sanitized.output.claims);
+        const previousQuestion = questionByClaims.get(signature);
+        if (
+          previousQuestion !== undefined &&
+          previousQuestion !== questionGroup
+        )
+          throw new YcApplicationOutputValidationError(
+            "Different questions reuse the same reviewed claims",
+            "YC_REPEATED_ANSWER",
+          );
+        questionByClaims.set(signature, questionGroup);
+      }
       validatedAnswers.push({ questionId, question, ...validated });
     }
     const answers = validatedAnswers.map((answer) => ({
