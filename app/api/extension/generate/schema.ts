@@ -186,7 +186,14 @@ const applicationAnswerSchema = z
   .object({
     questionId: z.string().regex(/^q[1-5]$/u),
     question: normalizedBoundedString(10, 1000),
-    body: z.string().trim().min(1).max(APPLICATION_ANSWER_MAX_CHARACTERS),
+    body: z
+      .string()
+      .trim()
+      .min(1)
+      .refine(
+        (body) => body.length <= APPLICATION_ANSWER_MAX_CHARACTERS,
+        "Answer exceeds the character limit",
+      ),
     word_count: z.number().int().min(50).max(150),
     character_count: z.number().int().nonnegative(),
   })
