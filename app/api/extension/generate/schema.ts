@@ -112,11 +112,23 @@ function normalizedBoundedString(minimum: number, maximum: number) {
   return z
     .string()
     .transform(normalizeYcInput)
-    .pipe(z.string().min(minimum).max(maximum))
-    .refine(
-      (value) => value.length <= maximum,
-      "Input exceeds its character limit",
-    );
+    .pipe(z.string().max(maximum))
+    .superRefine((value, context) => {
+      if (value.length < minimum) {
+        context.addIssue({
+          code: "too_small",
+          origin: "string",
+          minimum,
+          inclusive: true,
+        });
+      }
+      if (value.length > maximum) {
+        context.addIssue({
+          code: "custom",
+          message: "Input exceeds its character limit",
+        });
+      }
+    });
 }
 
 const legacyYcApplicationRequestSchema = z
@@ -140,10 +152,13 @@ const canonicalYcApplicationRequestSchema = z
   .object({
     category: z.literal("yc_application"),
     selectedEvidenceIds,
-    jd: normalizedBoundedString(80, 20_000),
+    jd: normalizedBoundedString(
+      YC_APPLICATION_JOB_DESCRIPTION_MIN_CHARS,
+      YC_APPLICATION_JOB_DESCRIPTION_MAX_CHARS,
+    ),
     questions: z
       .array(
-        normalizedBoundedString(10, 500).refine(
+        normalizedBoundedString(YC_APPLICATION_QUESTION_MIN_CHARS, 500).refine(
           (value) => !value.includes("\n"),
           "Use one line per question",
         ),
@@ -185,7 +200,10 @@ export function formatApplicationAnswers(
 const applicationAnswerSchema = z
   .object({
     questionId: z.string().regex(/^q[1-5]$/u),
-    question: normalizedBoundedString(10, 1000),
+    question: normalizedBoundedString(
+      YC_APPLICATION_QUESTION_MIN_CHARS,
+      YC_APPLICATION_QUESTION_MAX_CHARS,
+    ),
     body: z
       .string()
       .trim()

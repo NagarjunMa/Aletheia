@@ -533,6 +533,28 @@ describe("YC category UI and validation", () => {
     );
   });
 
+  it.each([
+    { jd: 79, question: 10, code: "YC_JOB_DESCRIPTION_TOO_SHORT" },
+    { jd: 80, question: 9, code: "YC_QUESTION_TOO_SHORT" },
+    { jd: 80, question: 10, code: null },
+    { jd: 81, question: 11, code: null },
+  ])(
+    "validates normalized emoji input at JD $jd and question $question units",
+    ({ jd, question, code }) => {
+      const context = "😀".repeat(37) + "ﬀ" + "x".repeat(jd - 76);
+      const questionText = "😀😀😀ﬀ" + "x".repeat(question - 8);
+      const result = validateGenerationInput({
+        category: "yc_application",
+        hasProfile: false,
+        contextValue: `  ${context}  `,
+        questionValue: `Why this role?\r\n  ${questionText}  `,
+      });
+      expect(result).toMatchObject(
+        code ? { valid: false, code } : { valid: true },
+      );
+    },
+  );
+
   it("requires an 80-character YC job description", () => {
     expect(
       validateGenerationInput({

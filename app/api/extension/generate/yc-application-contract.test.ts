@@ -20,6 +20,76 @@ import {
 
 const validJobDescription = `Founding software engineer at an early-stage AI company. Build and operate TypeScript services, ship product experiments with customers, improve observability, and own features from ambiguous requirements through reliable production delivery.`;
 
+describe.each([
+  {
+    format: "legacy",
+    questionPath: ["question"],
+    questionMax: 1000,
+    fields: (question: string) => ({ question }),
+  },
+  {
+    format: "batch",
+    questionPath: ["questions", 1],
+    questionMax: 500,
+    fields: (question: string) => ({ questions: ["Why this role?", question] }),
+  },
+])(
+  "$format normalized UTF-16 input limits",
+  ({ questionPath, questionMax, fields }) => {
+    function check(
+      field: "question" | "jd",
+      length: number,
+      accepted: boolean,
+    ) {
+      for (const prefix of ["", "😀😀😀"]) {
+        // The ligature expands to two UTF-16 units during NFKC normalization.
+        const rest = "x".repeat(length - prefix.length - 2);
+        const normalized = prefix + "ff" + rest;
+        const raw = `  ${prefix}ﬀ${rest}\r\n`;
+        const input = (value: string) => ({
+          category: "yc_application",
+          jd: field === "jd" ? value : validJobDescription,
+          ...fields(field === "question" ? value : "Why this role?"),
+        });
+        const result = ycApplicationRequestSchema.safeParse(input(raw));
+        expect(
+          result.success,
+          `${field}: ${length} units (emoji: ${!!prefix})`,
+        ).toBe(accepted);
+        if (result.success) expect(result.data).toEqual(input(normalized));
+        else
+          expect(result.error.issues).toContainEqual(
+            expect.objectContaining({
+              path: field === "jd" ? ["jd"] : questionPath,
+            }),
+          );
+      }
+    }
+
+    it.each([
+      [9, false],
+      [10, true],
+      [11, true],
+      [questionMax - 1, true],
+      [questionMax, true],
+      [questionMax + 1, false],
+    ])("validates a question at %i units", (length, accepted) =>
+      check("question", length, accepted),
+    );
+
+    it.each([
+      [79, false],
+      [80, true],
+      [81, true],
+      [19_999, true],
+      [20_000, true],
+      [20_001, false],
+    ])("validates a job description at %i units", (length, accepted) =>
+      check("jd", length, accepted),
+    );
+  },
+);
+
 const legacyPayload = {
   profileMarkdown: "# Jane Doe\nSenior Software Engineer at Acme\nNew York, NY",
   resume: "Server and product engineering experience.",
@@ -165,6 +235,14 @@ describe("ALE-37 ordered public answer collection", () => {
     const entry = answer("q1", "Why this role?");
     const payload = response([entry], entry.body);
     expect(ycApplicationPublicSuccessSchema.parse(payload)).toEqual(payload);
+  });
+
+  it("preserves an echoed question with emoji at the ten-unit minimum", () => {
+    const entry = answer("q1", "😀😀😀😀😀");
+    expect(
+      ycApplicationPublicSuccessSchema.parse(response([entry], entry.body))
+        .answers,
+    ).toEqual([entry]);
   });
 
   it("accepts five separately bounded answers and counts the complete compatibility body", () => {
