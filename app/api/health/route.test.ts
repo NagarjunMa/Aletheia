@@ -52,6 +52,7 @@ describe("GET /api/health", () => {
       vi.stubEnv("VERCEL_URL", "fixture-test.vercel.app");
       vi.stubEnv("GROUNDED_RESPONSE_GATE_ATTESTATION", attestation);
       vi.stubEnv("RHETORICAL_PLANS_ENABLED", String(flag));
+      vi.stubEnv("DEBUG", "false");
 
       const response = await GET(makeRequest({ method: "GET" }));
       expect(response.headers.get("cache-control")).toBe("no-store");
@@ -62,9 +63,22 @@ describe("GET /api/health", () => {
           projectId: "prj_isolated",
           deploymentHost: "fixture-test.vercel.app",
           rhetoricalPlans: flag,
+          providerWireDebug: false,
         });
     },
   );
+
+  it("attests active provider wire debug on an opted-in Preview", async () => {
+    vi.stubEnv("VERCEL_ENV", "preview");
+    vi.stubEnv("VERCEL_PROJECT_ID", "prj_isolated");
+    vi.stubEnv("VERCEL_URL", "fixture-test.vercel.app");
+    vi.stubEnv("GROUNDED_RESPONSE_GATE_ATTESTATION", "true");
+    vi.stubEnv("DEBUG", "true");
+    const response = await GET(makeRequest({ method: "GET" }));
+    await expect(response.json()).resolves.toMatchObject({
+      groundedResponseGate: { providerWireDebug: true },
+    });
+  });
 
   it("returns the deployed commit SHA for gate identity checks", async () => {
     process.env.VERCEL_GIT_COMMIT_SHA =

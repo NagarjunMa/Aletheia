@@ -36,6 +36,7 @@ async function handleGet(log: SafeLogger) {
           projectId: VERCEL_PROJECT_ID,
           deploymentHost: VERCEL_URL,
           rhetoricalPlans: rhetoricalPlansEnabled(),
+          providerWireDebug: process.env.DEBUG === "true",
         }
       : undefined;
   return NextResponse.json(

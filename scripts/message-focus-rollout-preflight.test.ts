@@ -32,7 +32,14 @@ function preview(failure?: string) {
   return vi.fn<typeof fetch>(async (input, init) => {
     const url = new URL(String(input));
     const enabled = url.origin === on;
-    const broken = enabled ? failure : undefined;
+    const broken =
+      failure === "off-debug"
+        ? !enabled
+          ? "debug"
+          : undefined
+        : enabled
+          ? failure
+          : undefined;
     const bypass = new Headers(init?.headers).get("x-vercel-protection-bypass");
     expect([off, on]).toContain(url.origin);
     expect(init?.method ?? "GET").toBe("GET");
@@ -59,6 +66,9 @@ function preview(failure?: string) {
           deploymentHost:
             broken === "alias" ? "different.vercel.app" : url.hostname,
           rhetoricalPlans: broken === "rhetorical",
+          ...(broken === "missing-debug"
+            ? {}
+            : { providerWireDebug: broken === "debug" }),
         },
       });
     expect(url.pathname).toBe("/api/extension/config");
@@ -145,6 +155,8 @@ describe("Message Focus rollout preflight", () => {
     "project",
     "alias",
     "rhetorical",
+    "off-debug",
+    "missing-debug",
     "flag",
     "missing-flag",
     "config-origin",
