@@ -2087,6 +2087,12 @@ No new cost, model judge, acceptance waiver or release approved.
 - Added opt-in cleanup for frozen delivery payloads after their retry window or attempt budget is exhausted. The cleanup retains financial and delivery audit records.
 - ALE-53 and ALE-59 stay In Progress. ALE-53 hosted scheduler and provider checks remain pending. See the refund review runbook for rollout and recovery.
 
+2026-11-14 — ALE-70 application answer response limit.
+- Based on main 632fad5. A synthetic 3,001-unit answer containing emoji passed the old structured-response schema while the legacy response rejected it.
+- The public structured answer schema now measures trimmed text in UTF-16 units, matching the service, legacy response, and extension. Contract cases cover 2,999, 3,000, and 3,001 units in both response forms.
+- Passed 3,081 web tests, 15 guardrails, types, affected lint and formatting, engineering policy, and the Next.js production build with placeholder settings. Fresh independent review found no material issues.
+- Backend validation only. Roll back by reverting the change and redeploying the backend.
+
 2026-11-14 — ALE-68 single-question grounding and acceptance fixture.
 - Significant. The canonical Automatic one-question request passed topic readiness without proving a reviewed answer could fit the word limits. A relevant short fact and a longer unrelated fact reproduced HTTP 502 on the merged base. Use question-specific reviewed facts and the existing feasibility check before quota, billing, or provider dispatch. Preserve legacy requests and explicitly selected single-question behavior.
 - Replay with the fictional fixture in modules/application-answer/application/fixtures/ale-68-reviewed-evidence.json. Its exact action excerpts pass the saved fact-review contract. Test one and five ordered answers in both generation modes. Use the fixture only on a dedicated test profile for hosted acceptance.

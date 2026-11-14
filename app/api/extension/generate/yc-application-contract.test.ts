@@ -178,6 +178,45 @@ describe("ALE-37 ordered public answer collection", () => {
     expect(ycApplicationPublicSuccessSchema.parse(payload)).toEqual(payload);
   });
 
+  it.each([
+    [2999, true],
+    [3000, true],
+    [3001, false],
+  ])(
+    "applies the same %i UTF-16-unit boundary to structured and legacy answers",
+    (length, accepted) => {
+      const first = answer("q1", "Why this role?");
+      const prefix = "word ".repeat(49);
+      const remaining = length - prefix.length;
+      const body =
+        prefix +
+        "😀".repeat(Math.floor(remaining / 2)) +
+        "x".repeat(remaining % 2);
+      expect(body).toHaveLength(length);
+      const second = {
+        ...answer("q2", "What did you ship?"),
+        body,
+        character_count: length,
+      };
+      const batchBody = `**Why this role?**\n${first.body}\n\n**What did you ship?**\n${body}`;
+
+      const legacy = ycApplicationPublicSuccessSchema.safeParse(
+        validPublicSuccess(body),
+      );
+      const batch = ycApplicationPublicSuccessSchema.safeParse(
+        response([first, second], batchBody),
+      );
+
+      expect(legacy.success).toBe(accepted);
+      expect(batch.success).toBe(accepted);
+      if (!batch.success) {
+        expect(batch.error.issues).toContainEqual(
+          expect.objectContaining({ path: ["answers", 1, "body"] }),
+        );
+      }
+    },
+  );
+
   it("accepts escaped bold headings with the answer on the next line", () => {
     const first = answer("q1", "Why **this** role?");
     const second = answer("q2", "Describe your experience.");
