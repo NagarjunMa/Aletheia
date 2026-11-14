@@ -77,11 +77,16 @@ export async function runMessageFocusPreflight(
         projectId: z.literal(config.projectId),
         deploymentHost: z.literal(url.hostname),
         rhetoricalPlans: z.boolean(),
+        providerWireDebug: z.boolean(),
       }),
     });
     const identity = health.safeParse(await readProtected("/api/health"));
     if (!identity.success)
       throw new GateError(`Preview identity check failed (${mode})`);
+    if (identity.data.groundedResponseGate.providerWireDebug)
+      throw new GateError(
+        `Preview comparison check failed (${mode}): turn provider wire debug off`,
+      );
     if (identity.data.groundedResponseGate.rhetoricalPlans)
       throw new GateError(
         `Preview comparison check failed (${mode}): turn rhetorical plans off`,
@@ -104,43 +109,52 @@ export async function runMessageFocusPreflight(
   return { deploymentSha: config.sha, previews };
 }
 
+export function loadMessageFocusPreviewInventory(projectId: string): unknown {
+  const cliEnv = { ...process.env };
+  for (const key of Object.keys(cliEnv)) {
+    if (
+      key.startsWith("GROUNDED_GATE_") ||
+      key.startsWith("MESSAGE_FOCUS_GATE_")
+    )
+      delete cliEnv[key];
+  }
+  try {
+    return JSON.parse(
+      execFileSync(
+        "vercel",
+        [
+          "list",
+          projectId,
+          "--environment",
+          "preview",
+          "--status",
+          "READY",
+          "--json",
+          "--limit",
+          "100",
+        ],
+        {
+          encoding: "utf8",
+          env: cliEnv,
+          timeout: 30_000,
+          stdio: ["ignore", "pipe", "pipe"],
+        },
+      ),
+    );
+  } catch {
+    throw new GateError(
+      "Vercel Preview inventory unavailable; check the CLI session and project access",
+    );
+  }
+}
+
 async function main() {
   try {
     const { projectId } = readHostedPreviewConfig(process.env);
-    const cliEnv = { ...process.env };
-    for (const key of Object.keys(cliEnv)) {
-      if (key.startsWith("GROUNDED_GATE_")) delete cliEnv[key];
-    }
-    let inventory: unknown;
-    try {
-      inventory = JSON.parse(
-        execFileSync(
-          "vercel",
-          [
-            "list",
-            projectId,
-            "--environment",
-            "preview",
-            "--status",
-            "READY",
-            "--json",
-            "--limit",
-            "100",
-          ],
-          {
-            encoding: "utf8",
-            env: cliEnv,
-            timeout: 30_000,
-            stdio: ["ignore", "pipe", "pipe"],
-          },
-        ),
-      );
-    } catch {
-      throw new GateError(
-        "Vercel Preview inventory unavailable; check the CLI session and project access",
-      );
-    }
-    const result = await runMessageFocusPreflight(process.env, inventory);
+    const result = await runMessageFocusPreflight(
+      process.env,
+      loadMessageFocusPreviewInventory(projectId),
+    );
     process.stdout.write(JSON.stringify(result, null, 2) + "\n");
   } catch (error) {
     const reason =
