@@ -72,7 +72,7 @@ try {
   }
   asUser(
     owner,
-    `INSERT INTO candidate_evidence(id,user_id,kind,title,actions,confirmed_at,fact_review) VALUES('${id}','${owner}','technical_project','Policy prototype','I built a policy prototype.',now(),'{"forged":true}');`,
+    `INSERT INTO candidate_evidence(id,user_id,kind,title,actions,fact_review) VALUES('${id}','${owner}','technical_project','Policy prototype','I built a policy prototype.','{"forged":true}');`,
   );
   assert(
     asUser(
@@ -84,15 +84,15 @@ try {
   );
   asUser(
     owner,
-    `UPDATE candidate_evidence SET fact_review='{"reviewed":true}' WHERE id='${id}';`,
+    `UPDATE candidate_evidence SET confirmed_at=now(), fact_review='{"reviewed":true}' WHERE id='${id}';`,
   );
   assert(
     asUser(
       owner,
-      `SELECT fact_review->>'reviewed' FROM candidate_evidence WHERE id='${id}';`,
+      `SELECT (confirmed_at IS NOT NULL AND fact_review->>'reviewed' = 'true')::text FROM candidate_evidence WHERE id='${id}';`,
     ),
     "true",
-    "owner review persists",
+    "owner can confirm an unreviewed project and its facts in the same write",
   );
   assert(
     asUser(other, `SELECT count(*) FROM candidate_evidence WHERE id='${id}';`),

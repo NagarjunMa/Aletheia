@@ -124,7 +124,7 @@ describe("getApplicationProfileReadiness", () => {
 
     expect(readiness.ready).toBe(false);
     expect(readiness.missingRequired).toContain(
-      "Add at least two confirmed evidence stories",
+      "Review facts for at least two evidence stories",
     );
     expect(readiness.recommendedNext).toContain(
       "Explain why early-stage companies interest you",

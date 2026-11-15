@@ -119,13 +119,44 @@ describe("candidate application profile actions", () => {
     expect(createClient).not.toHaveBeenCalled();
   });
 
-  it("inserts new evidence under the authenticated user", async () => {
-    const insert = vi.fn().mockResolvedValue({ error: null });
+  const savedEvidenceRow = {
+    id: "0d8d57a9-771c-48c2-9d94-ce9a69ea4eac",
+    user_id: "user-123",
+    kind: validEvidence.kind,
+    title: validEvidence.title,
+    context: validEvidence.context,
+    actions: validEvidence.actions,
+    outcome: validEvidence.outcome,
+    metrics: validEvidence.metrics,
+    skills: validEvidence.skills,
+    links: validEvidence.links,
+    confirmed_at: "2026-11-15T12:00:00Z",
+    sort_order: 1,
+    updated_at: "2026-11-15T12:00:00Z",
+    fact_review: {},
+  };
+
+  function savedRowQuery(row: typeof savedEvidenceRow | null) {
+    const query = {
+      eq: vi.fn().mockImplementation(() => query),
+      select: vi.fn().mockImplementation(() => query),
+      maybeSingle: vi.fn().mockResolvedValue({ data: row, error: null }),
+    };
+    return query;
+  }
+
+  it("returns the server identity and revision of the inserted evidence", async () => {
+    const query = savedRowQuery(savedEvidenceRow);
+    const insert = vi.fn().mockReturnValue(query);
     mockAuthenticatedClient(vi.fn().mockReturnValue({ insert }));
-
     const result = await saveCandidateEvidence(validEvidence);
-
-    expect(result).toEqual({ ok: true });
+    expect(result).toMatchObject({
+      ok: true,
+      evidence: {
+        id: savedEvidenceRow.id,
+        updatedAt: savedEvidenceRow.updated_at,
+      },
+    });
     expect(insert).toHaveBeenCalledWith(
       expect.objectContaining({
         user_id: "user-123",
@@ -135,27 +166,40 @@ describe("candidate application profile actions", () => {
     );
   });
 
-  it("updates evidence only when both evidence and user IDs match", async () => {
-    const userEq = vi.fn().mockResolvedValue({ error: null });
-    const idEq = vi.fn().mockReturnValue({ eq: userEq });
-    const update = vi.fn().mockReturnValue({ eq: idEq });
+  it("returns the persisted revision after an owner-scoped edit", async () => {
+    const query = savedRowQuery({ ...savedEvidenceRow, confirmed_at: "" });
+    const update = vi.fn().mockReturnValue(query);
     mockAuthenticatedClient(vi.fn().mockReturnValue({ update }));
-
     const result = await saveCandidateEvidence({
       ...validEvidence,
-      id: "0d8d57a9-771c-48c2-9d94-ce9a69ea4eac",
+      id: savedEvidenceRow.id,
       confirmed: false,
     });
-
-    expect(result).toEqual({ ok: true });
+    expect(result).toMatchObject({
+      ok: true,
+      evidence: {
+        id: savedEvidenceRow.id,
+        confirmed: false,
+        updatedAt: savedEvidenceRow.updated_at,
+      },
+    });
     expect(update).toHaveBeenCalledWith(
       expect.objectContaining({ confirmed_at: null }),
     );
-    expect(idEq).toHaveBeenCalledWith(
-      "id",
-      "0d8d57a9-771c-48c2-9d94-ce9a69ea4eac",
-    );
-    expect(userEq).toHaveBeenCalledWith("user_id", "user-123");
+    expect(query.eq).toHaveBeenCalledWith("id", savedEvidenceRow.id);
+    expect(query.eq).toHaveBeenCalledWith("user_id", "user-123");
+  });
+
+  it("does not open fact review when the save affected no owned row", async () => {
+    const update = vi.fn().mockReturnValue(savedRowQuery(null));
+    mockAuthenticatedClient(vi.fn().mockReturnValue({ update }));
+    const result = await saveCandidateEvidence({
+      ...validEvidence,
+      id: savedEvidenceRow.id,
+    });
+    expect(result.ok).toBe(false);
+    expect(result).not.toHaveProperty("evidence");
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 
   it("deletes evidence only from the authenticated user's rows", async () => {

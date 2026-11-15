@@ -334,6 +334,9 @@ export function getApplicationEvidenceGuidance(response, questions) {
       : single
         ? `Question ${numbers[0]}`
         : `Questions ${new Intl.ListFormat("en").format(numbers.map(String))}`;
+  if (gap.reason === "missing_rationale") {
+    return `${subject} ${single ? "needs" : "need"} the reason behind the decision. What specific problem or trade-off led to your choice? Add and review that reason in your application profile, then generate again.`;
+  }
   const need =
     gap.reason === "incomplete_answer"
       ? "more reviewed detail for a complete answer"
@@ -377,7 +380,8 @@ export function getGenerationErrorPresentation(response, questions) {
   }
 
   if (
-    response?.code === "GROUNDING_PROFILE_INCOMPLETE" &&
+    (response?.code === "GROUNDING_PROFILE_INCOMPLETE" ||
+      (response?.code === "INSUFFICIENT_GROUNDING" && evidenceGuidance)) &&
     response?.applicationProfileUrl
   ) {
     return {

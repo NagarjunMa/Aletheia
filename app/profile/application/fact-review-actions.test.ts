@@ -115,6 +115,86 @@ describe("owned individual fact review actions", () => {
       }),
     });
   });
+  it("confirms selected facts and their previously unconfirmed project in one owned write", async () => {
+    const unconfirmed = { ...row, confirmed_at: null };
+    const reviewed = {
+      ...row,
+      fact_review: {
+        version: 1,
+        source: JSON.stringify({
+          kind: row.kind,
+          title: row.title,
+          context: row.context,
+          actions: row.actions,
+          outcome: row.outcome,
+          metrics: row.metrics,
+          skills: row.skills,
+          links: row.links,
+        }),
+        facts,
+      },
+    };
+    const c = client({ row: unconfirmed, writeRow: reviewed });
+    const result = await saveCandidateFactReview({
+      evidenceId: id,
+      expectedRevision: revision,
+      facts,
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      evidence: { confirmed: true, factReview: { facts } },
+    });
+    expect(c.update).toHaveBeenCalledOnce();
+    expect(c.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        confirmed_at: expect.any(String),
+        fact_review: expect.objectContaining({ facts }),
+      }),
+    );
+  });
+
+  it("does not confirm an unconfirmed project when the selection is empty", async () => {
+    const draft = { ...row, confirmed_at: null };
+    const c = client({ row: draft, writeRow: draft });
+    const result = await saveCandidateFactReview({
+      evidenceId: id,
+      expectedRevision: revision,
+      facts: [],
+    });
+    expect(result).toMatchObject({ ok: true, evidence: { confirmed: false } });
+    expect(c.update).toHaveBeenCalledWith(
+      expect.not.objectContaining({ confirmed_at: expect.anything() }),
+    );
+  });
+
+  it.each([
+    "The prototype cut review time by 30% in simulated tests only.",
+    "The prototype cut review time by 30%\nThe result came from simulated tests only.",
+  ])(
+    "rejects an exact excerpt that drops its qualification from a saved entry",
+    async (outcome) => {
+      const c = client({
+        row: {
+          ...row,
+          outcome,
+        },
+      });
+      const result = await saveCandidateFactReview({
+        evidenceId: id,
+        expectedRevision: revision,
+        facts: [
+          {
+            ...facts[0],
+            kind: "metric",
+            excerpt: "The prototype cut review time by 30%",
+          },
+        ],
+      });
+      expect(result.ok).toBe(false);
+      expect(c.update).not.toHaveBeenCalled();
+    },
+  );
+
   it.each([
     { row: null },
     { row: { ...row, user_id: "another-owner" } },

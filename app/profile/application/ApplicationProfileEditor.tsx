@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   CheckCircle2,
@@ -20,6 +20,7 @@ import {
   type CandidateProfileInput,
 } from "@/lib/candidate-profile/schema";
 import type { CandidateEvidenceRecord } from "@/lib/candidate-profile/service";
+import { readFactReview } from "@/lib/candidate-profile/fact-review";
 import FactReview from "./FactReview";
 import {
   deleteCandidateEvidence,
@@ -80,24 +81,34 @@ export default function ApplicationProfileEditor({
   const [profile, setProfile] = useState(initialProfile);
   const [evidence, setEvidence] = useState(initialEvidence);
   const [lastServerEvidence, setLastServerEvidence] = useState(initialEvidence);
+  const [reviewId, setReviewId] = useState<string | null>(null);
   // Refresh delivers authoritative revisions, including trigger-invalidated reviews.
   // Keep unsaved profile/editor state while replacing only saved evidence.
   if (lastServerEvidence !== initialEvidence) {
     setLastServerEvidence(initialEvidence);
     setEvidence(initialEvidence);
+    if (reviewId && !initialEvidence.some(({ id }) => id === reviewId))
+      setReviewId(null);
   }
   const [editor, setEditor] = useState<CandidateEvidenceInput | null>(null);
-  const [reviewId, setReviewId] = useState<string | null>(null);
   const [profileNotice, setProfileNotice] = useState<ProfileNotice>(null);
   const [evidenceNotice, setEvidenceNotice] = useState<Notice>(null);
   const [profilePending, startProfileTransition] = useTransition();
   const [evidencePending, startEvidenceTransition] = useTransition();
+  const evidenceSection = useRef<HTMLDetailsElement>(null);
+
+  useEffect(() => {
+    if (window.location.hash === "#evidence" && evidenceSection.current)
+      evidenceSection.current.open = true;
+  }, []);
 
   const readiness = useMemo(
     () =>
       getApplicationProfileReadiness({
         profile,
-        evidence,
+        evidence: evidence.filter(
+          (item) => readFactReview(item, item.factReview).length > 0,
+        ),
         hasPrimaryResume,
       }),
     [evidence, hasPrimaryResume, profile],
@@ -124,29 +135,51 @@ export default function ApplicationProfileEditor({
 
   const submitEvidence = (event: React.FormEvent) => {
     event.preventDefault();
-    if (!editor) return;
+    if (!editor || evidencePending) return;
     setEvidenceNotice(null);
     startEvidenceTransition(async () => {
-      const result = await saveCandidateEvidence(editor);
-      if (!result.ok) {
-        setEvidenceNotice({ type: "error", message: result.error });
-        return;
-      }
+      try {
+        const result = await saveCandidateEvidence(editor);
+        if (!result.ok) {
+          setEvidenceNotice({ type: "error", message: result.error });
+          return;
+        }
 
-      if (editor.id) {
+        const saved = result.evidence;
         setEvidence((items) =>
-          items.map((item) =>
-            item.id === editor.id
-              ? ({ ...editor, id: editor.id } as CandidateEvidenceRecord)
-              : item,
-          ),
+          items.some(({ id }) => id === saved.id)
+            ? items.map((item) => (item.id === saved.id ? saved : item))
+            : [...items, saved],
         );
+        setEditor(null);
+        if (!readFactReview(saved, saved.factReview).length) {
+          setReviewId(saved.id);
+        } else {
+          setEvidenceNotice({
+            type: "success",
+            message: "Evidence story saved.",
+          });
+        }
+      } catch {
+        setEvidenceNotice({
+          type: "error",
+          message: "Could not save this project. Try again.",
+        });
       }
-      setEditor(null);
-      setEvidenceNotice({ type: "success", message: "Evidence story saved." });
-      router.refresh();
     });
   };
+
+  function editEvidence(item: CandidateEvidenceRecord) {
+    const { factReview: _review, updatedAt: _revision, ...input } = item;
+    setReviewId(null);
+    setEvidenceNotice(null);
+    setEditor(input);
+  }
+
+  function closeReview(id: string) {
+    document.getElementById(`review-project-${id}`)?.focus();
+    setReviewId(null);
+  }
 
   const removeEvidence = (item: CandidateEvidenceRecord) => {
     if (!window.confirm(`Delete “${item.title}”?`)) return;
@@ -421,6 +454,7 @@ export default function ApplicationProfileEditor({
 
         <details
           id="evidence"
+          ref={evidenceSection}
           className="group scroll-mt-6 rounded-xl border border-border/70 bg-card/75 shadow-[0_18px_55px_rgba(2,4,3,0.16)] backdrop-blur-xl transition-colors open:border-primary/25 open:bg-card"
         >
           <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-5 marker:content-none sm:px-6 [&::-webkit-details-marker]:hidden">
@@ -451,7 +485,11 @@ export default function ApplicationProfileEditor({
               </div>
               <button
                 type="button"
-                disabled={Boolean(editor) || evidence.length >= 25}
+                disabled={
+                  Boolean(editor || reviewId) ||
+                  evidencePending ||
+                  evidence.length >= 25
+                }
                 onClick={() =>
                   setEditor({ ...EMPTY_EVIDENCE, sortOrder: evidence.length })
                 }
@@ -483,8 +521,8 @@ export default function ApplicationProfileEditor({
                   <p className="font-semibold text-white">No evidence yet.</p>
                   <p className="mt-2 text-sm leading-6 text-muted-foreground">
                     Start with a measurable achievement or your most difficult
-                    technical project. Two confirmed stories unlock generation
-                    readiness; five strong achievements create better coverage.
+                    technical project. Review specific actions and outcomes to
+                    make them available for application answers.
                   </p>
                 </div>
               ) : (
@@ -500,22 +538,21 @@ export default function ApplicationProfileEditor({
                       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                         <button
                           type="button"
-                          onClick={() => {
-                            const {
-                              factReview: _review,
-                              updatedAt: _revision,
-                              ...input
-                            } = item;
-                            setReviewId(null);
-                            setEditor(input);
-                          }}
+                          disabled={
+                            evidencePending || Boolean(editor || reviewId)
+                          }
+                          onClick={() => editEvidence(item)}
                           className="min-w-0 text-left"
                         >
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="text-xs uppercase tracking-[0.14em] text-accent/58">
                               {option?.label ?? item.kind}
                             </span>
-                            <EvidenceStatus confirmed={item.confirmed} />
+                            <EvidenceStatus
+                              count={
+                                readFactReview(item, item.factReview).length
+                              }
+                            />
                           </div>
                           <h3 className="mt-2 text-base font-semibold text-white">
                             {item.title}
@@ -527,23 +564,27 @@ export default function ApplicationProfileEditor({
                         <div className="flex shrink-0 items-center gap-2">
                           <button
                             type="button"
-                            onClick={() => {
-                              const {
-                                factReview: _review,
-                                updatedAt: _revision,
-                                ...input
-                              } = item;
-                              setReviewId(null);
-                              setEditor(input);
-                            }}
+                            disabled={
+                              evidencePending || Boolean(editor || reviewId)
+                            }
+                            onClick={() => editEvidence(item)}
                             className="rounded-lg border border-accent/14 px-3 py-2 text-xs font-semibold text-white hover:bg-accent/10"
                           >
                             Edit
                           </button>
                           <button
                             type="button"
-                            disabled={evidencePending || Boolean(editor)}
-                            onClick={() => setReviewId(item.id)}
+                            id={`review-project-${item.id}`}
+                            aria-expanded={reviewId === item.id}
+                            disabled={
+                              evidencePending ||
+                              Boolean(editor) ||
+                              Boolean(reviewId && reviewId !== item.id)
+                            }
+                            onClick={() => {
+                              setEvidenceNotice(null);
+                              setReviewId(item.id);
+                            }}
                             className="rounded-lg border border-accent/25 px-3 py-2 text-xs font-semibold text-accent disabled:opacity-50"
                           >
                             Review facts
@@ -551,7 +592,9 @@ export default function ApplicationProfileEditor({
                           <button
                             type="button"
                             aria-label={`Delete ${item.title}`}
-                            disabled={evidencePending}
+                            disabled={
+                              evidencePending || Boolean(editor || reviewId)
+                            }
                             onClick={() => removeEvidence(item)}
                             className="rounded-lg border border-rose-300/20 p-2 text-rose-200 transition hover:bg-rose-400/10 disabled:opacity-50"
                           >
@@ -563,17 +606,25 @@ export default function ApplicationProfileEditor({
                         <FactReview
                           key={`${item.id}:${item.updatedAt}`}
                           evidence={item}
-                          onClose={() => setReviewId(null)}
+                          onClose={() => closeReview(item.id)}
+                          onEdit={() => editEvidence(item)}
+                          onReload={() => router.refresh()}
                           onSaved={(saved) => {
                             setEvidence((current) =>
                               current.map((entry) =>
                                 entry.id === saved.id ? saved : entry,
                               ),
                             );
+                            const count = readFactReview(
+                              saved,
+                              saved.factReview,
+                            ).length;
+                            closeReview(saved.id);
                             setEvidenceNotice({
                               type: "success",
-                              message:
-                                "Reviewed facts saved. Source edits will require a new review.",
+                              message: count
+                                ? `${count} ${count === 1 ? "fact" : "facts"} confirmed and available for matching.`
+                                : "Reviewed facts withdrawn.",
                             });
                           }}
                         />
@@ -859,6 +910,10 @@ function EvidenceEditor({
   onCancel: () => void;
   onSubmit: (_event: React.FormEvent) => void;
 }) {
+  const form = useRef<HTMLFormElement>(null);
+  useEffect(() => {
+    form.current?.querySelector<HTMLInputElement>("#evidence-title")?.focus();
+  }, []);
   const update = <Key extends keyof CandidateEvidenceInput>(
     key: Key,
     next: CandidateEvidenceInput[Key],
@@ -866,6 +921,7 @@ function EvidenceEditor({
 
   return (
     <form
+      ref={form}
       onSubmit={onSubmit}
       className="mt-6 rounded-xl border border-accent/22 bg-background/55 p-5"
     >
@@ -882,6 +938,7 @@ function EvidenceEditor({
         <button
           type="button"
           aria-label="Close evidence editor"
+          disabled={pending}
           onClick={onCancel}
           className="rounded-lg border border-accent/12 p-2 text-muted-foreground hover:bg-accent/10"
         >
@@ -1003,9 +1060,8 @@ function EvidenceEditor({
             Confirm this evidence is accurate
           </span>
           <span className="mt-1 block text-xs leading-5 text-muted-foreground">
-            Every claim, metric, link, and description can be defended in an
-            interview. Unconfirmed stories remain saved but do not count toward
-            generation readiness.
+            Confirm the project details are accurate. You can also confirm the
+            project when you approve its individual facts.
           </span>
         </span>
       </label>
@@ -1022,6 +1078,7 @@ function EvidenceEditor({
         <button
           type="button"
           onClick={onCancel}
+          disabled={pending}
           className="rounded-lg border border-accent/16 px-4 py-2.5 text-sm font-semibold text-white hover:bg-accent/10"
         >
           Cancel
@@ -1031,14 +1088,15 @@ function EvidenceEditor({
   );
 }
 
-function EvidenceStatus({ confirmed }: { confirmed: boolean }) {
-  return confirmed ? (
+function EvidenceStatus({ count }: { count: number }) {
+  return count ? (
     <span className="inline-flex items-center gap-1 rounded-full border border-accent/25 bg-accent/10 px-2 py-0.5 text-[11px] text-accent">
-      <CheckCircle2 className="h-3 w-3" aria-hidden={true} /> Confirmed
+      <CheckCircle2 className="h-3 w-3" aria-hidden={true} />
+      {count} {count === 1 ? "fact" : "facts"} confirmed
     </span>
   ) : (
     <span className="rounded-full border border-amber-200/20 bg-amber-200/8 px-2 py-0.5 text-[11px] text-amber-100">
-      Unconfirmed
+      Review needed
     </span>
   );
 }

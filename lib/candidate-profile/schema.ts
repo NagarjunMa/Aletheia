@@ -108,7 +108,7 @@ export function getApplicationProfileReadiness(input: {
     missingRequired.push("Add your current role or a primary resume");
   }
   if (!hasEvidence) {
-    missingRequired.push("Add at least two confirmed evidence stories");
+    missingRequired.push("Review facts for at least two evidence stories");
   }
 
   const recommendedNext: string[] = [];
