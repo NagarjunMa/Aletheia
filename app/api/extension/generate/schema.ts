@@ -434,7 +434,11 @@ const evidenceQuestionNumbers = z
 export const applicationEvidenceGapSchema = z.union([
   z
     .object({
-      reason: z.enum(["missing_reviewed_facts", "incomplete_answer"]),
+      reason: z.enum([
+        "missing_reviewed_facts",
+        "missing_rationale",
+        "incomplete_answer",
+      ]),
       questionNumbers: evidenceQuestionNumbers,
     })
     .strict(),

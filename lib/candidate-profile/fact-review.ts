@@ -54,29 +54,77 @@ export function evidenceReviewSource(evidence: CandidateEvidenceInput): string {
   });
 }
 
-export function evidenceFactFields(evidence: CandidateEvidenceInput): string[] {
-  return [
-    evidence.title,
-    evidence.context,
-    evidence.actions,
-    evidence.outcome,
-    ...evidence.metrics,
-    ...evidence.skills,
-  ].filter(Boolean);
+export function evidenceFactSources(evidence: CandidateEvidenceInput): Array<{
+  text: string;
+  field: string;
+  kind: CandidateFact["kind"];
+  demonstrates: string;
+}> {
+  const sources: ReturnType<typeof evidenceFactSources> = [
+    {
+      text: evidence.actions,
+      field: "Actions",
+      kind: "action",
+      demonstrates: "Work performed, decisions or implementation.",
+    },
+    {
+      text: evidence.outcome,
+      field: "Outcome",
+      kind: "outcome",
+      demonstrates: "What happened after the work.",
+    },
+    ...evidence.metrics.map((text) => ({
+      text,
+      field: "Metrics",
+      kind: "metric" as const,
+      demonstrates: "A recorded measurement or comparison.",
+    })),
+    {
+      text: evidence.context,
+      field: "Context",
+      kind: "action",
+      demonstrates: "The problem, constraints or reason for the work.",
+    },
+    {
+      text: evidence.title,
+      field: "Title",
+      kind: "action",
+      demonstrates: "Which project the fact belongs to.",
+    },
+    ...evidence.skills.map((text) => ({
+      text,
+      field: "Skills",
+      kind: "technology" as const,
+      demonstrates: "A skill or tool named in the project.",
+    })),
+  ];
+  return sources.filter(({ text }) => Boolean(text));
 }
 
-/** Suggestions are never trusted/typed/confirmed without the individual's review. */
+export function evidenceFactFields(evidence: CandidateEvidenceInput): string[] {
+  return evidenceFactSources(evidence).map(({ text }) => text);
+}
+
+/** Bind new approvals to a whole entry, including qualifications on later lines. */
+export function findCompleteFactSource(
+  sources: ReturnType<typeof evidenceFactSources>,
+  excerpt: string,
+) {
+  return sources.find(({ text }) => text === excerpt);
+}
+
+/** Suggestions use whole saved fields when they fit the fact limit. */
 export function suggestFactExcerpts(
   evidence: CandidateEvidenceInput,
 ): string[] {
   return [
     ...new Set(
-      evidenceFactFields(evidence).flatMap((field) =>
-        field.split(/(?<=[.!?])\s+(?=[A-Z])/u).map((part) => part.trim()),
-      ),
+      evidenceFactSources(evidence)
+        .filter(({ field }) => field !== "Title" && field !== "Skills")
+        .map(({ text }) => text),
     ),
   ]
-    .filter((excerpt) => excerpt.length > 0 && excerpt.length <= 600)
+    .filter((excerpt) => excerpt.length <= 600)
     .slice(0, MAX_REVIEWED_FACTS);
 }
 

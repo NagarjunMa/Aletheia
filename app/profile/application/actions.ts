@@ -13,7 +13,10 @@ import type { TablesInsert } from "@/lib/database/types";
 import { createClient } from "@/lib/supabase/server";
 import {
   candidateFactsSchema,
+  evidenceFactSources,
+  findCompleteFactSource,
   prepareFactReview,
+  readFactReview,
 } from "@/lib/candidate-profile/fact-review";
 import {
   mapCandidateEvidenceRow,
@@ -35,7 +38,7 @@ export type CandidateProfileCategory = z.infer<typeof profileCategorySchema>;
 export type CandidateProfileActionResult =
   { ok: true } | { ok: false; error: string };
 
-function validationError(message: string): CandidateProfileActionResult {
+function validationError(message: string): { ok: false; error: string } {
   return { ok: false, error: message };
 }
 
@@ -44,11 +47,13 @@ function refreshCandidateProfilePages() {
   revalidatePath("/profile/application");
 }
 
+type CandidateEvidenceSaveResult =
+  | { ok: true; evidence: CandidateEvidenceRecord }
+  | { ok: false; error: string; stale?: true };
+
 export async function saveCandidateFactReview(
   input: unknown,
-): Promise<
-  { ok: true; evidence: CandidateEvidenceRecord } | { ok: false; error: string }
-> {
+): Promise<CandidateEvidenceSaveResult> {
   const parsed = z
     .object({
       evidenceId: z.string().max(36).uuid(),
@@ -80,20 +85,46 @@ export async function saveCandidateFactReview(
       .eq("id", evidenceId)
       .eq("user_id", user.id)
       .maybeSingle();
-    if (
-      loaded.error ||
-      !loaded.data ||
-      loaded.data.user_id !== user.id ||
-      loaded.data.updated_at !== expectedRevision
-    ) {
+    if (loaded.error || !loaded.data || loaded.data.user_id !== user.id) {
       complete("failure", { errorCode: "FACT_REVIEW_STALE" });
       return failure;
     }
     const row = loaded.data as Tables<"candidate_evidence">;
-    const factReview = prepareFactReview(mapCandidateEvidenceRow(row), facts);
+    if (row.updated_at !== expectedRevision) {
+      complete("failure", { errorCode: "FACT_REVIEW_STALE" });
+      return { ...failure, stale: true };
+    }
+    const evidence = mapCandidateEvidenceRow(row);
+    const sources = evidenceFactSources(evidence);
+    const savedFacts = readFactReview(evidence, evidence.factReview);
+    if (
+      facts.some(
+        (fact) =>
+          !findCompleteFactSource(sources, fact.excerpt) &&
+          !savedFacts.some(
+            (saved) =>
+              saved.id === fact.id &&
+              saved.kind === fact.kind &&
+              saved.excerpt === fact.excerpt,
+          ),
+      )
+    ) {
+      complete("failure", { errorCode: "FACT_REVIEW_INVALID" });
+      return validationError(
+        "Choose a complete excerpt from the saved project.",
+      );
+    }
+    const confirmProject = facts.length > 0 && !evidence.confirmed;
+    const factReview = prepareFactReview(
+      { ...evidence, confirmed: evidence.confirmed || confirmProject },
+      facts,
+    );
     const result = await supabase
       .from("candidate_evidence")
-      .update({ fact_review: factReview })
+      .update({
+        fact_review: factReview,
+        ...(confirmProject && { confirmed_at: new Date().toISOString() }),
+      })
       .eq("id", evidenceId)
       .eq("user_id", user.id)
       .eq("updated_at", expectedRevision)
@@ -101,7 +132,9 @@ export async function saveCandidateFactReview(
       .maybeSingle();
     if (result.error || !result.data || result.data.user_id !== user.id) {
       complete("failure", { errorCode: "FACT_REVIEW_SAVE_FAILED" });
-      return failure;
+      return !result.error && !result.data
+        ? { ...failure, stale: true }
+        : failure;
     }
     complete("success", { claimCount: facts.length });
     refreshCandidateProfilePages();
@@ -226,7 +259,7 @@ export async function saveCandidateProfileCategory(
 
 export async function saveCandidateEvidence(
   input: CandidateEvidenceInput,
-): Promise<CandidateProfileActionResult> {
+): Promise<CandidateEvidenceSaveResult> {
   const parsed = candidateEvidenceInputSchema.safeParse(input);
   if (!parsed.success) {
     return validationError(
@@ -264,17 +297,18 @@ export async function saveCandidateEvidence(
     userId: user.id,
     operation: evidence.id ? "update" : "insert",
   });
-  const result = evidence.id
-    ? await supabase
+  const write = evidence.id
+    ? supabase
         .from("candidate_evidence")
         .update(payload)
         .eq("id", evidence.id)
         .eq("user_id", user.id)
-    : await supabase
+    : supabase
         .from("candidate_evidence")
         .insert({ ...payload, user_id: user.id });
 
-  if (result.error) {
+  const result = await write.select("*").maybeSingle();
+  if (result.error || !result.data || result.data.user_id !== user.id) {
     completeWrite("failure", { errorCode: "CANDIDATE_EVIDENCE_SAVE_FAILED" });
     log.error(
       {
@@ -290,7 +324,7 @@ export async function saveCandidateEvidence(
 
   completeWrite("success");
   refreshCandidateProfilePages();
-  return { ok: true };
+  return { ok: true, evidence: mapCandidateEvidenceRow(result.data) };
 }
 
 export async function deleteCandidateEvidence(

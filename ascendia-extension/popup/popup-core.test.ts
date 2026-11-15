@@ -646,6 +646,11 @@ describe("application evidence guidance", () => {
       /Question 2 needs more reviewed detail/u,
     ],
     [
+      { reason: "missing_rationale", questionNumbers: [2] },
+      2,
+      /Question 2 needs the reason behind the decision.*problem or trade-off/u,
+    ],
+    [
       { reason: "shared_coverage" },
       5,
       /^The questions need distinct reviewed facts/u,

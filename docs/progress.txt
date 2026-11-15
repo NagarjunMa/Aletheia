@@ -1,3 +1,70 @@
+## 2026-11-15 — ALE-71 project save to reviewed facts
+
+Change contract, Critical risk. On feat/ale-71-project-fact-review, open
+fact review on a successful first project save and after a
+source edit invalidates prior approval. Display the exact field or excerpt
+and a short explanation of what it demonstrates. Saving or leaving the
+review does not approve facts. A single explicit confirmation persists
+only the selected excerpts under the current owner and source revision.
+The existing invalidation trigger still governs edits and revocation.
+
+The scoped application generator matches approved facts per question.
+For a question explicitly asking why the applicant made a decision, guide
+the user to add and review the reason when the matching excerpts lack it.
+Preserve the submitted batch and return before quota, billing or provider
+work. Keep the answer contract, legacy request handling, provider call
+budget and privacy boundaries. No schema migration is needed.
+
+New approvals accept a complete saved entry. Previously approved
+excerpts can remain in the set under the same source revision. Rationale
+questions require an approved reason attached to the named choice. Reviewed
+details from that project can supplement a short reason. Recovery opens the
+Evidence section directly and preserves the original question batch.
+
+Independent reviews found a dropped recovery anchor, lost editor focus,
+clipped qualifications, unrelated rationales, and a first-save remount
+during dashboard revalidation. The browser regression exercises the real
+dashboard key and action-driven refresh. The third review also reproduced
+a rationale bypass in passive and alternate question forms. The correction
+separates explicit rationale intent from decision matching and rejects an
+unresolved choice before admission. That correction passed focused tests
+and still needs independent review.
+
+Node 24 clean installs, the default Next.js production build, 3,150 web
+tests with coverage, 15 guardrails, type-check, lint and engineering policy
+passed. Extension CI passed 308 tests and built 1.0.29. Eight extension
+Chromium cases, the fact-review browser checks at three widths, and the
+disposable PostgreSQL ownership, revision and invalidation checks passed.
+
+Hosted Preview evidence with extension 1.0.29 and a manual screen-reader
+check remain open. Preview rollout pairs the updated app with the extension.
+A rollback restores the prior app deployment and extension package.
+Reviewed evidence remains readable under the existing storage schema.
+
+Pre-merge audit, 2026-11-15. Updated the working branch to remote main
+5773453 and resolved four overlaps with ALE-68. Reviewed reasons are required
+in ALE-68's validated options. R6 reproduced reason phrasing that could reach
+admission with action-only evidence or prevent recovery. R7 reproduced a
+public-production question using a staging-only reason. The correction matches
+the scope attached to the question and distinguishes continuing a tool from
+choosing it initially.
+Focused regressions cover denied action-only and wrong-scope answers and
+successful recovery with matching reviewed evidence.
+R8 covers additional outcome and decision wording. R9 accepts an explicit
+reason immediately following the decision in the same reviewed excerpt.
+The third independent pass confirmed R8 and R9 and reproduced R10. A statement
+that a reason was recorded could still pass without giving the reason. The
+guard now rejects that case in both reviewed reason forms. The two new
+regressions failed before the fix and passed after it. Independent review of
+that last correction, authenticated Preview and manual VoiceOver remain open.
+
+Pre-push verification, 2026-11-15. R10 review reproduced references to
+undisclosed reasons that reached metering. A stricter wording rule also
+rejected genuine short reasons (R11). The matcher now examines the full
+reason text for references to its disclosure or location. Local regressions
+cover both reason forms, rejection before metering, bare or numeric reasons,
+and cases where documentation itself is an explicit factor in the decision.
+
 ## 2026-11-15 — ALE-68 tool input fix and ALE-69 regression matrix
 
 The production `yc-2.4.0` rerun on `6965c4e` returned 502 at tool parsing

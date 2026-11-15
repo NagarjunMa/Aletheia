@@ -17,7 +17,11 @@ export function readApplicationEvidenceGap({ status, code, evidenceGap } = {}) {
     return;
   }
   if (
-    !["missing_reviewed_facts", "incomplete_answer"].includes(reason) ||
+    ![
+      "missing_reviewed_facts",
+      "missing_rationale",
+      "incomplete_answer",
+    ].includes(reason) ||
     !Array.isArray(questionNumbers) ||
     questionNumbers.length < 1 ||
     questionNumbers.length > 5 ||

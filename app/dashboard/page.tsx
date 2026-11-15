@@ -27,6 +27,7 @@ import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import CreditsPanel from "./CreditsPanel";
 import { getApplicationProfileReadiness } from "@/lib/candidate-profile/schema";
+import { readFactReview } from "@/lib/candidate-profile/fact-review";
 import { getCandidateApplicationProfile } from "@/lib/candidate-profile/service";
 import {
   listUserResumes,
@@ -154,7 +155,9 @@ export default async function DashboardPage() {
   const primaryResume = resumes.find((resume) => resume.is_primary);
   const applicationReadiness = getApplicationProfileReadiness({
     profile: applicationProfile.profile,
-    evidence: applicationProfile.evidence,
+    evidence: applicationProfile.evidence.filter(
+      (item) => readFactReview(item, item.factReview).length > 0,
+    ),
     hasPrimaryResume: Boolean(primaryResume),
   });
 
@@ -516,7 +519,7 @@ export default async function DashboardPage() {
           </div>
 
           <ApplicationProfileEditor
-            key={applicationProfile.evidence.map((item) => item.id).join(":")}
+            key={user.id}
             initialProfile={applicationProfile.profile}
             initialEvidence={applicationProfile.evidence}
             hasPrimaryResume={Boolean(primaryResume)}

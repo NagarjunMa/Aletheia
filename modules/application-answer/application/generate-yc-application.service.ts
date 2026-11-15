@@ -75,6 +75,7 @@ import {
   YcApplicationStructuredOutputError,
 } from "../infrastructure/anthropic-yc.repository";
 import { prepareYcGroundingContext } from "./prepare-yc-grounding-context";
+import { applicationRationaleRequest } from "./build-yc-grounding-context";
 import {
   sanitizeYcApplicationOutput,
   type SanitizedYcApplicationOutput,
@@ -165,9 +166,9 @@ function rateLimitHeaders(
   };
 }
 
-function profileUrl(baseUrl: string): string {
+function profileUrl(baseUrl: string, reviewEvidence: boolean): string {
   return new URL(
-    "/profile/application",
+    reviewEvidence ? "/dashboard#evidence" : "/profile/application",
     `${baseUrl.replace(/\/$/u, "")}/`,
   ).toString();
 }
@@ -341,15 +342,25 @@ export async function generateYcApplication(
       sourceCount: context.sources.length,
     });
 
-    if (isBatch && !input.request.selectedEvidenceIds) {
+    if (isBatch) {
       missingReviewedQuestionNumbers =
         context.questions?.flatMap((question, index) =>
-          question.reviewedFactIds?.length === 0 ? [index + 1] : [],
+          question.reviewedFactIds?.length === 0 &&
+          (!input.request.selectedEvidenceIds ||
+            applicationRationaleRequest(questions[index]!))
+            ? [index + 1]
+            : [],
         ) ?? [];
     }
+    const missingRationaleNumbers = missingReviewedQuestionNumbers.filter(
+      (number) => applicationRationaleRequest(questions[number - 1]!),
+    );
+    const missingRationale = missingRationaleNumbers.length > 0;
     const missingEvidenceGap = {
-      reason: "missing_reviewed_facts",
-      questionNumbers: missingReviewedQuestionNumbers,
+      reason: missingRationale ? "missing_rationale" : "missing_reviewed_facts",
+      questionNumbers: missingRationale
+        ? missingRationaleNumbers
+        : missingReviewedQuestionNumbers,
     };
 
     if (!context.readiness.ready) {
@@ -357,11 +368,15 @@ export async function generateYcApplication(
         success: false,
         error: "Candidate profile incomplete",
         code: "GROUNDING_PROFILE_INCOMPLETE",
-        message:
-          "Add the missing candidate information before generating this answer.",
+        message: missingRationale
+          ? "Add and review the reason for your decision before generating these answers."
+          : "Add the missing candidate information before generating this answer.",
         missingFields: context.readiness.missingFields,
         recommendedFields: context.readiness.recommendedFields,
-        applicationProfileUrl: profileUrl(input.applicationBaseUrl),
+        applicationProfileUrl: profileUrl(
+          input.applicationBaseUrl,
+          missingReviewedQuestionNumbers.length > 0,
+        ),
         evidenceGap:
           applicationEvidenceGapSchema.safeParse(missingEvidenceGap).data,
         billing: "none",
@@ -806,7 +821,10 @@ export async function generateYcApplication(
           billing: "none",
           ...(isBatch &&
             !modelRequested &&
-            diagnostic.success && { evidenceGap: diagnostic.data }),
+            diagnostic.success && {
+              evidenceGap: diagnostic.data,
+              applicationProfileUrl: profileUrl(input.applicationBaseUrl, true),
+            }),
         },
         { status: 422, headers: input.corsHeaders },
       );

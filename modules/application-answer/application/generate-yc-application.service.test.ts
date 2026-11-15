@@ -1165,6 +1165,249 @@ describe("ALE-37 batch orchestration", () => {
       return deps;
     }
 
+    const deploymentReason =
+      "Our reason for choosing Kubernetes for deployment and rollback was the availability of a repeatable recovery procedure.";
+    it.each([
+      ...[
+        "Why did you choose to use Kubernetes for deployment and rollback?",
+        "Why was Kubernetes chosen for deployment and rollback?",
+        "What factors informed the decision to use Kubernetes for deployment and rollback?",
+        "What drove your decision to use Kubernetes for deployment and rollback?",
+        "What were your reasons for choosing Kubernetes for deployment and rollback?",
+        "What motivated your choice of Kubernetes for deployment and rollback?",
+        "What led to your decision to use Kubernetes for deployment and rollback?",
+      ].map((question) => [question, deploymentReason]),
+      [
+        "Why did you end up using Kubernetes for deployment and rollback?",
+        deploymentReason,
+      ],
+      [
+        "Why did you choose Kubernetes for deployment and rollback?",
+        "We chose Kubernetes for deployment and rollback. Our reason was that on-call engineers could exercise the same recovery procedure before an incident.",
+      ],
+      [
+        "Why did you choose Kubernetes for deployment and rollback?",
+        "We chose Kubernetes for deployment and rollback. Our reason was to make recovery rehearsals repeatable across engineering teams.",
+      ],
+      ...[
+        "improved reliability during traffic spikes, especially when on-call engineers needed to repeat the tested rollback procedure",
+        "24/7 availability of the repeatable recovery procedure",
+        "that the repeatable recovery procedure was documented and familiar to every on-call team",
+        "shared accountability for recovery across the two on-call teams",
+      ].flatMap((reason) =>
+        [
+          `We chose Kubernetes for deployment and rollback. Our reason was ${reason}.`,
+          `Our reason for choosing Kubernetes for deployment and rollback was ${reason}.`,
+        ].map((excerpt) => [
+          "Why did you choose Kubernetes for deployment and rollback?",
+          excerpt,
+        ]),
+      ),
+      [
+        "Why did you continue using Kubernetes for deployment and rollback?",
+        "We continued using Kubernetes for deployment and rollback because it let us reuse the recovery procedure that reviewers had already exercised.",
+      ],
+      [
+        "For your public production rollout, why did you choose Kubernetes for deployment and rollback?",
+        "For our public production rollout, we chose Kubernetes for deployment and rollback because it let on-call engineers use a recovery procedure they had already exercised.",
+      ],
+    ])(
+      "rejects missing rationale and accepts reviewed rationale for %s",
+      async (why, reason) => {
+        const first = acceptanceFixture.cases[0]!;
+        const second = acceptanceFixture.cases[1]!;
+        const questions = [why, second.question];
+        const jd = acceptanceFixture.jobDescription;
+        const missing = withReviewedFacts(
+          questions,
+          [[0], [1]],
+          [first.reviewedAction, second.reviewedAction],
+          jd,
+        );
+        const rejection = await run(missing, questions, jd);
+        expect(rejection.status).toBe(422);
+        const error = await rejection.json();
+        expect(error).toMatchObject({
+          code: "GROUNDING_PROFILE_INCOMPLETE",
+          billing: "none",
+          applicationProfileUrl: expect.stringMatching(
+            /\/dashboard#evidence$/u,
+          ),
+          evidenceGap: { reason: "missing_rationale", questionNumbers: [1] },
+        });
+        expect(error).not.toHaveProperty("answers");
+        expect(missing.checkRateLimit).not.toHaveBeenCalled();
+        expect(missing.grantTrialCredits).not.toHaveBeenCalled();
+        expect(missing.reserveCredits).not.toHaveBeenCalled();
+        expect(missing.startAttempt).not.toHaveBeenCalled();
+        expect(missing.createMessage).not.toHaveBeenCalled();
+        const reviewed = withReviewedFacts(
+          questions,
+          [[2, 0], [1]],
+          [first.reviewedAction, second.reviewedAction, reason],
+          jd,
+        );
+        const retry = await run(reviewed, questions, jd);
+        expect({
+          status: retry.status,
+          body: await retry.json(),
+        }).toMatchObject({
+          status: 200,
+          body: {
+            answers: [
+              { question: questions[0], body: expect.stringContaining(reason) },
+              { question: questions[1], body: second.reviewedAction },
+            ],
+          },
+        });
+      },
+    );
+
+    it.each([
+      "We chose Redis for deployment because a queue met our latency target. We documented that approach for the team alongside our usual Kubernetes deployment practices.",
+      "We analyzed Kubernetes for deployment because we wanted to document the current architecture and share expected operational steps with the next team.",
+    ])(
+      "never substitutes a reviewed reason for a different decision %#",
+      async (excerpt) => {
+        const questions = [
+          "What was the rationale for choosing Kubernetes for deployment?",
+          "How did you write payroll tax reports?",
+        ];
+        const jd = acceptanceFixture.jobDescription;
+        const deps = withReviewedFacts(questions, [[0], [0]], [excerpt], jd);
+        const response = await run(deps, questions, jd);
+        expect(response.status).toBe(422);
+        expect(await response.json()).toMatchObject({
+          billing: "none",
+          evidenceGap: { reason: "missing_rationale", questionNumbers: [1] },
+        });
+        expect(deps.checkRateLimit).not.toHaveBeenCalled();
+        expect(deps.reserveCredits).not.toHaveBeenCalled();
+        expect(deps.createMessage).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([
+      [
+        "Why did you use Kubernetes for production deployment?",
+        "We used Kubernetes for local development because Minikube ran our checks on one laptop. The production deployment used a separate managed runtime and the development team recorded those choices in the internal rollout plan with instructions for reproducing the tests without using any production infrastructure or shared data.",
+      ],
+      [
+        "Why did you deploy using Kubernetes?",
+        acceptanceFixture.cases[0]!.reviewedAction,
+      ],
+      [
+        "Why did you continue using Kubernetes for deployment and rollback?",
+        deploymentReason,
+      ],
+      [
+        "For your public production rollout, why did you choose Kubernetes for deployment and rollback?",
+        "We chose Kubernetes for deployment and rollback because it gave us an offline way to exercise the rollback procedure on synthetic workloads. This choice was only for an internal staging pilot using fictional data and never applied to our public production rollout, which ran on a different tool and was operated by another team.",
+      ],
+      ...[
+        "Why did you decide on Kubernetes for deployment and rollback?",
+        "Why was Kubernetes chosen for deployment and rollback?",
+        "Why do you use Kubernetes for deployment and rollback?",
+        "What was the rationale behind choosing Kubernetes for deployment and rollback?",
+        "What factors informed the decision to use Kubernetes for deployment and rollback?",
+        "What factors drove your Kubernetes deployment decision?",
+      ].map((question) => [
+        question,
+        acceptanceFixture.cases[0]!.reviewedAction,
+      ]),
+    ])(
+      "requires the reason for the specific choice in %s",
+      async (question, excerpt) => {
+        const jd = acceptanceFixture.jobDescription;
+        const deps = withReviewedFacts([question], [[0]], [excerpt], jd);
+        const response = await run(deps, [question], jd);
+        expect(response.status).toBe(422);
+        expect(await response.json()).toMatchObject({
+          evidenceGap: { reason: "missing_rationale", questionNumbers: [1] },
+        });
+        expect(deps.checkRateLimit).not.toHaveBeenCalled();
+        expect(deps.reserveCredits).not.toHaveBeenCalled();
+        expect(deps.createMessage).not.toHaveBeenCalled();
+      },
+    );
+
+    it("answers five ordered questions with distinct reviewed facts from two projects", async () => {
+      const questions = acceptanceFixture.cases.map(({ question }) => question);
+      const facts = acceptanceFixture.cases.map(
+        ({ reviewedAction }) => reviewedAction,
+      );
+      const jd = acceptanceFixture.jobDescription;
+      const deps = withReviewedFacts(
+        questions,
+        questions.map((_, i) => [i]),
+        facts,
+        jd,
+        acceptanceFixture.storyTitle,
+        2,
+      );
+      const response = await run(deps, questions, jd);
+      expect(response.status).toBe(200);
+      const answer = await response.json();
+      expect(
+        answer.answers.map(
+          ({ question, body }: { question: string; body: string }) => [
+            question,
+            body,
+          ],
+        ),
+      ).toEqual(questions.map((question, index) => [question, facts[index]]));
+      for (const { body, word_count, character_count } of answer.answers) {
+        expect(word_count).toBeGreaterThanOrEqual(50);
+        expect(word_count).toBeLessThanOrEqual(150);
+        expect(character_count).toBe(body.length);
+        expect(character_count).toBeLessThanOrEqual(3000);
+      }
+      expect(deps.createMessage).toHaveBeenCalledTimes(1);
+    });
+
+    it.each(
+      [
+        "recorded in a private planning document",
+        "already documented in a private planning document",
+        "recorded separately",
+        "to be shared at a later date",
+        "that it had been documented separately",
+        "to be formally documented later",
+        "an internal matter documented separately in a private planning document",
+      ].flatMap((reference) => [
+        `We chose Kubernetes for deployment and rollback. Our reason was ${reference}.`,
+        `Our reason for choosing Kubernetes for deployment and rollback was ${reference}.`,
+      ]),
+    )(
+      "requires the actual reason when a reviewed excerpt only refers to it %#",
+      async (reference) => {
+        const fixture = acceptanceFixture.cases[0]!;
+        const questions = [
+          "Why did you choose Kubernetes for deployment and rollback?",
+        ];
+        const jd = acceptanceFixture.jobDescription;
+        const deps = withReviewedFacts(
+          questions,
+          [[0, 1]],
+          [reference, fixture.reviewedAction],
+          jd,
+        );
+        const response = await run(deps, questions, jd);
+        expect(response.status).toBe(422);
+        const error = await response.json();
+        expect(error).toMatchObject({
+          billing: "none",
+          evidenceGap: { reason: "missing_rationale", questionNumbers: [1] },
+        });
+        expect(error).not.toHaveProperty("answers");
+        expect(deps.checkRateLimit).not.toHaveBeenCalled();
+        expect(deps.grantTrialCredits).not.toHaveBeenCalled();
+        expect(deps.reserveCredits).not.toHaveBeenCalled();
+        expect(deps.startAttempt).not.toHaveBeenCalled();
+        expect(deps.createMessage).not.toHaveBeenCalled();
+      },
+    );
+
     it.each([
       { omitted: [3], count: 5 },
       { omitted: [1, 3], count: 5 },

@@ -410,21 +410,28 @@ test("invalid question input explains how to recover without a request @smoke", 
   ).toHaveLength(0);
 });
 
-for (const { code, actionLabel } of [
+for (const { code, actionLabel, rationale } of [
   {
     code: "GROUNDING_PROFILE_INCOMPLETE",
     actionLabel: "Complete application profile",
   },
   { code: "INSUFFICIENT_GROUNDING", actionLabel: null },
+  {
+    code: "GROUNDING_PROFILE_INCOMPLETE",
+    actionLabel: "Review application evidence",
+    rationale: true,
+  },
 ]) {
-  test(`422 ${code} preserves all five questions for recovery @smoke`, async ({
+  test(`422 ${rationale ? "missing rationale" : code} preserves all five questions for recovery @smoke`, async ({
     page,
   }) => {
     await openPopup(page);
     await page.selectOption("#category", "yc_application");
     const questions = [
       "Describe your approach to planning a project.",
-      "How did you measure the outcome?",
+      rationale
+        ? "What motivated your choice of method to measure the outcome?"
+        : "How did you measure the outcome?",
       "What tradeoff did you make?",
       "How did you evaluate accessibility?",
       "What did you learn from the project?",
@@ -436,22 +443,33 @@ for (const { code, actionLabel } of [
     });
     await page.click("#generateBtn");
     await expect(page.locator("#generationProgress")).toBeVisible();
-    await page.evaluate((errorCode) => {
-      window.aleTest.generationCallback?.({
-        success: false,
-        status: 422,
-        code: errorCode,
-        ...(errorCode === "GROUNDING_PROFILE_INCOMPLETE"
-          ? {
-              missingFields: ["confirmed_evidence"],
-              applicationProfileUrl:
-                "https://www.aletheia.live/profile/application",
-            }
-          : {
-              error: "No complete reviewed fact combination fits every answer.",
-            }),
-      });
-    }, code);
+    await page.evaluate(
+      ({ errorCode, rationaleGap }) => {
+        window.aleTest.generationCallback?.({
+          success: false,
+          status: 422,
+          code: errorCode,
+          ...(errorCode === "GROUNDING_PROFILE_INCOMPLETE"
+            ? {
+                missingFields: ["confirmed_evidence"],
+                applicationProfileUrl: rationaleGap
+                  ? "https://www.aletheia.live/dashboard#evidence"
+                  : "https://www.aletheia.live/profile/application",
+                ...(rationaleGap && {
+                  evidenceGap: {
+                    reason: "missing_rationale",
+                    questionNumbers: [2],
+                  },
+                }),
+              }
+            : {
+                error:
+                  "No complete reviewed fact combination fits every answer.",
+              }),
+        });
+      },
+      { errorCode: code, rationaleGap: rationale },
+    );
     await expect(page.locator("#errorMessage")).toBeFocused();
     if (actionLabel) {
       await expect(page.locator("#errorAction")).toHaveText(actionLabel);
@@ -460,6 +478,15 @@ for (const { code, actionLabel } of [
         "No complete reviewed fact combination fits every answer.",
       );
       await expect(page.locator("#errorAction")).toBeHidden();
+    }
+    if (rationale) {
+      await expect(page.locator("#errorAction")).toHaveAttribute(
+        "href",
+        "https://www.aletheia.live/dashboard#evidence",
+      );
+      await expect(page.locator("#errorMessage")).toContainText(
+        "Question 2 needs the reason behind the decision.",
+      );
     }
     await expect(page.locator(".application-answer")).toHaveCount(0);
     await expect(page.locator("#jdInput")).toHaveValue(jd);
