@@ -31,7 +31,7 @@ export type YcGroundingContext = {
     questionId: string;
     question: string;
     sourceIds: string[];
-    /** Exact reviewed fact IDs for multi-question answers. */
+    /** Eligible reviewed fact IDs in descending question-match order. */
     reviewedFactIds?: readonly string[];
     leadingFactIds?: readonly string[];
     /** Ordinal of the first identical input question, before prompt escaping. */

@@ -4864,6 +4864,36 @@ describe("POST /api/extension/generate", () => {
     expect(mockFrom).not.toHaveBeenCalled();
   });
 
+  it("rejects an invalid canonical question at its original index before generation", async () => {
+    const res = await POST(
+      makeRequest({
+        method: "POST",
+        headers: { authorization: "Bearer verified-token" },
+        body: {
+          category: "yc_application",
+          jd: "Build and operate an AI product with a small startup team while working closely with customers from idea through production.",
+          questions: [
+            "Describe your most relevant project.",
+            "How did you measure the outcome?",
+            "What tradeoff did you make?",
+            "short",
+            "What did you learn from the project?",
+          ],
+        },
+      }),
+    );
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toMatchObject({
+      code: "INVALID_REQUEST",
+      details: [expect.objectContaining({ field: "questions.3" })],
+    });
+    expect(mockGenerateYcApplication).not.toHaveBeenCalled();
+    expect(mockAnthropicCreate).not.toHaveBeenCalled();
+    expect(mockRpc).not.toHaveBeenCalled();
+    expect(mockFrom).not.toHaveBeenCalled();
+  });
+
   it("returns 401 when no auth token is provided", async () => {
     const res = await POST(makeRequest({ method: "POST", headers: {} }));
     expect(res.status).toBe(401);

@@ -8,6 +8,7 @@ declare global {
     aleTest: {
       messages: Array<{ action: string; payload?: Record<string, unknown> }>;
       copied: string;
+      clipboardFails: boolean;
       feedbackFails: boolean;
       holdGeneration: boolean;
       generationCallback?: (response: unknown) => void;
@@ -47,6 +48,7 @@ async function openPopup(page: Page, authenticated = true) {
       window.aleTest = {
         messages: [],
         copied: "",
+        clipboardFails: false,
         feedbackFails: false,
         holdGeneration: false,
       };
@@ -79,6 +81,9 @@ async function openPopup(page: Page, authenticated = true) {
       Object.defineProperty(navigator, "clipboard", {
         value: {
           writeText: async (value: string) => {
+            if (window.aleTest.clipboardFails) {
+              throw new Error("Clipboard unavailable");
+            }
             window.aleTest.copied = value;
           },
         },
@@ -219,7 +224,8 @@ test("ordered answers, copy controls and report modal work without persisting in
   await page.fill("#jdInput", jd);
   const questions = Array.from(
     { length: 5 },
-    (_, index) => `PRIVATE QUESTION ${index + 1}: Describe your experience?`,
+    (_, index) =>
+      `PRIVATE QUESTION ${index + 1}: Describe your *technical* experience?`,
   );
   await page.fill("#ycQuestionInput", questions.join("\n"));
   await page.click("#generateBtn");
@@ -238,14 +244,19 @@ test("ordered answers, copy controls and report modal work without persisting in
     await expect(button).toHaveCSS("outline-style", "solid");
     await expect(button).toHaveCSS("outline-width", "2px");
   }
-  await copyAnswer(3).click();
-  expect(await page.evaluate(() => window.aleTest.copied)).toBe(
-    fixtureAnswers[2],
-  );
+  for (const index of [1, 3, 5]) {
+    await copyAnswer(index).click();
+    await expect
+      .poll(() => page.evaluate(() => window.aleTest.copied))
+      .toBe(fixtureAnswers[index - 1]);
+  }
   await page.click("#copyAllBtn");
   expect(await page.evaluate(() => window.aleTest.copied)).toBe(
     questions
-      .map((question, index) => `**${question}**\n${fixtureAnswers[index]}`)
+      .map(
+        (question, index) =>
+          `**${question.replace("*technical*", "\\*technical\\*")}**\n${fixtureAnswers[index]}`,
+      )
       .join("\n\n"),
   );
   await page.screenshot({
@@ -335,6 +346,40 @@ test("signed-out application draft survives authentication and is consumed once 
   await expect(page.locator("#rejectBtn")).toBeFocused();
 });
 
+test("clipboard failure keeps the answer available for a retry @smoke", async ({
+  page,
+}) => {
+  await openPopup(page);
+  await page.setViewportSize({ width: 340, height: 640 });
+  await page.selectOption("#category", "yc_application");
+  await page.fill("#jdInput", jd);
+  await page.fill("#ycQuestionInput", "Describe your relevant experience?");
+  await page.click("#generateBtn");
+  const copy = page.getByRole("button", { name: "Copy answer 1", exact: true });
+  await page.evaluate(() => {
+    window.aleTest.clipboardFails = true;
+  });
+  await copy.click();
+  await expect(copy).toHaveText("Copy failed");
+  expect(await page.evaluate(() => window.aleTest.copied)).toBe("");
+  await expect(page.locator(".application-answer p")).toHaveText(
+    fixtureAnswers[0]!,
+  );
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  await expect(copy).not.toHaveText("Copy failed");
+  await page.evaluate(() => {
+    window.aleTest.clipboardFails = false;
+  });
+  await copy.click();
+  await expect
+    .poll(() => page.evaluate(() => window.aleTest.copied))
+    .toBe(fixtureAnswers[0]);
+});
+
 test("invalid question input explains how to recover without a request @smoke", async ({
   page,
 }) => {
@@ -365,40 +410,76 @@ test("invalid question input explains how to recover without a request @smoke", 
   ).toHaveLength(0);
 });
 
-test("insufficient reviewed evidence preserves the batch for recovery @smoke", async ({
-  page,
-}) => {
-  await openPopup(page);
-  await page.selectOption("#category", "yc_application");
-  const questions = [
-    "Describe your approach to planning a project.",
-    "How did you measure the outcome?",
-  ].join("\n");
-  await page.fill("#jdInput", jd);
-  await page.fill("#ycQuestionInput", questions);
-  await page.evaluate(() => {
-    window.aleTest.holdGeneration = true;
-  });
-  await page.click("#generateBtn");
-  await expect(page.locator("#generationProgress")).toBeVisible();
-  await page.evaluate(() => {
-    window.aleTest.generationCallback?.({
-      success: false,
-      status: 422,
-      code: "GROUNDING_PROFILE_INCOMPLETE",
-      missingFields: ["confirmed_evidence"],
-      applicationProfileUrl: "https://www.aletheia.live/profile/application",
+for (const { code, actionLabel } of [
+  {
+    code: "GROUNDING_PROFILE_INCOMPLETE",
+    actionLabel: "Complete application profile",
+  },
+  { code: "INSUFFICIENT_GROUNDING", actionLabel: null },
+]) {
+  test(`422 ${code} preserves all five questions for recovery @smoke`, async ({
+    page,
+  }) => {
+    await openPopup(page);
+    await page.selectOption("#category", "yc_application");
+    const questions = [
+      "Describe your approach to planning a project.",
+      "How did you measure the outcome?",
+      "What tradeoff did you make?",
+      "How did you evaluate accessibility?",
+      "What did you learn from the project?",
+    ].join("\n");
+    await page.fill("#jdInput", jd);
+    await page.fill("#ycQuestionInput", questions);
+    await page.evaluate(() => {
+      window.aleTest.holdGeneration = true;
     });
+    await page.click("#generateBtn");
+    await expect(page.locator("#generationProgress")).toBeVisible();
+    await page.evaluate((errorCode) => {
+      window.aleTest.generationCallback?.({
+        success: false,
+        status: 422,
+        code: errorCode,
+        ...(errorCode === "GROUNDING_PROFILE_INCOMPLETE"
+          ? {
+              missingFields: ["confirmed_evidence"],
+              applicationProfileUrl:
+                "https://www.aletheia.live/profile/application",
+            }
+          : {
+              error: "No complete reviewed fact combination fits every answer.",
+            }),
+      });
+    }, code);
+    await expect(page.locator("#errorMessage")).toBeFocused();
+    if (actionLabel) {
+      await expect(page.locator("#errorAction")).toHaveText(actionLabel);
+    } else {
+      await expect(page.locator("#errorMessage")).toContainText(
+        "No complete reviewed fact combination fits every answer.",
+      );
+      await expect(page.locator("#errorAction")).toBeHidden();
+    }
+    await expect(page.locator(".application-answer")).toHaveCount(0);
+    await expect(page.locator("#jdInput")).toHaveValue(jd);
+    await expect(page.locator("#ycQuestionInput")).toHaveValue(questions);
+    await expect(page.locator("#generateBtn")).toBeEnabled();
+    await page.evaluate(() => {
+      window.aleTest.holdGeneration = false;
+    });
+    await page.click("#generateBtn");
+    await expect(page.locator(".application-answer h3")).toHaveText(
+      questions.split("\n"),
+    );
+    await expect(page.locator("#errorMessage")).toBeHidden();
+    const requests = await page.evaluate(() =>
+      window.aleTest.messages.filter(({ action }) => action === "generate"),
+    );
+    expect(requests).toHaveLength(2);
+    expect(requests[1]?.payload).toEqual(requests[0]?.payload);
   });
-  await expect(page.locator("#errorMessage")).toBeFocused();
-  await expect(page.locator("#errorAction")).toHaveText(
-    "Complete application profile",
-  );
-  await expect(page.locator(".application-answer")).toHaveCount(0);
-  await expect(page.locator("#jdInput")).toHaveValue(jd);
-  await expect(page.locator("#ycQuestionInput")).toHaveValue(questions);
-  await expect(page.locator("#generateBtn")).toBeEnabled();
-});
+}
 
 test("the compact application panel focuses question 4 recovery after a previous draft @smoke", async ({
   page,
@@ -490,6 +571,17 @@ test("ZIP-source popup paints the orb, reports elapsed time, and stops after suc
     "aria-busy",
     "true",
   );
+  await expect(page.locator("#generateBtn")).toBeDisabled();
+  await page.locator("#generateBtn").evaluate((button) => {
+    (button as HTMLButtonElement).click();
+  });
+  expect(
+    await page.evaluate(
+      () =>
+        window.aleTest.messages.filter(({ action }) => action === "generate")
+          .length,
+    ),
+  ).toBe(1);
   await expect
     .poll(() =>
       page.locator("#generationOrb").evaluate((canvas) => {

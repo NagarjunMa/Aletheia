@@ -1,3 +1,23 @@
+## 2026-11-15 — ALE-68 tool input fix and ALE-69 regression matrix
+
+The production `yc-2.4.0` rerun on `6965c4e` returned 502 at tool parsing
+for all three sizes. The single tool input failed its schema, and the larger
+batches failed reference resolution. The telemetry kept the failure class
+without capturing the private tool payload.
+
+The Significant local fix on `fix/ale-68-validated-answer-options` gives
+Claude complete, prevalidated answer options with a strict enum for each
+question. The server allocates distinct sets across question groups and
+revalidates each answer before returning the batch. The search prioritizes
+the strongest relevant reviewed facts before applying the option cap.
+
+Live Claude replay using the same nine reviewed excerpts returned 1, 3, and 5
+ordered grounded answers in 1.518, 1.495, and 2.069 seconds locally, with one
+provider attempt per size. The ALE-69 matrix used current main plus this fix
+and local extension 1.0.28. See docs/operations/ale-69-application-question-regressions.md.
+The user moved remaining manual production exercises to real-user follow-up.
+Hosted metering and latency stay with ALE-56 and ALE-38.
+
 ## 2026-11-14 — ALE-68 reviewed application answers and five-question timing
 
 On `fix/ale-68-batch-claim-selection` from main at `0bd2c88`, the scoped

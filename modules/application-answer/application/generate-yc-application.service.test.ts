@@ -5,6 +5,7 @@ import { SelectedEvidenceUnavailableError } from "@/modules/candidate-context/ap
 import Anthropic from "@anthropic-ai/sdk";
 import type { YcGroundingContext } from "../domain/yc-grounding.types";
 import {
+  createYcApplicationDraft,
   getYcApplicationToolInput,
   YcApplicationStructuredOutputError,
 } from "../infrastructure/anthropic-yc.repository";
@@ -944,6 +945,63 @@ describe("generateYcApplication", () => {
       expect.objectContaining({ info: expect.any(Function) }),
     );
   });
+
+  it("compensates an upstream provider rate limit without retrying or returning a draft", async () => {
+    const transport = vi
+      .spyOn(Anthropic.prototype, "fetchWithTimeout")
+      .mockImplementation(async () =>
+        Response.json({ error: { type: "rate_limit_error" } }, { status: 429 }),
+      );
+    const deps = dependencies({
+      createMessage: vi.fn(createYcApplicationDraft),
+    });
+    vi.stubEnv("ANTHROPIC_API_KEY", "synthetic-key");
+    try {
+      const response = await generateYcApplication(
+        {
+          caller,
+          request,
+          corsHeaders: {},
+          applicationBaseUrl: "https://www.aletheia.live",
+        },
+        deps,
+      );
+      expect(response.status).toBe(502);
+      const body = await response.json();
+      expect(body).toMatchObject({
+        code: "MODEL_UPSTREAM_ERROR",
+        billing: "refunded",
+        quotaRestoration: "released",
+      });
+      expect(body).not.toHaveProperty("body");
+      expect(body).not.toHaveProperty("answers");
+      expect(deps.startAttempt).toHaveBeenCalledTimes(1);
+      expect(deps.createMessage).toHaveBeenCalledTimes(1);
+      expect(transport).toHaveBeenCalledTimes(1);
+      expect(deps.refundCredits).toHaveBeenCalledExactlyOnceWith(
+        {
+          userId: caller.userId,
+          reservationId: "22222222-2222-4222-8222-222222222222",
+          amount: 4,
+        },
+        "model_upstream_error",
+        expect.anything(),
+      );
+      expect(deps.releaseRateLimit).toHaveBeenCalledExactlyOnceWith(
+        caller.userId,
+        "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        expect.anything(),
+      );
+      expect(deps.finishAttempt).toHaveBeenCalledExactlyOnceWith(
+        caller.userId,
+        "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        expect.anything(),
+      );
+    } finally {
+      transport.mockRestore();
+      vi.unstubAllEnvs();
+    }
+  });
 });
 
 describe("ALE-37 batch orchestration", () => {
@@ -989,22 +1047,23 @@ describe("ALE-37 batch orchestration", () => {
       ],
     })),
   });
+  function batchMessage(input: unknown) {
+    return {
+      stop_reason: "tool_use",
+      content: [
+        { type: "tool_use", name: "return_application_answers", input },
+      ],
+      usage: { input_tokens: 120, output_tokens: 800 },
+    } as Awaited<
+      ReturnType<GenerateYcApplicationDependencies["createMessage"]>
+    >;
+  }
   function batchDeps(output: unknown = batch()) {
     return dependencies({
-      createMessage: vi.fn().mockResolvedValue({
-        stop_reason: "tool_use",
-        content: [
-          {
-            type: "tool_use",
-            name: "return_application_answers",
-            input: output,
-          },
-        ],
-        usage: { input_tokens: 120, output_tokens: 800 },
-      }),
+      createMessage: vi.fn().mockResolvedValue(batchMessage(output)),
     });
   }
-  describe("question-specific reviewed facts in one story", () => {
+  describe("question-specific reviewed facts", () => {
     const topics = [
       "Kubernetes",
       "Billing",
@@ -1026,13 +1085,14 @@ describe("ALE-37 batch orchestration", () => {
       reviewedExcerpts = excerpts,
       jobDescription = request.jd,
       title = "Internal pilot",
+      storyCount = 1,
     ) {
       const record = {
         id: "11111111-1111-4111-8111-111111111111",
         kind: "technical_project" as const,
         title,
         context: "",
-        actions: reviewedExcerpts.join("\n"),
+        actions: "",
         outcome: "",
         metrics: [],
         skills: [],
@@ -1046,6 +1106,23 @@ describe("ALE-37 batch orchestration", () => {
         excerpt,
         confirmed: true as const,
       }));
+      const storyIds = [record.id, "33333333-3333-4333-8333-333333333333"];
+      const reviewedStories = storyIds.slice(0, storyCount).map((id, index) => {
+        const storyFacts = facts.filter((_, i) => i % storyCount === index);
+        const story = {
+          ...record,
+          id,
+          actions: storyFacts.map(({ excerpt }) => excerpt).join("\n"),
+          sortOrder: index,
+        };
+        return {
+          ...story,
+          factReview: prepareFactReview(
+            candidateEvidenceInputSchema.parse(story),
+            storyFacts,
+          ),
+        };
+      });
       const context = buildYcGroundingContext({
         question: submittedQuestions[0]!,
         questions: submittedQuestions,
@@ -1056,27 +1133,32 @@ describe("ALE-37 batch orchestration", () => {
             currentRole: "Engineer",
           }),
           resume: { text: "", source: "none" },
-          confirmedEvidence: [
-            {
-              ...record,
-              factReview: prepareFactReview(
-                candidateEvidenceInputSchema.parse(record),
-                facts,
-              ),
-            },
-          ],
+          confirmedEvidence: reviewedStories,
         },
       });
-      const deps = batchDeps({
-        answers: factIndices
-          .map((indices, i) => ({
-            questionId: `q${i + 1}`,
-            claims: indices.map((index) => ({
-              source_id: `evidence:${record.id}.fact.${facts[index]!.id}`,
-              text_index: 1,
-            })),
-          }))
-          .reverse(),
+      const deps = dependencies({
+        createMessage: vi.fn<
+          GenerateYcApplicationDependencies["createMessage"]
+        >(async ({ reviewedOptions }) => {
+          const choices = (reviewedOptions ?? []).map(
+            ({ questionId, options }, i) => {
+              const expected = (factIndices[i] ?? []).map(
+                (index) => facts[index]!.excerpt,
+              );
+              const option = expected.length
+                ? options.find(
+                    ({ claims }) =>
+                      claims.length === expected.length &&
+                      claims.every(({ supporting_excerpt }) =>
+                        expected.includes(supporting_excerpt),
+                      ),
+                  )
+                : options[0];
+              return [questionId, option?.id ?? "unoffered"];
+            },
+          );
+          return batchMessage(Object.fromEntries(choices.reverse()));
+        }),
       });
       deps.prepareGrounding = vi.fn().mockResolvedValue(context);
       deps.sanitizeOutput = vi.fn(sanitizeYcApplicationOutput);
@@ -1150,37 +1232,129 @@ describe("ALE-37 batch orchestration", () => {
       },
     );
 
-    it("offers and returns only the matching reviewed fact for each of five questions", async () => {
+    it.each([1, 2, 3, 4, 5])(
+      "returns %i question-local answers with one reservation",
+      async (count) => {
+        const submitted = topicQuestions.slice(0, count);
+        const deps = withReviewedFacts(
+          submitted,
+          submitted.map((_, i) => [i]),
+        );
+        const response = await run(deps, submitted);
+        expect(response.status).toBe(200);
+        expect((await response.json()).answers).toEqual(
+          submitted.map((question, i) => ({
+            questionId: `q${i + 1}`,
+            question,
+            body: excerpts[i],
+            word_count: 54,
+            character_count: excerpts[i]!.length,
+          })),
+        );
+        expect(deps.createMessage).toHaveBeenCalledTimes(1);
+        expect(deps.checkRateLimit).toHaveBeenCalledTimes(1);
+        expect(deps.reserveCredits).toHaveBeenCalledTimes(1);
+        expect(deps.refundCredits).not.toHaveBeenCalled();
+        const [{ reviewedOptions, userPrompt }] = vi.mocked(deps.createMessage)
+          .mock.calls[0]!;
+        expect(reviewedOptions).toHaveLength(count);
+        for (const [i, entry] of reviewedOptions!.entries()) {
+          expect(entry.options).toHaveLength(1);
+          expect(
+            entry.options[0]?.claims.map((claim) => claim.supporting_excerpt),
+          ).toEqual([excerpts[i]]);
+        }
+        expect(userPrompt).not.toMatch(
+          /source_id|ATOMIC_SOURCES|candidate_sources|evidence:/u,
+        );
+      },
+    );
+
+    it("answers five questions from distinct reviewed facts across two projects", async () => {
       const deps = withReviewedFacts(
         topicQuestions,
-        topics.map((_, i) => [i]),
+        [[0], [1], [2], [3], [4]],
+        excerpts,
+        request.jd,
+        "Internal pilot",
+        2,
       );
       const response = await run(deps, topicQuestions);
       expect(response.status).toBe(200);
       expect((await response.json()).answers).toEqual(
-        topicQuestions.map((question, i) => ({
-          questionId: `q${i + 1}`,
-          question,
-          body: excerpts[i],
-          word_count: 54,
-          character_count: excerpts[i]!.length,
-        })),
-      );
-      expect(deps.createMessage).toHaveBeenCalledTimes(1);
-      const [{ userPrompt }] = vi.mocked(deps.createMessage).mock.calls[0]!;
-      const questionSources = Array.from(
-        userPrompt.matchAll(
-          /<application_question id="q\d" source_ids="([^"]*)"/gu,
+        topicQuestions.map((question, index) =>
+          expect.objectContaining({
+            question,
+            questionId: `q${index + 1}`,
+            body: excerpts[index],
+          }),
         ),
-        ([, ids]) => ids?.split(" "),
       );
-      expect(questionSources).toHaveLength(5);
-      for (const [i, ids] of questionSources.entries()) {
-        expect(ids).toEqual([
-          expect.stringMatching(new RegExp(`22222222222${i}$`)),
-        ]);
-      }
+
+      const sparse = withReviewedFacts(
+        topicQuestions,
+        [],
+        [
+          "I built a pilot covering Kubernetes, billing, accessibility, analytics, and onboarding, and recorded which workflows the team could test before production.",
+          "I documented Kubernetes, billing, accessibility, analytics, and onboarding tradeoffs in a review guide and explained which inputs still needed manual checking.",
+        ],
+        request.jd,
+        "Internal pilot",
+        2,
+      );
+      const rejected = await run(sparse, topicQuestions);
+      expect(rejected.status).toBe(422);
+      const failure = await rejected.json();
+      expect(failure).toMatchObject({
+        code: "INSUFFICIENT_GROUNDING",
+        billing: "none",
+      });
+      expect(failure).not.toHaveProperty("answers");
+      expect(sparse.checkRateLimit).not.toHaveBeenCalled();
+      expect(sparse.grantTrialCredits).not.toHaveBeenCalled();
+      expect(sparse.reserveCredits).not.toHaveBeenCalled();
+      expect(sparse.startAttempt).not.toHaveBeenCalled();
+      expect(sparse.createMessage).not.toHaveBeenCalled();
     });
+
+    it.each([
+      { slots: [0] },
+      { slots: [3] },
+      { slots: [4] },
+      { slots: [1, 3] },
+    ])(
+      "rejects an unsupported question at zero-based slots $slots before quota, billing, or provider work",
+      async ({ slots }) => {
+        const submitted = topicQuestions.map((question, index) =>
+          slots.includes(index)
+            ? "Which spectrometer resolved molecular absorption lines?"
+            : question,
+        );
+        const deps = withReviewedFacts(
+          submitted,
+          submitted.map((_, i) => [i]),
+        );
+        const response = await run(deps, submitted);
+
+        expect(response.status).toBe(422);
+        const body = await response.json();
+        expect(body).toMatchObject({
+          success: false,
+          code: "GROUNDING_PROFILE_INCOMPLETE",
+          billing: "none",
+          evidenceGap: {
+            reason: "missing_reviewed_facts",
+            questionNumbers: slots.map((i) => i + 1),
+          },
+        });
+        expect(body).not.toHaveProperty("answers");
+        expect(body).not.toHaveProperty("body");
+        expect(deps.checkRateLimit).not.toHaveBeenCalled();
+        expect(deps.grantTrialCredits).not.toHaveBeenCalled();
+        expect(deps.reserveCredits).not.toHaveBeenCalled();
+        expect(deps.createMessage).not.toHaveBeenCalled();
+      },
+    );
 
     it("rejects a single relevant but too-short reviewed fact before admission", async () => {
       const { question, reviewedAction } = acceptanceFixture.cases[0]!;
@@ -1283,6 +1457,24 @@ describe("ALE-37 batch orchestration", () => {
       expect(deps.createMessage).not.toHaveBeenCalled();
     });
 
+    it("offers a short direct match ahead of four longer weak matches", async () => {
+      const question = "How did you roll back a failed Kubernetes deployment?";
+      const jd =
+        "Help a startup build, deploy, operate, and maintain a reliable application. Collaborate across projects.";
+      const direct =
+        "I rolled back a failed Kubernetes deployment by restoring the last working image after the readiness checks failed. I verified the pods recovered using deployment status and service checks, wrote down the image and the reason for restoring it, and asked the next engineer to repeat those checks in the training cluster.";
+      const weak = ["monitoring", "capacity", "dashboard", "documentation"].map(
+        (topic) =>
+          `I helped plan a Kubernetes deployment by reviewing ${topic} requirements for a practice service. The work focused on collecting sample data from a disposable environment, comparing the notes with a shared project checklist, and reporting which details required further investigation before the project team could use the material for its regular weekly review meeting.`,
+      );
+      const deps = withReviewedFacts([question], [[4]], [...weak, direct], jd);
+      const response = await run(deps, [question], jd);
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({
+        answers: [{ question, body: direct }],
+      });
+    });
+
     it("accepts a feasible reviewed fact when the best lexical match is too short", async () => {
       const question =
         "How did you verify Kubernetes deployment and rollback behavior?";
@@ -1382,26 +1574,30 @@ describe("ALE-37 batch orchestration", () => {
         ).toBe(count);
         expect(deps.createMessage).toHaveBeenCalledTimes(1);
         const [{ userPrompt }] = vi.mocked(deps.createMessage).mock.calls[0]!;
-        expect(
-          Array.from(
-            userPrompt.matchAll(
-              /<application_question id="q\d" source_ids="([^"]*)"/gu,
+        if (rhetoricalPlans) {
+          expect(
+            Array.from(
+              userPrompt.matchAll(
+                /<application_question id="q\d" source_ids="([^"]*)"/gu,
+              ),
+              ([, ids]) => ids,
             ),
-            ([, ids]) => ids,
-          ),
-        ).toEqual(
-          cases.map((_, index) =>
-            expect.stringMatching(
-              new RegExp(`^evidence:[^ ]+22222222222${index}$`),
+          ).toEqual(
+            cases.map((_, index) =>
+              expect.stringMatching(
+                new RegExp(`^evidence:[^ ]+22222222222${index}$`),
+              ),
             ),
-          ),
-        );
-        if (!rhetoricalPlans) {
+          );
+        } else {
           expect(deps.createMessage).toHaveBeenCalledWith(
             expect.objectContaining({
-              selectReviewedClaims: true,
-              systemPrompt: expect.stringContaining("zero-based text_index"),
+              reviewedOptions: expect.any(Array),
+              systemPrompt: expect.stringContaining("chosen option ID"),
             }),
+          );
+          expect(userPrompt).not.toMatch(
+            /source_id|ATOMIC_SOURCES|candidate_sources|evidence:/u,
           );
         }
       },
@@ -1420,7 +1616,15 @@ describe("ALE-37 batch orchestration", () => {
       expect(deps.releaseRateLimit).toHaveBeenCalledTimes(1);
     });
 
-    it.each(["prose", "missing wording", "duplicate source"] as const)(
+    it.each([
+      "prose",
+      "missing question",
+      "extra question",
+      "extra inherited-name field",
+      "wrong type",
+      "wrong question's option",
+      "old claim indexes",
+    ] as const)(
       "rejects %s in a reviewed selection without returning a partial batch",
       async (kind) => {
         const submitted = topicQuestions.slice(0, 2);
@@ -1431,19 +1635,23 @@ describe("ALE-37 batch orchestration", () => {
           const block = message.content[0];
           if (!block || block.type !== "tool_use")
             throw new Error("Missing test tool");
-          const { answers } = block.input as {
-            answers: Array<{
-              claims: Array<{
-                source_id: string;
-                text_index: number;
-                text?: string;
-              }>;
-            }>;
-          };
-          const claims = answers[0]!.claims;
-          if (kind === "prose") claims[0]!.text = "Unreviewed copy";
-          if (kind === "missing wording") claims[0]!.text_index = 99;
-          if (kind === "duplicate source") claims.push({ ...claims[0]! });
+          const choices = block.input as Record<string, unknown>;
+          if (kind === "prose") choices.body = "Unreviewed copy";
+          if (kind === "missing question") delete choices.q2;
+          if (kind === "extra question") choices.q3 = "q3-1";
+          if (kind === "extra inherited-name field")
+            block.input = { ...choices, ["__proto__"]: "unoffered" };
+          if (kind === "wrong type") choices.q2 = 1;
+          if (kind === "wrong question's option") choices.q2 = choices.q1;
+          if (kind === "old claim indexes")
+            block.input = {
+              answers: [
+                {
+                  questionId: "q1",
+                  claims: [{ source_id: "unknown", text_index: 9 }],
+                },
+              ],
+            };
           return message;
         });
         const response = await run(deps, submitted);
@@ -1465,7 +1673,7 @@ describe("ALE-37 batch orchestration", () => {
         "How did you use TypeScript for Billing?",
       ];
       // Both excerpts mention TypeScript. Each question also names its own topic.
-      const deps = withReviewedFacts(submitted, [[0], [1, 0]]);
+      const deps = withReviewedFacts(submitted, [[0], [1]]);
       const response = await run(deps, submitted);
       expect(response.status).toBe(200);
       const { answers } = await response.json();
@@ -1479,25 +1687,27 @@ describe("ALE-37 batch orchestration", () => {
       });
     });
 
-    it("uses distinct verified claim sets when the model picks reordered copies for different questions", async () => {
+    it("never offers the same complete claim set to different questions", async () => {
       const submitted = [
         "How did you use TypeScript for testing?",
         "What limits did you document for the TypeScript pilot?",
       ];
-      const deps = withReviewedFacts(submitted, [
-        [0, 1],
-        [1, 0],
-      ]);
+      const deps = withReviewedFacts(submitted, [[], []]);
       const response = await run(deps, submitted);
       expect(response.status).toBe(200);
       const { answers } = await response.json();
-      expect(answers[0].body).toContain(excerpts[0]);
-      expect(answers[1].body).toContain(excerpts[1]);
-      const claimCounts = answers.map(
-        ({ body }: { body: string }) =>
-          excerpts.filter((excerpt) => body.includes(excerpt)).length,
+      expect(answers[0].body).not.toBe(answers[1].body);
+      const [{ reviewedOptions }] = vi.mocked(deps.createMessage).mock
+        .calls[0]!;
+      const signatures = reviewedOptions!.flatMap(({ options }) =>
+        options.map(({ claims }) =>
+          claims
+            .map(({ supporting_excerpt }) => supporting_excerpt)
+            .sort()
+            .join("\n"),
+        ),
       );
-      expect(claimCounts).toContain(1);
+      expect(new Set(signatures).size).toBe(signatures.length);
       expect(deps.createMessage).toHaveBeenCalledTimes(1);
       expect(deps.refundCredits).not.toHaveBeenCalled();
       expect(deps.releaseRateLimit).not.toHaveBeenCalled();
@@ -1830,19 +2040,10 @@ describe("ALE-37 batch orchestration", () => {
       },
     });
     expect(context.readiness.ready).toBe(true);
-    const source = context.atomicSources!.find((s) => s.scope === "candidate")!;
     const before = JSON.stringify(context);
-    const output = {
-      answers: fiveQuestions.map((_, i) => ({
-        questionId: `q${i + 1}`,
-        claims: [
-          {
-            source_id: source.id,
-            text_index: allowedClaimTexts(source).indexOf(answer),
-          },
-        ],
-      })),
-    };
+    const output = Object.fromEntries(
+      fiveQuestions.map((_, i) => [`q${i + 1}`, `q${i + 1}-1`]),
+    );
     const deps = batchDeps(output);
     deps.prepareGrounding = vi.fn().mockResolvedValue(context);
     deps.sanitizeOutput = vi.fn(sanitizeYcApplicationOutput);
@@ -3004,16 +3205,17 @@ it.each([
             : "return_application_answers",
           input: legacy
             ? { claims }
-            : {
-                answers: questions
-                  .map((_, i) => ({
-                    questionId: `q${i + 1}`,
-                    claims: !selectedEvidenceIds
-                      ? [{ source_id: source.id, text_index: 0 }]
-                      : claims,
-                  }))
-                  .reverse(),
-              },
+            : selectedEvidenceIds
+              ? {
+                  answers: questions
+                    .map((_, i) => ({ questionId: `q${i + 1}`, claims }))
+                    .reverse(),
+                }
+              : Object.fromEntries(
+                  questions
+                    .map((_, i) => [`q${i + 1}`, `q${i + 1}-1`])
+                    .reverse(),
+                ),
         },
       ],
       usage: { input_tokens: 120, output_tokens: 80 },

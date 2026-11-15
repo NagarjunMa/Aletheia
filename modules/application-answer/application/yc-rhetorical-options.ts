@@ -12,6 +12,7 @@ import {
 import { createHash } from "node:crypto";
 import {
   allowedClaimTexts,
+  isFirstPersonAssertion,
   MAX_ATOMIC_CLAIMS,
   type AtomicClaim,
 } from "@/modules/grounding/domain/atomic-claim";
@@ -132,41 +133,45 @@ function matchDistinctClaimSets(claimSets: readonly Set<string>[]) {
   return new Map([...owners].map(([signature, index]) => [index, signature]));
 }
 
-/** Keep the provider's choices where possible when two questions pick the same claims. */
-export function separateReviewedAnswers(
-  selections: ReadonlyArray<{ group: string | number; claims: AtomicClaim[] }>,
-  alternatives: ReadonlyMap<string | number, Map<string, AtomicClaim[]>>,
-) {
-  const owners = new Map<string, string | number>();
-  const preferences = new Map<string | number, Map<string, AtomicClaim[]>>();
-  let hasCollision = false;
-  for (const { group, claims } of selections) {
-    const signature = ycClaimSignature(claims);
-    const owner = owners.get(signature);
-    if (owner !== undefined && owner !== group) hasCollision = true;
-    owners.set(signature, group);
-    if (!preferences.has(group))
-      preferences.set(group, new Map([[signature, claims]]));
-  }
-  if (!hasCollision) return undefined;
+export type YcReviewedOptions = Array<{
+  questionId: string;
+  options: Array<{ id: string; claims: AtomicClaim[] }>;
+}>;
 
-  const groups = [...preferences];
-  const options = groups.map(
-    ([group, preferred]) =>
-      new Map([...(alternatives.get(group) ?? []), ...preferred]),
+/** Reserve one distinct choice per group before exposing additional options. */
+export function buildYcReviewedOptions(
+  questions: NonNullable<YcGroundingContext["questions"]>,
+  {
+    claimSetsByQuestion,
+    matched,
+  }: ReturnType<typeof assertYcSelectionFeasible>,
+): YcReviewedOptions {
+  const groups = [...claimSetsByQuestion];
+  const owners = new Map(
+    groups.map(([group], index) => [matched.get(index)!, group]),
   );
-  const matched = matchDistinctClaimSets(
-    groups.map(
-      ([, preferred], index) =>
-        new Set([...preferred.keys(), ...options[index]!.keys()]),
-    ),
-  );
-  return new Map(
-    groups.map(([group], index) => [
+  const byGroup = new Map(
+    groups.map(([group, options]) => [
       group,
-      options[index]!.get(matched.get(index)!)!,
+      [...options].flatMap(([signature, claims]) => {
+        const owner = owners.get(signature);
+        if (owner !== undefined && owner !== group) return [];
+        owners.set(signature, group);
+        return [claims];
+      }),
     ]),
   );
+  return questions.map(({ questionId, question, questionGroup }) => {
+    const options = byGroup.get(questionGroup ?? question);
+    if (!options?.length) throw new YcPlanUnavailableError();
+    return {
+      questionId,
+      options: options.map((claims, i) => ({
+        id: `${questionId}-${i + 1}`,
+        claims,
+      })),
+    };
+  });
 }
 
 /** Check that scoped facts can make complete answers before a provider call. */
@@ -198,11 +203,16 @@ export function assertYcSelectionFeasible(context: YcGroundingContext) {
     const signatures = new Map<string, AtomicClaim[]>();
     // After one gap, a single viable answer is enough to rule out another.
     const signatureLimit =
-      scopedFacts && !incompleteGroups.size ? distinctQuestionCount : 1;
+      scopedFacts && !incompleteGroups.size
+        ? Math.max(4, distinctQuestionCount)
+        : 1;
     const scoped = ycQuestionContext(context, questionId, true);
     const sources = scoped.atomicSources ?? [];
     if (sources.length > 64) throw new YcPlanUnavailableError();
     const leading = new Set(scoped.leadingFactIds);
+    const reviewedRanks = new Map(
+      question.reviewedFactIds?.map((id, index) => [id, index]),
+    );
     if (scopedFacts && !leading.size) {
       if (required.length) throw new YcPlanUnavailableError();
       incompleteGroups.add(questionGroup);
@@ -230,6 +240,7 @@ export function assertYcSelectionFeasible(context: YcGroundingContext) {
             {
               rootBit: index >= 0 ? 1 << index : 0,
               leads: leading.has(source.id),
+              reviewedRank: reviewedRanks.get(source.id) ?? 0,
               words: countOutputUnits(text, "words"),
               claim: {
                 text,
@@ -245,6 +256,11 @@ export function assertYcSelectionFeasible(context: YcGroundingContext) {
         (a, b) =>
           Number(b.leads) - Number(a.leads) ||
           Number(Boolean(b.rootBit)) - Number(Boolean(a.rootBit)) ||
+          a.reviewedRank - b.reviewedRank ||
+          (scopedFacts
+            ? Number(isFirstPersonAssertion(b.claim.text)) -
+              Number(isFirstPersonAssertion(a.claim.text))
+            : 0) ||
           b.words - a.words,
       );
 
@@ -333,10 +349,10 @@ export function assertYcSelectionFeasible(context: YcGroundingContext) {
           : [],
       ),
     });
-  matchDistinctClaimSets(
+  const matched = matchDistinctClaimSets(
     [...claimSetsByQuestion.values()].map((sets) => new Set(sets.keys())),
   );
-  return claimSetsByQuestion;
+  return { claimSetsByQuestion, matched };
 }
 
 export function buildYcPlannedOptions(

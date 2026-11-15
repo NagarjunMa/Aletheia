@@ -106,7 +106,7 @@ const legacyPayload = {
 describe("ALE-37 additive batch request compatibility", () => {
   const base = { category: "yc_application", jd: validJobDescription };
 
-  it.each([10, 500, 501, 1000])(
+  it.each([10, 11, 500, 501, 999, 1000])(
     "preserves legacy questions of %i characters",
     (length) => {
       const question = "x".repeat(length);
@@ -127,7 +127,7 @@ describe("ALE-37 additive batch request compatibility", () => {
     });
   });
 
-  it.each([1, 5])(
+  it.each([1, 2, 3, 4, 5])(
     "accepts %i canonical questions at the 500-character boundary",
     (count) => {
       const questions = Array.from({ length: count }, () => "x".repeat(500));
@@ -137,15 +137,63 @@ describe("ALE-37 additive batch request compatibility", () => {
     },
   );
 
-  it("normalizes each item before measuring the ten-character minimum", () => {
-    const questions = ["  ＡＢＣＤＥＦＧＨＩＪ  ", "  Why this role?  "];
-    expect(generateRequestContractSchema.parse({ ...base, questions })).toEqual(
-      {
+  it.each([
+    [79, false],
+    [80, true],
+    [81, true],
+    [19_999, true],
+    [20_000, true],
+    [20_001, false],
+  ])(
+    "validates a canonical job description at %i normalized units",
+    (length, accepted) => {
+      const normalized = "f".repeat(length);
+      const pasted =
+        "ﬀ".repeat(Math.floor(length / 2)) + "f".repeat(length % 2);
+      const result = ycApplicationRequestSchema.safeParse({
         ...base,
-        questions: ["ABCDEFGHIJ", "Why this role?"],
-      },
-    );
-  });
+        jd: `  ${pasted}\r\n`,
+        questions: ["What did you ship?"],
+      });
+
+      expect(result.success).toBe(accepted);
+      if (result.success) expect(result.data.jd).toBe(normalized);
+      else
+        expect(result.error.issues).toContainEqual(
+          expect.objectContaining({ path: ["jd"] }),
+        );
+    },
+  );
+
+  it.each([
+    [9, false],
+    [10, true],
+    [11, true],
+    [499, true],
+    [500, true],
+    [501, false],
+  ])(
+    "validates canonical questions at %i units after normalization",
+    (length, accepted) => {
+      const pasted =
+        "ﬀ".repeat(Math.floor(length / 2)) + "f".repeat(length % 2);
+      const result = ycApplicationRequestSchema.safeParse({
+        ...base,
+        questions: ["Why this role?", `  ${pasted}  `],
+      });
+      expect(result.success).toBe(accepted);
+      if (result.success) {
+        expect(result.data).toEqual({
+          ...base,
+          questions: ["Why this role?", "f".repeat(length)],
+        });
+      } else {
+        expect(result.error.issues).toContainEqual(
+          expect.objectContaining({ path: ["questions", 1] }),
+        );
+      }
+    },
+  );
 
   it("counts normalized UTF-16 units, preserving existing string-length semantics", () => {
     const questions = ["😀".repeat(250)];
@@ -164,11 +212,10 @@ describe("ALE-37 additive batch request compatibility", () => {
     ["empty array", []],
     ["six entries", Array.from({ length: 6 }, () => "Why this role?")],
     ["blank entry", ["Why this role?", "  "]],
-    ["short entry", ["x".repeat(9)]],
-    ["oversized entry", ["x".repeat(501)]],
     ["embedded newline", ["Why this role?\nDescribe your experience."]],
     ["client-owned ID", [{ questionId: "q1", question: "Why this role?" }]],
     ["null entry", [null]],
+    ["numeric entry", [1234567890]],
     ["null array", null],
     ["string instead of array", "Why this role?"],
   ])("rejects canonical input with %s", (_label, questions) => {
@@ -189,7 +236,7 @@ describe("ALE-37 additive batch request compatibility", () => {
     }
   });
 
-  it.each(["", "  ", null])(
+  it.each(["", "  ", null, 1234567890])(
     "does not default an explicitly invalid legacy question (%s)",
     (question) => {
       expect(
@@ -331,9 +378,16 @@ describe("ALE-37 ordered public answer collection", () => {
     ).toBe(false);
   });
 
-  it.each([49, 151])(
-    "rejects one %i-word answer even if the batch total looks valid",
-    (count) => {
+  it.each([
+    [49, false],
+    [50, true],
+    [51, true],
+    [149, true],
+    [150, true],
+    [151, false],
+  ])(
+    "validates a %i-word answer independently of the batch total",
+    (count, accepted) => {
       const answers = [
         answer("q1", "Why this role?"),
         answer("q2", "Describe your experience?", count),
@@ -344,7 +398,41 @@ describe("ALE-37 ordered public answer collection", () => {
       expect(
         ycApplicationPublicSuccessSchema.safeParse(response(answers, body))
           .success,
-      ).toBe(false);
+      ).toBe(accepted);
+    },
+  );
+
+  it.each([
+    { label: "mixed 2999", length: 2999, accepted: true, useEmoji: true },
+    { label: "mixed 3000", length: 3000, accepted: true, useEmoji: true },
+    { label: "ASCII 3001", length: 3001, accepted: false, useEmoji: false },
+  ])(
+    "validates the second answer at $label UTF-16 units",
+    ({ length, accepted, useEmoji }) => {
+      const first = answer("q1", "Why this role?");
+      const wordsBeforeFinal = "word ".repeat(49);
+      const remaining = length - wordsBeforeFinal.length;
+      const finalWord = useEmoji
+        ? "😀".repeat(Math.floor(remaining / 2)) + "a".repeat(remaining % 2)
+        : "a".repeat(remaining);
+      const secondBody = wordsBeforeFinal + finalWord;
+      const second = {
+        questionId: "q2",
+        question: "What did you ship?",
+        body: secondBody,
+        word_count: 50,
+        character_count: length,
+      };
+      const body = `**Why this role?**\n${first.body}\n\n**What did you ship?**\n${secondBody}`;
+
+      const result = ycApplicationPublicSuccessSchema.safeParse(
+        response([first, second], body),
+      );
+      expect(result.success).toBe(accepted);
+      if (!result.success)
+        expect(result.error.issues).toContainEqual(
+          expect.objectContaining({ path: ["answers", 1, "body"] }),
+        );
     },
   );
 

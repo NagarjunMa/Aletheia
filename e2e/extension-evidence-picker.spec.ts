@@ -1288,6 +1288,72 @@ test("uses the selected endpoint, recovers from stale stories and clears before 
   expect(posts[3]?.body).not.toHaveProperty("selectedEvidenceIds");
 });
 
+test.describe("Store ZIP application questions", () => {
+  test.use({ storeZip: true });
+
+  test("carries one or five question and answer pairs through the worker in order @smoke", async () => {
+    const submitted: unknown[] = [];
+    const bodies = Array.from({ length: 5 }, (_, index) =>
+      answer.replace("word0", `project${index + 1}`),
+    );
+    await browser.route(
+      "https://www.aletheia.live/api/extension/generate",
+      async (route) => {
+        const payload = route.request().postDataJSON() as {
+          questions: string[];
+        };
+        submitted.push(payload);
+        return route.fulfill({
+          json: {
+            success: true,
+            category: "yc_application",
+            answers: payload.questions
+              .map((question, index) => ({
+                questionId: `q${index + 1}`,
+                question,
+                body: bodies[index],
+                word_count: 50,
+                character_count: bodies[index]!.length,
+              }))
+              .reverse(),
+          },
+        });
+      },
+    );
+    const worker =
+      browser.serviceWorkers()[0] ??
+      (await browser.waitForEvent("serviceworker"));
+    await signIn(worker, "user-a");
+    const page = await openPanel(worker);
+    await page.locator("#category").selectOption("yc_application");
+    await page.locator("#jdInput").fill(jd);
+    const questions = [
+      "Describe your policy evaluation experience.",
+      "How did you measure the outcome?",
+      "What tradeoff did you make?",
+      "How did you decide when to deploy?",
+      "What did you learn from the project?",
+    ];
+    for (const count of [1, 5]) {
+      const batch = questions.slice(0, count);
+      await page.locator("#ycQuestionInput").fill(batch.join("\n"));
+      await page.locator("#generateBtn").click();
+      await expect(page.locator(".application-answer h3")).toHaveText(batch);
+      await expect(page.locator(".application-answer p")).toHaveText(
+        bodies.slice(0, count),
+      );
+      await expect(page.locator("#fillBtn")).toBeHidden();
+    }
+    expect(submitted).toEqual(
+      [questions.slice(0, 1), questions].map((batch) => ({
+        category: "yc_application",
+        jd,
+        questions: batch,
+      })),
+    );
+  });
+});
+
 test("uses the near-expiry bearer without changing auth and discards a delayed response after an account switch", async () => {
   let delayed: Route | undefined;
   const refreshRequests: string[] = [];

@@ -374,8 +374,8 @@ export function buildYcGroundingContext(input: {
     questions.length > 1 || (input.questions && !explicit)
       ? targets.map((target, index) => {
           const rank = createReviewedFactRanker(target);
-          const rankedFacts = (availableByQuestion[index] ?? []).flatMap(
-            (entry) =>
+          const rankedFacts = (availableByQuestion[index] ?? [])
+            .flatMap((entry) =>
               (reviewedEvidence.get(entry.id) ?? []).flatMap(
                 ({ id, excerpt }) => {
                   const factId = candidateEvidenceFactId(
@@ -387,7 +387,8 @@ export function buildYcGroundingContext(input: {
                   return score ? [{ factId, score }] : [];
                 },
               ),
-          );
+            )
+            .sort((a, b) => b.score - a.score);
           const highest = Math.max(0, ...rankedFacts.map(({ score }) => score));
           return {
             reviewedFactIds: rankedFacts.map(({ factId }) => factId),
