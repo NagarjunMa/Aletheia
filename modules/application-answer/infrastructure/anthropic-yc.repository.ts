@@ -1,15 +1,12 @@
 import { renderYcAnswer } from "../domain/render-yc-answer";
-import {
-  applicationQuestionSources,
-  type YcGroundingContext,
-} from "../domain/yc-grounding.types";
-import type { YcPlannedOptions } from "../application/yc-rhetorical-options";
+import type {
+  YcPlannedOptions,
+  YcReviewedOptions,
+} from "../application/yc-rhetorical-options";
 import { buildYcPlannedTool } from "./yc-planned-tool";
 import {
-  allowedClaimTexts,
   atomicClaimsSchema,
   atomicClaimsToolSchema,
-  MAX_ATOMIC_CLAIMS,
   type AtomicClaim,
 } from "@/modules/grounding/domain/atomic-claim";
 import Anthropic from "@anthropic-ai/sdk";
@@ -83,46 +80,45 @@ export const applicationBatchTool = {
   },
 } as const;
 
-const reviewedBatchSelectionSchema = z
-  .object({
-    answers: z
-      .array(
-        z
-          .object({
-            questionId: z.enum(["q1", "q2", "q3", "q4", "q5"]),
-            claims: z
-              .array(
-                z
-                  .object({
-                    source_id: z.string().min(1).max(200),
-                    text_index: z.number().int().nonnegative(),
-                  })
-                  .strict(),
-              )
-              .min(1)
-              .max(MAX_ATOMIC_CLAIMS),
-          })
-          .strict(),
-      )
-      .min(1)
-      .max(5),
-  })
-  .strict();
-const {
-  properties: reviewedSelectionProperties,
-  required: reviewedSelectionRequired,
-} = z.toJSONSchema(reviewedBatchSelectionSchema, { target: "draft-7" });
-const reviewedBatchSelectionTool = {
-  name: applicationBatchTool.name,
-  description:
-    "Select ordered references to exact approved wording for each question.",
-  input_schema: {
-    type: "object",
-    additionalProperties: false,
-    properties: reviewedSelectionProperties,
-    required: reviewedSelectionRequired,
-  },
-} as const;
+function reviewedBatchSelectionTool(options: YcReviewedOptions) {
+  return {
+    name: applicationBatchTool.name,
+    description: "Choose an offered answer option for each supplied question.",
+    strict: true,
+    input_schema: {
+      type: "object" as const,
+      additionalProperties: false,
+      properties: Object.fromEntries(
+        options.map(({ questionId, options }) => [
+          questionId,
+          { type: "string", enum: options.map(({ id }) => id) },
+        ]),
+      ),
+      required: options.map(({ questionId }) => questionId),
+    },
+  };
+}
+
+export function getReviewedApplicationToolInput(
+  response: Anthropic.Messages.Message,
+  options: YcReviewedOptions,
+) {
+  const fields = Object.fromEntries(
+    options.map(({ questionId }) => [questionId, z.string()]),
+  );
+  const output = z
+    .strictObject(fields)
+    .safeParse(applicationBatchInput(response));
+  if (!output.success)
+    throw new YcApplicationStructuredOutputError("YC_TOOL_SCHEMA");
+
+  return options.map(({ questionId, options }) => {
+    const option = options.find(({ id }) => output.data[questionId] === id);
+    if (!option)
+      throw new YcApplicationStructuredOutputError("YC_TOOL_SELECTION");
+    return { questionId, ...renderToolAnswer(option.claims) };
+  });
+}
 
 /** Initial engineering budget includes answer text, evidence ledger and JSON.
  * Calibrate against complete valid batches; it is not a latency guarantee. */
@@ -138,67 +134,25 @@ export function getApplicationOutputBudget(questionCount?: number): number {
   return Math.min(8_000, 500 + questionCount * 1_500);
 }
 
+function applicationBatchInput(response: Anthropic.Messages.Message) {
+  if (response.stop_reason !== "tool_use") {
+    throw new YcApplicationStructuredOutputError(
+      response.stop_reason === "max_tokens"
+        ? "YC_TOOL_TRUNCATED"
+        : "YC_TOOL_ENVELOPE",
+    );
+  }
+  const blocks = response.content.filter((block) => block.type === "tool_use");
+  const block = blocks[0];
+  if (blocks.length !== 1 || !block || block.name !== applicationBatchTool.name)
+    throw new YcApplicationStructuredOutputError("YC_TOOL_ENVELOPE");
+  return block.input;
+}
+
 export function getApplicationBatchToolInput(
   response: Anthropic.Messages.Message,
-  reviewedContext?: YcGroundingContext,
 ) {
   try {
-    if (response.stop_reason !== "tool_use")
-      throw new YcApplicationStructuredOutputError(
-        response.stop_reason === "max_tokens"
-          ? "YC_TOOL_TRUNCATED"
-          : "YC_TOOL_ENVELOPE",
-      );
-    const blocks = response.content.filter(
-      (block) => block.type === "tool_use",
-    );
-    const block = blocks[0];
-    if (
-      blocks.length !== 1 ||
-      !block ||
-      block.type !== "tool_use" ||
-      block.name !== applicationBatchTool.name
-    ) {
-      throw new YcApplicationStructuredOutputError("YC_TOOL_ENVELOPE");
-    }
-    if (reviewedContext) {
-      return reviewedBatchSelectionSchema
-        .parse(block.input)
-        .answers.map(({ questionId, claims }) => {
-          const question = reviewedContext.questions?.find(
-            (q) => q.questionId === questionId,
-          );
-          if (!question?.reviewedFactIds) {
-            throw new YcApplicationStructuredOutputError("YC_BATCH_IDS");
-          }
-          const sources = new Map(
-            applicationQuestionSources(
-              reviewedContext.atomicSources ?? [],
-              question,
-            )
-              .filter((source) => source.scope === "candidate")
-              .map((source) => [source.id, source]),
-          );
-          const resolved = claims.map(({ source_id, text_index }) => {
-            const source = sources.get(source_id);
-            const text = source && allowedClaimTexts(source)[text_index];
-            if (!source || !text) {
-              throw new YcApplicationStructuredOutputError("YC_TOOL_SELECTION");
-            }
-            sources.delete(source_id);
-            return {
-              text,
-              source_id,
-              kind: source.kind,
-              supporting_excerpt: source.content,
-            };
-          });
-          return {
-            questionId,
-            ...renderToolAnswer(atomicClaimsSchema.parse(resolved)),
-          };
-        });
-    }
     const parsed = z
       .object({
         answers: z
@@ -211,7 +165,7 @@ export function getApplicationBatchToolInput(
           .max(5),
       })
       .strict()
-      .parse(block.input);
+      .parse(applicationBatchInput(response));
     return parsed.answers.map(({ questionId, claims }) => ({
       questionId,
       ...renderToolAnswer(claims),
@@ -329,7 +283,7 @@ export async function createYcApplicationMessage(input: {
   systemPrompt: string;
   userPrompt: string;
   questionCount?: number;
-  selectReviewedClaims?: boolean;
+  reviewedOptions?: YcReviewedOptions;
   plannedOptions?: YcPlannedOptions;
 }) {
   const timeout =
@@ -353,12 +307,13 @@ export async function createYcApplicationMessage(input: {
               )
             : input.questionCount === undefined
               ? ycApplicationTool
-              : input.selectReviewedClaims
-                ? reviewedBatchSelectionTool
+              : input.reviewedOptions
+                ? reviewedBatchSelectionTool(input.reviewedOptions)
                 : applicationBatchTool,
         ],
         tool_choice: {
           type: "tool",
+          ...(input.reviewedOptions ? { disable_parallel_tool_use: true } : {}),
           name:
             input.questionCount === undefined
               ? YC_APPLICATION_TOOL_NAME
@@ -378,7 +333,7 @@ export async function createYcApplicationDraft(input: {
   systemPrompt: string;
   userPrompt: string;
   questionCount?: number;
-  selectReviewedClaims?: boolean;
+  reviewedOptions?: YcReviewedOptions;
   plannedOptions?: YcPlannedOptions;
   logger?: SafeLogger;
 }) {

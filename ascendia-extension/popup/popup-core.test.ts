@@ -379,6 +379,34 @@ describe("ALE-37 canonical question entry", () => {
     });
   });
 
+  it.each([
+    [
+      "YC",
+      "\r\n",
+      "What have you built?",
+      "How did you find your first users?",
+    ],
+    [
+      "Greenhouse",
+      "\n\n",
+      "Why are you interested in this role?",
+      "Describe a project you led.",
+    ],
+    [
+      "Ashby",
+      "\n",
+      "What makes this role a good fit?",
+      "What did you ship in your last role?",
+    ],
+  ])(
+    "preserves the order of questions pasted from %s",
+    (_source, separator, first, second) => {
+      expect(payload(`  ${first}${separator}  ${second}  `)).toMatchObject({
+        questions: [first, second],
+      });
+    },
+  );
+
   it.each(["", " \r\n \n "])(
     "requires application question data (%s)",
     (input) => {

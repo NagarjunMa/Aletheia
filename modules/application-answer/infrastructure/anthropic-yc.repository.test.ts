@@ -181,6 +181,39 @@ describe("createYcApplicationMessage", () => {
 });
 
 describe("ALE-37 bounded batch tool", () => {
+  it("constrains reviewed output to one offered answer option for each question", async () => {
+    const create = vi.fn().mockResolvedValue({ content: [] });
+    await createYcApplicationMessage({
+      anthropic: { messages: { create } } as never,
+      systemPrompt: "system",
+      userPrompt: "user",
+      questionCount: 2,
+      reviewedOptions: [
+        { questionId: "q1", options: [{ id: "q1-1", claims: [] }] },
+        { questionId: "q2", options: [{ id: "q2-1", claims: [] }] },
+      ],
+    });
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tools: [
+          expect.objectContaining({
+            strict: true,
+            input_schema: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                q1: { type: "string", enum: ["q1-1"] },
+                q2: { type: "string", enum: ["q2-1"] },
+              },
+              required: ["q1", "q2"],
+            },
+          }),
+        ],
+      }),
+      expect.any(Object),
+    );
+  });
+
   it.each([
     [1, 2000],
     [2, 3500],
