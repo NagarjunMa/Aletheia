@@ -39,6 +39,7 @@ const METRICS = [
 ] as const;
 const CONFIG_ENUMS = {
   messageFocus: ["enabled"],
+  claimSelection: ["reviewed_batch"],
   intent: ["networking", "referral", "mentorship", "job_inquiry"],
   mode: [
     "initial_outreach",

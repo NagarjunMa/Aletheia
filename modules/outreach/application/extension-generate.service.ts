@@ -76,6 +76,7 @@ import {
 } from "@/lib/generation-timing";
 import {
   YC_APPLICATION_PROMPT_VERSION,
+  YC_REVIEWED_BATCH_PROMPT_VERSION,
   RHETORICAL_YC_PROMPT_VERSION,
 } from "@/lib/ai/prompts/yc-application";
 import {
@@ -246,6 +247,17 @@ export async function POST(request: NextRequest) {
       // response-body parsing. Failure queue capture is separately bounded.
       const summary = timing.finish(status);
       await recordFailedGeneration(failureContext, status, summary.errorCode);
+      const templateVersion =
+        summary.category === "yc_application"
+          ? rhetoricalPlans
+            ? RHETORICAL_YC_PROMPT_VERSION
+            : summary.config.claimSelection === "reviewed_batch"
+              ? YC_REVIEWED_BATCH_PROMPT_VERSION
+              : YC_APPLICATION_PROMPT_VERSION
+          : outreachPromptVersion(
+              rhetoricalPlans,
+              summary.config.messageFocus === "enabled",
+            );
       recordMeasurement(log, {
         event: "generation.quality",
         generationId,
@@ -253,15 +265,7 @@ export async function POST(request: NextRequest) {
         outcome: status < 400 ? "success" : "failure",
         status,
         durationMs: summary.durationMs,
-        templateVersion:
-          summary.category === "yc_application"
-            ? rhetoricalPlans
-              ? RHETORICAL_YC_PROMPT_VERSION
-              : YC_APPLICATION_PROMPT_VERSION
-            : outreachPromptVersion(
-                rhetoricalPlans,
-                summary.config.messageFocus === "enabled",
-              ),
+        templateVersion,
         model: CLAUDE_MODEL,
         inputUnits: summary.metrics.inputUnits ?? null,
         outputUnits: summary.metrics.outputUnits ?? null,
@@ -278,15 +282,7 @@ export async function POST(request: NextRequest) {
           : undefined,
         firstInvocation,
         model: CLAUDE_MODEL,
-        templateVersion:
-          summary.category === "yc_application"
-            ? rhetoricalPlans
-              ? RHETORICAL_YC_PROMPT_VERSION
-              : YC_APPLICATION_PROMPT_VERSION
-            : outreachPromptVersion(
-                rhetoricalPlans,
-                summary.config.messageFocus === "enabled",
-              ),
+        templateVersion,
       });
     }
   });

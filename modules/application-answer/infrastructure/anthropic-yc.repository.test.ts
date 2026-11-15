@@ -187,22 +187,28 @@ describe("ALE-37 bounded batch tool", () => {
     [3, 5000],
     [4, 6500],
     [5, 8000],
-  ])("sets the %i-question output ceiling", async (questionCount, ceiling) => {
-    const create = vi.fn().mockResolvedValue({ content: [] });
-    await createYcApplicationMessage({
-      anthropic: { messages: { create } } as never,
-      systemPrompt: "system",
-      userPrompt: "user",
-      questionCount,
-    });
-    expect(create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        max_tokens: ceiling,
-        tool_choice: { type: "tool", name: "return_application_answers" },
-      }),
-      { timeout: 30000, signal: expect.any(AbortSignal) },
-    );
-  });
+  ])(
+    "sets the %i-question output ceiling and deadline",
+    async (questionCount, ceiling) => {
+      const create = vi.fn().mockResolvedValue({ content: [] });
+      await createYcApplicationMessage({
+        anthropic: { messages: { create } } as never,
+        systemPrompt: "system",
+        userPrompt: "user",
+        questionCount,
+      });
+      expect(create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          max_tokens: ceiling,
+          tool_choice: { type: "tool", name: "return_application_answers" },
+        }),
+        {
+          timeout: questionCount === 5 ? 45000 : 30000,
+          signal: expect.any(AbortSignal),
+        },
+      );
+    },
+  );
   it.each([0, 6, 1.5, NaN])(
     "rejects an invalid batch count %s before a provider call",
     async (questionCount) => {

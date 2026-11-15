@@ -1,3 +1,21 @@
+## 2026-11-14 — ALE-68 reviewed application answers and five-question timing
+
+On `fix/ale-68-batch-claim-selection` from main at `0bd2c88`, the scoped
+application generator asks Claude for references to approved wording and renders
+the reviewed text on the server. When distinct questions independently validate
+with the same claim set, the server uses the existing feasibility search to
+choose distinct supported sets and validates the resulting answers again.
+Exactly five questions get a 45-second provider deadline. Shorter requests
+use 30 seconds. The SDK makes one provider attempt per request.
+
+The first live local comparison reproduced CLAIM_REWRITE on one question
+and a repeated claim set in the five-question request. After both corrections,
+the matched 1/3/5 runs using the same reviewed excerpts returned 200. Local
+request times were 2.484, 8.406, and 11.801 seconds. Provider times were 2.472,
+8.398, and 11.790 seconds. Every response returned its ordered grounded answers.
+Auth, quota, and billing services were stubbed for this live model test.
+Hosted production and installed-extension checks remain open in ALE-68.
+
 ## 2026-11-07 — ALE-61 Stage 2 red fixtures
 
 Synchronized main to d394929 and started feat/ale-61-confirmed-evidence-focus.
