@@ -23,6 +23,7 @@ import type { GenerationTiming } from "@/lib/generation-timing";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
+  applicationEvidenceGapSchema,
   ycApplicationGenerationResultSchema,
   formatApplicationAnswers,
   ycApplicationReadinessFailureSchema,
@@ -289,6 +290,7 @@ export async function generateYcApplication(
   let reservedCredit:
     { userId: string; reservationId: string; amount: number } | undefined;
   let modelRequested = false;
+  let missingReviewedQuestionNumbers: number[] = [];
   let validationStage:
     | "tool_parse"
     | "batch_contract"
@@ -339,6 +341,17 @@ export async function generateYcApplication(
       sourceCount: context.sources.length,
     });
 
+    if (isBatch && !input.request.selectedEvidenceIds) {
+      missingReviewedQuestionNumbers =
+        context.questions?.flatMap((question, index) =>
+          question.reviewedFactIds?.length === 0 ? [index + 1] : [],
+        ) ?? [];
+    }
+    const missingEvidenceGap = {
+      reason: "missing_reviewed_facts",
+      questionNumbers: missingReviewedQuestionNumbers,
+    };
+
     if (!context.readiness.ready) {
       const response = ycApplicationReadinessFailureSchema.parse({
         success: false,
@@ -349,6 +362,8 @@ export async function generateYcApplication(
         missingFields: context.readiness.missingFields,
         recommendedFields: context.readiness.recommendedFields,
         applicationProfileUrl: profileUrl(input.applicationBaseUrl),
+        evidenceGap:
+          applicationEvidenceGapSchema.safeParse(missingEvidenceGap).data,
         billing: "none",
       });
       return NextResponse.json(response, {
@@ -813,6 +828,18 @@ export async function generateYcApplication(
     }
     if (error instanceof YcPlanUnavailableError) {
       timing?.failure("INSUFFICIENT_GROUNDING");
+      const gap = error.evidenceGap;
+      const diagnostic = applicationEvidenceGapSchema.safeParse(
+        gap?.reason === "incomplete_answer" &&
+          gap.questionNumbers.every((n) =>
+            missingReviewedQuestionNumbers.includes(n),
+          )
+          ? {
+              reason: "missing_reviewed_facts",
+              questionNumbers: missingReviewedQuestionNumbers,
+            }
+          : gap,
+      );
       return NextResponse.json(
         {
           success: false,
@@ -820,6 +847,9 @@ export async function generateYcApplication(
           error:
             "No complete reviewed fact combination fits every answer. Review complete facts; qualifications will not be shortened.",
           billing: "none",
+          ...(isBatch &&
+            !modelRequested &&
+            diagnostic.success && { evidenceGap: diagnostic.data }),
         },
         { status: 422, headers: input.corsHeaders },
       );

@@ -367,6 +367,7 @@ function setupEventListeners() {
       return auth?.user?.id;
     },
     getCategory: () => document.getElementById("category")?.value,
+    onContextChange: dismissApplicationEvidenceGuidance,
     send: sendBackgroundMessage,
   });
   // Settings button
@@ -942,6 +943,7 @@ async function generateMessage() {
   try {
     log.info("generation.start", { operationId, category, clientVersion });
     dismissMessageFocusRecovery();
+    dismissApplicationEvidenceGuidance();
     setGeneratingState(true);
 
     const intent = document.getElementById("intent").value;
@@ -1074,7 +1076,17 @@ async function generateMessage() {
       ) {
         storyPicker.rejectSelection();
       }
-      const presentation = getGenerationErrorPresentation(response);
+      const currentQuestions =
+        category === YC_APPLICATION_CATEGORY &&
+        popupAuthenticated &&
+        requesterId === currentUserId &&
+        storyPicker.isCurrent(storySelection)
+          ? payload.questions
+          : undefined;
+      const presentation = getGenerationErrorPresentation(
+        response,
+        currentQuestions,
+      );
       const errMsg = presentation.message;
       if (
         ["MESSAGE_FOCUS_NO_MATCH", "MESSAGE_FOCUS_UNAVAILABLE"].includes(
@@ -1858,7 +1870,15 @@ function showGenerationError(presentation) {
     return;
   }
 
-  errorText.textContent = presentation.message;
+  const guidance = document.getElementById("applicationEvidenceGuidance");
+  if (guidance && presentation.evidenceGuidance) {
+    guidance.textContent = presentation.evidenceGuidance;
+    guidance.hidden = false;
+    errorText.hidden = true;
+    document.getElementById("ycQuestionGroup")?.append(errorEl);
+  } else {
+    errorText.textContent = presentation.message;
+  }
   details.replaceChildren();
   const fields = [
     ...presentation.missingFields,
@@ -1907,10 +1927,23 @@ function dismissMessageFocusRecovery() {
   if (recovery && !recovery.classList.contains("hidden")) hideError();
 }
 
+function dismissApplicationEvidenceGuidance() {
+  const guidance = document.getElementById("applicationEvidenceGuidance");
+  if (guidance && !guidance.hidden) hideError();
+}
+
 function hideError() {
   clearTimeout(errorDismissalTimer);
+  const error = document.getElementById("errorMessage");
+  error?.classList.add("hidden");
+  const guidance = document.getElementById("applicationEvidenceGuidance");
+  if (guidance && !guidance.hidden) {
+    guidance.hidden = true;
+    guidance.textContent = "";
+    document.getElementById("errorText").hidden = false;
+    if (error) document.getElementById("mainContent")?.append(error);
+  }
   document.getElementById("messageFocusRecovery")?.classList.add("hidden");
-  document.getElementById("errorMessage")?.classList.add("hidden");
   document.getElementById("errorDetails")?.classList.add("hidden");
   document.getElementById("errorAction")?.classList.add("hidden");
   document.getElementById("authError")?.classList.add("hidden");

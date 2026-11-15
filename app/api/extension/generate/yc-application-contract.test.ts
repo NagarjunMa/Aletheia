@@ -12,6 +12,7 @@ import {
   YC_APPLICATION_MIN_WORDS,
   YC_APPLICATION_QUESTION_MAX_CHARS,
   YC_APPLICATION_QUESTION_MIN_CHARS,
+  applicationEvidenceGapSchema,
   ycApplicationGenerationResultSchema,
   ycApplicationRequestSchema,
   ycApplicationPublicSuccessSchema,
@@ -616,6 +617,27 @@ describe("YC application stable error contract", () => {
       MODEL_UPSTREAM_ERROR: { status: 502, billing: "refunded" },
       MODEL_TIMEOUT: { status: 504, billing: "refunded" },
     });
+  });
+
+  it.each([
+    { reason: "missing_reviewed_facts", questionNumbers: [2, 4] },
+    { reason: "incomplete_answer", questionNumbers: [5] },
+    { reason: "shared_coverage" },
+  ])("allows bounded evidence recovery metadata %#", (value) => {
+    expect(applicationEvidenceGapSchema.parse(value)).toEqual(value);
+  });
+
+  it.each([
+    { reason: "missing_reviewed_facts", questionNumbers: [] },
+    { reason: "missing_reviewed_facts", questionNumbers: [0] },
+    { reason: "missing_reviewed_facts", questionNumbers: [6] },
+    { reason: "missing_reviewed_facts", questionNumbers: [4, 4] },
+    { reason: "missing_reviewed_facts", questionNumbers: [4, 2] },
+    { reason: "incomplete_answer", questionNumbers: [4], text: "private" },
+    { reason: "shared_coverage", questionNumbers: [4] },
+    { reason: "unknown", questionNumbers: [4] },
+  ])("rejects unsafe or ambiguous evidence recovery metadata %#", (value) => {
+    expect(applicationEvidenceGapSchema.safeParse(value).success).toBe(false);
   });
 
   it("freezes a privacy-safe, non-billable profile-readiness response", () => {

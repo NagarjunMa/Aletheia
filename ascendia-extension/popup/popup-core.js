@@ -1,3 +1,4 @@
+import { readApplicationEvidenceGap } from "../lib/application-evidence-gap.js";
 import { normalizeConnectionNoteLimit } from "../lib/linkedin-connection-limit.js";
 
 // Popup Core — Pure functions extracted from popup.js for testability.
@@ -313,7 +314,43 @@ export function validateGenerationInput({
 /**
  * Convert API failures into a stable display model for the popup.
  */
-export function getGenerationErrorPresentation(response) {
+export function getApplicationEvidenceGuidance(response, questions) {
+  const questionCount = questions?.length ?? 0;
+  if (questionCount < 1 || questionCount > 5) return;
+  const gap = readApplicationEvidenceGap(response);
+  if (!gap) return;
+  if (gap.reason === "shared_coverage") {
+    if (questionCount > 1)
+      return "The questions need distinct reviewed facts. In your application profile, add or review facts that support different answers, then generate again.";
+    return;
+  }
+  const numbers = gap.questionNumbers;
+  if (numbers.at(-1) > questionCount) return;
+
+  const single = numbers.length === 1;
+  const subject =
+    questionCount === 1
+      ? "This question"
+      : single
+        ? `Question ${numbers[0]}`
+        : `Questions ${new Intl.ListFormat("en").format(numbers.map(String))}`;
+  const need =
+    gap.reason === "incomplete_answer"
+      ? "more reviewed detail for a complete answer"
+      : single
+        ? "a matching reviewed fact"
+        : "matching reviewed facts";
+  // Use the locally submitted question for a concrete cue when it fits the panel.
+  const prompt = single ? questions[numbers[0] - 1] : "";
+  const detail =
+    prompt && prompt.length <= 120
+      ? `Include an action, method, or result that answers “${prompt}”.`
+      : "Include the action, method, or result each affected question asks for.";
+  return `${subject} ${single ? "needs" : "need"} ${need}. Add or review evidence in your application profile. ${detail} Then generate again.`;
+}
+
+export function getGenerationErrorPresentation(response, questions) {
+  const evidenceGuidance = getApplicationEvidenceGuidance(response, questions);
   const baseMessage =
     (response?.billing === "refund_pending"
       ? `Generation failed. Credit restoration pending manual review.${response.refundReference ? ` Reference: ${response.refundReference}` : ""}`
@@ -345,7 +382,10 @@ export function getGenerationErrorPresentation(response) {
   ) {
     return {
       message,
-      actionLabel: "Complete application profile",
+      actionLabel: evidenceGuidance
+        ? "Review application evidence"
+        : "Complete application profile",
+      ...(evidenceGuidance ? { evidenceGuidance } : {}),
       actionUrl: response.applicationProfileUrl,
       missingFields: response.missingFields || [],
       recommendedFields: response.recommendedFields || [],
@@ -368,6 +408,7 @@ export function getGenerationErrorPresentation(response) {
 
   return {
     message,
+    ...(evidenceGuidance ? { evidenceGuidance } : {}),
     actionLabel: "",
     actionUrl: "",
     missingFields: [],

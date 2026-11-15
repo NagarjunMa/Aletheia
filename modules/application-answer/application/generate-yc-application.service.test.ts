@@ -1083,6 +1083,73 @@ describe("ALE-37 batch orchestration", () => {
       return deps;
     }
 
+    it.each([
+      { omitted: [3], count: 5 },
+      { omitted: [1, 3], count: 5 },
+      { omitted: [0], count: 1 },
+    ])(
+      "identifies unsupported question slots $omitted and accepts the original batch after review",
+      async ({ omitted, count }) => {
+        const cases = acceptanceFixture.cases.slice(0, count);
+        const submitted = cases.map(({ question }) => question);
+        const facts = acceptanceFixture.cases.map(
+          ({ reviewedAction }) => reviewedAction,
+        );
+        const incompleteFacts = facts.filter((_, i) => !omitted.includes(i));
+        const deps = withReviewedFacts(
+          submitted,
+          submitted.map(() => [0]),
+          incompleteFacts,
+          acceptanceFixture.jobDescription,
+          acceptanceFixture.storyTitle,
+        );
+
+        const response = await run(
+          deps,
+          submitted,
+          acceptanceFixture.jobDescription,
+        );
+        expect(response.status).toBe(422);
+        const body = await response.json();
+        expect(body).toMatchObject({
+          code: "GROUNDING_PROFILE_INCOMPLETE",
+          billing: "none",
+          evidenceGap: {
+            reason: "missing_reviewed_facts",
+            questionNumbers: omitted.map((index) => index + 1),
+          },
+        });
+        expect(body).not.toHaveProperty("answers");
+        expect(JSON.stringify(body)).not.toMatch(
+          /fictional|22222222|How did/iu,
+        );
+        expect(deps.checkRateLimit).not.toHaveBeenCalled();
+        expect(deps.grantTrialCredits).not.toHaveBeenCalled();
+        expect(deps.reserveCredits).not.toHaveBeenCalled();
+        expect(deps.createMessage).not.toHaveBeenCalled();
+
+        const reviewed = withReviewedFacts(
+          submitted,
+          submitted.map((_, index) => [index]),
+          facts,
+          acceptanceFixture.jobDescription,
+          acceptanceFixture.storyTitle,
+        );
+        const retry = await run(
+          reviewed,
+          submitted,
+          acceptanceFixture.jobDescription,
+        );
+        expect(retry.status).toBe(200);
+        expect(
+          (await retry.json()).answers.map(
+            ({ question }: { question: string }) => question,
+          ),
+        ).toEqual(submitted);
+        expect(reviewed.createMessage).toHaveBeenCalledTimes(1);
+      },
+    );
+
     it("offers and returns only the matching reviewed fact for each of five questions", async () => {
       const deps = withReviewedFacts(
         topicQuestions,
@@ -1136,6 +1203,80 @@ describe("ALE-37 batch orchestration", () => {
       expect(await response.json()).toMatchObject({
         code: "INSUFFICIENT_GROUNDING",
         billing: "none",
+        evidenceGap: { reason: "incomplete_answer", questionNumbers: [1] },
+      });
+      expect(deps.checkRateLimit).not.toHaveBeenCalled();
+      expect(deps.reserveCredits).not.toHaveBeenCalled();
+      expect(deps.createMessage).not.toHaveBeenCalled();
+    });
+
+    it.each([false, true])(
+      "reports independent incomplete answers without blaming a viable slot (planned=%s)",
+      async (planned) => {
+        const cases = acceptanceFixture.cases.slice(0, 3);
+        const submitted = cases.map(({ question }) => question);
+        const facts = cases.map(({ reviewedAction }, index) =>
+          index === 1 ? reviewedAction : reviewedAction.split(" by ")[0] + ".",
+        );
+        const deps = withReviewedFacts(
+          submitted,
+          [[0], [1], [2]],
+          facts,
+          acceptanceFixture.jobDescription,
+          acceptanceFixture.storyTitle,
+        );
+        const prepared = await deps.prepareGrounding({
+          caller,
+          question: submitted[0]!,
+          questions: submitted,
+          jobDescription: acceptanceFixture.jobDescription,
+        });
+        expect(prepared.readiness.ready).toBe(true);
+        expect(
+          prepared.questions?.map((q) => q.reviewedFactIds?.length),
+        ).toEqual([1, 1, 1]);
+
+        const response = await run(
+          deps,
+          submitted,
+          acceptanceFixture.jobDescription,
+          planned,
+        );
+        expect(response.status).toBe(422);
+        expect(await response.json()).toMatchObject({
+          code: "INSUFFICIENT_GROUNDING",
+          billing: "none",
+          evidenceGap: { reason: "incomplete_answer", questionNumbers: [1, 3] },
+        });
+        expect(deps.checkRateLimit).not.toHaveBeenCalled();
+        expect(deps.grantTrialCredits).not.toHaveBeenCalled();
+        expect(deps.reserveCredits).not.toHaveBeenCalled();
+        expect(deps.createMessage).not.toHaveBeenCalled();
+      },
+    );
+
+    it("reports every repeat of an infeasible question in the default generation path", async () => {
+      const { question, reviewedAction } = acceptanceFixture.cases[0]!;
+      const submitted = [question, question];
+      const shortFact = reviewedAction.split(" by ")[0] + ".";
+      const deps = withReviewedFacts(
+        submitted,
+        [[0], [0]],
+        [shortFact],
+        acceptanceFixture.jobDescription,
+        acceptanceFixture.storyTitle,
+      );
+
+      const response = await run(
+        deps,
+        submitted,
+        acceptanceFixture.jobDescription,
+      );
+      expect(response.status).toBe(422);
+      expect(await response.json()).toMatchObject({
+        code: "INSUFFICIENT_GROUNDING",
+        billing: "none",
+        evidenceGap: { reason: "incomplete_answer", questionNumbers: [1, 2] },
       });
       expect(deps.checkRateLimit).not.toHaveBeenCalled();
       expect(deps.reserveCredits).not.toHaveBeenCalled();
@@ -1472,31 +1613,35 @@ describe("ALE-37 batch orchestration", () => {
       expect(deps.createMessage).not.toHaveBeenCalled();
     });
 
-    it("refuses different questions if only one complete set of claims can answer both", async () => {
-      const submitted = [
-        "How did you use TypeScript for testing?",
-        "What limits did you document for the TypeScript pilot?",
-      ];
-      const deps = withReviewedFacts(
-        submitted,
-        [
-          [0, 1],
-          [1, 0],
-        ],
-        [
-          "I wrote TypeScript testing cases for a pilot, including boundary inputs, and documented the supported request shapes so engineers could replay the checks locally.",
-          "I documented the limits of our TypeScript pilot in a review guide and described which cases needed manual testing before another team could use it.",
-        ],
-      );
-      const response = await run(deps, submitted);
-      expect(response.status).toBe(422);
-      expect(await response.json()).toMatchObject({
-        code: "INSUFFICIENT_GROUNDING",
-        billing: "none",
-      });
-      expect(deps.checkRateLimit).not.toHaveBeenCalled();
-      expect(deps.createMessage).not.toHaveBeenCalled();
-    });
+    it.each([false, true])(
+      "refuses distinct questions with only one complete claim set (planned=%s)",
+      async (planned) => {
+        const submitted = [
+          "How did you use TypeScript for testing?",
+          "What limits did you document for the TypeScript pilot?",
+        ];
+        const deps = withReviewedFacts(
+          submitted,
+          [
+            [0, 1],
+            [1, 0],
+          ],
+          [
+            "I wrote TypeScript testing cases for a pilot, including boundary inputs, and documented the supported request shapes so engineers could replay the checks locally with the same recorded settings and synthetic request data.",
+            "I documented the limits of our TypeScript pilot in a review guide and described which cases needed manual testing before another team could use it.",
+          ],
+        );
+        const response = await run(deps, submitted, request.jd, planned);
+        expect(response.status).toBe(422);
+        expect(await response.json()).toMatchObject({
+          code: "INSUFFICIENT_GROUNDING",
+          billing: "none",
+          evidenceGap: { reason: "shared_coverage" },
+        });
+        expect(deps.checkRateLimit).not.toHaveBeenCalled();
+        expect(deps.createMessage).not.toHaveBeenCalled();
+      },
+    );
 
     it("keeps distinct input questions distinct when prompt escaping produces the same text", async () => {
       const submitted = [

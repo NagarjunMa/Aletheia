@@ -1,6 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import acceptanceFixture from "../modules/application-answer/application/fixtures/ale-68-reviewed-evidence.json";
 
 declare global {
   interface Window {
@@ -397,6 +398,77 @@ test("insufficient reviewed evidence preserves the batch for recovery @smoke", a
   await expect(page.locator("#jdInput")).toHaveValue(jd);
   await expect(page.locator("#ycQuestionInput")).toHaveValue(questions);
   await expect(page.locator("#generateBtn")).toBeEnabled();
+});
+
+test("the compact application panel focuses question 4 recovery after a previous draft @smoke", async ({
+  page,
+}) => {
+  await openPopup(page);
+  await page.setViewportSize({ width: 320, height: 550 });
+  await page.selectOption("#category", "yc_application");
+  const questions = acceptanceFixture.cases.map(({ question }) => question);
+  await page.fill("#jdInput", acceptanceFixture.jobDescription);
+  await page.fill("#ycQuestionInput", questions.join("\n"));
+  await page.click("#generateBtn");
+  await expect(page.locator(".application-answer h3")).toHaveText(questions);
+  await page.evaluate(() => {
+    window.aleTest.holdGeneration = true;
+  });
+  await page.click("#regenerateApplicationBtn");
+  await expect(page.locator("#generationProgress")).toBeVisible();
+  await page.evaluate(() => {
+    window.aleTest.generationCallback?.({
+      success: false,
+      status: 422,
+      code: "GROUNDING_PROFILE_INCOMPLETE",
+      missingFields: ["confirmed_evidence"],
+      applicationProfileUrl: "https://www.aletheia.live/profile/application",
+      evidenceGap: { reason: "missing_reviewed_facts", questionNumbers: [4] },
+    });
+    window.aleTest.holdGeneration = false;
+  });
+
+  const alert = page.locator("#errorMessage");
+  await expect(alert).toBeFocused();
+  await expect(alert).toBeInViewport({ ratio: 0.75 });
+  await expect(alert).toContainText(
+    "Question 4 needs a matching reviewed fact",
+  );
+  await expect(alert).toContainText(questions[3]!);
+  await expect(alert).toContainText("an action, method, or result");
+  await expect(page.locator("#ycQuestionGroup #errorMessage")).toBeVisible();
+  await expect(page.locator("#ycQuestionInput")).toHaveAccessibleDescription(
+    /Question 4 needs/u,
+  );
+  await expect(page.locator("#errorAction")).toHaveText(
+    "Review application evidence",
+  );
+  await expect(page.locator(".application-answer h3")).toHaveText(questions);
+  await expect(page.locator("#jdInput")).toHaveValue(
+    acceptanceFixture.jobDescription,
+  );
+  await expect(page.locator("#ycQuestionInput")).toHaveValue(
+    questions.join("\n"),
+  );
+
+  await page.fill("#ycQuestionInput", questions.slice(0, 2).join("\n"));
+  await expect(alert).toBeHidden();
+  await expect(
+    page.locator("#ycQuestionInput"),
+  ).not.toHaveAccessibleDescription(/Question 4/u);
+  await page.fill("#ycQuestionInput", questions.join("\n"));
+  await page.click("#generateBtn");
+  await expect(page.locator(".application-answer h3")).toHaveText(questions);
+  await expect(alert).toBeHidden();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          window.aleTest.messages.filter(({ action }) => action === "generate")
+            .length,
+      ),
+    )
+    .toBe(3);
 });
 
 test("ZIP-source popup paints the orb, reports elapsed time, and stops after success @smoke", async ({

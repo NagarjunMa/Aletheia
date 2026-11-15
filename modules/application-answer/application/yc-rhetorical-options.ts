@@ -36,9 +36,16 @@ import {
   inspectGroundedText,
 } from "@/lib/ai/sanitizer";
 import { MAX_REVIEWED_FACTS } from "@/lib/candidate-profile/fact-review";
+type YcPlanEvidenceGap =
+  | { reason: "incomplete_answer"; questionNumbers: number[] }
+  | { reason: "shared_coverage" };
+
 export class YcPlanUnavailableError extends Error {
-  constructor() {
+  readonly evidenceGap: YcPlanEvidenceGap | undefined;
+
+  constructor(evidenceGap?: YcPlanEvidenceGap) {
     super("No complete reviewed answer fits the question");
+    this.evidenceGap = evidenceGap;
   }
 }
 export type YcPlannedOptions = Array<{
@@ -121,7 +128,7 @@ function matchDistinctClaimSets(claimSets: readonly Set<string>[]) {
     return false;
   };
   if (claimSets.some((_, index) => !assign(index, new Set())))
-    throw new YcPlanUnavailableError();
+    throw new YcPlanUnavailableError({ reason: "shared_coverage" });
   return new Map([...owners].map(([signature, index]) => [index, signature]));
 }
 
@@ -173,6 +180,7 @@ export function assertYcSelectionFeasible(context: YcGroundingContext) {
     string | number,
     Map<string, AtomicClaim[]>
   >();
+  const incompleteGroups = new Set<string | number>();
   const distinctQuestionCount = new Set(
     questions.map(({ question, questionGroup }) => questionGroup ?? question),
   ).size;
@@ -181,14 +189,25 @@ export function assertYcSelectionFeasible(context: YcGroundingContext) {
     const questionGroup = question.questionGroup ?? question.question;
     const scopedFacts = "reviewedFactIds" in question;
     if (!required.length && !scopedFacts) continue;
-    if (scopedFacts && claimSetsByQuestion.has(questionGroup)) continue;
+    if (
+      scopedFacts &&
+      (claimSetsByQuestion.has(questionGroup) ||
+        incompleteGroups.has(questionGroup))
+    )
+      continue;
     const signatures = new Map<string, AtomicClaim[]>();
-    const signatureLimit = scopedFacts ? distinctQuestionCount : 1;
+    // After one gap, a single viable answer is enough to rule out another.
+    const signatureLimit =
+      scopedFacts && !incompleteGroups.size ? distinctQuestionCount : 1;
     const scoped = ycQuestionContext(context, questionId, true);
     const sources = scoped.atomicSources ?? [];
     if (sources.length > 64) throw new YcPlanUnavailableError();
     const leading = new Set(scoped.leadingFactIds);
-    if (scopedFacts && !leading.size) throw new YcPlanUnavailableError();
+    if (scopedFacts && !leading.size) {
+      if (required.length) throw new YcPlanUnavailableError();
+      incompleteGroups.add(questionGroup);
+      continue;
+    }
     if (
       required.length &&
       sources.filter(({ scope }) => scope === "candidate").length >
@@ -298,9 +317,22 @@ export function assertYcSelectionFeasible(context: YcGroundingContext) {
         APPLICATION_ANSWER_MIN_CLAIM_WORDS,
         APPLICATION_ANSWER_MIN_WORDS - 1,
       );
-    if (!signatures.size) throw new YcPlanUnavailableError();
-    if (scopedFacts) claimSetsByQuestion.set(questionGroup, signatures);
+    if (!signatures.size) {
+      if (required.length || !scopedFacts) throw new YcPlanUnavailableError();
+      incompleteGroups.add(questionGroup);
+    } else if (scopedFacts) {
+      claimSetsByQuestion.set(questionGroup, signatures);
+    }
   }
+  if (incompleteGroups.size)
+    throw new YcPlanUnavailableError({
+      reason: "incomplete_answer",
+      questionNumbers: questions.flatMap((entry, index) =>
+        incompleteGroups.has(entry.questionGroup ?? entry.question)
+          ? [index + 1]
+          : [],
+      ),
+    });
   matchDistinctClaimSets(
     [...claimSetsByQuestion.values()].map((sets) => new Set(sets.keys())),
   );
@@ -323,6 +355,7 @@ export function buildYcPlannedOptions(
 
   const claimSetsByQuestion = new Map<string | number, Set<string>>();
   const claimSetIds = new Map<string, number>();
+  const incompleteQuestionNumbers: number[] = [];
   const planned = questions.map((question, questionIndex) => {
     const questionGroup = question.questionGroup ?? question.question;
     const scopedFacts = "reviewedFactIds" in question;
@@ -427,17 +460,26 @@ export function buildYcPlannedOptions(
               claimSetIds.set(signature, claimSet);
             previewBytes += bytes;
             options.push(option);
-            if (options.length === 8) break search;
+            if (options.length === 8 || incompleteQuestionNumbers.length)
+              break search;
           }
     }
-    if (!options.length) throw new YcPlanUnavailableError();
-    if (scopedFacts && !claimSetsByQuestion.has(questionGroup))
+    if (!options.length) {
+      if (!scopedFacts || scoped.requiredEvidenceRoots?.length)
+        throw new YcPlanUnavailableError();
+      incompleteQuestionNumbers.push(questionIndex + 1);
+    } else if (scopedFacts && !claimSetsByQuestion.has(questionGroup))
       claimSetsByQuestion.set(
         questionGroup,
         new Set(options.map(({ claims }) => ycClaimSignature(claims))),
       );
     return { questionId: question.questionId, options };
   });
+  if (incompleteQuestionNumbers.length)
+    throw new YcPlanUnavailableError({
+      reason: "incomplete_answer",
+      questionNumbers: incompleteQuestionNumbers,
+    });
   matchDistinctClaimSets([...claimSetsByQuestion.values()]);
   return planned;
 }
