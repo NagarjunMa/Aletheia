@@ -1008,6 +1008,10 @@ textarea::placeholder {
   gap: var(--space-2);
 }
 
+#applicationEvidenceGuidance {
+  overflow-wrap: anywhere;
+}
+
 .error-details {
   margin: 0;
   padding-left: var(--space-5);

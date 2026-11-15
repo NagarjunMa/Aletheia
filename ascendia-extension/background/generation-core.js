@@ -1,3 +1,5 @@
+import { readApplicationEvidenceGap } from "../lib/application-evidence-gap.js";
+
 // Pure helpers for the generation message boundary. Keeping these functions
 // free of chrome.* access makes strict payload and error propagation testable.
 
@@ -14,6 +16,12 @@ export function buildGenerationRequestData(payload, acceptedExamples) {
 
 export function serializeGenerationError(error) {
   const details = error?.apiResponse || {};
+  const code = error?.code || details.code;
+  const evidenceGap = readApplicationEvidenceGap({
+    status: error?.status,
+    code,
+    evidenceGap: details.evidenceGap,
+  });
   const now = Date.now();
   const resetTime =
     error?.status === 429 &&
@@ -49,9 +57,8 @@ export function serializeGenerationError(error) {
     error: details.error || error?.message || "Generation failed",
     message: details.message || error?.message || "Generation failed",
     ...(error?.status ? { status: error.status } : {}),
-    ...(error?.code || details.code
-      ? { code: error?.code || details.code }
-      : {}),
+    ...(code ? { code } : {}),
+    ...(evidenceGap ? { evidenceGap } : {}),
     ...(error?.requestId ? { requestId: error.requestId } : {}),
     ...(error?.authCause || details.cause
       ? { cause: error?.authCause || details.cause }

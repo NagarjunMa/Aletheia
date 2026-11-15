@@ -2121,3 +2121,41 @@ No new cost, model judge, acceptance waiver or release approved.
 - Before the fix, eight valid emoji request boundary cases and one echoed-question case failed. Regression coverage also exercises length-changing normalization, upper limits, and indexed rejection before application generation.
 - Passed 3,108 web tests with coverage, 287 extension tests, 15 guardrails, seven mocked Chromium cases, lint, types, policy, and the local production build with Turbopack disk caching disabled. Independent review found no material issues.
 - Runtime changes are server-only. Roll back by reverting the change and redeploying the backend. Leave ALE-72 In Progress for the pre-merge audit.
+
+2026-11-14 — ALE-67 application question evidence guidance (Significant).
+- Based on main 0bd2c88. The five-question regression reproduces a generic
+  rejection when only question 4 lacks a matching reviewed fact. The API now
+  adds a bounded reason and question numbers to existing 422 responses when
+  known. Shared coverage failures carry no question number.
+- The extension shows recovery guidance beside the question input, keeps the
+  submitted text, and clears the guidance when the inputs or story choice
+  change. The focused alert stays beside the input even with an earlier draft
+  in a compact panel. It uses the affected question already in the panel and
+  suggests an action, method, or result to review. The default solver reports
+  all repetitions of a proven infeasible question. The mocked Chromium flow
+  recovers and returns all five answers in
+  order. The metered service test confirms rejection before quota, trial
+  credits, reservations, or the provider and successful retry after review.
+- The diagnostic contains no question or evidence text, and legacy error
+  fields remain available. Deploy the API first, then ship extension 1.0.28.
+  Revert and redeploy the API to restore the generic message for both clients.
+  Leave ALE-67 In Progress until pre-merge verification and hosted acceptance.
+
+2026-11-14 — ALE-67 pre-merge correction.
+- The audit reproduced a three-question batch with incomplete reviewed facts
+  in slots 1 and 3 and a viable answer for slot 2. Both modes returned only
+  slot 1. Feasibility now reports all proven incomplete slots before rejecting.
+  It uses the existing per-question search limits. Once a failure is found,
+  one viable answer rules out each later slot. Legacy and explicit-story
+  failures retain their early exits, and shared coverage still has no ordinal.
+- The two regression cases failed before the correction and passed afterward.
+  The local Store ZIP and real MV3 worker replayed the question 4 HTTP error
+  against a mocked backend, then retried with the same inputs after mock
+  evidence review. Hosted and manual screen-reader evidence are pending.
+
+2026-11-15 — ALE-67 rebase onto the ALE-68 merge.
+- Resolved the shared application feasibility conflict on main acfc789.
+  Preserve ALE-68's reviewed claim choices and distinct-answer recovery,
+  and retain ALE-67's bounded question diagnostics before admission.
+- The 1,657 focused application, extension API and outreach tests passed.
+  Hosted acceptance and manual screen-reader verification remain pending.

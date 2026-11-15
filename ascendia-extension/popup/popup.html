@@ -268,7 +268,7 @@
             id="ycQuestionInput"
             rows="3"
             maxlength="10000"
-            aria-describedby="ycQuestionHelp ycQuestionCount applicationInputStatus"
+            aria-describedby="ycQuestionHelp ycQuestionCount applicationInputStatus applicationEvidenceGuidance"
           >
 Why are you a strong candidate for this role?</textarea>
           <p id="ycQuestionHelp" class="input-help">
@@ -509,6 +509,7 @@ Why are you a strong candidate for this role?</textarea>
           </svg>
           <div class="error-content">
             <span id="errorText">Something went wrong. Please try again.</span>
+            <span id="applicationEvidenceGuidance" hidden></span>
             <ul id="errorDetails" class="error-details hidden"></ul>
             <div id="messageFocusRecovery" class="hidden">
               <button

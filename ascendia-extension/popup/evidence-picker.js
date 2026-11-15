@@ -3,6 +3,7 @@ export function createEvidencePicker({
   getOwner,
   readOwner,
   getCategory,
+  onContextChange,
   send,
 }) {
   const panel = document.getElementById("evidencePicker");
@@ -64,6 +65,7 @@ export function createEvidencePicker({
 
   function resetContext() {
     revision++;
+    onContextChange();
     selected.clear();
     errorMessage = "";
     updateControls();
@@ -120,6 +122,7 @@ export function createEvidencePicker({
     if (!target.checked) selected.delete(target.value);
     else if (selected.size < limit()) selected.add(target.value);
     revision++;
+    onContextChange();
     errorMessage = "";
     updateControls();
   });

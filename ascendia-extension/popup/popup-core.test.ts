@@ -9,6 +9,7 @@ import {
   buildGeneratePayload,
   getCategoryUiState,
   getGenerationErrorPresentation,
+  getApplicationEvidenceGuidance,
   isAuthError,
   validateGenerationInput,
 } from "./popup-core.js";
@@ -588,6 +589,68 @@ describe("YC category UI and validation", () => {
       }),
     ).toMatchObject({ valid: false, code: "LINKEDIN_PROFILE_REQUIRED" });
   });
+});
+
+describe("application evidence guidance", () => {
+  const response = { status: 422, code: "INSUFFICIENT_GROUNDING" };
+  const submittedQuestions = (count: number | undefined) =>
+    count === undefined
+      ? undefined
+      : Array.from(
+          { length: count },
+          (_, index) => `What did you verify in project ${index + 1}?`,
+        );
+
+  it.each([
+    [
+      { reason: "missing_reviewed_facts", questionNumbers: [1] },
+      1,
+      /^This question needs/u,
+    ],
+    [
+      { reason: "missing_reviewed_facts", questionNumbers: [2, 4] },
+      5,
+      /^Questions 2 and 4 need/u,
+    ],
+    [
+      { reason: "incomplete_answer", questionNumbers: [2] },
+      2,
+      /Question 2 needs more reviewed detail/u,
+    ],
+    [
+      { reason: "shared_coverage" },
+      5,
+      /^The questions need distinct reviewed facts/u,
+    ],
+  ] as const)(
+    "describes supported diagnostics %#",
+    (evidenceGap, count, expected) => {
+      expect(
+        getApplicationEvidenceGuidance(
+          { ...response, evidenceGap },
+          submittedQuestions(count),
+        ),
+      ).toMatch(expected);
+    },
+  );
+
+  it.each([
+    [undefined, 5],
+    [{ reason: "missing_reviewed_facts", questionNumbers: [4] }, 2],
+    [{ reason: "missing_reviewed_facts", questionNumbers: [1] }, undefined],
+    [{ reason: "shared_coverage" }, 1],
+    [{ reason: "unrecognized" }, 5],
+  ] as const)(
+    "falls back for incompatible guidance %#",
+    (evidenceGap, count) => {
+      expect(
+        getApplicationEvidenceGuidance(
+          { ...response, evidenceGap },
+          submittedQuestions(count),
+        ),
+      ).toBeUndefined();
+    },
+  );
 });
 
 describe("getGenerationErrorPresentation", () => {

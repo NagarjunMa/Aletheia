@@ -425,6 +425,22 @@ export const YC_APPLICATION_ERROR_CONTRACTS = {
   MODEL_TIMEOUT: { status: 504, billing: "refunded" },
 } as const;
 
+const evidenceQuestionNumbers = z
+  .array(z.number().int().min(1).max(5))
+  .min(1)
+  .max(5)
+  .refine((numbers) => numbers.every((n, i) => i === 0 || n > numbers[i - 1]!));
+
+export const applicationEvidenceGapSchema = z.union([
+  z
+    .object({
+      reason: z.enum(["missing_reviewed_facts", "incomplete_answer"]),
+      questionNumbers: evidenceQuestionNumbers,
+    })
+    .strict(),
+  z.object({ reason: z.literal("shared_coverage") }).strict(),
+]);
+
 export const ycApplicationReadinessFailureSchema = z
   .object({
     success: z.literal(false),
@@ -434,6 +450,7 @@ export const ycApplicationReadinessFailureSchema = z
     missingFields: z.array(z.string().trim().min(1).max(100)).max(20),
     recommendedFields: z.array(z.string().trim().min(1).max(100)).max(20),
     applicationProfileUrl: z.string().url().max(2_048),
+    evidenceGap: applicationEvidenceGapSchema.optional(),
     billing: z.literal("none"),
   })
   .strict();

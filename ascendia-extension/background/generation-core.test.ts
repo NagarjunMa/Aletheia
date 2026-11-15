@@ -23,6 +23,54 @@ describe("generation background bridge", () => {
       expect(result).not.toHaveProperty("retryAfterSeconds");
     },
   );
+  it("projects only the allowed reason and question ordinals from a grounding rejection", () => {
+    const result = serializeGenerationError({
+      status: 422,
+      code: "GROUNDING_PROFILE_INCOMPLETE",
+      apiResponse: {
+        evidenceGap: {
+          reason: "missing_reviewed_facts",
+          questionNumbers: [2, 4],
+          excerpt: "private text",
+        },
+      },
+    });
+    expect(result.evidenceGap).toEqual({
+      reason: "missing_reviewed_facts",
+      questionNumbers: [2, 4],
+    });
+  });
+
+  it.each([
+    { reason: "missing_reviewed_facts", questionNumbers: [] },
+    { reason: "missing_reviewed_facts", questionNumbers: [0, 6] },
+    { reason: "missing_reviewed_facts", questionNumbers: ["4"] },
+    { reason: "incomplete_answer", questionNumbers: [1, 1] },
+    { reason: "incomplete_answer", questionNumbers: [2, 1] },
+    { reason: "incomplete_answer", questionNumbers: [1.5] },
+    { reason: "shared_coverage", questionNumbers: [4] },
+    { reason: "private text", questionNumbers: [4] },
+  ])("drops invalid application diagnostics %#", (evidenceGap) => {
+    expect(
+      serializeGenerationError({
+        status: 422,
+        code: "INSUFFICIENT_GROUNDING",
+        apiResponse: { evidenceGap },
+      }),
+    ).not.toHaveProperty("evidenceGap");
+  });
+  it.each([
+    { status: 503, code: "INSUFFICIENT_GROUNDING" },
+    { status: 422, code: "EVIDENCE_SELECTION_UNAVAILABLE" },
+  ])("drops diagnostics on other failure contracts %#", (error) => {
+    expect(
+      serializeGenerationError({
+        ...error,
+        apiResponse: { evidenceGap: { reason: "shared_coverage" } },
+      }),
+    ).not.toHaveProperty("evidenceGap");
+  });
+
   it("does not add legacy style examples to a strict YC request", () => {
     expect(
       buildGenerationRequestData(
