@@ -24,9 +24,13 @@ afterEach(() => {
   transport.mockReset();
 });
 
-it.each(["outreach", "yc"])(
-  "bounds the complete %s provider response, including a stalled body",
-  async (kind) => {
+it.each([
+  ["outreach", undefined, 30_000],
+  ["yc", undefined, 30_000],
+  ["yc", 5, 45_000],
+] as const)(
+  "bounds the complete %s provider response (%s questions), including a stalled body",
+  async (kind, questionCount, deadline) => {
     vi.stubEnv("ANTHROPIC_API_KEY", "synthetic-test-key");
     transport.mockImplementation(
       async (_url, init: RequestInit) =>
@@ -68,6 +72,7 @@ it.each(["outreach", "yc"])(
         : createYcApplicationDraft({
             systemPrompt: "synthetic",
             userPrompt: "synthetic",
+            ...(questionCount === undefined ? {} : { questionCount }),
           });
     await expect(
       Promise.race([
@@ -77,7 +82,8 @@ it.each(["outreach", "yc"])(
         ),
       ]),
     ).rejects.toBeInstanceOf(Anthropic.APIConnectionTimeoutError);
-    expect(timeout).toHaveBeenCalledWith(30_000);
+    expect(timeout).toHaveBeenCalledWith(deadline);
+    expect(transport).toHaveBeenCalledTimes(1);
   },
 );
 

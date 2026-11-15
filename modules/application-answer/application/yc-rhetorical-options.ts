@@ -105,8 +105,8 @@ function isValidAnswer(
   }
 }
 
-/** A bounded matching check ensures distinct questions have distinct options. */
-function assertDistinctClaimSets(claimSets: readonly Set<string>[]) {
+/** Match each distinct question to a different supported set of claims. */
+function matchDistinctClaimSets(claimSets: readonly Set<string>[]) {
   const owners = new Map<string, number>();
   const assign = (question: number, visited: Set<string>): boolean => {
     for (const signature of claimSets[question]!) {
@@ -122,6 +122,44 @@ function assertDistinctClaimSets(claimSets: readonly Set<string>[]) {
   };
   if (claimSets.some((_, index) => !assign(index, new Set())))
     throw new YcPlanUnavailableError();
+  return new Map([...owners].map(([signature, index]) => [index, signature]));
+}
+
+/** Keep the provider's choices where possible when two questions pick the same claims. */
+export function separateReviewedAnswers(
+  selections: ReadonlyArray<{ group: string | number; claims: AtomicClaim[] }>,
+  alternatives: ReadonlyMap<string | number, Map<string, AtomicClaim[]>>,
+) {
+  const owners = new Map<string, string | number>();
+  const preferences = new Map<string | number, Map<string, AtomicClaim[]>>();
+  let hasCollision = false;
+  for (const { group, claims } of selections) {
+    const signature = ycClaimSignature(claims);
+    const owner = owners.get(signature);
+    if (owner !== undefined && owner !== group) hasCollision = true;
+    owners.set(signature, group);
+    if (!preferences.has(group))
+      preferences.set(group, new Map([[signature, claims]]));
+  }
+  if (!hasCollision) return undefined;
+
+  const groups = [...preferences];
+  const options = groups.map(
+    ([group, preferred]) =>
+      new Map([...(alternatives.get(group) ?? []), ...preferred]),
+  );
+  const matched = matchDistinctClaimSets(
+    groups.map(
+      ([, preferred], index) =>
+        new Set([...preferred.keys(), ...options[index]!.keys()]),
+    ),
+  );
+  return new Map(
+    groups.map(([group], index) => [
+      group,
+      options[index]!.get(matched.get(index)!)!,
+    ]),
+  );
 }
 
 /** Check that scoped facts can make complete answers before a provider call. */
@@ -131,7 +169,10 @@ export function assertYcSelectionFeasible(context: YcGroundingContext) {
     context.questions ?? [
       { questionId: "q1", question: context.question, sourceIds: [] },
     ];
-  const claimSetsByQuestion = new Map<string | number, Set<string>>();
+  const claimSetsByQuestion = new Map<
+    string | number,
+    Map<string, AtomicClaim[]>
+  >();
   const distinctQuestionCount = new Set(
     questions.map(({ question, questionGroup }) => questionGroup ?? question),
   ).size;
@@ -141,7 +182,7 @@ export function assertYcSelectionFeasible(context: YcGroundingContext) {
     const scopedFacts = "reviewedFactIds" in question;
     if (!required.length && !scopedFacts) continue;
     if (scopedFacts && claimSetsByQuestion.has(questionGroup)) continue;
-    const signatures = new Set<string>();
+    const signatures = new Map<string, AtomicClaim[]>();
     const signatureLimit = scopedFacts ? distinctQuestionCount : 1;
     const scoped = ycQuestionContext(context, questionId, true);
     const sources = scoped.atomicSources ?? [];
@@ -211,7 +252,8 @@ export function assertYcSelectionFeasible(context: YcGroundingContext) {
           validations++;
           const claims = group.map(({ claim }) => claim);
           if (isValidAnswer(scoped, renderYcAnswer(claims), claims)) {
-            signatures.add(ycClaimSignature(claims));
+            const signature = ycClaimSignature(claims);
+            if (!signatures.has(signature)) signatures.set(signature, claims);
             if (signatures.size >= signatureLimit) return true;
           }
         }
@@ -259,7 +301,10 @@ export function assertYcSelectionFeasible(context: YcGroundingContext) {
     if (!signatures.size) throw new YcPlanUnavailableError();
     if (scopedFacts) claimSetsByQuestion.set(questionGroup, signatures);
   }
-  assertDistinctClaimSets([...claimSetsByQuestion.values()]);
+  matchDistinctClaimSets(
+    [...claimSetsByQuestion.values()].map((sets) => new Set(sets.keys())),
+  );
+  return claimSetsByQuestion;
 }
 
 export function buildYcPlannedOptions(
@@ -393,6 +438,6 @@ export function buildYcPlannedOptions(
       );
     return { questionId: question.questionId, options };
   });
-  assertDistinctClaimSets([...claimSetsByQuestion.values()]);
+  matchDistinctClaimSets([...claimSetsByQuestion.values()]);
   return planned;
 }

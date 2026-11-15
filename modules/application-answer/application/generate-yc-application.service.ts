@@ -7,6 +7,7 @@ import {
 import {
   assertYcSelectionFeasible,
   buildYcPlannedOptions,
+  separateReviewedAnswers,
   ycQuestionContext,
   YcPlanUnavailableError,
 } from "./yc-rhetorical-options";
@@ -15,7 +16,8 @@ import { rhetoricalPlansEnabled } from "@/modules/grounding/domain/rhetorical-pl
 import { GroundedOutputLimitError } from "@/modules/grounding/application/finalize-grounded-output";
 import { GroundedTextSanitizationError } from "@/lib/ai/sanitizer";
 import { AtomicClaimValidationError } from "@/modules/grounding/application/validate-atomic-claims";
-import { ycClaimSignature } from "../domain/render-yc-answer";
+import { renderYcAnswer, ycClaimSignature } from "../domain/render-yc-answer";
+import { atomicClaimsSchema } from "@/modules/grounding/domain/atomic-claim";
 import { randomUUID } from "node:crypto";
 import type { GenerationTiming } from "@/lib/generation-timing";
 import { NextResponse } from "next/server";
@@ -30,6 +32,7 @@ import { createLogger, startTimedStage, type SafeLogger } from "@/lib/logger";
 import {
   buildYcApplicationPrompt,
   YC_APPLICATION_PROMPT_VERSION,
+  YC_REVIEWED_BATCH_PROMPT_VERSION,
   RHETORICAL_YC_PROMPT_VERSION,
 } from "@/lib/ai/prompts/yc-application";
 import {
@@ -358,7 +361,17 @@ export async function generateYcApplication(
     const plannedOptions = rhetoricalPlans
       ? buildYcPlannedOptions(context)
       : undefined;
-    if (!rhetoricalPlans) assertYcSelectionFeasible(context);
+    const selectReviewedClaims =
+      !rhetoricalPlans &&
+      context.questions?.length === questions.length &&
+      context.questions.every(
+        (question) => question.reviewedFactIds !== undefined,
+      );
+    if (selectReviewedClaims)
+      timing?.config({ claimSelection: "reviewed_batch" });
+    const feasibleClaimSets = rhetoricalPlans
+      ? undefined
+      : assertYcSelectionFeasible(context);
     timing?.enter("rateLimit");
     const completeRateLimit = startTimedStage(
       operationLog,
@@ -489,7 +502,11 @@ export async function generateYcApplication(
     if (dependencies.billingEnabled && billingMode === "unlimited_developer")
       timing?.config({ billingMode: "unlimited" });
     timing?.enter("inputBuild");
-    const prompt = buildYcApplicationPrompt(context, rhetoricalPlans);
+    const prompt = buildYcApplicationPrompt(
+      context,
+      rhetoricalPlans,
+      selectReviewedClaims,
+    );
     timing?.metrics({
       inputChars: prompt.systemPrompt.length + prompt.userPrompt.length,
     });
@@ -554,6 +571,7 @@ export async function generateYcApplication(
       systemPrompt: prompt.systemPrompt,
       userPrompt: prompt.userPrompt,
       ...(isBatch ? { questionCount: questions.length } : {}),
+      ...(selectReviewedClaims ? { selectReviewedClaims } : {}),
       ...(plannedOptions ? { plannedOptions } : {}),
       logger: operationLog,
     });
@@ -590,7 +608,10 @@ export async function generateYcApplication(
     const parsedAnswers =
       plannedAnswers ??
       (isBatch
-        ? getApplicationBatchToolInput(message)
+        ? getApplicationBatchToolInput(
+            message,
+            selectReviewedClaims ? context : undefined,
+          )
         : [{ questionId: "q1", ...dependencies.parseMessage(message) }]);
     validationStage = "batch_contract";
     const byId = new Map(
@@ -614,12 +635,11 @@ export async function generateYcApplication(
         0,
       ),
     });
-    const validatedAnswers = [];
-    const questionByClaims = new Map<string, number>();
-    for (const [index, question] of questions.entries()) {
-      const questionId = `q${index + 1}`;
-      const parsed = byId.get(questionId);
-      if (!parsed) throw new YcApplicationStructuredOutputError("YC_BATCH_IDS");
+    const validateAnswer = async (
+      index: number,
+      questionId: string,
+      parsed: YcApplicationToolOutput,
+    ) => {
       validationItem = index + 1;
       validationStage = "sanitize";
       const sanitized = await dependencies.sanitizeOutput({
@@ -636,9 +656,56 @@ export async function generateYcApplication(
         context: answerContext,
         output: sanitized.output,
       });
-      const questionGroup = context.questions?.[index]?.questionGroup;
+      return { ...validated, selectedClaims: sanitized.output.claims };
+    };
+    const selections = [];
+    for (const [index, question] of questions.entries()) {
+      const questionId = `q${index + 1}`;
+      const parsed = byId.get(questionId)!;
+      const validated = await validateAnswer(index, questionId, parsed);
+      selections.push({
+        questionId,
+        question,
+        questionGroup: context.questions?.[index]?.questionGroup,
+        validated,
+      });
+    }
+    const separated =
+      selectReviewedClaims && feasibleClaimSets && selections.length > 1
+        ? separateReviewedAnswers(
+            selections.map(({ question, questionGroup, validated }) => ({
+              group: questionGroup ?? question,
+              claims: atomicClaimsSchema.parse(
+                validated.selectedClaims.map(
+                  ({ sourceIds: _ids, ...claim }) => claim,
+                ),
+              ),
+            })),
+            feasibleClaimSets,
+          )
+        : undefined;
+    const validatedAnswers = [];
+    const questionByClaims = new Map<string, number>();
+    for (const [index, selection] of selections.entries()) {
+      const { questionId, question, questionGroup } = selection;
+      let validated = selection.validated;
+      validationItem = index + 1;
+      const alternative = separated?.get(questionGroup ?? question);
+      if (
+        alternative &&
+        ycClaimSignature(alternative) !==
+          ycClaimSignature(validated.selectedClaims)
+      ) {
+        validated = await validateAnswer(index, questionId, {
+          body: renderYcAnswer(alternative),
+          claims: alternative.map((claim) => ({
+            ...claim,
+            sourceIds: [claim.source_id],
+          })),
+        });
+      }
       if (questionGroup !== undefined) {
-        const signature = ycClaimSignature(sanitized.output.claims);
+        const signature = ycClaimSignature(validated.selectedClaims);
         const previousQuestion = questionByClaims.get(signature);
         if (
           previousQuestion !== undefined &&
@@ -662,7 +729,7 @@ export async function generateYcApplication(
     const body = formatApplicationAnswers(answers);
     const claims = validatedAnswers.flatMap((answer) => answer.claims);
     const quality = buildQualityMetadata({
-      claims: parsedAnswers.flatMap((a) => a.claims),
+      claims: validatedAnswers.flatMap((answer) => answer.selectedClaims),
       sources: context.atomicSources ?? [],
       archetypes: parsedAnswers.flatMap((a) =>
         "rhetoricalArchetype" in a && typeof a.rhetoricalArchetype === "string"
@@ -699,7 +766,9 @@ export async function generateYcApplication(
           quality,
           promptVersion: rhetoricalPlans
             ? RHETORICAL_YC_PROMPT_VERSION
-            : YC_APPLICATION_PROMPT_VERSION,
+            : selectReviewedClaims
+              ? YC_REVIEWED_BATCH_PROMPT_VERSION
+              : YC_APPLICATION_PROMPT_VERSION,
           model: dependencies.model,
           category: "yc_application",
           generationTimeMs: processingTime,

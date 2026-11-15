@@ -1,9 +1,15 @@
 import { renderYcAnswer } from "../domain/render-yc-answer";
+import {
+  applicationQuestionSources,
+  type YcGroundingContext,
+} from "../domain/yc-grounding.types";
 import type { YcPlannedOptions } from "../application/yc-rhetorical-options";
 import { buildYcPlannedTool } from "./yc-planned-tool";
 import {
+  allowedClaimTexts,
   atomicClaimsSchema,
   atomicClaimsToolSchema,
+  MAX_ATOMIC_CLAIMS,
   type AtomicClaim,
 } from "@/modules/grounding/domain/atomic-claim";
 import Anthropic from "@anthropic-ai/sdk";
@@ -22,6 +28,7 @@ export const YC_GENERATION_SETTINGS = {
   maxOutputUnits: 1000,
 } as const;
 const YC_APPLICATION_TOOL_NAME = "return_yc_application_answer";
+const YC_FIVE_QUESTION_TIMEOUT_MS = 45_000;
 const log = createLogger("yc-anthropic-repository");
 
 export const ycApplicationTool = {
@@ -76,6 +83,47 @@ export const applicationBatchTool = {
   },
 } as const;
 
+const reviewedBatchSelectionSchema = z
+  .object({
+    answers: z
+      .array(
+        z
+          .object({
+            questionId: z.enum(["q1", "q2", "q3", "q4", "q5"]),
+            claims: z
+              .array(
+                z
+                  .object({
+                    source_id: z.string().min(1).max(200),
+                    text_index: z.number().int().nonnegative(),
+                  })
+                  .strict(),
+              )
+              .min(1)
+              .max(MAX_ATOMIC_CLAIMS),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(5),
+  })
+  .strict();
+const {
+  properties: reviewedSelectionProperties,
+  required: reviewedSelectionRequired,
+} = z.toJSONSchema(reviewedBatchSelectionSchema, { target: "draft-7" });
+const reviewedBatchSelectionTool = {
+  name: applicationBatchTool.name,
+  description:
+    "Select ordered references to exact approved wording for each question.",
+  input_schema: {
+    type: "object",
+    additionalProperties: false,
+    properties: reviewedSelectionProperties,
+    required: reviewedSelectionRequired,
+  },
+} as const;
+
 /** Initial engineering budget includes answer text, evidence ledger and JSON.
  * Calibrate against complete valid batches; it is not a latency guarantee. */
 export function getApplicationOutputBudget(questionCount?: number): number {
@@ -92,6 +140,7 @@ export function getApplicationOutputBudget(questionCount?: number): number {
 
 export function getApplicationBatchToolInput(
   response: Anthropic.Messages.Message,
+  reviewedContext?: YcGroundingContext,
 ) {
   try {
     if (response.stop_reason !== "tool_use")
@@ -111,6 +160,44 @@ export function getApplicationBatchToolInput(
       block.name !== applicationBatchTool.name
     ) {
       throw new YcApplicationStructuredOutputError("YC_TOOL_ENVELOPE");
+    }
+    if (reviewedContext) {
+      return reviewedBatchSelectionSchema
+        .parse(block.input)
+        .answers.map(({ questionId, claims }) => {
+          const question = reviewedContext.questions?.find(
+            (q) => q.questionId === questionId,
+          );
+          if (!question?.reviewedFactIds) {
+            throw new YcApplicationStructuredOutputError("YC_BATCH_IDS");
+          }
+          const sources = new Map(
+            applicationQuestionSources(
+              reviewedContext.atomicSources ?? [],
+              question,
+            )
+              .filter((source) => source.scope === "candidate")
+              .map((source) => [source.id, source]),
+          );
+          const resolved = claims.map(({ source_id, text_index }) => {
+            const source = sources.get(source_id);
+            const text = source && allowedClaimTexts(source)[text_index];
+            if (!source || !text) {
+              throw new YcApplicationStructuredOutputError("YC_TOOL_SELECTION");
+            }
+            sources.delete(source_id);
+            return {
+              text,
+              source_id,
+              kind: source.kind,
+              supporting_excerpt: source.content,
+            };
+          });
+          return {
+            questionId,
+            ...renderToolAnswer(atomicClaimsSchema.parse(resolved)),
+          };
+        });
     }
     const parsed = z
       .object({
@@ -156,7 +243,11 @@ function renderToolAnswer(claims: AtomicClaim[]): YcApplicationToolOutput {
 }
 
 export type YcToolValidationCode =
-  "YC_TOOL_SCHEMA" | "YC_TOOL_ENVELOPE" | "YC_TOOL_TRUNCATED" | "YC_BATCH_IDS";
+  | "YC_TOOL_SCHEMA"
+  | "YC_TOOL_ENVELOPE"
+  | "YC_TOOL_TRUNCATED"
+  | "YC_BATCH_IDS"
+  | "YC_TOOL_SELECTION";
 
 type ToolValidationDetail = { field: string; code: string; itemIndex?: number };
 
@@ -238,9 +329,14 @@ export async function createYcApplicationMessage(input: {
   systemPrompt: string;
   userPrompt: string;
   questionCount?: number;
+  selectReviewedClaims?: boolean;
   plannedOptions?: YcPlannedOptions;
 }) {
-  const signal = AbortSignal.timeout(GENERATION_MODEL_TIMEOUT_MS);
+  const timeout =
+    input.questionCount === 5
+      ? YC_FIVE_QUESTION_TIMEOUT_MS
+      : GENERATION_MODEL_TIMEOUT_MS;
+  const signal = AbortSignal.timeout(timeout);
   try {
     return await input.anthropic.messages.create(
       {
@@ -257,7 +353,9 @@ export async function createYcApplicationMessage(input: {
               )
             : input.questionCount === undefined
               ? ycApplicationTool
-              : applicationBatchTool,
+              : input.selectReviewedClaims
+                ? reviewedBatchSelectionTool
+                : applicationBatchTool,
         ],
         tool_choice: {
           type: "tool",
@@ -267,7 +365,7 @@ export async function createYcApplicationMessage(input: {
               : applicationBatchTool.name,
         },
       },
-      { timeout: GENERATION_MODEL_TIMEOUT_MS, signal },
+      { timeout, signal },
     );
   } catch (error) {
     throw signal.aborted ? new Anthropic.APIConnectionTimeoutError() : error;
@@ -280,6 +378,7 @@ export async function createYcApplicationDraft(input: {
   systemPrompt: string;
   userPrompt: string;
   questionCount?: number;
+  selectReviewedClaims?: boolean;
   plannedOptions?: YcPlannedOptions;
   logger?: SafeLogger;
 }) {

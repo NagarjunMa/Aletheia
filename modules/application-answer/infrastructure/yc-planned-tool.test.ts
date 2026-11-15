@@ -60,7 +60,7 @@ it("keeps five planned answers question-local, bounded and in one existing SDK c
       tools: [tool],
       tool_choice: { type: "tool", name: tool.name },
     }),
-    { timeout: 30000, signal: expect.any(AbortSignal) },
+    { timeout: 45000, signal: expect.any(AbortSignal) },
   );
   const answers = options.map((q) => ({
     questionId: q.questionId,

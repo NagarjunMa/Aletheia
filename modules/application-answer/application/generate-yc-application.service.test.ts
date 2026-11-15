@@ -989,7 +989,7 @@ describe("ALE-37 batch orchestration", () => {
       ],
     })),
   });
-  function batchDeps(output = batch()) {
+  function batchDeps(output: unknown = batch()) {
     return dependencies({
       createMessage: vi.fn().mockResolvedValue({
         stop_reason: "tool_use",
@@ -1072,10 +1072,8 @@ describe("ALE-37 batch orchestration", () => {
           .map((indices, i) => ({
             questionId: `q${i + 1}`,
             claims: indices.map((index) => ({
-              text: facts[index]!.excerpt,
-              kind: "action",
               source_id: `evidence:${record.id}.fact.${facts[index]!.id}`,
-              supporting_excerpt: facts[index]!.excerpt,
+              text_index: 1,
             })),
           }))
           .reverse(),
@@ -1167,6 +1165,7 @@ describe("ALE-37 batch orchestration", () => {
 
     it.each([
       [1, false],
+      [3, false],
       [5, false],
       [1, true],
       [5, true],
@@ -1256,6 +1255,14 @@ describe("ALE-37 batch orchestration", () => {
             ),
           ),
         );
+        if (!rhetoricalPlans) {
+          expect(deps.createMessage).toHaveBeenCalledWith(
+            expect.objectContaining({
+              selectReviewedClaims: true,
+              systemPrompt: expect.stringContaining("zero-based text_index"),
+            }),
+          );
+        }
       },
     );
 
@@ -1271,6 +1278,45 @@ describe("ALE-37 batch orchestration", () => {
       expect(deps.refundCredits).toHaveBeenCalledTimes(1);
       expect(deps.releaseRateLimit).toHaveBeenCalledTimes(1);
     });
+
+    it.each(["prose", "missing wording", "duplicate source"] as const)(
+      "rejects %s in a reviewed selection without returning a partial batch",
+      async (kind) => {
+        const submitted = topicQuestions.slice(0, 2);
+        const deps = withReviewedFacts(submitted, [[0], [1]]);
+        const create = deps.createMessage;
+        deps.createMessage = vi.fn(async (input) => {
+          const message = await create(input);
+          const block = message.content[0];
+          if (!block || block.type !== "tool_use")
+            throw new Error("Missing test tool");
+          const { answers } = block.input as {
+            answers: Array<{
+              claims: Array<{
+                source_id: string;
+                text_index: number;
+                text?: string;
+              }>;
+            }>;
+          };
+          const claims = answers[0]!.claims;
+          if (kind === "prose") claims[0]!.text = "Unreviewed copy";
+          if (kind === "missing wording") claims[0]!.text_index = 99;
+          if (kind === "duplicate source") claims.push({ ...claims[0]! });
+          return message;
+        });
+        const response = await run(deps, submitted);
+        expect(response.status).toBe(502);
+        const payload = await response.json();
+        expect(payload).toMatchObject({
+          code: "YC_OUTPUT_INVALID",
+          billing: "refunded",
+        });
+        expect(payload).not.toHaveProperty("answers");
+        expect(deps.refundCredits).toHaveBeenCalledTimes(1);
+        expect(deps.releaseRateLimit).toHaveBeenCalledTimes(1);
+      },
+    );
 
     it("rejects an answer that skips the strongest match in favor of shared context", async () => {
       const submitted = [
@@ -1292,7 +1338,7 @@ describe("ALE-37 batch orchestration", () => {
       });
     });
 
-    it("rejects reordered copies of the same reviewed claims for different questions", async () => {
+    it("uses distinct verified claim sets when the model picks reordered copies for different questions", async () => {
       const submitted = [
         "How did you use TypeScript for testing?",
         "What limits did you document for the TypeScript pilot?",
@@ -1302,13 +1348,18 @@ describe("ALE-37 batch orchestration", () => {
         [1, 0],
       ]);
       const response = await run(deps, submitted);
-      expect(response.status).toBe(502);
-      expect(await response.json()).toMatchObject({
-        code: "YC_OUTPUT_INVALID",
-        billing: "refunded",
-      });
-      expect(deps.refundCredits).toHaveBeenCalledTimes(1);
-      expect(deps.releaseRateLimit).toHaveBeenCalledTimes(1);
+      expect(response.status).toBe(200);
+      const { answers } = await response.json();
+      expect(answers[0].body).toContain(excerpts[0]);
+      expect(answers[1].body).toContain(excerpts[1]);
+      const claimCounts = answers.map(
+        ({ body }: { body: string }) =>
+          excerpts.filter((excerpt) => body.includes(excerpt)).length,
+      );
+      expect(claimCounts).toContain(1);
+      expect(deps.createMessage).toHaveBeenCalledTimes(1);
+      expect(deps.refundCredits).not.toHaveBeenCalled();
+      expect(deps.releaseRateLimit).not.toHaveBeenCalled();
     });
 
     it.each([false, true])(
@@ -1641,10 +1692,8 @@ describe("ALE-37 batch orchestration", () => {
         questionId: `q${i + 1}`,
         claims: [
           {
-            text: answer,
-            kind: source.kind,
             source_id: source.id,
-            supporting_excerpt: source.content,
+            text_index: allowedClaimTexts(source).indexOf(answer),
           },
         ],
       })),
@@ -2812,7 +2861,12 @@ it.each([
             ? { claims }
             : {
                 answers: questions
-                  .map((_, i) => ({ questionId: `q${i + 1}`, claims }))
+                  .map((_, i) => ({
+                    questionId: `q${i + 1}`,
+                    claims: !selectedEvidenceIds
+                      ? [{ source_id: source.id, text_index: 0 }]
+                      : claims,
+                  }))
                   .reverse(),
               },
         },
