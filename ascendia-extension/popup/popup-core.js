@@ -354,6 +354,9 @@ export function getApplicationEvidenceGuidance(response, questions) {
 
 export function getGenerationErrorPresentation(response, questions) {
   const evidenceGuidance = getApplicationEvidenceGuidance(response, questions);
+  const missingFields = Array.isArray(response?.missingFields)
+    ? response.missingFields
+    : [];
   const baseMessage =
     (response?.billing === "refund_pending"
       ? `Generation failed. Credit restoration pending manual review.${response.refundReference ? ` Reference: ${response.refundReference}` : ""}`
@@ -379,19 +382,38 @@ export function getGenerationErrorPresentation(response, questions) {
     message += ` Retry in about ${count} ${unit}${count === 1 ? "" : "s"}.`;
   }
 
+  const needsReviewedEvidence =
+    response?.status === 422 &&
+    questions?.length > 0 &&
+    (response.code === "INSUFFICIENT_GROUNDING" ||
+      (response.code === "GROUNDING_PROFILE_INCOMPLETE" &&
+        missingFields.includes("confirmed_evidence")));
+  if (evidenceGuidance || needsReviewedEvidence) {
+    return {
+      message,
+      evidenceGuidance:
+        evidenceGuidance ??
+        "Add or review facts that support your questions. You can also edit your questions and try again.",
+      actionLabel: "Review application evidence",
+      actionUrl: response.applicationProfileUrl,
+      missingFields: missingFields.includes("current_role_or_resume")
+        ? [
+            "Add your current role or upload a resume in your application profile.",
+          ]
+        : [],
+      recommendedFields: [],
+    };
+  }
+
   if (
-    (response?.code === "GROUNDING_PROFILE_INCOMPLETE" ||
-      (response?.code === "INSUFFICIENT_GROUNDING" && evidenceGuidance)) &&
-    response?.applicationProfileUrl
+    response?.code === "GROUNDING_PROFILE_INCOMPLETE" &&
+    response.applicationProfileUrl
   ) {
     return {
       message,
-      actionLabel: evidenceGuidance
-        ? "Review application evidence"
-        : "Complete application profile",
-      ...(evidenceGuidance ? { evidenceGuidance } : {}),
+      actionLabel: "Complete application profile",
       actionUrl: response.applicationProfileUrl,
-      missingFields: response.missingFields || [],
+      missingFields,
       recommendedFields: response.recommendedFields || [],
     };
   }
@@ -412,7 +434,6 @@ export function getGenerationErrorPresentation(response, questions) {
 
   return {
     message,
-    ...(evidenceGuidance ? { evidenceGuidance } : {}),
     actionLabel: "",
     actionUrl: "",
     missingFields: [],

@@ -413,7 +413,7 @@ test("invalid question input explains how to recover without a request @smoke", 
 for (const { code, actionLabel, rationale } of [
   {
     code: "GROUNDING_PROFILE_INCOMPLETE",
-    actionLabel: "Complete application profile",
+    actionLabel: "Review application evidence",
   },
   { code: "INSUFFICIENT_GROUNDING", actionLabel: null },
   {
@@ -451,7 +451,10 @@ for (const { code, actionLabel, rationale } of [
           code: errorCode,
           ...(errorCode === "GROUNDING_PROFILE_INCOMPLETE"
             ? {
-                missingFields: ["confirmed_evidence"],
+                missingFields: rationaleGap
+                  ? ["confirmed_evidence"]
+                  : ["current_role_or_resume", "confirmed_evidence"],
+                recommendedFields: ["technical_project_evidence"],
                 applicationProfileUrl: rationaleGap
                   ? "https://www.aletheia.live/dashboard#evidence"
                   : "https://www.aletheia.live/profile/application",
@@ -471,14 +474,23 @@ for (const { code, actionLabel, rationale } of [
       { errorCode: code, rationaleGap: rationale },
     );
     await expect(page.locator("#errorMessage")).toBeFocused();
+    const warning = page.locator("#ycQuestionGroup #errorMessage");
+    await expect(warning).toContainText("More reviewed evidence needed");
+    await expect(warning).not.toContainText(
+      /confirmed_evidence|current_role_or_resume|technical_project_evidence|HTTP 422/u,
+    );
     if (actionLabel) {
       await expect(page.locator("#errorAction")).toHaveText(actionLabel);
     } else {
       await expect(page.locator("#errorMessage")).toContainText(
-        "No complete reviewed fact combination fits every answer.",
+        "Add or review facts that support your questions",
       );
       await expect(page.locator("#errorAction")).toBeHidden();
     }
+    if (code === "GROUNDING_PROFILE_INCOMPLETE" && !rationale)
+      await expect(warning).toContainText(
+        "Add your current role or upload a resume in your application profile.",
+      );
     if (rationale) {
       await expect(page.locator("#errorAction")).toHaveAttribute(
         "href",
@@ -539,6 +551,8 @@ test("the compact application panel focuses question 4 recovery after a previous
   const alert = page.locator("#errorMessage");
   await expect(alert).toBeFocused();
   await expect(alert).toBeInViewport({ ratio: 0.75 });
+  await expect(alert).toContainText("More reviewed evidence needed");
+  await expect(alert).not.toContainText("confirmed_evidence");
   await expect(alert).toContainText(
     "Question 4 needs a matching reviewed fact",
   );
@@ -551,6 +565,8 @@ test("the compact application panel focuses question 4 recovery after a previous
   await expect(page.locator("#errorAction")).toHaveText(
     "Review application evidence",
   );
+  await page.keyboard.press("Tab");
+  await expect(page.locator("#errorAction")).toBeFocused();
   await expect(page.locator(".application-answer h3")).toHaveText(questions);
   await expect(page.locator("#jdInput")).toHaveValue(
     acceptanceFixture.jobDescription,
@@ -701,6 +717,10 @@ test("ZIP-source popup clears progress after failure and respects reduced motion
     });
   });
   await expect(page.locator("#generationProgress")).toBeHidden();
+  await expect(
+    page.locator("#mainContent > #errorMessage #errorText"),
+  ).toHaveText("Please try again.");
+  await expect(page.getByText("More reviewed evidence needed")).toBeHidden();
   await expect(page.locator("#generateBtn")).toBeEnabled();
   await expect(page.locator("#generateBtn")).toHaveAttribute(
     "aria-busy",

@@ -1875,6 +1875,7 @@ function showGenerationError(presentation) {
     guidance.textContent = presentation.evidenceGuidance;
     guidance.hidden = false;
     errorText.hidden = true;
+    errorEl.classList.add("evidence-warning");
     document.getElementById("ycQuestionGroup")?.append(errorEl);
   } else {
     errorText.textContent = presentation.message;
@@ -1936,6 +1937,7 @@ function hideError() {
   clearTimeout(errorDismissalTimer);
   const error = document.getElementById("errorMessage");
   error?.classList.add("hidden");
+  error?.classList.remove("evidence-warning");
   const guidance = document.getElementById("applicationEvidenceGuidance");
   if (guidance && !guidance.hidden) {
     guidance.hidden = true;

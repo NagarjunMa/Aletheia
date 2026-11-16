@@ -1,3 +1,20 @@
+## 2026-11-15 — ALE-67 evidence recovery warning
+
+Standard risk. On fix/ale-67-evidence-warning from main 2143390, present a
+missing-evidence response as an inline warning under Application Questions.
+Show question-specific guidance when available, keep focus and the review
+link, and translate any required background step into plain language.
+Preserve the job description, questions, prior drafts and retry behavior.
+The HTTP 422, evidence policy, billing and model admission are unchanged.
+
+The slot-4 regression reproduced the visible confirmed_evidence label before
+the fix. Passed 37 Chromium checks against the corrected popup and package,
+including the Store ZIP worker's 422 recovery. Passed 311 extension tests,
+308 generation contract, service and version route tests, extension lint,
+types, audit, version policy, formatting and engineering policy. Built the
+unpacked extension and Store ZIP at 1.0.30 for local validation. Hosted
+verification and manual screen-reader announcements remain pending.
+
 ## 2026-11-15 — ALE-71 project save to reviewed facts
 
 Change contract, Critical risk. On feat/ale-71-project-fact-review, open
