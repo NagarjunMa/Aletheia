@@ -81,7 +81,7 @@ async function handlePatch(
 
   try {
     const resume = parsed.data.is_primary
-      ? await setPrimaryUserResume(supabase, user.id, id)
+      ? await setPrimaryUserResume(supabase, id)
       : await renameUserResume(supabase, user.id, id, parsed.data.label ?? "");
 
     return NextResponse.json(

@@ -63,6 +63,7 @@ export async function prepareYcGroundingContext(
       ? await dependencies.loadCandidateData(input.caller)
       : await loadCandidateGroundingData(input.caller, {
           logger: operationLog,
+          includeResumeReviews: true,
         });
     input.timing?.enter("groundingBuild");
     context = buildYcGroundingContext({
