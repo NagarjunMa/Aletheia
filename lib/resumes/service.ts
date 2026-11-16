@@ -28,9 +28,15 @@ export type ResumeUploadResult = {
 };
 
 type Supabase = SupabaseClient<Database>;
-type ResumeStorageClient = Pick<Supabase, "storage">;
 
-function toListItem(row: Tables<"user_resumes">): ResumeListItem {
+function toListItem(
+  row: Pick<
+    Tables<"user_resumes">,
+    | keyof Omit<ResumeListItem, "parsed_text_chars" | "has_storage_file">
+    | "parsed_text"
+    | "storage_path"
+  >,
+): ResumeListItem {
   return {
     id: row.id,
     label: row.label,
@@ -115,7 +121,7 @@ export async function uploadUserResume(
   userId: string,
   file: File,
   label?: string,
-  storageSupabase: ResumeStorageClient = supabase,
+  storageSupabase: Supabase = supabase,
 ): Promise<ResumeUploadResult> {
   const validationError = validateResumeFile(file);
   if (validationError) throw new Error(validationError);
@@ -154,7 +160,7 @@ export async function uploadUserResume(
     "repository.resume_record_create",
     { userId },
   );
-  const { data, error: insertError } = await supabase
+  const { data, error: insertError } = await storageSupabase
     .from("user_resumes")
     .insert({
       id: resumeId,
@@ -165,6 +171,7 @@ export async function uploadUserResume(
       file_size: file.size,
       storage_path: storagePath,
       parsed_text: parsed.text,
+      review_source_verified: !parsed.truncated,
       is_primary: isPrimary,
     })
     .select(
@@ -204,32 +211,10 @@ export async function renameUserResume(
 
 export async function setPrimaryUserResume(
   supabase: Supabase,
-  userId: string,
   resumeId: string,
 ): Promise<ResumeListItem> {
-  const { data: target, error: targetError } = await supabase
-    .from("user_resumes")
-    .select("id")
-    .eq("user_id", userId)
-    .eq("id", resumeId)
-    .single();
-
-  if (targetError) throw targetError;
-  if (!target) throw new Error("Resume not found");
-
-  const { error: clearError } = await supabase
-    .from("user_resumes")
-    .update({ is_primary: false })
-    .eq("user_id", userId)
-    .eq("is_primary", true);
-
-  if (clearError) throw clearError;
-
   const { data, error } = await supabase
-    .from("user_resumes")
-    .update({ is_primary: true })
-    .eq("user_id", userId)
-    .eq("id", resumeId)
+    .rpc("set_primary_user_resume", { p_resume_id: resumeId })
     .select(
       "id,label,file_name,file_mime,file_size,parsed_text,is_primary,storage_path,created_at,updated_at,user_id",
     )

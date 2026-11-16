@@ -523,6 +523,9 @@ export default async function DashboardPage() {
             initialProfile={applicationProfile.profile}
             initialEvidence={applicationProfile.evidence}
             hasPrimaryResume={Boolean(primaryResume)}
+            {...(primaryResume?.has_storage_file && {
+              uploadedPrimaryResumeId: primaryResume.id,
+            })}
           />
         </section>
       </main>

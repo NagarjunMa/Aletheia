@@ -23,6 +23,12 @@ import {
   type CandidateEvidenceRecord,
 } from "@/lib/candidate-profile/service";
 import type { Tables } from "@/lib/database/types";
+import {
+  prepareResumeFactReview,
+  readResumeFactReview,
+  resumeReviewInputSchema,
+  suggestResumeFactExcerpts,
+} from "@/lib/candidate-profile/resume-fact-review";
 
 const log = createLogger("candidate-profile-actions");
 const profileCategorySchema = z.enum([
@@ -45,6 +51,119 @@ function validationError(message: string): { ok: false; error: string } {
 function refreshCandidateProfilePages() {
   revalidatePath("/dashboard");
   revalidatePath("/profile/application");
+}
+
+async function getOwnedResumeReview(resumeId?: string) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+  if (authError || !user) return null;
+  const query = supabase
+    .from("user_resume_review_sources")
+    .select(
+      "id,user_id,is_primary,review_source_verified,parsed_text,updated_at,fact_review",
+    )
+    .eq("user_id", user.id)
+    .eq("is_primary", true)
+    .eq("review_source_verified", true);
+  if (resumeId) query.eq("id", resumeId);
+  const { data, error } = await query.maybeSingle();
+  if (error) throw error;
+  if (
+    !data?.id ||
+    !data.parsed_text ||
+    !data.updated_at ||
+    data.user_id !== user.id ||
+    !data.is_primary ||
+    !data.review_source_verified
+  )
+    return null;
+  return {
+    supabase,
+    resume: {
+      id: data.id,
+      user_id: user.id,
+      parsed_text: data.parsed_text,
+      updated_at: data.updated_at,
+      fact_review: data.fact_review,
+    },
+  };
+}
+
+export async function loadResumeFactReview() {
+  try {
+    const owned = await getOwnedResumeReview();
+    if (owned) {
+      const { resume } = owned;
+      return {
+        ok: true as const,
+        resumeId: resume.id,
+        revision: resume.updated_at,
+        suggestions: suggestResumeFactExcerpts(resume.parsed_text),
+        facts: readResumeFactReview(resume.parsed_text, resume.fact_review),
+      };
+    }
+    return {
+      ok: false as const,
+      error:
+        "Review needs a verified primary résumé. Upload an updated file and make it primary. To use the identical file, keep a local copy, remove the older upload, then upload it again.",
+    };
+  } catch {
+    return {
+      ok: false as const,
+      error: "Could not load résumé suggestions. Refresh and try again.",
+    };
+  }
+}
+
+export async function saveResumeFactReview(input: unknown) {
+  const parsed = resumeReviewInputSchema.safeParse(input);
+  const failure = {
+    ok: false as const,
+    stale: false,
+    error: "Could not save résumé facts. Try again.",
+  };
+  const stale = {
+    ...failure,
+    stale: true,
+    error: "The primary résumé or review changed. Reload résumé suggestions.",
+  };
+  if (!parsed.success) return failure;
+  const { resumeId, expectedRevision, facts } = parsed.data;
+  try {
+    const owned = await getOwnedResumeReview(resumeId);
+    if (!owned || owned.resume.updated_at !== expectedRevision) return stale;
+    const { supabase, resume } = owned;
+    const review = prepareResumeFactReview(
+      resume.parsed_text,
+      facts,
+      resume.fact_review,
+    );
+    if (!review)
+      return {
+        ...failure,
+        error:
+          "Use a complete source excerpt. You can add the next complete suggestion or adjust spacing.",
+      };
+    const result = await supabase
+      .from("user_resumes")
+      .update({ fact_review: review })
+      .eq("id", resume.id)
+      .eq("user_id", resume.user_id)
+      .eq("is_primary", true)
+      .eq("review_source_verified", true)
+      .eq("updated_at", expectedRevision)
+      .select("id")
+      .maybeSingle();
+    if (result.error) return failure;
+    if (!result.data) return stale;
+    refreshCandidateProfilePages();
+    return { ok: true as const };
+  } catch {
+    return failure;
+  }
 }
 
 type CandidateEvidenceSaveResult =

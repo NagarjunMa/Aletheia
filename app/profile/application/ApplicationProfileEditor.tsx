@@ -22,6 +22,7 @@ import {
 import type { CandidateEvidenceRecord } from "@/lib/candidate-profile/service";
 import { readFactReview } from "@/lib/candidate-profile/fact-review";
 import FactReview from "./FactReview";
+import ResumeFactReview from "./ResumeFactReview";
 import {
   deleteCandidateEvidence,
   saveCandidateEvidence,
@@ -39,6 +40,7 @@ type Props = {
   initialProfile: CandidateProfileInput;
   initialEvidence: CandidateEvidenceRecord[];
   hasPrimaryResume: boolean;
+  uploadedPrimaryResumeId?: string;
 };
 
 type Notice = { type: "success" | "error"; message: string } | null;
@@ -76,6 +78,7 @@ export default function ApplicationProfileEditor({
   initialProfile,
   initialEvidence,
   hasPrimaryResume,
+  uploadedPrimaryResumeId,
 }: Props) {
   const router = useRouter();
   const [profile, setProfile] = useState(initialProfile);
@@ -503,6 +506,10 @@ export default function ApplicationProfileEditor({
             <div className="mt-5">
               <NoticeMessage notice={evidenceNotice} />
             </div>
+
+            {uploadedPrimaryResumeId && (
+              <ResumeFactReview key={uploadedPrimaryResumeId} />
+            )}
 
             {editor && (
               <EvidenceEditor

@@ -6,7 +6,7 @@ import {
 
 const userId = "77777777-7777-4777-8777-777777777777";
 
-function clientWithRows() {
+function clientWithRows(resume: unknown = { parsed_text: "Primary resume" }) {
   const profile = {
     user_id: userId,
     current_role: "Platform Engineer",
@@ -59,7 +59,7 @@ function clientWithRows() {
   const resumeUserEq = vi.fn(() => ({
     eq: vi.fn(() => ({
       maybeSingle: vi.fn().mockResolvedValue({
-        data: { parsed_text: "Primary resume" },
+        data: resume,
         error: null,
       }),
     })),
@@ -77,7 +77,7 @@ function clientWithRows() {
           return { select: () => ({ eq: profileEq }) };
         if (table === "candidate_evidence")
           return { select: () => ({ eq: evidenceEq }) };
-        if (table === "user_resumes")
+        if (table === "user_resumes" || table === "user_resume_review_sources")
           return { select: () => ({ eq: resumeUserEq }) };
         return { select: () => ({ eq: legacyEq }) };
       },
@@ -138,6 +138,52 @@ describe("shared candidate-context repository", () => {
       text: "Primary resume",
       source: "user_resumes",
     });
+  });
+
+  it("adds only current, uploaded and reviewed résumé facts to YC's evidence", async () => {
+    const excerpt = "I helped deploy a policy prototype used only in testing.";
+    const resume = {
+      user_id: userId,
+      is_primary: true,
+      review_source_verified: true,
+      parsed_text: excerpt,
+      fact_review: [
+        {
+          id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          confirmed: true,
+          kind: "action",
+          excerpt,
+        },
+      ],
+    };
+    const load = (row: unknown, includeResumeReviews: boolean) => {
+      const { client } = clientWithRows(row);
+      return loadCandidateGroundingData(
+        { userId, accessToken: "verified-token" },
+        { createCallerClient: () => client as never, includeResumeReviews },
+      );
+    };
+    const reviewed = await load(resume, true);
+    expect(reviewed.confirmedEvidence).toHaveLength(2);
+    expect(reviewed.confirmedEvidence[1]?.actions).toBe(excerpt);
+    for (const row of [
+      null,
+      { ...resume, is_primary: false },
+      { ...resume, review_source_verified: false },
+      { ...resume, user_id: "other" },
+      {
+        ...resume,
+        parsed_text: "Different reviewed source.",
+        fact_review: resume.fact_review,
+      },
+      { ...resume, fact_review: [] },
+    ]) {
+      expect((await load(row, true)).confirmedEvidence).toHaveLength(1);
+    }
+    expect((await load(resume, false)).confirmedEvidence).toHaveLength(1);
+    expect(
+      (await load({ ...resume, user_id: "other" }, true)).resume.text,
+    ).toBe("");
   });
 });
 

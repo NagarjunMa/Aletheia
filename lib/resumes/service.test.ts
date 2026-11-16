@@ -183,6 +183,7 @@ function createFakeSupabase(options?: {
     client: {
       storage,
       from: vi.fn((table: string) => makeBuilder(table)),
+      rpc: vi.fn(() => makeBuilder("user_resumes")),
     },
   };
 }
@@ -284,10 +285,11 @@ describe("resume service", () => {
     expect(result.resume.label).toBe("Uploaded");
     expect(storage.client.storage.from).toHaveBeenCalledWith(RESUME_BUCKET);
     expect(database.client.storage.from).not.toHaveBeenCalled();
-    expect(database.state.inserted).toMatchObject({
+    expect(storage.state.inserted).toMatchObject({
       user_id: "user-1",
       parsed_text: "Parsed resume text",
     });
+    expect(database.state.inserted).toBeUndefined();
   });
 
   it("removes the rollback storage object when its row insert fails", async () => {
@@ -358,12 +360,13 @@ describe("resume service", () => {
     ).resolves.toEqual(expect.objectContaining({ label: "Renamed" }));
 
     await expect(
-      setPrimaryUserResume(client as any, "user-1", "resume-1"),
+      setPrimaryUserResume(client as any, "resume-1"),
     ).resolves.toEqual(expect.objectContaining({ is_primary: true }));
 
     expect(state.updates).toContainEqual({ label: "Renamed" });
-    expect(state.updates).toContainEqual({ is_primary: false });
-    expect(state.updates).toContainEqual({ is_primary: true });
+    expect(client.rpc).toHaveBeenCalledWith("set_primary_user_resume", {
+      p_resume_id: "resume-1",
+    });
   });
 
   it("deletes non-primary resumes without promotion", async () => {
