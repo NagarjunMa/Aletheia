@@ -46,7 +46,8 @@ const output = await build({
       }, []);
       const applicationProfile = { evidence: projects };
       const user = { id: 'editor-test-account' };
-      return <main className="product-shell"><ApplicationProfileEditor key={${dashboardEditorKey}} initialProfile={candidateProfileInputSchema.parse({})} initialEvidence={projects} hasPrimaryResume={false}/></main>;
+      const resume = new URLSearchParams(location.search).has('resume');
+      return <main className="product-shell"><ApplicationProfileEditor key={${dashboardEditorKey}} initialProfile={candidateProfileInputSchema.parse({})} initialEvidence={projects} hasPrimaryResume={resume} uploadedPrimaryResumeId={resume ? original.id : undefined}/></main>;
     }
     const editor = new URLSearchParams(location.search).has('editor');
     createRoot(document.getElementById('root')).render(
@@ -81,6 +82,15 @@ const output = await build({
       const editor = new URLSearchParams(location.search).has('editor');
       const records = () => JSON.parse(localStorage.getItem('test-projects') || '[]');
       const save = evidence => localStorage.setItem('test-projects', JSON.stringify([...records().filter(x => x.id !== evidence.id), evidence]));
+      const suggestions = ['I helped build a policy prototype. Simulated cases only.', 'I migrated order data from MySQL to PostgreSQL.'];
+      export async function loadResumeFactReview() {
+        return { ok: true, resumeId: window.testEvidence.id, revision: 'test-revision', suggestions, facts: window.resumeFacts ?? [] };
+      }
+      export async function saveResumeFactReview({ facts }) {
+        if (window.staleResume) return { ok: false, stale: true, error: 'The primary résumé or review changed.' };
+        window.resumeFacts = facts;
+        return { ok: true };
+      }
       export async function saveCandidateEvidence(input) {
         if (window.failSave) return {ok:false,error:'Project save failed. Try again.'};
         const evidence = {...input, id:input.id || crypto.randomUUID(), updatedAt:new Date().toISOString()};
@@ -323,6 +333,55 @@ try {
     expect(errors).toEqual([]);
     await page.close();
   }
+  const resumePage = await browser.newPage({
+    viewport: { width: 375, height: 820 },
+  });
+  await resumePage.goto(origin + "/?editor&resume#evidence");
+  const review = resumePage.getByRole("region", {
+    name: "Review facts from your résumé",
+  });
+  const reveal = review.getByRole("button", {
+    name: "Show résumé suggestions",
+  });
+  await reveal.focus();
+  await resumePage.keyboard.press("Enter");
+  const saveResume = review.getByRole("button", {
+    name: "Save reviewed résumé facts",
+  });
+  await expect(saveResume).toBeDisabled();
+  await review.getByRole("button", { name: "Close review" }).click();
+  expect(await resumePage.evaluate(() => window.resumeFacts)).toBeUndefined();
+  await reveal.click();
+  await review.getByRole("button", { name: "Edit excerpt" }).first().click();
+  await expect(
+    review.getByRole("textbox", { name: "Edit source wording" }),
+  ).toBeFocused();
+  await expect(
+    review.locator("blockquote").filter({
+      hasText: "I helped build a policy prototype. Simulated cases only.",
+    }),
+  ).toBeVisible();
+  await review.getByRole("checkbox", { name: "Confirm fact 2" }).check();
+  await saveResume.click();
+  await expect(review.getByRole("status")).toHaveText("Résumé facts saved.");
+  await reveal.click();
+  const first = review.getByRole("checkbox", { name: "Confirm fact 1" });
+  await expect(first).toBeChecked();
+  await first.uncheck();
+  await saveResume.click();
+  await expect(review.getByRole("status")).toHaveText("Résumé facts removed.");
+  await reveal.click();
+  await first.check();
+  await resumePage.evaluate(() => {
+    window.staleResume = true;
+  });
+  await saveResume.click();
+  await expect(review.getByRole("alert")).toHaveText(/changed/u);
+  await expect(first).toHaveCount(0);
+  await expect(
+    review.getByRole("button", { name: "Reload résumé suggestions" }),
+  ).toBeVisible();
+  await resumePage.close();
   console.log(
     "Fact review browser checks passed at 375/900/1440px: unconfirmed suggestions, explicit type/confirmation, save/reload, withdrawal, unsupported excerpt and no overflow/runtime errors.",
   );

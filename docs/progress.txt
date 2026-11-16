@@ -1,3 +1,13 @@
+## 2026-11-15 — ALE-66 résumé fact review
+
+The Evidence Library offers owner-scoped excerpts from the active uploaded
+résumé. Only explicitly selected, source-verified passages can ground
+application answers. Confirmed facts are tied to the source row and cleared
+on replacement, source changes or deletion. Renaming preserves approvals.
+See docs/operations/ale-66-resume-fact-review.md for the Critical risk
+contract, local checks and hosted acceptance procedure. Keep ALE-66 In
+Progress pending Preview and manual accessibility checks.
+
 ## 2026-11-15 — ALE-67 evidence recovery warning
 
 Standard risk. On fix/ale-67-evidence-warning from main 2143390, present a

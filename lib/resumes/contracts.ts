@@ -1,5 +1,6 @@
 export const RESUME_MIME_TYPES = ["application/pdf", "text/plain"] as const;
 export const MAX_RESUME_BYTES = 5 * 1024 * 1024;
+export const MAX_RESUME_TEXT_LENGTH = 50_000;
 
 export type ResumeMimeType = (typeof RESUME_MIME_TYPES)[number];
 export type ResumeValidationStatus = "ready" | "warning" | "rejected";

@@ -1,9 +1,8 @@
 import { extractText, getResolvedPDFJS } from "unpdf";
 
-import { MAX_RESUME_BYTES } from "./contracts";
+import { MAX_RESUME_BYTES, MAX_RESUME_TEXT_LENGTH } from "./contracts";
 
-export { MAX_RESUME_BYTES };
-export const MAX_RESUME_TEXT_LENGTH = 50_000;
+export { MAX_RESUME_BYTES, MAX_RESUME_TEXT_LENGTH };
 export const MAX_RESUME_PDF_PAGES = 20;
 const PDF_DESTROY_TIMEOUT_MS = 1_000;
 export const ACCEPTED_RESUME_MIME = new Set(["application/pdf", "text/plain"]);

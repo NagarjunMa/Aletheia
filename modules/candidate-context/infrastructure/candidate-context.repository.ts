@@ -6,6 +6,7 @@ import {
   mapCandidateProfileRow,
 } from "@/lib/candidate-profile/service";
 import type { Database, Tables } from "@/lib/database/types";
+import { reviewedResumeEvidence } from "@/lib/candidate-profile/resume-fact-review";
 import { createBearerUserClient } from "@/lib/supabase/bearer-user-client";
 import type {
   CandidateContextCaller,
@@ -29,6 +30,7 @@ export class CandidateContextRepositoryError extends Error {
 export type CandidateContextRepositoryDependencies = {
   createCallerClient?: (_accessToken: string) => SupabaseClient<Database>;
   logger?: SafeLogger;
+  includeResumeReviews?: boolean;
 };
 
 /**
@@ -57,6 +59,13 @@ export async function loadCandidateGroundingData(
   }
 
   const { userId } = caller;
+  const primaryResumeQuery = dependencies.includeResumeReviews
+    ? supabase
+        .from("user_resume_review_sources")
+        .select(
+          "user_id,is_primary,review_source_verified,parsed_text,fact_review",
+        )
+    : supabase.from("user_resumes").select("parsed_text");
   const [profileResult, evidenceResult, resumeResult, legacyProfileResult] =
     await Promise.all([
       observeQuery(
@@ -81,9 +90,7 @@ export async function loadCandidateGroundingData(
       ),
       observeQuery(
         "primary",
-        supabase
-          .from("user_resumes")
-          .select("parsed_text")
+        primaryResumeQuery
           .eq("user_id", userId)
           .eq("is_primary", true)
           .maybeSingle(),
@@ -119,7 +126,28 @@ export async function loadCandidateGroundingData(
     )
       .filter((row) => row.user_id === userId && Boolean(row.confirmed_at))
       .map(mapCandidateEvidenceRow);
-    const primaryResume = resumeResult.data?.parsed_text?.trim() ?? "";
+    const loadedResume = resumeResult.data;
+    const resumeRow =
+      dependencies.includeResumeReviews &&
+      (!loadedResume ||
+        !("user_id" in loadedResume) ||
+        loadedResume.user_id !== userId ||
+        !("is_primary" in loadedResume) ||
+        loadedResume.is_primary !== true)
+        ? null
+        : loadedResume;
+    const primaryResume = resumeRow?.parsed_text?.trim() ?? "";
+    if (
+      dependencies.includeResumeReviews &&
+      resumeRow &&
+      "fact_review" in resumeRow &&
+      "review_source_verified" in resumeRow &&
+      resumeRow.review_source_verified === true
+    ) {
+      confirmedEvidence.push(
+        ...reviewedResumeEvidence(primaryResume, resumeRow.fact_review),
+      );
+    }
     const resume = primaryResume
       ? { text: primaryResume, source: "user_resumes" as const }
       : { text: "", source: "none" as const };

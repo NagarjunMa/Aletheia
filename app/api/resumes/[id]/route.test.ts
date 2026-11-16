@@ -63,7 +63,6 @@ describe("/api/resumes/[id]", () => {
     expect(res.status).toBe(200);
     expect(mockSetPrimaryUserResume).toHaveBeenCalledWith(
       expect.anything(),
-      MOCK_USER.id,
       "resume-1",
     );
   });

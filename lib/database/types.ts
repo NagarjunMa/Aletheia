@@ -614,6 +614,7 @@ export type Database = {
       user_resumes: {
         Row: {
           created_at: string;
+          fact_review: Json;
           file_mime: string;
           file_name: string;
           file_size: number;
@@ -621,12 +622,14 @@ export type Database = {
           is_primary: boolean;
           label: string;
           parsed_text: string;
+          review_source_verified: boolean;
           storage_path: string | null;
           updated_at: string;
           user_id: string;
         };
         Insert: {
           created_at?: string;
+          fact_review?: Json;
           file_mime: string;
           file_name: string;
           file_size: number;
@@ -634,12 +637,14 @@ export type Database = {
           is_primary?: boolean;
           label: string;
           parsed_text: string;
+          review_source_verified?: boolean;
           storage_path?: string | null;
           updated_at?: string;
           user_id: string;
         };
         Update: {
           created_at?: string;
+          fact_review?: Json;
           file_mime?: string;
           file_name?: string;
           file_size?: number;
@@ -647,6 +652,7 @@ export type Database = {
           is_primary?: boolean;
           label?: string;
           parsed_text?: string;
+          review_source_verified?: boolean;
           storage_path?: string | null;
           updated_at?: string;
           user_id?: string;
@@ -736,10 +742,31 @@ export type Database = {
       };
     };
     Views: {
-      [_ in never]: never;
+      user_resume_review_sources: {
+        Row: {
+          fact_review: Json | null;
+          id: string | null;
+          is_primary: boolean | null;
+          parsed_text: string | null;
+          review_source_verified: boolean | null;
+          updated_at: string | null;
+          user_id: string | null;
+        };
+        Relationships: [];
+      };
     };
     Functions: {
       prepare_next_refund_week: { Args: { p_anchor: string }; Returns: Json };
+      set_primary_user_resume: {
+        Args: { p_resume_id: string };
+        Returns: Database["public"]["Tables"]["user_resumes"]["Row"][];
+        SetofOptions: {
+          from: "*";
+          to: "user_resumes";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
+      };
       clear_expired_refund_receipt_payloads: {
         Args: Record<string, never>;
         Returns: number;
