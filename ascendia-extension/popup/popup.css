@@ -1000,6 +1000,25 @@ textarea::placeholder {
   flex-shrink: 0;
 }
 
+.error-message.evidence-warning {
+  background: rgba(146, 96, 10, 0.16);
+  border-color: var(--warning-400);
+  color: var(--green-lightest);
+}
+
+.evidence-warning .error-icon {
+  color: var(--warning-400);
+}
+
+.evidence-warning-only,
+.evidence-warning .error-symbol {
+  display: none;
+}
+
+.evidence-warning .evidence-warning-only {
+  display: block;
+}
+
 .error-content {
   display: flex;
   min-width: 0;

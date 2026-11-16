@@ -1291,8 +1291,10 @@ test("uses the selected endpoint, recovers from stale stories and clears before 
 test.describe("Store ZIP application questions", () => {
   test.use({ storeZip: true });
 
-  test("carries one or five question and answer pairs through the worker in order @smoke", async () => {
+  test("carries ordered answers and question-specific recovery through the worker @smoke", async () => {
     const submitted: unknown[] = [];
+    const unsupported =
+      "Which spectrometer resolved molecular absorption lines?";
     const bodies = Array.from({ length: 5 }, (_, index) =>
       answer.replace("word0", `project${index + 1}`),
     );
@@ -1303,6 +1305,22 @@ test.describe("Store ZIP application questions", () => {
           questions: string[];
         };
         submitted.push(payload);
+        if (payload.questions[3] === unsupported) {
+          return route.fulfill({
+            status: 422,
+            json: {
+              success: false,
+              code: "GROUNDING_PROFILE_INCOMPLETE",
+              missingFields: ["confirmed_evidence"],
+              applicationProfileUrl:
+                "https://www.aletheia.live/dashboard#evidence",
+              evidenceGap: {
+                reason: "missing_reviewed_facts",
+                questionNumbers: [4],
+              },
+            },
+          });
+        }
         return route.fulfill({
           json: {
             success: true,
@@ -1344,8 +1362,28 @@ test.describe("Store ZIP application questions", () => {
       );
       await expect(page.locator("#fillBtn")).toBeHidden();
     }
+    const batchWithGap = [...questions];
+    batchWithGap[3] = unsupported;
+    await page.locator("#ycQuestionInput").fill(batchWithGap.join("\n"));
+    await page.locator("#generateBtn").click();
+    const warning = page.locator("#ycQuestionGroup #errorMessage");
+    await expect(
+      warning.getByText("More reviewed evidence needed"),
+    ).toBeVisible();
+    await expect(warning).toContainText(
+      "Question 4 needs a matching reviewed fact",
+    );
+    await expect(warning).not.toContainText("confirmed_evidence");
+    await expect(warning.getByRole("link")).toHaveAttribute(
+      "href",
+      "https://www.aletheia.live/dashboard#evidence",
+    );
+    await expect(page.locator("#ycQuestionInput")).toHaveValue(
+      batchWithGap.join("\n"),
+    );
+    await expect(page.locator(".application-answer h3")).toHaveText(questions);
     expect(submitted).toEqual(
-      [questions.slice(0, 1), questions].map((batch) => ({
+      [questions.slice(0, 1), questions, batchWithGap].map((batch) => ({
         category: "yc_application",
         jd,
         questions: batch,
