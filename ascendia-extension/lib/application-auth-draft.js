@@ -1,9 +1,11 @@
+import { isValidOperationId } from "./logger-core.js";
+
 const YC_APPLICATION_CATEGORY = "yc_application";
 
 export const APPLICATION_AUTH_DRAFT_KEY = "applicationAuthDraft";
 export const APPLICATION_AUTH_DRAFT_TTL_MS = 15 * 60 * 1000;
 export function buildApplicationAuthDraft(
-  { category, jd, questions, ownerId = null },
+  { category, jd, questions, ownerId = null, skippedQuestions, operationId },
   now = Date.now(),
 ) {
   if (
@@ -14,10 +16,29 @@ export function buildApplicationAuthDraft(
     questions.length > 10000
   )
     return null;
+  const questionCount = questions
+    .split(/\r\n?|\n/u)
+    .filter((line) => line.trim()).length;
+  const skips =
+    Array.isArray(skippedQuestions) &&
+    typeof ownerId === "string" &&
+    ownerId.length > 0 &&
+    skippedQuestions.length > 0 &&
+    skippedQuestions.length <= 5 &&
+    questionCount <= 5 &&
+    new Set(skippedQuestions).size === skippedQuestions.length &&
+    Array.from(skippedQuestions).every(
+      (number) =>
+        Number.isInteger(number) && number > 0 && number <= questionCount,
+    )
+      ? [...skippedQuestions]
+      : undefined;
   return {
     category,
     jd,
     questions,
+    ...(skips ? { skippedQuestions: skips } : {}),
+    ...(isValidOperationId(operationId) ? { operationId } : {}),
     ownerId,
     expiresAt: now + APPLICATION_AUTH_DRAFT_TTL_MS,
   };

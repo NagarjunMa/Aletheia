@@ -1519,6 +1519,18 @@ textarea:focus-visible {
   margin: 0 0 12px;
   white-space: pre-wrap;
 }
+.application-unanswered {
+  color: var(--green-lightest);
+}
+#applicationSkipActions[hidden],
+#applicationUndoActions[hidden] {
+  display: none;
+}
+#applicationSkipActions button:focus-visible,
+#applicationUndoActions button:focus-visible {
+  outline: 2px solid var(--accent-500);
+  outline-offset: 2px;
+}
 .application-answer .copy-btn {
   opacity: 1;
   transform: none;

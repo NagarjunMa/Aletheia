@@ -1291,6 +1291,79 @@ test("uses the selected endpoint, recovers from stale stories and clears before 
 test.describe("Store ZIP application questions", () => {
   test.use({ storeZip: true });
 
+  test("sends only the supported subset through the real worker after an explicit skip @smoke", async () => {
+    const questions = [
+      "Describe your policy evaluation experience.",
+      "How did you measure the outcome?",
+      "What tradeoff did you make?",
+      "How did you run payroll for other teams?",
+      "What did you learn from the project?",
+    ];
+    const submitted: string[][] = [];
+    await browser.route(
+      "https://www.aletheia.live/api/extension/generate",
+      async (route) => {
+        const payload = route.request().postDataJSON() as {
+          questions: string[];
+        };
+        submitted.push(payload.questions);
+        if (submitted.length === 1) {
+          return route.fulfill({
+            status: 422,
+            json: {
+              success: false,
+              category: "yc_application",
+              code: "GROUNDING_PROFILE_INCOMPLETE",
+              applicationProfileUrl:
+                "https://www.aletheia.live/dashboard#evidence",
+              billing: "none",
+              evidenceGap: {
+                reason: "missing_reviewed_facts",
+                questionNumbers: [4],
+              },
+            },
+          });
+        }
+        return route.fulfill({
+          json: {
+            success: true,
+            category: "yc_application",
+            answers: payload.questions.map((question, index) => ({
+              questionId: "q" + (index + 1),
+              question,
+              body: answer,
+              word_count: 50,
+              character_count: answer.length,
+            })),
+          },
+        });
+      },
+    );
+    const worker =
+      browser.serviceWorkers()[0] ??
+      (await browser.waitForEvent("serviceworker"));
+    await signIn(worker, "user-a");
+    const page = await openPanel(worker);
+    await page.locator("#category").selectOption("yc_application");
+    await page.locator("#jdInput").fill(jd);
+    await page.locator("#ycQuestionInput").fill(questions.join("\n"));
+    await page.locator("#generateBtn").click();
+    await page.getByRole("button", { name: "Skip Question 4" }).click();
+    await page.locator("#generateBtn").click();
+    await expect(page.locator(".application-answer h3")).toHaveText(questions);
+    await expect(page.locator(".application-answer").nth(3)).toContainText(
+      "Unanswered",
+    );
+    expect(submitted).toEqual([
+      questions,
+      [questions[0], questions[1], questions[2], questions[4]],
+    ]);
+    const stored = await worker.evaluate(() =>
+      chrome.storage.local.get("lastGeneration"),
+    );
+    expect(JSON.stringify(stored)).not.toContain(questions[3]);
+  });
+
   test("carries ordered answers and question-specific recovery through the worker @smoke", async () => {
     const submitted: unknown[] = [];
     const unsupported =
@@ -1390,6 +1463,140 @@ test.describe("Store ZIP application questions", () => {
       })),
     );
   });
+
+  for (const keepPanelOpen of [false, true]) {
+    test(
+      "keeps the skipped draft through sign-in (panel stays open: " +
+        keepPanelOpen +
+        ") @smoke",
+      async () => {
+        const questions = [
+          "Describe the prototype you tested.",
+          "How did you run payroll for other teams?",
+        ];
+        const requests: Record<string, unknown>[] = [];
+        let signedIn = false;
+        await browser.route("https://www.aletheia.live/auth/login?*", (route) =>
+          route.fulfill({
+            contentType: "text/html",
+            body: "<title>Test sign-in</title>",
+          }),
+        );
+        await browser.route(
+          "https://www.aletheia.live/api/extension/session",
+          (route) =>
+            signedIn
+              ? route.fulfill({
+                  json: {
+                    access_token: "reconnected-user-a",
+                    refresh_token: "synthetic",
+                    expires_at: Math.floor(Date.now() / 1000) + 3600,
+                    supabase_url: "https://www.aletheia.live",
+                    supabase_anon_key: "synthetic",
+                    user: { id: "user-a", email: "user-a@example.test" },
+                  },
+                })
+              : route.fulfill({
+                  status: 401,
+                  json: { code: "SESSION_UNAVAILABLE" },
+                }),
+        );
+        await browser.route(
+          "https://www.aletheia.live/api/extension/generate",
+          (route) => {
+            requests.push(route.request().postDataJSON());
+            return requests.length === 1
+              ? route.fulfill({
+                  status: 422,
+                  json: {
+                    code: "GROUNDING_PROFILE_INCOMPLETE",
+                    billing: "none",
+                    evidenceGap: {
+                      reason: "missing_reviewed_facts",
+                      questionNumbers: [2],
+                    },
+                  },
+                })
+              : route.fulfill({
+                  status: 401,
+                  json: { code: "SESSION_UNAVAILABLE" },
+                });
+          },
+        );
+        const worker =
+          browser.serviceWorkers()[0] ??
+          (await browser.waitForEvent("serviceworker"));
+        await signIn(worker, "user-a");
+        const page = await openPanel(worker);
+        await page.locator("#category").selectOption("yc_application");
+        await page.locator("#jdInput").fill(jd);
+        await page.locator("#ycQuestionInput").fill(questions.join("\n"));
+        await page.locator("#generateBtn").click();
+        await page.getByRole("button", { name: "Skip Question 2" }).click();
+        await page.locator("#generateBtn").click();
+        await expect
+          .poll(
+            () =>
+              worker.evaluate(() =>
+                chrome.storage.session.get("applicationAuthDraft"),
+              ),
+            {
+              timeout: 12_000,
+            },
+          )
+          .toMatchObject({
+            applicationAuthDraft: {
+              ownerId: "user-a",
+              questions: questions.join("\n"),
+              skippedQuestions: [2],
+            },
+          });
+        expect(
+          requests.every(
+            ({ applicationAuthContext }) => !applicationAuthContext,
+          ),
+        ).toBe(true);
+        expect(
+          requests
+            .slice(1)
+            .every(
+              (payload) =>
+                JSON.stringify(payload.questions) ===
+                JSON.stringify(questions.slice(0, 1)),
+            ),
+        ).toBe(true);
+        if (!keepPanelOpen) await page.close();
+        signedIn = true;
+        await expect
+          .poll(
+            () =>
+              worker.evaluate(() => chrome.storage.local.get("aletheia_auth")),
+            { timeout: 18_000 },
+          )
+          .toMatchObject({
+            aletheia_auth: { access_token: "reconnected-user-a" },
+          });
+        const reopened = keepPanelOpen ? page : await openPanel(worker);
+        await expect(reopened.locator("#ycQuestionInput")).toHaveValue(
+          questions.join("\n"),
+        );
+        await expect(reopened.locator("#jdInput")).toHaveValue(jd);
+        await expect(
+          reopened.getByRole("button", { name: "Undo skip for Question 2" }),
+        ).toBeVisible();
+        await expect(reopened.locator("#generateBtn")).toHaveText(
+          "Generate 1 supported answer · 4 credits",
+        );
+        await expect
+          .poll(() =>
+            worker.evaluate(() =>
+              chrome.storage.session.get("applicationAuthDraft"),
+            ),
+          )
+          .toEqual({});
+      },
+    );
+  }
 });
 
 test("uses the near-expiry bearer without changing auth and discards a delayed response after an account switch", async () => {
