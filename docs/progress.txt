@@ -2263,3 +2263,12 @@ No new cost, model judge, acceptance waiver or release approved.
   and retain ALE-67's bounded question diagnostics before admission.
 - The 1,657 focused application, extension API and outreach tests passed.
   Hosted acceptance and manual screen-reader verification remain pending.
+
+## 2026-11-15 — ALE-73 skip unsupported application questions
+
+The extension maps validated grounding diagnostics back to the open draft.
+Users can skip and restore individual questions. Only the included subset
+is sent for generation, while skipped positions show Unanswered. The existing
+server grounding and metering paths apply, and Copy All excludes skipped text.
+See docs/operations/ale-73-skip-unsupported-questions.md for the Significant
+risk contract and the hosted acceptance procedure.

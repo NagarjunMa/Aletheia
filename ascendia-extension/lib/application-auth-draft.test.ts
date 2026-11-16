@@ -1,9 +1,34 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   buildApplicationAuthDraft,
+  readApplicationAuthDraft,
   saveApplicationAuthDraft,
 } from "./application-auth-draft.js";
 describe("authentication handoff storage", () => {
+  it("retains original questions and bounded skip ordinals only for the same account", () => {
+    const input = {
+      category: "yc_application",
+      jd: "Synthetic JD",
+      questions: "First question\nSecond question",
+      ownerId: "owner",
+      skippedQuestions: [2],
+    };
+    const draft = buildApplicationAuthDraft(input, 1000);
+    expect(readApplicationAuthDraft(draft, "owner", 1001)).toMatchObject({
+      questions: input.questions,
+      skippedQuestions: [2],
+    });
+    expect(readApplicationAuthDraft(draft, "other", 1001)).toBeNull();
+    expect(readApplicationAuthDraft(draft, "owner", 901000)).toBeNull();
+    for (const invalid of [[1, 1], [3], [0]]) {
+      expect(
+        buildApplicationAuthDraft(
+          { ...input, skippedQuestions: invalid },
+          1000,
+        ),
+      ).not.toHaveProperty("skippedQuestions");
+    }
+  });
   it("removes a saved draft when expiry scheduling fails", async () => {
     const storage = {
       setAccessLevel: vi.fn().mockResolvedValue(undefined),

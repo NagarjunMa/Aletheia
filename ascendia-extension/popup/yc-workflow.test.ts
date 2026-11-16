@@ -6,6 +6,7 @@ import {
   projectStoredApplication,
   buildApplicationFeedback,
   parseGenerationResponse,
+  selectApplicationQuestions,
 } from "./popup-core.js";
 import { isValidOperationId } from "../lib/logger-core.js";
 import { filterOwnedAccepted } from "../lib/account-owned-cache.js";
@@ -383,6 +384,7 @@ it.each([
       generationInFlight: false,
       messageFocusSupported: false,
       focusContextRevision: 0,
+      applicationDraftRevision: 0,
       storyPicker: { snapshot: () => ({ ids: [] }) },
       popupAuthenticated: true,
       currentUserId: "user-1",
@@ -438,6 +440,9 @@ describe("ALE-38 popup elapsed time", () => {
         generationInFlight: false,
         messageFocusSupported: false,
         focusContextRevision: 0,
+        applicationDraftRevision: 0,
+        skippedApplicationQuestions: new Set(),
+        selectApplicationQuestions,
         storyPicker: { snapshot: () => ({ ids: [] }) },
         YC_APPLICATION_CATEGORY: "yc_application",
         PROFILE_EXTRACTION_CONSENT_KEY: "profileExtractionConsent",

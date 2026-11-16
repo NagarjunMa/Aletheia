@@ -14,6 +14,9 @@ import {
   projectStoredApplication,
   buildApplicationFeedback,
   parseApplicationQuestions,
+  selectApplicationQuestions,
+  skippableApplicationQuestions,
+  projectApplicationSlots,
   buildApplicationAuthDraft,
   readApplicationAuthDraft,
   APPLICATION_AUTH_DRAFT_KEY,
@@ -64,6 +67,9 @@ let messageFocusSupported = false;
 let focusContextRevision = 0;
 let focusedDraftTarget = null;
 let errorDismissalTimer;
+const skippedApplicationQuestions = new Set();
+let applicationSkipCandidates = [];
+let applicationDraftRevision = 0;
 
 function resetMessageFocus() {
   focusContextRevision++;
@@ -197,8 +203,6 @@ document.addEventListener("DOMContentLoaded", async () => {
       const after = changes.aletheia_auth.newValue;
       // A visible draft belongs to the authenticated account that created it.
       if (before?.user?.id !== after?.user?.id) {
-        storyPicker.resetAccount();
-        resetMessageFocus();
         // Storage events can arrive after a refresh has already restored the
         // same account, so decide using the latest stored auth state.
         const { aletheia_auth: latestAuth } =
@@ -211,6 +215,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         ) {
           currentUserId = latestId;
           popupAuthenticated = true;
+          renderApplicationQuestionSelection();
+          updateGenerateAvailability();
           document.getElementById("evidencePicker")?.classList.remove("hidden");
           if (currentOutput) {
             document.getElementById("output")?.classList.remove("hidden");
@@ -219,12 +225,26 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
         if (!latestId) {
           popupAuthenticated = false;
+          const recoveringApplication =
+            generationInFlight &&
+            document.getElementById("category")?.value ===
+              YC_APPLICATION_CATEGORY;
+          if (recoveringApplication) dismissApplicationEvidenceGuidance();
+          else {
+            resetApplicationQuestions();
+            storyPicker.resetAccount();
+          }
+          renderApplicationQuestionSelection();
+          resetMessageFocus();
           updateMessageFocus();
           document.getElementById("evidencePicker")?.classList.add("hidden");
           document.getElementById("output")?.classList.add("hidden");
           document.getElementById("applicationFeedbackDialog")?.close?.();
           return;
         }
+        resetApplicationQuestions();
+        storyPicker.resetAccount();
+        resetMessageFocus();
         currentOutput = null;
         feedbackOutput = null;
         popupAuthenticated = false;
@@ -367,7 +387,10 @@ function setupEventListeners() {
       return auth?.user?.id;
     },
     getCategory: () => document.getElementById("category")?.value,
-    onContextChange: dismissApplicationEvidenceGuidance,
+    onContextChange: () => {
+      applicationDraftRevision++;
+      dismissApplicationEvidenceGuidance();
+    },
     send: sendBackgroundMessage,
   });
   // Settings button
@@ -504,6 +527,7 @@ function setupEventListeners() {
 
   // Category change handler
   document.getElementById("category")?.addEventListener("change", async () => {
+    resetApplicationQuestions();
     storyPicker.resetContext();
     resetMessageFocus();
     updateUIForCategory();
@@ -521,12 +545,14 @@ function setupEventListeners() {
 
   // JD input change handler
   document.getElementById("jdInput")?.addEventListener("input", () => {
+    resetApplicationQuestions();
     storyPicker.resetContext();
     resetMessageFocus();
     updateCharacterCount();
     updateGenerateAvailability();
   });
   document.getElementById("ycQuestionInput")?.addEventListener("input", () => {
+    resetApplicationQuestions();
     storyPicker.resetContext();
     updateQuestionCharacterCount();
     updateGenerateAvailability();
@@ -909,6 +935,15 @@ async function generateMessage() {
   const questionValue = document
     .getElementById("ycQuestionInput")
     ?.value.trim();
+  const application = category === YC_APPLICATION_CATEGORY;
+  const applicationSelection = application
+    ? selectApplicationQuestions(questionValue, skippedApplicationQuestions)
+    : null;
+  if (
+    applicationSelection?.questions.length === 0 &&
+    skippedApplicationQuestions.size
+  )
+    return;
   const validation = validateGenerationInput({
     category,
     hasProfile: Boolean(profile),
@@ -927,6 +962,15 @@ async function generateMessage() {
   }
   const operationId = createOperationId();
   const requesterId = currentUserId;
+  const applicationRevision = applicationDraftRevision;
+  const applicationIsCurrent = () =>
+    !application ||
+    (requesterId === currentUserId &&
+      applicationRevision === applicationDraftRevision &&
+      document.getElementById("category")?.value === category &&
+      document.getElementById("jdInput")?.value.trim() === contextValue &&
+      document.getElementById("ycQuestionInput")?.value.trim() ===
+        questionValue);
   const storySelection = storyPicker.snapshot();
   const selected = storySelection.ids.length > 0;
   generationInFlight = true;
@@ -982,6 +1026,7 @@ async function generateMessage() {
     }
     if (
       !focusIsCurrent() ||
+      !applicationIsCurrent() ||
       (selected && !storyPicker.isCurrent(storySelection))
     )
       return;
@@ -1000,7 +1045,7 @@ async function generateMessage() {
       intent,
       relevantExamples,
       emailMode,
-      questionValue,
+      applicationSelection?.questions.join("\n") ?? questionValue,
       storySelection.ids,
       category === "linkedin_connection" ? getConnectionNoteLimit() : undefined,
     );
@@ -1009,12 +1054,19 @@ async function generateMessage() {
     const response = await sendBackgroundMessage({
       action: "generate",
       payload: messageFocus ? { ...payload, messageFocus } : payload,
+      ...(applicationSelection &&
+        skippedApplicationQuestions.size && {
+          applicationAuthContext: {
+            questions: questionValue,
+            skippedQuestions: [...skippedApplicationQuestions],
+          },
+        }),
       ...(focusTarget ? { focusTarget } : {}),
       requesterId,
       operationId,
     });
 
-    if (!focusIsCurrent()) return;
+    if (!focusIsCurrent() || !applicationIsCurrent()) return;
     if (selected && !storyPicker.isCurrent(storySelection)) {
       showError(
         "Draft context changed. Generate again for the current context.",
@@ -1034,6 +1086,7 @@ async function generateMessage() {
       }
       if (
         !focusIsCurrent() ||
+        !applicationIsCurrent() ||
         (selected && !storyPicker.isCurrent(storySelection))
       )
         return;
@@ -1041,7 +1094,16 @@ async function generateMessage() {
         response,
         payload.questions,
       );
-      displayOutput(validatedResponse, focusTarget);
+      const slots =
+        applicationSelection &&
+        applicationSelection.ordinals.length !==
+          applicationSelection.original.length
+          ? projectApplicationSlots(
+              applicationSelection,
+              validatedResponse.answers,
+            )
+          : null;
+      displayOutput(validatedResponse, focusTarget, slots);
       generationCompleted = true;
       generationRequestId = isValidOperationId(response.requestId)
         ? response.requestId.toLowerCase()
@@ -1083,9 +1145,32 @@ async function generateMessage() {
         storyPicker.isCurrent(storySelection)
           ? payload.questions
           : undefined;
+      if (currentQuestions && response.status === 422) {
+        const { aletheia_auth: activeAuth } =
+          await chrome.storage.local.get("aletheia_auth");
+        if (!applicationIsCurrent() || activeAuth?.user?.id !== requesterId)
+          return;
+      }
+      if (
+        application &&
+        popupAuthenticated &&
+        response.code === "AUTH_RECONNECTED"
+      ) {
+        const { [APPLICATION_AUTH_DRAFT_KEY]: pending } =
+          await chrome.storage.session.get(APPLICATION_AUTH_DRAFT_KEY);
+        if (!applicationIsCurrent() || !popupAuthenticated) return;
+        if (
+          pending?.ownerId === requesterId &&
+          pending.operationId === operationId
+        ) {
+          await chrome.storage.session.remove(APPLICATION_AUTH_DRAFT_KEY);
+          await chrome.alarms.clear("application-auth-draft-expiry");
+        }
+      }
       const presentation = getGenerationErrorPresentation(
         response,
         currentQuestions,
+        applicationSelection?.ordinals,
       );
       const errMsg = presentation.message;
       if (
@@ -1113,11 +1198,27 @@ async function generateMessage() {
           .getElementById("editMessageFocus")
           ?.classList.toggle("hidden", unavailable);
       } else if (isAuthError(response.code) || isAuthError(errMsg)) {
+        if (application) {
+          const { aletheia_auth: activeAuth } =
+            await chrome.storage.local.get("aletheia_auth");
+          if (
+            !applicationIsCurrent() ||
+            (activeAuth?.user?.id && activeAuth.user.id !== requesterId)
+          )
+            return;
+        }
         await persistAuthenticationDraft();
         showAuthRequired();
         showAuthError(errMsg);
       } else {
         showGenerationError(presentation);
+        if (currentQuestions && presentation.evidenceGuidance) {
+          applicationSkipCandidates = skippableApplicationQuestions(
+            response,
+            applicationSelection.ordinals,
+          );
+          renderApplicationQuestionSelection();
+        }
       }
     }
   } catch (error) {
@@ -1158,7 +1259,7 @@ async function generateMessage() {
   }
 }
 
-function displayOutput(output, target = null) {
+function displayOutput(output, target = null, applicationSlots = null) {
   const outputSection = document.getElementById("output");
   const messageText = document.getElementById("messageText");
   const subjectLine = document.getElementById("subjectLine");
@@ -1180,23 +1281,36 @@ function displayOutput(output, target = null) {
     processedOutput.category === YC_APPLICATION_CATEGORY &&
     processedOutput.answers
   ) {
-    for (const [index, answer] of processedOutput.answers.entries()) {
+    const slots =
+      applicationSlots ??
+      processedOutput.answers.map((answer, index) => ({
+        answer,
+        question: answer.question,
+        ordinal: index + 1,
+      }));
+    for (const { question, ordinal, answer } of slots) {
       const section = document.createElement("section");
       section.className = "application-answer";
       const heading = document.createElement("h3");
-      heading.id = `answer-heading-${answer.questionId}`;
-      heading.textContent = answer.question || `Answer ${index + 1}`;
+      heading.id = "answer-heading-" + ordinal;
+      heading.textContent = question || "Answer " + ordinal;
       section.setAttribute("aria-labelledby", heading.id);
       const body = document.createElement("p");
-      body.textContent = answer.body;
+      body.textContent = answer?.body ?? "Unanswered";
+      if (!answer) body.className = "application-unanswered";
+      section.append(heading, body);
+      if (!answer) {
+        messageText.append(section);
+        continue;
+      }
       const copy = document.createElement("button");
       copy.className = "copy-btn";
       copy.type = "button";
       copy.dataset.copy = "answer";
       copy.dataset.answerId = answer.questionId;
-      copy.setAttribute("aria-label", `Copy answer ${index + 1}`);
+      copy.setAttribute("aria-label", "Copy answer " + ordinal);
       copy.textContent = "Copy answer";
-      section.append(heading, body, copy);
+      section.append(copy);
       messageText.append(section);
     }
   } else messageText.textContent = messageBody;
@@ -1255,6 +1369,7 @@ function updateCharacterCountDisplay(text, category) {
 function setGeneratingState(isGenerating) {
   storyPicker.setBusy(isGenerating);
   updateMessageFocus();
+  renderApplicationQuestionSelection();
   const generateBtn = document.getElementById("generateBtn");
   const generateText = document.getElementById("generateText");
   const progress = document.getElementById("generationProgress");
@@ -1737,6 +1852,72 @@ function updateQuestionCharacterCount() {
   count.textContent = `${parseApplicationQuestions(input.value).length}/5 questions · 500 characters each`;
 }
 
+function resetApplicationQuestions() {
+  applicationDraftRevision++;
+  skippedApplicationQuestions.clear();
+  dismissApplicationEvidenceGuidance();
+  renderApplicationQuestionSelection();
+  updateGenerateAvailability();
+}
+
+function renderApplicationQuestionSelection() {
+  const skip = document.getElementById("applicationSkipActions");
+  const undo = document.getElementById("applicationUndoActions");
+  const status = document.getElementById("applicationSkipStatus");
+  if (!skip || !undo || !status) return;
+  if (!popupAuthenticated) {
+    status.textContent = "";
+    for (const controls of [skip, undo]) {
+      controls.replaceChildren();
+      controls.hidden = true;
+    }
+    return;
+  }
+  const selected = selectApplicationQuestions(
+    document.getElementById("ycQuestionInput")?.value,
+    skippedApplicationQuestions,
+  );
+  const skipped = [...skippedApplicationQuestions].sort((a, b) => a - b);
+  const label = skipped.map((number) => "Question " + number).join(", ");
+  status.textContent = skipped.length
+    ? selected.questions.length +
+      " of " +
+      selected.original.length +
+      " questions included. Unanswered: " +
+      label +
+      "."
+    : "";
+
+  const button = (number, undoSkip) => {
+    const action = document.createElement("button");
+    action.type = "button";
+    action.id = (undoSkip ? "undo-question-" : "skip-question-") + number;
+    action.textContent =
+      (undoSkip ? "Undo skip for Question " : "Skip Question ") + number;
+    action.disabled = generationInFlight;
+    action.addEventListener("click", () => {
+      if (generationInFlight || !popupAuthenticated) return;
+      applicationDraftRevision++;
+      if (undoSkip) skippedApplicationQuestions.delete(number);
+      else skippedApplicationQuestions.add(number);
+      renderApplicationQuestionSelection();
+      updateGenerateAvailability();
+      const nextControl = document.getElementById(
+        (undoSkip ? "skip-question-" : "undo-question-") + number,
+      );
+      (nextControl ?? document.getElementById("ycQuestionInput"))?.focus();
+    });
+    return action;
+  };
+  const available = applicationSkipCandidates.filter(
+    (number) => !skippedApplicationQuestions.has(number),
+  );
+  skip.replaceChildren(...available.map((number) => button(number, false)));
+  undo.replaceChildren(...skipped.map((number) => button(number, true)));
+  skip.hidden = available.length === 0;
+  undo.hidden = skipped.length === 0;
+}
+
 function updateGenerateAvailability() {
   const button = document.getElementById("generateBtn");
   const category = document.getElementById("category")?.value;
@@ -1758,9 +1939,20 @@ function updateGenerateAvailability() {
     messageFocusSupported &&
     category !== YC_APPLICATION_CATEGORY &&
     normalizeMessageFocus(focusField?.value) === null;
+  const applicationMode = category === YC_APPLICATION_CATEGORY;
+  const hasSkipped = applicationMode && skippedApplicationQuestions.size > 0;
+  const included = hasSkipped
+    ? selectApplicationQuestions(
+        document.getElementById("ycQuestionInput")?.value,
+        skippedApplicationQuestions,
+      ).questions.length
+    : null;
   button.disabled =
-    generationInFlight || feedbackInFlight || !validation.valid || invalidFocus;
-  const applicationMode = category === "yc_application";
+    generationInFlight ||
+    feedbackInFlight ||
+    !validation.valid ||
+    invalidFocus ||
+    included === 0;
   const inputStatus = document.getElementById("applicationInputStatus");
   if (inputStatus)
     inputStatus.textContent =
@@ -1783,8 +1975,22 @@ function updateGenerateAvailability() {
       ),
     );
   const regenerate = document.getElementById("regenerateApplicationBtn");
-  if (regenerate) regenerate.disabled = button.disabled;
-  if (generateText) generateText.textContent = uiState.generateLabel;
+  const subsetLabel =
+    included === null
+      ? ""
+      : included === 0
+        ? "No questions included"
+        : "Generate " +
+          included +
+          " supported " +
+          (included === 1 ? "answer" : "answers") +
+          " · 4 credits";
+  if (regenerate) {
+    regenerate.disabled = button.disabled;
+    regenerate.textContent = subsetLabel || "Generate again · 4 credits";
+  }
+  if (generateText)
+    generateText.textContent = subsetLabel || uiState.generateLabel;
 }
 
 async function updateUsageStats() {
@@ -1936,6 +2142,12 @@ function dismissApplicationEvidenceGuidance() {
 function hideError() {
   clearTimeout(errorDismissalTimer);
   const error = document.getElementById("errorMessage");
+  applicationSkipCandidates = [];
+  const skip = document.getElementById("applicationSkipActions");
+  if (skip) {
+    skip.hidden = true;
+    skip.replaceChildren();
+  }
   error?.classList.add("hidden");
   error?.classList.remove("evidence-warning");
   const guidance = document.getElementById("applicationEvidenceGuidance");
@@ -2354,12 +2566,24 @@ chrome.runtime.onMessage.addListener((message, sender) => {
 });
 
 async function persistAuthenticationDraft() {
+  const questions = document.getElementById("ycQuestionInput");
   const draft = buildApplicationAuthDraft({
     category: document.getElementById("category")?.value,
     jd: document.getElementById("jdInput")?.value,
-    questions: document.getElementById("ycQuestionInput")?.value,
+    questions: questions?.value,
     ownerId: currentUserId,
+    skippedQuestions: [...skippedApplicationQuestions],
   });
+  if (
+    !currentUserId &&
+    !draft?.jd.trim() &&
+    questions?.value.trim() === questions?.defaultValue.trim()
+  ) {
+    const { [APPLICATION_AUTH_DRAFT_KEY]: pending } =
+      await chrome.storage.session.get(APPLICATION_AUTH_DRAFT_KEY);
+    if (pending?.ownerId && readApplicationAuthDraft(pending, pending.ownerId))
+      return;
+  }
   await saveApplicationAuthDraft(draft, chrome.storage.session, chrome.alarms);
 }
 
@@ -2375,6 +2599,10 @@ async function restoreAuthenticationDraft() {
   document.getElementById("category").value = draft.category;
   document.getElementById("jdInput").value = draft.jd;
   document.getElementById("ycQuestionInput").value = draft.questions;
+  skippedApplicationQuestions.clear();
+  for (const number of draft.skippedQuestions ?? [])
+    skippedApplicationQuestions.add(number);
+  renderApplicationQuestionSelection();
   updateUIForCategory();
   updateCharacterCount();
   updateQuestionCharacterCount();

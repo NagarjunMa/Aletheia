@@ -314,7 +314,7 @@ export function validateGenerationInput({
 /**
  * Convert API failures into a stable display model for the popup.
  */
-export function getApplicationEvidenceGuidance(response, questions) {
+export function getApplicationEvidenceGuidance(response, questions, ordinals) {
   const questionCount = questions?.length ?? 0;
   if (questionCount < 1 || questionCount > 5) return;
   const gap = readApplicationEvidenceGap(response);
@@ -324,12 +324,14 @@ export function getApplicationEvidenceGuidance(response, questions) {
       return "The questions need distinct reviewed facts. In your application profile, add or review facts that support different answers, then generate again.";
     return;
   }
-  const numbers = gap.questionNumbers;
-  if (numbers.at(-1) > questionCount) return;
+  if (gap.questionNumbers.at(-1) > questionCount) return;
+  const numbers = ordinals
+    ? gap.questionNumbers.map((number) => ordinals[number - 1])
+    : gap.questionNumbers;
 
   const single = numbers.length === 1;
   const subject =
-    questionCount === 1
+    questionCount === 1 && !ordinals
       ? "This question"
       : single
         ? `Question ${numbers[0]}`
@@ -344,7 +346,7 @@ export function getApplicationEvidenceGuidance(response, questions) {
         ? "a matching reviewed fact"
         : "matching reviewed facts";
   // Use the locally submitted question for a concrete cue when it fits the panel.
-  const prompt = single ? questions[numbers[0] - 1] : "";
+  const prompt = single ? questions[gap.questionNumbers[0] - 1] : "";
   const detail =
     prompt && prompt.length <= 120
       ? `Include an action, method, or result that answers “${prompt}”.`
@@ -352,8 +354,12 @@ export function getApplicationEvidenceGuidance(response, questions) {
   return `${subject} ${single ? "needs" : "need"} ${need}. Add or review evidence in your application profile. ${detail} Then generate again.`;
 }
 
-export function getGenerationErrorPresentation(response, questions) {
-  const evidenceGuidance = getApplicationEvidenceGuidance(response, questions);
+export function getGenerationErrorPresentation(response, questions, ordinals) {
+  const evidenceGuidance = getApplicationEvidenceGuidance(
+    response,
+    questions,
+    ordinals,
+  );
   const missingFields = Array.isArray(response?.missingFields)
     ? response.missingFields
     : [];
@@ -471,6 +477,49 @@ export function parseApplicationQuestions(value) {
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
+}
+
+export function selectApplicationQuestions(value, skipped) {
+  const original = parseApplicationQuestions(value);
+  const ordinals = original.flatMap((_, index) =>
+    skipped.has(index + 1) ? [] : [index + 1],
+  );
+  return {
+    original,
+    ordinals,
+    questions: ordinals.map((number) => original[number - 1]),
+  };
+}
+
+export function skippableApplicationQuestions(response, ordinals) {
+  const numbers = readApplicationEvidenceGap(response)?.questionNumbers;
+  if (!numbers || numbers.at(-1) > ordinals.length) return [];
+  return numbers.map((number) => ordinals[number - 1]);
+}
+
+export function projectApplicationSlots(
+  { original, ordinals, questions },
+  answers,
+) {
+  if (
+    answers?.length !== questions.length ||
+    answers.some(
+      ({ question, questionId }, index) =>
+        question !== questions[index] || questionId !== "q" + (index + 1),
+    )
+  ) {
+    throw new Error(
+      "The returned answers do not match the submitted questions.",
+    );
+  }
+  const byOrdinal = new Map(
+    ordinals.map((number, index) => [number, answers[index]]),
+  );
+  return original.map((question, index) => ({
+    question,
+    ordinal: index + 1,
+    answer: byOrdinal.get(index + 1),
+  }));
 }
 
 export function formatApplicationAnswers(answers) {

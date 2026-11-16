@@ -326,7 +326,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "generate") {
     if (
       (message.payload?.selectedEvidenceIds?.length ||
-        message.payload?.messageFocus !== undefined) &&
+        message.payload?.messageFocus !== undefined ||
+        message.applicationAuthContext !== undefined) &&
       !isStoryPickerSender(sender)
     ) {
       sendResponse({ success: false, code: "EVIDENCE_SELECTION_UNAVAILABLE" });
@@ -354,6 +355,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       operationId,
       message.requesterId,
       message.focusTarget,
+      message.applicationAuthContext,
     )
       .then((result) => {
         log.info("runtime.message.complete", {
@@ -631,8 +633,16 @@ async function handleAuthenticate(
       message: "Connected to Aletheia",
     };
   } catch (waitError) {
-    await chrome.storage.session.remove("applicationAuthDraft");
-    await chrome.alarms.clear("application-auth-draft-expiry");
+    const { applicationAuthDraft } = await chrome.storage.session.get(
+      "applicationAuthDraft",
+    );
+    if (
+      !applicationAuthDraft?.ownerId ||
+      waitError.code === "AUTH_ACCOUNT_CHANGED"
+    ) {
+      await chrome.storage.session.remove("applicationAuthDraft");
+      await chrome.alarms.clear("application-auth-draft-expiry");
+    }
     complete("failure", {
       errorCode: getSafeErrorCode(waitError, "AUTHENTICATION_FAILED"),
     });
@@ -808,6 +818,7 @@ async function handleGenerateRequest(
   operationId,
   requesterId,
   focusTarget,
+  applicationAuthContext,
 ) {
   const generationUsageEpoch = usageEpoch;
   const focused = Boolean(payload.messageFocus);
@@ -879,10 +890,17 @@ async function handleGenerateRequest(
             buildApplicationAuthDraft({
               category: payload.category,
               jd: payload.jd,
-              questions: Array.isArray(payload.questions)
-                ? payload.questions.join("\n")
-                : payload.question,
-              ownerId: aletheia_auth?.user?.id ?? null,
+              questions:
+                requesterId && applicationAuthContext
+                  ? applicationAuthContext.questions
+                  : Array.isArray(payload.questions)
+                    ? payload.questions.join("\n")
+                    : payload.question,
+              ...(requesterId && applicationAuthContext
+                ? { skippedQuestions: applicationAuthContext.skippedQuestions }
+                : {}),
+              ownerId: requesterId ?? aletheia_auth?.user?.id ?? null,
+              operationId,
             }),
             chrome.storage.session,
             chrome.alarms,

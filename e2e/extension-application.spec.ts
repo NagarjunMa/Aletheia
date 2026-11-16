@@ -380,6 +380,55 @@ test("clipboard failure keeps the answer available for a retry @smoke", async ({
     .toBe(fixtureAnswers[0]);
 });
 
+for (const replaceDraft of [false, true]) {
+  test(
+    "manual sign-in retains the intended draft (new question: " +
+      replaceDraft +
+      ") @smoke",
+    async ({ page }) => {
+      await openPopup(page, false);
+      const questions =
+        "Describe your prototype work?\nHow did you run payroll?";
+      await page.evaluate(
+        ({ questions, jd }) => {
+          sessionStorage.setItem(
+            "test-session",
+            JSON.stringify({
+              applicationAuthDraft: {
+                category: "yc_application",
+                ownerId: "user-1",
+                expiresAt: Date.now() + 30_000,
+                questions,
+                jd,
+                skippedQuestions: [2],
+              },
+            }),
+          );
+        },
+        { questions, jd },
+      );
+      const entered = "What did you recently build?";
+      if (replaceDraft) await page.locator("#ycQuestionInput").fill(entered);
+      await page.locator("#connectBtn").click();
+      if (replaceDraft) {
+        await expect(page.locator("#ycQuestionInput")).toHaveValue(entered);
+        await expect(
+          page.getByRole("button", { name: "Undo skip for Question 2" }),
+        ).toHaveCount(0);
+        return;
+      }
+      await expect(page.locator("#ycQuestionInput")).toHaveValue(questions);
+      await expect(page.locator("#jdInput")).toHaveValue(jd);
+      await expect(
+        page.getByRole("button", { name: "Undo skip for Question 2" }),
+      ).toBeVisible();
+      await expect(page.locator("#generateBtn")).toHaveText(
+        /1 supported answer/u,
+      );
+    },
+  );
+}
+
 test("invalid question input explains how to recover without a request @smoke", async ({
   page,
 }) => {
@@ -593,6 +642,187 @@ test("the compact application panel focuses question 4 recovery after a previous
       ),
     )
     .toBe(3);
+});
+
+test("skip question four, submit four, and keep the unanswered slot in order @smoke", async ({
+  page,
+}) => {
+  await openPopup(page);
+  await page.selectOption("#category", "yc_application");
+  const questions = acceptanceFixture.cases.map(({ question }) => question);
+  await page.fill("#jdInput", acceptanceFixture.jobDescription);
+  await page.fill("#ycQuestionInput", questions.join("\n"));
+  await page.evaluate(() => {
+    window.aleTest.holdGeneration = true;
+  });
+  await page.click("#generateBtn");
+  await expect(page.locator("#generationProgress")).toBeVisible();
+  await page.evaluate(() => {
+    window.aleTest.generationCallback?.({
+      success: false,
+      status: 422,
+      code: "GROUNDING_PROFILE_INCOMPLETE",
+      billing: "none",
+      missingFields: ["confirmed_evidence"],
+      evidenceGap: { reason: "missing_reviewed_facts", questionNumbers: [4] },
+      applicationProfileUrl: "https://www.aletheia.live/dashboard#evidence",
+    });
+    window.aleTest.holdGeneration = false;
+  });
+
+  const skip = page.getByRole("button", { name: "Skip Question 4" });
+  const warning = page.locator("#ycQuestionGroup #errorMessage");
+  await expect(warning).toContainText("More reviewed evidence needed");
+  await expect(warning).not.toContainText("confirmed_evidence");
+  await expect(
+    warning.getByRole("link", { name: "Review application evidence" }),
+  ).toBeVisible();
+  await skip.focus();
+  await page.keyboard.press("Enter");
+  await expect(
+    page.getByRole("button", {
+      name: /Generate 4 supported answers.*4 credits/u,
+    }),
+  ).toBeEnabled();
+  await page.getByRole("button", { name: "Undo skip for Question 4" }).click();
+  await expect(page.locator("#generateBtn")).toHaveText(/Generate Answers/u);
+  await page.getByRole("button", { name: "Skip Question 4" }).click();
+  await page.click("#generateBtn");
+
+  const answers = page.locator(".application-answer");
+  await expect(answers.locator("h3")).toHaveText(questions);
+  await expect(answers.nth(3)).toContainText("Unanswered");
+  await expect(answers.nth(3).getByRole("button")).toHaveCount(0);
+  await answers.nth(4).getByRole("button", { name: "Copy answer 5" }).click();
+  expect(await page.evaluate(() => window.aleTest.copied)).toBe(
+    fixtureAnswers[3],
+  );
+  await page.click("#copyAllBtn");
+  const copied = await page.evaluate(() => window.aleTest.copied);
+  expect(copied).not.toContain(questions[3]);
+  expect(copied).not.toContain("Unanswered");
+  expect(copied).toContain(fixtureAnswers[3]);
+  const requests = await page.evaluate(() =>
+    window.aleTest.messages.filter(({ action }) => action === "generate"),
+  );
+  expect(requests).toHaveLength(2);
+  expect(requests[1]?.payload?.questions).toEqual(
+    questions.filter((_, index) => index !== 3),
+  );
+  await expect(page.locator("#ycQuestionInput")).toHaveValue(
+    questions.join("\n"),
+  );
+  const local = await page.evaluate(() => sessionStorage.getItem("test-local"));
+  expect(local).not.toContain(questions[3]);
+});
+
+test("maps a later gap to the original slot and skips multiple questions @smoke", async ({
+  page,
+}) => {
+  await openPopup(page);
+  await page.selectOption("#category", "yc_application");
+  const questions = acceptanceFixture.cases.map(({ question }) => question);
+  await page.fill("#jdInput", jd);
+  await page.fill("#ycQuestionInput", questions.join("\n"));
+  const rejectQuestions = async (numbers: number[]) => {
+    await page.evaluate(() => {
+      window.aleTest.holdGeneration = true;
+    });
+    await page.click("#generateBtn");
+    await expect(page.locator("#generationProgress")).toBeVisible();
+    await page.evaluate((questionNumbers) => {
+      window.aleTest.generationCallback?.({
+        success: false,
+        status: 422,
+        code: "GROUNDING_PROFILE_INCOMPLETE",
+        billing: "none",
+        evidenceGap: { reason: "missing_reviewed_facts", questionNumbers },
+      });
+      window.aleTest.holdGeneration = false;
+    }, numbers);
+  };
+  await rejectQuestions([2, 4]);
+  await expect(
+    page.getByRole("button", { name: "Skip Question 4" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Skip Question 2" }).click();
+  await rejectQuestions([3]);
+  await expect(page.getByRole("alert")).toContainText("Question 4 needs");
+  await expect(
+    page.getByRole("button", { name: "Skip Question 3" }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Skip Question 4" }).click();
+  await expect(page.locator("#applicationSkipStatus")).toHaveText(
+    /3 of 5 questions included/u,
+  );
+  await page.click("#generateBtn");
+  await expect(page.locator(".application-answer h3")).toHaveText(questions);
+  await expect(page.getByText("Unanswered", { exact: true })).toHaveCount(2);
+  const payloads = await page.evaluate(() =>
+    window.aleTest.messages.filter(({ action }) => action === "generate"),
+  );
+  expect(payloads.map(({ payload }) => payload?.questions)).toEqual([
+    questions,
+    [questions[0], questions[2], questions[3], questions[4]],
+    [questions[0], questions[2], questions[4]],
+  ]);
+});
+
+test("sends no empty subset and discards a diagnostic for edited questions @smoke", async ({
+  page,
+}) => {
+  await openPopup(page);
+  await page.selectOption("#category", "yc_application");
+  await page.fill("#jdInput", jd);
+  const input = page.locator("#ycQuestionInput");
+  const request = page.locator("#generateBtn");
+  await input.fill("How did you lead the production migration?");
+  const prepareFailure = async () => {
+    await page.evaluate(() => {
+      window.aleTest.holdGeneration = true;
+    });
+    await request.click();
+    await expect(page.locator("#generationProgress")).toBeVisible();
+  };
+  const failure = () =>
+    page.evaluate(() => {
+      window.aleTest.generationCallback?.({
+        success: false,
+        status: 422,
+        code: "GROUNDING_PROFILE_INCOMPLETE",
+        billing: "none",
+        evidenceGap: { reason: "missing_reviewed_facts", questionNumbers: [1] },
+        applicationProfileUrl: "https://www.aletheia.live/dashboard#evidence",
+      });
+    });
+  await prepareFailure();
+  await failure();
+  await page.getByRole("button", { name: "Skip Question 1" }).click();
+  await expect(request).toBeDisabled();
+  await expect(request).toHaveText("No questions included");
+  await expect(
+    page.getByRole("link", { name: "Review application evidence" }),
+  ).toBeVisible();
+  await expect(input).toBeEnabled();
+  await request.evaluate((button) => (button as HTMLButtonElement).click());
+  expect(
+    await page.evaluate(() =>
+      window.aleTest.messages.filter(({ action }) => action === "generate"),
+    ),
+  ).toHaveLength(1);
+  await page.getByRole("button", { name: "Undo skip for Question 1" }).click();
+  await prepareFailure();
+  await input.evaluate((field) => {
+    (field as HTMLTextAreaElement).value =
+      "Describe your unrelated infrastructure project.";
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await failure();
+  await expect(request).toBeEnabled();
+  await expect(
+    page.getByRole("button", { name: "Skip Question 1" }),
+  ).toHaveCount(0);
+  await expect(page.locator("#errorMessage")).toBeHidden();
 });
 
 test("ZIP-source popup paints the orb, reports elapsed time, and stops after success @smoke", async ({

@@ -5,6 +5,9 @@ import {
   buildApplicationAuthDraft,
   readApplicationAuthDraft,
   parseGenerationResponse,
+  selectApplicationQuestions,
+  projectApplicationSlots,
+  skippableApplicationQuestions,
   calculateCharCount,
   buildGeneratePayload,
   getCategoryUiState,
@@ -13,6 +16,61 @@ import {
   isAuthError,
   validateGenerationInput,
 } from "./popup-core.js";
+
+describe("application skip mappings", () => {
+  const first = "Describe your production project.";
+  const second = "Describe your unrelated trial.";
+  const third = "Describe how you evaluated the result.";
+  const draft = selectApplicationQuestions(
+    [first, second, third].join("\n"),
+    new Set([2]),
+  );
+  const response = {
+    status: 422,
+    code: "INSUFFICIENT_GROUNDING",
+    evidenceGap: { reason: "incomplete_answer", questionNumbers: [2] },
+  };
+
+  it("uses only reliable, in-range ordinals from the submitted subset", () => {
+    expect(draft.questions).toEqual([first, third]);
+    expect(skippableApplicationQuestions(response, draft.ordinals)).toEqual([
+      3,
+    ]);
+    for (const evidenceGap of [
+      null,
+      { reason: "shared_coverage" },
+      { reason: "incomplete_answer", questionNumbers: [3] },
+      { reason: "incomplete_answer", questionNumbers: [1, 1] },
+    ]) {
+      expect(
+        skippableApplicationQuestions(
+          { ...response, evidenceGap },
+          draft.ordinals,
+        ),
+      ).toEqual([]);
+    }
+  });
+
+  it("rejects missing, misnumbered and mismatched answer mappings", () => {
+    const one = { questionId: "q1", question: first };
+    const two = { questionId: "q2", question: third };
+    expect(projectApplicationSlots(draft, [one, two])).toEqual([
+      { ordinal: 1, question: first, answer: one },
+      { ordinal: 2, question: second, answer: undefined },
+      { ordinal: 3, question: third, answer: two },
+    ]);
+    for (const answers of [
+      undefined,
+      [one],
+      [one, { ...two, question: second }],
+      [one, { ...two, questionId: "q3" }],
+    ]) {
+      expect(() => projectApplicationSlots(draft, answers)).toThrow(
+        /submitted questions/u,
+      );
+    }
+  });
+});
 
 describe("personal usage reminder", () => {
   it("reflects a configured threshold without blocking the server request", () => {
