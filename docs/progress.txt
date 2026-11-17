@@ -1,3 +1,12 @@
+## 2026-11-16 — ALE-73 metered test account
+
+Critical risk. The application-answer service can opt one verified Supabase
+user ID into its existing billing path while the global switch is disabled.
+The opt-in does not change outreach or bypass unlimited-user exemptions.
+See docs/runbooks/credit-billing-migrations.md for the account setting,
+the 40 → 40 → 36 acceptance flow, and how to turn off the test setting.
+The hosted debit is pending deployment of the scoped setting.
+
 ## 2026-11-15 — ALE-66 résumé fact review
 
 The Evidence Library offers owner-scoped excerpts from the active uploaded

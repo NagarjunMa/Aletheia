@@ -266,6 +266,11 @@ export async function generateYcApplication(
     input.qualityHooks?.generationId ?? dependencies.randomUuid();
   const operationLog = input.logger ?? log;
   const timing = input.timing;
+  const meteredTestUserId =
+    process.env.YC_APPLICATION_CREDIT_BILLING_TEST_USER_ID?.trim();
+  const billingEnabled =
+    dependencies.billingEnabled ||
+    (Boolean(meteredTestUserId) && input.caller.userId === meteredTestUserId);
   const isBatch = "questions" in input.request;
   const questions =
     "questions" in input.request
@@ -276,7 +281,7 @@ export async function generateYcApplication(
     maxOutputUnits: getApplicationOutputBudget(
       isBatch ? questions.length : undefined,
     ),
-    ...(!dependencies.billingEnabled ? { billingMode: "disabled" } : {}),
+    ...(!billingEnabled ? { billingMode: "disabled" } : {}),
   });
   timing?.metrics({
     itemCount: questions.length,
@@ -472,10 +477,7 @@ export async function generateYcApplication(
     let creditCost = 0;
     let creditsRemaining: number | null = null;
 
-    if (
-      dependencies.billingEnabled &&
-      !dependencies.isUnlimitedUser(input.caller.email)
-    ) {
+    if (billingEnabled && !dependencies.isUnlimitedUser(input.caller.email)) {
       timing?.config({ billingMode: "metered" });
       timing?.enter("billing");
       await dependencies.grantTrialCredits(input.caller.userId);
@@ -529,7 +531,7 @@ export async function generateYcApplication(
       };
     }
 
-    if (dependencies.billingEnabled && billingMode === "unlimited_developer")
+    if (billingEnabled && billingMode === "unlimited_developer")
       timing?.config({ billingMode: "unlimited" });
     timing?.enter("inputBuild");
     const prompt = buildYcApplicationPrompt(
