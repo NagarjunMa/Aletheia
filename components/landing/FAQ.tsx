@@ -13,8 +13,8 @@ const faqs = [
     a: "After you consent, Aletheia can read visible details on supported LinkedIn profiles you visit. It does not read Apollo profiles; on supported Apollo pages, it can place a draft you choose into a compose field. Selected LinkedIn profile content is sent to Aletheia only when you request a draft. Resumes and application-profile details are saved separately in your Aletheia account. You can withdraw profile-reading consent in the extension settings.",
   },
   {
-    q: "How do resumes and evidence work?",
-    a: "You can manage multiple resumes and select a primary version. For YC application answers, Aletheia can also use the evidence you have confirmed in your application profile. That evidence is user-confirmed, not independently verified by Aletheia.",
+    q: "When do I need to review facts?",
+    a: "A résumé gives Aletheia background. A LinkedIn connection note can use the recipient’s profile alone when it has a usable detail. To bring your own work into outreach, add and confirm a relevant project fact. YC application answers need reviewed facts that support each question. You can use confirmed project facts or excerpts you confirm from your primary résumé.",
   },
   {
     q: "Does Aletheia always get the draft right?",

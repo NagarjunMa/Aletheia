@@ -17,8 +17,8 @@ const capabilities = [
     id: "application-answers",
     icon: BookOpenCheck,
     eyebrow: "Your source of truth",
-    title: "Work from the experience you have recorded.",
-    body: "Choose a primary resume and keep confirmed evidence in your application profile. Grounded YC application answers draw on those user-confirmed sources.",
+    title: "Your résumé is the starting point.",
+    body: "A résumé bullet can leave out what you did, how you did it, and what changed. Add those details to a project and confirm them. Aletheia can use them when they’re relevant to a LinkedIn connection note, cold email, or YC application answer.",
   },
   {
     icon: Sparkles,

@@ -1,8 +1,8 @@
 const steps = [
   {
     num: "01",
-    title: "Set your source of truth",
-    body: "Install from the official Chrome Web Store, sign in, and select the primary resume or application profile you want Aletheia to use.",
+    title: "Review the details of your work",
+    body: "Install from the Chrome Web Store and sign in. To bring your experience into outreach, add a project in your Evidence Library and confirm the details you want Aletheia to use.",
   },
   {
     num: "02",
@@ -62,7 +62,7 @@ const MockupCard = () => (
           Dana Mercer
         </div>
         <div style={{ fontSize: "9px", color: "var(--l-text-dim)" }}>
-          Research engineer · Northstar Labs (fictional)
+          On-device ML researcher · Northstar Labs (fictional)
         </div>
       </div>
     </div>
@@ -101,27 +101,35 @@ const MockupCard = () => (
       </div>
     </div>
 
-    {/* Generated message */}
-    <div
-      className="p-3 mb-4"
+    <dl
+      className="mb-4 space-y-3 p-3 text-xs leading-relaxed"
       style={{
         background: "var(--l-surface-2)",
         border: "1px solid var(--l-border)",
         borderRadius: "1px",
+        color: "var(--l-text-muted)",
       }}
     >
-      <p
-        style={{
-          fontSize: "10px",
-          lineHeight: 1.6,
-          color: "var(--l-text-muted)",
-        }}
-      >
-        Hi Dana — your note on making smaller on-device models practical caught
-        my attention. I have worked on operational ML systems at a smaller
-        scale, and would value hearing how your team thinks about the tradeoffs.
-      </p>
-    </div>
+      <div>
+        <dt className="font-bold">Résumé bullet</dt>
+        <dd>Improved model release checks.</dd>
+      </div>
+      <div>
+        <dt className="font-bold">Project fact you confirm</dt>
+        <dd>
+          I added rollback tests in staging that caught two failed model
+          releases before production.
+        </dd>
+      </div>
+      <div>
+        <dt className="font-bold">LinkedIn connection note</dt>
+        <dd>
+          Hi Dana, I added rollback tests in staging that caught two failed
+          model releases before production. I’m curious how you approach
+          on-device releases. Open to connecting?
+        </dd>
+      </div>
+    </dl>
 
     <div className="flex gap-2" aria-label="Illustrative draft controls">
       <div
