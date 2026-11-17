@@ -453,6 +453,77 @@ const caller = {
 };
 
 describe("generateYcApplication", () => {
+  it("bills the configured test account once after grounding with global billing off", async () => {
+    vi.stubEnv("YC_APPLICATION_CREDIT_BILLING_TEST_USER_ID", caller.userId);
+    try {
+      const deps = dependencies({
+        billingEnabled: false,
+        prepareGrounding: vi
+          .fn()
+          .mockResolvedValueOnce(grounding(false))
+          .mockResolvedValue(grounding()),
+      });
+      const input = {
+        caller,
+        request,
+        corsHeaders: {},
+        applicationBaseUrl: "https://www.aletheia.live",
+      };
+
+      const rejected = await generateYcApplication(input, deps);
+      expect(rejected.status).toBe(422);
+      expect(deps.checkRateLimit).not.toHaveBeenCalled();
+      expect(deps.grantTrialCredits).not.toHaveBeenCalled();
+      expect(deps.reserveCredits).not.toHaveBeenCalled();
+      expect(deps.createMessage).not.toHaveBeenCalled();
+
+      const accepted = await generateYcApplication(input, deps);
+      expect(accepted.status).toBe(200);
+      await expect(accepted.json()).resolves.toMatchObject({
+        billingMode: "credits",
+        creditCost: 4,
+        creditsRemaining: 36,
+      });
+      expect(deps.reserveCredits).toHaveBeenCalledExactlyOnceWith(
+        caller.userId,
+      );
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it.each([undefined, "", "55555555-5555-4555-8555-555555555555"])(
+    "leaves other accounts unmetered with configured test account %s",
+    async (configuredUserId) => {
+      vi.stubEnv(
+        "YC_APPLICATION_CREDIT_BILLING_TEST_USER_ID",
+        configuredUserId,
+      );
+      try {
+        const deps = dependencies({ billingEnabled: false });
+        const response = await generateYcApplication(
+          {
+            caller,
+            request,
+            corsHeaders: {},
+            applicationBaseUrl: "https://www.aletheia.live",
+          },
+          deps,
+        );
+
+        expect(response.status).toBe(200);
+        await expect(response.json()).resolves.toMatchObject({
+          creditCost: 0,
+          creditsRemaining: null,
+        });
+        expect(deps.grantTrialCredits).not.toHaveBeenCalled();
+        expect(deps.reserveCredits).not.toHaveBeenCalled();
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    },
+  );
+
   it("returns a privacy-safe 422 before rate limiting, billing, or model work", async () => {
     const timing = createGenerationTiming();
     const deps = dependencies({

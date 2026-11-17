@@ -65,3 +65,23 @@ Do not mark a version as applied before its schema and behavior have been verifi
 Linked project `gzmkloodyhngejchomqj` received both migrations in order. Before application, the billing tables, RPCs, and both history entries were absent. After application, catalog/security checks and a rollback-only lifecycle smoke test passed, both billing tables remained empty, and migration history showed both versions locally and remotely.
 
 The linked full-schema lint still reports pre-existing functions that reference missing style/security tables. Those findings are unrelated to the new billing objects and must be reconciled separately.
+
+## Meter application answers for one test account
+
+Leave `CREDIT_BILLING_ENABLED` disabled. Set the server-only
+`YC_APPLICATION_CREDIT_BILLING_TEST_USER_ID` to the dedicated test account's
+Supabase Auth user ID, then deploy the reviewed build. The application-answer
+service compares the value to the verified caller ID. A blank or unset value
+leaves the test path disabled. The existing unlimited-user exemption still
+applies, so use a nonexempt account. Outreach uses the global switch.
+
+On extension 1.0.31, start with 40 credits and zero application debits. Submit
+the five-question fixture with slot 4 unsupported. Verify HTTP 422, 40 credits,
+and zero new debit entries. Skip slot 4 once and submit the other four. Verify
+HTTP 200, original answer positions 1, 2, 3, and 5, slot 4 marked Unanswered,
+and a balance of 36 with one new `yc_application` ledger entry of `-4`.
+
+To turn off test metering, remove the one-account setting and redeploy. Keep
+the test account's ledger as the acceptance record. Previous deployment URLs
+retain their original settings. For rollback, use a deployment with the test
+setting unset.
