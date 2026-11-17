@@ -7,6 +7,20 @@ See docs/runbooks/credit-billing-migrations.md for the account setting,
 the 40 → 40 → 36 acceptance flow, and how to turn off the test setting.
 The hosted debit is pending deployment of the scoped setting.
 
+## 2026-11-16 — ALE-65 reviewed work on the landing page
+
+Trivial risk. The landing page explains how confirmed project details can
+support outreach and how YC application answers use reviewed facts that
+match each question. The existing workflow mockup follows a fictional
+résumé bullet into a confirmed project fact and a 168-character LinkedIn
+connection note. The FAQ explains when a note can use the recipient's
+profile alone and how confirmed primary-résumé excerpts support YC answers.
+
+The baseline browser check found the example missing. Passed the production
+build, changed-file lint and formatting, 61 grounding tests, and 35 Chromium
+smoke tests. Focused Chromium checks passed at 375, 768 and 1440 pixels for
+layout, keyboard FAQ operation, and install and example links.
+
 ## 2026-11-15 — ALE-66 résumé fact review
 
 The Evidence Library offers owner-scoped excerpts from the active uploaded
