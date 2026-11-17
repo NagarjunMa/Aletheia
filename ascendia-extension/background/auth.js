@@ -5,6 +5,10 @@ import {
   createExtensionLogger,
   startExtensionTimedStage,
 } from "../lib/logger.js";
+import {
+  extensionLoginCompletion,
+  readExtensionSessionId,
+} from "../lib/extension-login-proof.js";
 
 const AUTH_STORAGE_KEY = "aletheia_auth";
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000; // 5 minutes before expiry
@@ -85,38 +89,46 @@ async function assertAuthSnapshot(expected) {
     current?.user?.id !== expected.auth?.user?.id ||
     current?.access_token !== expected.auth?.access_token ||
     current?.refresh_token !== expected.auth?.refresh_token ||
+    current?.signInRequired !== expected.auth?.signInRequired ||
+    current?.signOutId !== expected.auth?.signOutId ||
+    current?.signedOutSessionId !== expected.auth?.signedOutSessionId ||
     current?.stored_at !== expected.auth?.stored_at
   ) {
     throw authAccountChanged();
   }
 }
 
-function mutateAuth(expected, write) {
+function mutateAuth(expected, write, beforeWrite) {
   return queueAuthOperation(async () => {
     if (expected) await assertAuthSnapshot(expected);
+    if (beforeWrite) await beforeWrite();
     authRevision++;
     await write();
   });
 }
 
-export function storeAuth(authData, expected) {
-  return mutateAuth(expected, async () => {
-    await chrome.storage.local.set({
-      [AUTH_STORAGE_KEY]: {
-        access_token: authData.access_token,
-        refresh_token: authData.refresh_token,
-        expires_at: authData.expires_at,
-        user: authData.user,
-        supabase_url: authData.supabase_url,
-        supabase_anon_key: authData.supabase_anon_key,
-        stored_at: Date.now(),
-      },
-    });
-    log.info("auth.storage.complete", {
-      outcome: "success",
-      hasUser: Boolean(authData.user),
-    });
-  });
+export function storeAuth(authData, expected, beforeWrite) {
+  return mutateAuth(
+    expected,
+    async () => {
+      await chrome.storage.local.set({
+        [AUTH_STORAGE_KEY]: {
+          access_token: authData.access_token,
+          refresh_token: authData.refresh_token,
+          expires_at: authData.expires_at,
+          user: authData.user,
+          supabase_url: authData.supabase_url,
+          supabase_anon_key: authData.supabase_anon_key,
+          stored_at: Date.now(),
+        },
+      });
+      log.info("auth.storage.complete", {
+        outcome: "success",
+        hasUser: Boolean(authData.user),
+      });
+    },
+    beforeWrite,
+  );
 }
 
 export function clearAuth(expected) {
@@ -129,6 +141,23 @@ export function clearAuth(expected) {
       await chrome.alarms.clear(LOGIN_KEEPALIVE_ALARM);
     }
     log.info("auth.storage.cleared", { outcome: "success" });
+  });
+}
+
+export function signOutExtension(requesterId) {
+  return queueAuthOperation(async () => {
+    const auth = await getStoredAuth();
+    if (!requesterId || auth?.user?.id !== requesterId)
+      throw authAccountChanged();
+    authRevision++;
+    await chrome.storage.local.set({
+      [AUTH_STORAGE_KEY]: {
+        signInRequired: true,
+        signOutId: crypto.randomUUID(),
+        signedOutSessionId: readExtensionSessionId(auth.access_token),
+      },
+    });
+    _loginReject?.(authAccountChanged());
   });
 }
 
@@ -155,22 +184,33 @@ function needsRefresh(auth) {
 
 const webSessions = new Map();
 
-function fetchSessionFromWebApp(apiUrl, operationId, revision) {
+function fetchSessionFromWebApp(
+  apiUrl,
+  operationId,
+  revision,
+  verifyCookieFallback,
+) {
   const baseUrl = normalizeApiUrl(apiUrl);
-  const key = JSON.stringify([baseUrl, revision]);
+  const key = JSON.stringify([
+    baseUrl,
+    revision,
+    Boolean(verifyCookieFallback),
+  ]);
   const existing = webSessions.get(key);
   if (existing) {
     log.info("auth.session.coalesced", { operationId });
     return existing;
   }
-  const pending = requestWebSession(baseUrl, operationId).finally(() => {
-    webSessions.delete(key);
-  });
+  const pending = requestWebSession(
+    baseUrl,
+    operationId,
+    verifyCookieFallback,
+  ).finally(() => webSessions.delete(key));
   webSessions.set(key, pending);
   return pending;
 }
 
-async function requestWebSession(baseUrl, operationId) {
+async function requestWebSession(baseUrl, operationId, verifyCookieFallback) {
   const complete = startExtensionTimedStage(log, "auth.session_exchange", {
     operationId,
   });
@@ -189,6 +229,7 @@ async function requestWebSession(baseUrl, operationId) {
       headers: getAletheiaRequestHeaders(
         operationId ? { "X-Aletheia-Operation-Id": operationId } : {},
       ),
+      ...(verifyCookieFallback ? { signal: AbortSignal.timeout(10000) } : {}),
     });
 
     if (response.ok) {
@@ -228,7 +269,7 @@ async function requestWebSession(baseUrl, operationId) {
     }
   } catch (fetchError) {
     // Re-throw 401 errors so callers can apply backoff (don't fall through to cookie fallback)
-    if (fetchError.status === 401) {
+    if (fetchError.status === 401 && !verifyCookieFallback) {
       finish("failure", {
         errorCode: getSafeErrorCode(fetchError, "SESSION_UNAVAILABLE"),
         status: 401,
@@ -296,7 +337,14 @@ async function requestWebSession(baseUrl, operationId) {
   let session = null;
   if (candidate.startsWith("base64-")) {
     try {
-      session = JSON.parse(atob(candidate.slice(7)));
+      const decoded = atob(
+        candidate.slice(7).replace(/-/gu, "+").replace(/_/gu, "/"),
+      );
+      session = JSON.parse(
+        new TextDecoder().decode(
+          Uint8Array.from(decoded, (byte) => byte.charCodeAt(0)),
+        ),
+      );
     } catch (e) {
       finish("failure", { errorCode: "SESSION_COOKIE_INVALID" });
       throw createAuthFailure(
@@ -328,6 +376,40 @@ async function requestWebSession(baseUrl, operationId) {
     );
   }
 
+  let user;
+  if (verifyCookieFallback) {
+    // A first-party cookie can be absent from an extension-origin request.
+    // Verify its bearer explicitly and omit cookies from the verification.
+    const verification = await fetch(`${baseUrl}/api/auth/me`, {
+      credentials: "omit",
+      redirect: "error",
+      headers: getAletheiaRequestHeaders({
+        Authorization: `Bearer ${session.access_token}`,
+      }),
+      signal: AbortSignal.timeout(10000),
+    }).catch(() => null);
+    const identity = verification?.ok
+      ? await verification.json().catch(() => null)
+      : null;
+    if (!identity?.authenticated || !identity.user?.id) {
+      finish("failure", { errorCode: "SESSION_USER_INVALID" });
+      throw createAuthFailure("Could not verify the web sign-in.", {
+        code: "SESSION_USER_INVALID",
+      });
+    }
+    user = identity.user;
+  } else {
+    user = session.user
+      ? {
+          id: session.user.id,
+          email: session.user.email,
+          full_name:
+            session.user.user_metadata?.full_name ||
+            session.user.email?.split("@")[0],
+        }
+      : null;
+  }
+
   // Fetch Supabase config for token refresh
   let supabaseUrl, supabaseAnonKey;
   try {
@@ -352,15 +434,7 @@ async function requestWebSession(baseUrl, operationId) {
     access_token: session.access_token,
     refresh_token: session.refresh_token,
     expires_at: session.expires_at,
-    user: session.user
-      ? {
-          id: session.user.id,
-          email: session.user.email,
-          full_name:
-            session.user.user_metadata?.full_name ||
-            session.user.email?.split("@")[0],
-        }
-      : null,
+    user,
     supabase_url: supabaseUrl,
     supabase_anon_key: supabaseAnonKey,
   };
@@ -493,26 +567,85 @@ async function requestTokenRefresh(auth, operationId) {
 
 const webSessionWrites = new WeakMap();
 
+function freshSignInPending() {
+  return createAuthFailure("Waiting for a fresh Aletheia sign-in.", {
+    code: "FRESH_SIGN_IN_REQUIRED",
+  });
+}
+
+async function completedLoginUrl(pending) {
+  const tab = await chrome.tabs.get(pending.tabId).catch(() => null);
+  const completion = tab?.url?.slice(pending.apiUrl.length);
+  if (
+    !tab?.url?.startsWith(pending.apiUrl) ||
+    !completion ||
+    !/^\/auth\/login\?source=extension#extension-session=[a-f0-9]{64}$/u.test(
+      completion,
+    )
+  ) {
+    throw freshSignInPending();
+  }
+  return completion;
+}
+
 export async function recoverWebSession(
   apiUrl,
   operationId,
   expected,
-  { ownerId = expected.auth?.user?.id, requireValid = false } = {},
+  {
+    ownerId = expected.auth?.user?.id,
+    requireValid = false,
+    pendingLogin,
+  } = {},
 ) {
+  const freshSignIn = expected.auth?.signInRequired === true;
+  let completion;
+  if (freshSignIn) {
+    if (!pendingLogin?.attemptId) throw authAccountChanged();
+    completion = await completedLoginUrl(pendingLogin);
+  }
   const session = await fetchSessionFromWebApp(
     apiUrl,
     operationId,
     expected.revision,
+    freshSignIn,
   );
   if (ownerId && session.user?.id !== ownerId) throw authAccountChanged();
-  if (requireValid && !isTokenValid(session)) {
+  if (
+    freshSignIn &&
+    (!session.user?.id ||
+      expected.auth.signedOutSessionId ===
+        readExtensionSessionId(session.access_token) ||
+      (await extensionLoginCompletion(session.access_token)) !== completion)
+  ) {
+    throw freshSignInPending();
+  }
+  if ((requireValid || freshSignIn) && !isTokenValid(session)) {
     throw createAuthFailure("No active web session found.", {
       code: "SESSION_UNAVAILABLE",
     });
   }
   let write = webSessionWrites.get(session);
   if (!write) {
-    write = storeAuth(session, expected);
+    write = storeAuth(
+      session,
+      expected,
+      freshSignIn
+        ? async () => {
+            if ((await completedLoginUrl(pendingLogin)) !== completion)
+              throw freshSignInPending();
+            const { _loginPending } =
+              await chrome.storage.local.get("_loginPending");
+            if (
+              _loginPending?.attemptId !== pendingLogin.attemptId ||
+              _loginPending.timeoutAt <= Date.now() ||
+              cancelledLoginAttempts.has(pendingLogin.attemptId)
+            ) {
+              throw authAccountChanged();
+            }
+          }
+        : undefined,
+    );
     webSessionWrites.set(session, write);
   }
   await write;
@@ -531,6 +664,7 @@ export async function getValidAccessToken(
   });
   expected ??= await getAuthSnapshot();
   const { auth } = expected;
+  if (auth?.signInRequired) throw authAccountChanged();
 
   // If we have a valid, non-expiring-soon token, return it
   if (auth && isTokenValid(auth) && !needsRefresh(auth)) {
@@ -591,6 +725,8 @@ export async function getValidAccessToken(
 
 export async function getAuthStatus() {
   const { auth } = await getAuthSnapshot();
+  if (auth?.signInRequired)
+    return { authenticated: false, signInRequired: true };
   if (!auth || !auth.access_token) {
     log.info("auth.status.complete", { authenticated: false });
     return { authenticated: false };
@@ -610,29 +746,57 @@ export async function getAuthStatus() {
 // Recovery from restarts is handled in service-worker.js.
 
 const LOGIN_KEEPALIVE_ALARM = "aletheia-login-keepalive";
+const cancelledLoginAttempts = new Set();
+
+export function finishPendingLogin(expectedPending) {
+  return queueAuthOperation(async () => {
+    const { _loginPending } = await chrome.storage.local.get("_loginPending");
+    if (
+      !_loginPending ||
+      _loginPending.attemptId !== expectedPending.attemptId ||
+      _loginPending.tabId !== expectedPending.tabId ||
+      _loginPending.startedAt !== expectedPending.startedAt
+    )
+      return false;
+    await chrome.storage.local.remove("_loginPending");
+    await chrome.alarms.clear(LOGIN_KEEPALIVE_ALARM);
+    return true;
+  });
+}
 
 // Pending login resolve/reject — allows authBridgeSession messages to settle the promise
 let _loginResolve = null;
 let _loginReject = null;
 
-export async function waitForLogin(apiUrl, operationId, ownerId) {
+export function hasLiveLoginWait() {
+  return _loginReject !== null;
+}
+
+export async function waitForLogin(apiUrl, operationId, ownerId, expected) {
   apiUrl = normalizeApiUrl(apiUrl);
   const LOGIN_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
   const complete = startExtensionTimedStage(log, "auth.login_wait", {
     operationId,
   });
 
-  const expected = await getAuthSnapshot();
+  expected ??= await getAuthSnapshot();
   ownerId ??= expected.auth?.user?.id;
 
-  // Tab deduplication
-  const loginUrl = `${apiUrl}/auth/login?source=extension`;
-  const existingTabs = await chrome.tabs.query({
-    url: `${apiUrl}/auth/login*`,
-  });
+  const freshSignIn = expected.auth?.signInRequired === true;
+  if (freshSignIn && apiUrl === "https://aletheia.live")
+    apiUrl = "https://www.aletheia.live";
+
+  await assertAuthSnapshot(expected);
+  const loginUrl = `${apiUrl}/auth/login?source=extension${freshSignIn ? "&switchAccount=1" : ""}`;
+  // A reconnect after sign-out needs its own tab, without any previous proof.
+  const [eligibleTab] = freshSignIn
+    ? []
+    : await chrome.tabs.query({
+        url: `${apiUrl}/auth/login*`,
+      });
   let tab;
-  if (existingTabs.length > 0) {
-    tab = existingTabs[0];
+  if (eligibleTab) {
+    tab = eligibleTab;
     await chrome.tabs.update(tab.id, { active: true });
     log.info("auth.login_tab.ready", { operationId, reused: true });
   } else {
@@ -644,17 +808,18 @@ export async function waitForLogin(apiUrl, operationId, ownerId) {
   return queueAuthOperation(async () => {
     await assertAuthSnapshot(expected);
     const timeoutAt = Date.now() + LOGIN_TIMEOUT_MS;
-    await chrome.storage.local.set({
-      _loginPending: {
-        apiUrl,
-        tabId: tab.id,
-        startedAt: Date.now(),
-        timeoutAt,
-        ownerId,
-        initialOwnerId: expected.auth?.user?.id,
-        initialStoredAt: expected.auth?.stored_at,
-      },
-    });
+    const pendingLogin = {
+      apiUrl,
+      tabId: tab.id,
+      startedAt: Date.now(),
+      timeoutAt,
+      ownerId,
+      ...(freshSignIn ? { attemptId: crypto.randomUUID() } : {}),
+      signOutId: expected.auth?.signOutId,
+      initialOwnerId: expected.auth?.user?.id,
+      initialStoredAt: expected.auth?.stored_at,
+    };
+    await chrome.storage.local.set({ _loginPending: pendingLogin });
     chrome.alarms.create(LOGIN_KEEPALIVE_ALARM, { periodInMinutes: 0.5 });
     // Start the poll before releasing the queue so logout can always cancel it.
     return {
@@ -666,6 +831,7 @@ export async function waitForLogin(apiUrl, operationId, ownerId) {
         complete,
         expected,
         ownerId,
+        pendingLogin,
       ),
     };
   }).then(({ login }) => login);
@@ -691,7 +857,9 @@ async function injectAuthBridge(tabId) {
 export function matchesPendingLogin(pending, expected) {
   return (
     (pending.initialOwnerId ?? null) === (expected.auth?.user?.id ?? null) &&
-    (pending.initialStoredAt ?? null) === (expected.auth?.stored_at ?? null)
+    (pending.initialStoredAt ?? null) === (expected.auth?.stored_at ?? null) &&
+    pending.signOutId === expected.auth?.signOutId &&
+    Boolean(pending.attemptId) === Boolean(expected.auth?.signInRequired)
   );
 }
 
@@ -707,6 +875,7 @@ export function handleAuthBridgeSession(sessionData, operationId, tabId) {
         chrome.storage.local.get(["apiUrl", "_loginPending"]),
       ]);
       if (
+        expected.auth?.signInRequired ||
         tabId === undefined ||
         _loginPending?.tabId !== tabId ||
         _loginPending.timeoutAt <= Date.now() ||
@@ -752,8 +921,6 @@ export function handleAuthBridgeSession(sessionData, operationId, tabId) {
       // Resolve the pending login promise
       if (_loginResolve) {
         _loginResolve(authData);
-        _loginResolve = null;
-        _loginReject = null;
       }
     })
     .catch((error) => {
@@ -775,46 +942,48 @@ function pollUntilSession(
   complete,
   expected,
   ownerId,
+  pendingLogin,
 ) {
   return new Promise((resolve, reject) => {
     let settled = false;
     let pollTimer = null;
     let cookieDebounceTimer = null;
     let timeoutTimer = null;
-    let bridgeInjected = false;
     let pollStep = 0;
     let fetchInFlight = false;
 
     // Store resolve/reject so authBridgeSession messages can settle this promise
-    _loginResolve = (data) => {
+    const resolveLogin = (data) => {
       complete("success", { authSource: "auth_bridge" });
       settle(() => resolve(data), true);
     };
-    _loginReject = (err) => settle(() => reject(err), false);
+    const rejectLogin = (err) => settle(() => reject(err), false);
+    _loginResolve = resolveLogin;
+    _loginReject = rejectLogin;
 
     function cleanup(shouldCloseTab) {
       chrome.cookies.onChanged.removeListener(cookieListener);
       chrome.tabs.onUpdated.removeListener(tabListener);
-      chrome.alarms.clear(LOGIN_KEEPALIVE_ALARM);
-      chrome.storage.local.remove("_loginPending");
+      if (pendingLogin.attemptId)
+        chrome.tabs.onRemoved.removeListener(tabClosed);
+      void finishPendingLogin(pendingLogin)
+        .then((finished) => {
+          if (finished && shouldCloseTab) return chrome.tabs.remove(tabId);
+        })
+        .catch(() => {})
+        .finally(() => cancelledLoginAttempts.delete(pendingLogin.attemptId));
       clearTimeout(pollTimer);
       clearTimeout(cookieDebounceTimer);
       clearTimeout(timeoutTimer);
-      _loginResolve = null;
-      _loginReject = null;
-      // Only close the login tab on successful login
-      if (shouldCloseTab) {
-        try {
-          chrome.tabs.remove(tabId);
-        } catch (e) {
-          /* already closed */
-        }
-      }
+      if (_loginResolve === resolveLogin) _loginResolve = null;
+      if (_loginReject === rejectLogin) _loginReject = null;
     }
 
     function settle(fn, shouldCloseTab = false) {
       if (settled) return;
       settled = true;
+      if (!shouldCloseTab && pendingLogin.attemptId)
+        cancelledLoginAttempts.add(pendingLogin.attemptId);
       cleanup(shouldCloseTab);
       fn();
     }
@@ -831,7 +1000,7 @@ function pollUntilSession(
           apiUrl,
           operationId,
           expected,
-          { ownerId },
+          { ownerId, pendingLogin },
         );
         complete("success");
         settle(() => resolve(sessionData), true);
@@ -878,13 +1047,7 @@ function pollUntilSession(
     function tabListener(tid, changeInfo) {
       if (tid === tabId && changeInfo.status === "complete") {
         resetPollStep();
-        if (!bridgeInjected) {
-          bridgeInjected = true;
-          injectAuthBridge(tabId);
-        } else {
-          // Tab reloaded (e.g., after form submit) — re-inject
-          injectAuthBridge(tabId);
-        }
+        if (!pendingLogin.attemptId) injectAuthBridge(tabId);
         // Also try server endpoint as fallback
         setTimeout(() => {
           if (!settled) tryFetchSession();
@@ -892,6 +1055,14 @@ function pollUntilSession(
       }
     }
     chrome.tabs.onUpdated.addListener(tabListener);
+    function tabClosed(closedId) {
+      if (closedId === tabId)
+        settle(
+          () => reject(new Error("Sign-in tab closed. Please try again.")),
+          false,
+        );
+    }
+    if (pendingLogin.attemptId) chrome.tabs.onRemoved.addListener(tabClosed);
 
     // setTimeout-based polling with stepped backoff
     function schedulePoll() {
@@ -984,6 +1155,7 @@ export async function proactiveRefresh(apiUrl, operationId) {
 
 export async function restorePopupSession(apiUrl, operationId, expected) {
   const { auth } = expected;
+  if (auth?.signInRequired) return;
   if (isTokenValid(auth)) return;
   if (auth?.refresh_token) {
     try {

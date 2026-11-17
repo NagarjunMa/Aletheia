@@ -7,9 +7,12 @@ import {
   getValidAccessToken,
   proactiveRefresh,
   restorePopupSession,
+  recoverWebSession,
+  signOutExtension,
   storeAuth,
   waitForLogin,
 } from "./auth.js";
+import { extensionLoginCompletion } from "../lib/extension-login-proof.js";
 import { generateWithAuthRecovery } from "./generate-auth-recovery.js";
 
 const api = "https://extension.test";
@@ -35,14 +38,22 @@ function holdResponse() {
 }
 
 describe("extension auth account transitions", () => {
-  let current: ReturnType<typeof session> | undefined;
+  let current:
+    | (Partial<ReturnType<typeof session>> & { signInRequired?: boolean })
+    | undefined;
   let holdRead: (() => Promise<void>) | undefined;
+  let pendingLogin:
+    | { apiUrl: string; attemptId: string; tabId: number; timeoutAt: number }
+    | undefined;
+  let loginTabUrl: string | undefined;
   let writes: string[];
   let fetchMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     current = session("A", true);
     holdRead = undefined;
+    pendingLogin = undefined;
+    loginTabUrl = undefined;
     writes = [];
     fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
@@ -50,6 +61,7 @@ describe("extension auth account transitions", () => {
       runtime: { getManifest: () => ({ version: "1.0.22" }) },
       alarms: { clear: async () => true },
       tabs: {
+        get: async () => ({ url: loginTabUrl }),
         query: async () => [{ id: 15 }],
         update: async () => undefined,
         onUpdated: { addListener: vi.fn(), removeListener: vi.fn() },
@@ -57,21 +69,23 @@ describe("extension auth account transitions", () => {
       cookies: { onChanged: { addListener: vi.fn(), removeListener: vi.fn() } },
       storage: {
         local: {
-          get: async () => {
+          get: async (keys: string | string[]) => {
+            if (keys === "_loginPending")
+              return { _loginPending: pendingLogin };
             const captured = structuredClone(current);
             const pending = holdRead;
             holdRead = undefined;
             await pending?.();
             return captured ? { [key]: captured } : {};
           },
-          set: async (data: Record<string, ReturnType<typeof session>>) => {
+          set: async (data: Record<string, NonNullable<typeof current>>) => {
             if (!data[key]) return;
             current = structuredClone(data[key]);
-            writes.push("store:" + current.user.id);
+            writes.push("store:" + current.user?.id);
           },
           remove: async (keys: string | string[]) => {
             if (!keys.includes(key)) return;
-            writes.push("clear:" + current?.user.id);
+            writes.push("clear:" + current?.user?.id);
             current = undefined;
           },
         },
@@ -79,6 +93,82 @@ describe("extension auth account transitions", () => {
     });
   });
   afterEach(() => vi.unstubAllGlobals());
+
+  it("preserves an explicit sign-out instead of restoring the existing web session", async () => {
+    fetchMock.mockResolvedValue(Response.json(session("A")));
+    await signOutExtension("A");
+    const expected = await getAuthSnapshot();
+    await restorePopupSession(api, undefined, expected);
+    await expect(
+      recoverGenerationSession(api, undefined, expected, "A"),
+    ).rejects.toMatchObject({ code: "AUTH_ACCOUNT_CHANGED" });
+    expect(await getAuthStatus()).toMatchObject({
+      authenticated: false,
+      signInRequired: true,
+    });
+    expect(current).not.toHaveProperty("access_token");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects sign-out from a settings tab showing a stale account", async () => {
+    await storeAuth(session("B"));
+    await expect(signOutExtension("A")).rejects.toMatchObject({
+      code: "AUTH_ACCOUNT_CHANGED",
+    });
+    expect(await getAuthStatus()).toMatchObject({
+      authenticated: true,
+      user: { id: "B" },
+    });
+  });
+
+  it.each(["navigate", "expire"] as const)(
+    "rejects a delayed sign-in when the attempt changes after it starts (%s)",
+    async (change) => {
+      await signOutExtension("A");
+      const token = `mock.${Buffer.from(
+        JSON.stringify({
+          session_id: "88c9ad88-771d-42d7-91bf-323ecc783494",
+        }),
+      ).toString("base64url")}.mock`;
+      loginTabUrl = api + (await extensionLoginCompletion(token));
+      pendingLogin = {
+        apiUrl: api,
+        attemptId: "interactive-attempt",
+        tabId: 17,
+        timeoutAt: Date.now() + 60_000,
+      };
+      const fetch = holdResponse();
+      fetchMock.mockImplementation(() => {
+        fetch.started.resolve();
+        return fetch.response.promise;
+      });
+      const reconnect = recoverWebSession(
+        api,
+        undefined,
+        await getAuthSnapshot(),
+        {
+          pendingLogin,
+        },
+      );
+      const failure = expect(reconnect).rejects.toMatchObject({
+        code:
+          change === "navigate"
+            ? "FRESH_SIGN_IN_REQUIRED"
+            : "AUTH_ACCOUNT_CHANGED",
+      });
+      await fetch.started.promise;
+      if (change === "navigate") loginTabUrl = api + "/dashboard";
+      else pendingLogin = { ...pendingLogin, timeoutAt: Date.now() - 1 };
+      fetch.response.resolve(
+        Response.json({ ...session("B"), access_token: token }),
+      );
+      await failure;
+      expect(await getAuthStatus()).toMatchObject({
+        authenticated: false,
+        signInRequired: true,
+      });
+    },
+  );
 
   it("ends automatic generation on a stale refresh without touching the new session", async () => {
     const refresh = holdResponse();

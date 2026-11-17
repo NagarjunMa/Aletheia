@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient, ensureUserProfile } from "@/lib/supabase/server";
 import { createLogger } from "@/lib/logger";
+import { extensionLoginCompletion } from "@/ascendia-extension/lib/extension-login-proof.js";
 
 const log = createLogger("auth-callback");
 
@@ -43,7 +44,12 @@ export async function GET(request: Request) {
       // If signup came from extension, redirect to login page so the
       // auth-bridge content script can detect the session and auto-close the tab
       if (source === "extension") {
-        return NextResponse.redirect(`${origin}/auth/login?source=extension`);
+        const completion = await extensionLoginCompletion(
+          data.session?.access_token,
+        );
+        return NextResponse.redirect(
+          `${origin}${completion ?? "/auth/login?source=extension"}`,
+        );
       }
 
       return NextResponse.redirect(`${origin}${redirectTo}`);

@@ -29,6 +29,18 @@ function section(source: string, start: string, end: string) {
   );
 }
 
+function logoutInSandbox(sandbox: object) {
+  const logout = section(
+    workerSource,
+    "async function handleLogout(",
+    "\nfunction queueApplicationDraft(",
+  );
+  return runInNewContext(
+    `(async () => { let accountDataCleanup; ${logout}; return handleLogout("user-a", "op"); })()`,
+    sandbox,
+  );
+}
+
 describe("extension account isolation", () => {
   it("does not restore signed-out usage or overwrite the next account's usage", async () => {
     const usageSource = section(
@@ -95,11 +107,6 @@ describe("extension account isolation", () => {
       "async function logUsage(category, ownerId",
       "\n// Error handling for unhandled promise rejections",
     );
-    const logoutSource = section(
-      workerSource,
-      "async function handleLogout(operationId)",
-      "\nasync function saveAccountRecord(",
-    );
     let releaseWrite: (() => void) | undefined;
     let writeStarted: (() => void) | undefined;
     const started = new Promise<void>((resolve) => {
@@ -121,7 +128,7 @@ describe("extension account isolation", () => {
       getSafeErrorCode: () => "USAGE_RECORD_FAILED",
       Date,
       startExtensionTimedStage: () => vi.fn(),
-      clearAuth: async () => {
+      signOutExtension: async () => {
         values.aletheia_auth = null;
       },
       chrome: {
@@ -143,14 +150,15 @@ describe("extension account isolation", () => {
       },
     };
     const generation = runInNewContext(
-      `(${usageSource})("cold_email", "user-a", 0)`,
+      `(${usageSource})("cold_email", "user-a", 0, { remaining: 12 })`,
       sandbox,
     );
     await started;
-    const logout = runInNewContext(`(${logoutSource})("op")`, sandbox);
+    const logout = logoutInSandbox(sandbox);
     releaseWrite?.();
     await Promise.all([generation, logout]);
     expect(values.dailyUsage).toBeUndefined();
+    expect(values.serverQuota).toBeUndefined();
     expect(values.usageOwnerId).toBeUndefined();
   });
 
@@ -159,11 +167,6 @@ describe("extension account isolation", () => {
       workerSource,
       "async function saveAccountRecord(kind, requesterId, record)",
       "\nasync function handleFeedbackRequest(",
-    );
-    const logout = section(
-      workerSource,
-      "async function handleLogout(operationId)",
-      "\nasync function saveAccountRecord(",
     );
     let releaseWrite: (() => void) | undefined;
     let signalWrite: (() => void) | undefined;
@@ -188,7 +191,7 @@ describe("extension account isolation", () => {
       startExtensionTimedStage: () => vi.fn(),
       log: {},
       getSafeErrorCode: () => "LOGOUT_FAILED",
-      clearAuth: async () => {
+      signOutExtension: async () => {
         values.aletheia_auth = null;
       },
       chrome: {
@@ -214,7 +217,7 @@ describe("extension account isolation", () => {
       sandbox,
     );
     await writeStarted;
-    const pendingLogout = runInNewContext(`(${logout})("op")`, sandbox);
+    const pendingLogout = logoutInSandbox(sandbox);
     releaseWrite?.();
     await Promise.all([pendingSave, pendingLogout]);
     expect(values.accepted).toBeUndefined();
@@ -334,6 +337,7 @@ describe("extension account isolation", () => {
     );
     const sandbox = {
       usageEpoch: 0,
+      logoutInProgress: false,
       startExtensionTimedStage: () => vi.fn(),
       log: {},
       getEffectiveApiUrl: async () => "https://example.test",
@@ -483,19 +487,14 @@ describe("extension account isolation", () => {
 
   it("removes personal caches on explicit logout", async () => {
     const remove = vi.fn();
-    const logout = section(
-      workerSource,
-      "async function handleLogout(operationId)",
-      "\nasync function saveAccountRecord(",
-    );
-    await runInNewContext(`(${logout})("op")`, {
+    await logoutInSandbox({
       usageEpoch: 0,
       usageMutation: Promise.resolve(),
       personalStorageMutation: Promise.resolve(),
       logoutInProgress: false,
       startExtensionTimedStage: () => vi.fn(),
       log: {},
-      clearAuth: vi.fn(),
+      signOutExtension: vi.fn(),
       chrome: {
         storage: {
           local: { remove },
@@ -510,6 +509,7 @@ describe("extension account isolation", () => {
       "dailyUsage",
       "categoryUsage",
       "usageOwnerId",
+      "serverQuota",
     ]);
   });
 

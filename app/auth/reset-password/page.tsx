@@ -6,6 +6,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { KeyRound } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { readExtensionAuthIntent } from "../login/redirect";
 
 export default function ResetPasswordPage() {
   return (
@@ -23,7 +24,7 @@ export default function ResetPasswordPage() {
 
 function ResetPasswordForm() {
   const searchParams = useSearchParams();
-  const source = searchParams.get("source");
+  const { query } = readExtensionAuthIntent(searchParams);
 
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -121,7 +122,7 @@ function ResetPasswordForm() {
             new one.
           </p>
           <Link
-            href={`/auth/forgot-password${source ? `?source=${source}` : ""}`}
+            href={`/auth/forgot-password${query}`}
             className="inline-block rounded-[10px] bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-[#367960]"
           >
             Request new link
@@ -161,7 +162,7 @@ function ResetPasswordForm() {
             your new password.
           </p>
           <Link
-            href={`/auth/login${source ? `?source=${source}` : ""}`}
+            href={`/auth/login${query}`}
             className="inline-block rounded-[10px] bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-[#367960]"
           >
             Sign in

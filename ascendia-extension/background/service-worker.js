@@ -1,5 +1,6 @@
 import {
   buildApplicationAuthDraft,
+  readApplicationAuthDraft,
   saveApplicationAuthDraft,
 } from "../lib/application-auth-draft.js";
 import { isValidOperationId } from "../lib/logger-core.js";
@@ -15,17 +16,20 @@ import {
 import {
   authAccountChanged,
   clearAuth,
+  finishPendingLogin,
   recoverGenerationSession,
   getAuthSnapshot,
   getAletheiaRequestHeaders,
   getAuthStatus,
   getValidAccessToken,
   handleAuthBridgeSession,
+  hasLiveLoginWait,
   isTokenValid,
   matchesPendingLogin,
   proactiveRefresh,
   recoverWebSession,
   restorePopupSession,
+  signOutExtension,
   waitForLogin,
 } from "./auth.js";
 import {
@@ -69,6 +73,7 @@ let usageMutation = Promise.resolve();
 let usageEpoch = 0;
 let personalStorageMutation = Promise.resolve();
 let logoutInProgress = false;
+let accountDataCleanup = null;
 let focusAccountRevision = 0;
 
 chrome.storage.onChanged.addListener((changes, area) => {
@@ -80,8 +85,18 @@ chrome.storage.onChanged.addListener((changes, area) => {
 // Recover from service worker restart during login
 (async function recoverPendingLogin() {
   const expected = await getAuthSnapshot();
+  if (expected.auth?.signInRequired) {
+    try {
+      await clearExtensionAccountData();
+    } catch {
+      log.warn("auth.logout_cleanup.failed", {
+        errorCode: "LOGOUT_CLEANUP_FAILED",
+      });
+      return;
+    }
+  }
   const { _loginPending } = await chrome.storage.local.get("_loginPending");
-  if (!_loginPending) return;
+  if (!_loginPending || hasLiveLoginWait()) return;
 
   const { apiUrl, tabId, timeoutAt } = _loginPending;
   if (Date.now() > timeoutAt || !matchesPendingLogin(_loginPending, expected)) {
@@ -89,7 +104,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
       outcome: "expired",
       stage: "auth.recovery",
     });
-    await chrome.storage.local.remove("_loginPending");
+    await finishPendingLogin(_loginPending);
     return;
   }
 
@@ -98,12 +113,10 @@ chrome.storage.onChanged.addListener((changes, area) => {
   try {
     await recoverWebSession(apiUrl, undefined, expected, {
       ownerId: _loginPending.ownerId,
+      pendingLogin: _loginPending,
     });
-    await chrome.storage.local.remove("_loginPending");
-    try {
-      chrome.tabs.remove(tabId);
-    } catch (e) {}
-    chrome.alarms.clear("aletheia-login-keepalive");
+    if (await finishPendingLogin(_loginPending))
+      await chrome.tabs.remove(tabId).catch(() => {});
     completeRecovery("success");
   } catch (e) {
     completeRecovery("failure", {
@@ -215,7 +228,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === "aletheia-login-keepalive") {
     const expected = await getAuthSnapshot();
     const { _loginPending } = await chrome.storage.local.get("_loginPending");
-    if (!_loginPending) return;
+    if (!_loginPending || hasLiveLoginWait()) return;
 
     if (
       Date.now() > _loginPending.timeoutAt ||
@@ -225,20 +238,17 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
         stage: "auth.keepalive",
         outcome: "expired",
       });
-      await chrome.storage.local.remove("_loginPending");
-      chrome.alarms.clear("aletheia-login-keepalive");
+      await finishPendingLogin(_loginPending);
       return;
     }
 
     try {
       await recoverWebSession(_loginPending.apiUrl, undefined, expected, {
         ownerId: _loginPending.ownerId,
+        pendingLogin: _loginPending,
       });
-      await chrome.storage.local.remove("_loginPending");
-      try {
-        chrome.tabs.remove(_loginPending.tabId);
-      } catch (e) {}
-      chrome.alarms.clear("aletheia-login-keepalive");
+      if (await finishPendingLogin(_loginPending))
+        await chrome.tabs.remove(_loginPending.tabId).catch(() => {});
       log.info("auth.keepalive.complete", {
         stage: "auth.keepalive",
         outcome: "success",
@@ -407,7 +417,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       coalesced: Boolean(authenticatePromise),
     });
     if (!authenticatePromise) {
-      authenticatePromise = handleAuthenticate(operationId)
+      const recoverAccountId =
+        isStoryPickerSender(sender) &&
+        typeof message.recoverAccountId === "string"
+          ? message.recoverAccountId
+          : null;
+      authenticatePromise = handleAuthenticate(
+        operationId,
+        recoverAccountId,
+        undefined,
+        usageEpoch,
+        Boolean(recoverAccountId),
+      )
         .then((result) => {
           log.info("auth.interactive.complete", {
             operationId,
@@ -438,12 +459,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === "logout") {
-    handleLogout(operationId)
+    if (
+      sender.id !== chrome.runtime.id ||
+      !["settings/settings.html", "popup/popup.html"].some(
+        (path) => sender.url === chrome.runtime.getURL(path),
+      )
+    ) {
+      sendResponse({
+        success: false,
+        error: "Sign out from Aletheia Settings.",
+      });
+      return false;
+    }
+    handleLogout(message.requesterId, operationId)
       .then((result) => sendResponse(result))
       .catch((error) =>
         sendResponse({
           success: false,
-          error: error.message || "Logout failed",
+          error:
+            error.code === "AUTH_ACCOUNT_CHANGED"
+              ? "The connected account changed. Check the account and try again."
+              : "Could not sign out. Please try again.",
         }),
       );
     return true;
@@ -453,6 +489,38 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     saveAccountRecord(message.kind, message.requesterId, message.record)
       .then(() => sendResponse({ success: true }))
       .catch(() => sendResponse({ success: false }));
+    return true;
+  }
+
+  if (message.action === "saveApplicationAuthDraft") {
+    if (!isStoryPickerSender(sender)) {
+      sendResponse({ success: false });
+      return false;
+    }
+    const epoch = usageEpoch;
+    const draft = buildApplicationAuthDraft(message.draft ?? {});
+    queueApplicationDraft(draft, async () => {
+      const { auth } = await getAuthSnapshot();
+      const owner = auth?.user?.id ?? null;
+      const draftOwner = draft?.ownerId ?? null;
+      if (owner !== draftOwner) {
+        const { applicationAuthDraft } = await chrome.storage.session.get(
+          "applicationAuthDraft",
+        );
+        if (
+          owner ||
+          !draftOwner ||
+          readApplicationAuthDraft(applicationAuthDraft, draftOwner)
+            ?.ownerId !== draftOwner
+        )
+          throw authAccountChanged();
+      }
+      if (logoutInProgress || epoch !== usageEpoch || auth?.signInRequired)
+        throw authAccountChanged();
+    }).then(
+      () => sendResponse({ success: true }),
+      () => sendResponse({ success: false }),
+    );
     return true;
   }
 
@@ -598,34 +666,51 @@ async function handleAuthenticate(
   webOwnerId = null,
   expected,
   epoch = usageEpoch,
+  clearStoredSession = false,
 ) {
   const url = await getEffectiveApiUrl();
   if (logoutInProgress || epoch !== usageEpoch) throw authAccountChanged();
   expected ??= await getAuthSnapshot();
+  if (clearStoredSession && expected.auth?.user?.id) {
+    if (expected.auth.user.id !== webOwnerId) throw authAccountChanged();
+    await clearAuth(expected);
+    expected = await getAuthSnapshot();
+    if (logoutInProgress || epoch !== usageEpoch) throw authAccountChanged();
+  }
   const complete = startExtensionTimedStage(log, "auth.interactive", {
     operationId,
   });
 
-  // First try: maybe the user is already logged in (cookies exist)
-  try {
-    await getValidAccessToken(url, { operationId, webOwnerId, expected });
-    const status = await getAuthStatus();
-    if (logoutInProgress || epoch !== usageEpoch) throw authAccountChanged();
-    complete("success", { authSource: "stored_session" });
-    return {
-      success: true,
-      user: status.user,
-      message: "Connected to Aletheia",
-    };
-  } catch (error) {
-    if (error.code === "AUTH_ACCOUNT_CHANGED") throw error;
-    if (logoutInProgress || epoch !== usageEpoch) throw authAccountChanged();
-    // No existing session — open login tab and wait for cookies
+  if (!expected.auth?.signInRequired) {
+    try {
+      await getValidAccessToken(url, { operationId, webOwnerId, expected });
+      const status = await getAuthStatus();
+      if (logoutInProgress || epoch !== usageEpoch) throw authAccountChanged();
+      complete("success", { authSource: "stored_session" });
+      return {
+        success: true,
+        user: status.user,
+        message: "Connected to Aletheia",
+      };
+    } catch (error) {
+      if (error.code === "AUTH_ACCOUNT_CHANGED") throw error;
+      if (logoutInProgress || epoch !== usageEpoch) throw authAccountChanged();
+      // No existing session — open login tab and wait for cookies.
+      expected = await getAuthSnapshot();
+      if (logoutInProgress || epoch !== usageEpoch) throw authAccountChanged();
+    }
   }
 
   // Second try: open login page and wait for the user to authenticate
   try {
-    const sessionData = await waitForLogin(url, operationId, webOwnerId);
+    if (expected.auth?.signInRequired) await clearExtensionAccountData();
+    const sessionData = await waitForLogin(
+      url,
+      operationId,
+      webOwnerId,
+      expected,
+    );
+    if (logoutInProgress || epoch !== usageEpoch) throw authAccountChanged();
     complete("success", { authSource: "interactive_login" });
     return {
       success: true,
@@ -651,27 +736,19 @@ async function handleAuthenticate(
   }
 }
 
-async function handleLogout(operationId) {
-  usageEpoch++;
+async function handleLogout(requesterId, operationId) {
+  if (logoutInProgress)
+    return { success: false, error: "Sign-out is already in progress." };
   logoutInProgress = true;
   const complete = startExtensionTimedStage(log, "auth.logout", {
     operationId,
   });
   try {
-    await clearAuth();
-    await usageMutation;
-    await personalStorageMutation;
-    await chrome.storage.local.remove([
-      "accepted",
-      "lastGeneration",
-      "dailyUsage",
-      "categoryUsage",
-      "usageOwnerId",
-    ]);
-    await chrome.storage.session.remove("applicationAuthDraft");
-    await chrome.alarms.clear("application-auth-draft-expiry");
+    await signOutExtension(requesterId);
+    usageEpoch++;
+    await clearExtensionAccountData();
     complete("success");
-    return { success: true, message: "Disconnected from Aletheia" };
+    return { success: true };
   } catch (error) {
     complete("failure", {
       errorCode: getSafeErrorCode(error, "LOGOUT_FAILED"),
@@ -680,6 +757,39 @@ async function handleLogout(operationId) {
   } finally {
     logoutInProgress = false;
   }
+}
+
+function clearExtensionAccountData() {
+  accountDataCleanup ??= (async () => {
+    await usageMutation;
+    await personalStorageMutation;
+    await chrome.storage.local.remove([
+      "accepted",
+      "lastGeneration",
+      "dailyUsage",
+      "categoryUsage",
+      "usageOwnerId",
+      "serverQuota",
+    ]);
+    await chrome.storage.session.remove("applicationAuthDraft");
+    await chrome.alarms.clear("application-auth-draft-expiry");
+  })().finally(() => {
+    accountDataCleanup = null;
+  });
+  return accountDataCleanup;
+}
+
+function queueApplicationDraft(draft, assertAccount) {
+  const pending = personalStorageMutation.then(async () => {
+    await assertAccount();
+    await saveApplicationAuthDraft(
+      draft,
+      chrome.storage.session,
+      chrome.alarms,
+    );
+  });
+  personalStorageMutation = pending.catch(() => {});
+  return pending;
 }
 
 async function saveAccountRecord(kind, requesterId, record) {
@@ -859,6 +969,7 @@ async function handleGenerateRequest(
       if (
         logoutInProgress ||
         generationUsageEpoch !== usageEpoch ||
+        expected.auth?.signInRequired ||
         (expected.auth?.user?.id && expected.auth.user.id !== requesterId)
       ) {
         throw authAccountChanged();
@@ -886,7 +997,7 @@ async function handleGenerateRequest(
       authenticateInteractively: async () => {
         const expected = await getGenerationAuth();
         if (payload.category === "yc_application") {
-          await saveApplicationAuthDraft(
+          await queueApplicationDraft(
             buildApplicationAuthDraft({
               category: payload.category,
               jd: payload.jd,
@@ -902,8 +1013,7 @@ async function handleGenerateRequest(
               ownerId: requesterId ?? aletheia_auth?.user?.id ?? null,
               operationId,
             }),
-            chrome.storage.session,
-            chrome.alarms,
+            getGenerationAuth,
           );
         }
         return handleAuthenticate(
@@ -1013,6 +1123,8 @@ async function handleGenerateRequest(
             ),
           )
         : await generateWithAuthRecovery(workflow);
+    if (logoutInProgress || generationUsageEpoch !== usageEpoch)
+      throw authAccountChanged();
     if (explicit || focused)
       await readStoryAccount(requesterId, generationUsageEpoch);
     if (focused) {
@@ -1034,16 +1146,14 @@ async function handleGenerateRequest(
       });
       return response;
     }
-    if (response.serverQuota && requesterId) {
-      await chrome.storage.local.set({
-        serverQuota: {
-          ...response.serverQuota,
-          ownerId: requesterId,
-          observedAt: Date.now(),
-        },
-      });
-    }
-    await logUsage(payload.category, requesterId, generationUsageEpoch);
+    await logUsage(
+      payload.category,
+      requesterId,
+      generationUsageEpoch,
+      response.serverQuota,
+    );
+    if (logoutInProgress || generationUsageEpoch !== usageEpoch)
+      throw authAccountChanged();
     complete("success", { category: payload.category });
     return response;
   } catch (error) {
@@ -1269,7 +1379,7 @@ async function handleHealthCheck() {
   }
 }
 
-async function logUsage(category, ownerId, generationEpoch = usageEpoch) {
+async function logUsage(category, ownerId, generationEpoch, serverQuota) {
   try {
     if (!ownerId) return;
     const pending = usageMutation.then(async () => {
@@ -1322,6 +1432,9 @@ async function logUsage(category, ownerId, generationEpoch = usageEpoch) {
         dailyUsage,
         categoryUsage,
         usageOwnerId: ownerId,
+        ...(serverQuota
+          ? { serverQuota: { ...serverQuota, ownerId, observedAt: Date.now() } }
+          : {}),
       });
     });
     usageMutation = pending.catch(() => {});

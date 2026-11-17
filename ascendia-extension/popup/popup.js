@@ -3,7 +3,6 @@ import {
   normalizeMessageFocus,
 } from "../lib/message-focus.js";
 import { createEvidencePicker } from "./evidence-picker.js";
-import { saveApplicationAuthDraft } from "../lib/application-auth-draft.js";
 import { isValidOperationId } from "../lib/logger-core.js";
 import { normalizeConnectionNoteLimit } from "../lib/linkedin-connection-limit.js";
 // Aletheia Extension Popup JavaScript
@@ -201,6 +200,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (area === "local" && changes.aletheia_auth) {
       const before = changes.aletheia_auth.oldValue;
       const after = changes.aletheia_auth.newValue;
+      if (after?.signInRequired && !before?.signInRequired) {
+        window.location.reload();
+        return;
+      }
       // A visible draft belongs to the authenticated account that created it.
       if (before?.user?.id !== after?.user?.id) {
         // Storage events can arrive after a refresh has already restored the
@@ -322,6 +325,7 @@ async function initializePopup() {
   // (handles: logged in via web app, logged in from another window, etc.)
   if (
     !authStatus?.authenticated &&
+    !authStatus?.signInRequired &&
     authStatus?.code !== BACKGROUND_UNAVAILABLE_CODE
   ) {
     console.log(
@@ -578,7 +582,7 @@ function showUserBadge(user) {
   const disconnect = document.createElement("button");
   disconnect.id = "disconnectBtn";
   disconnect.className = "disconnect-btn";
-  disconnect.title = "Disconnect";
+  disconnect.title = "Sign out";
 
   const svgNs = "http://www.w3.org/2000/svg";
   const icon = document.createElementNS(svgNs, "svg");
@@ -609,9 +613,14 @@ function showUserBadge(user) {
   document
     .getElementById("disconnectBtn")
     .addEventListener("click", async () => {
-      const result = await sendBackgroundMessage({ action: "logout" });
+      const result = await sendBackgroundMessage({
+        action: "logout",
+        requesterId: user?.id,
+      });
       if (result?.success) {
         window.location.reload();
+      } else {
+        showError(result?.error || "Could not sign out. Please retry.");
       }
     });
 }
@@ -630,13 +639,17 @@ function showAuthRequired(authStatus) {
   heading.textContent = "Connect to Aletheia";
 
   const description = document.createElement("p");
-  description.textContent =
-    "Log in to the Aletheia web app, then click the button below to connect this extension to your account.";
+  description.textContent = authStatus?.signInRequired
+    ? "Select Sign in to choose an Aletheia account in the browser."
+    : "Log in to the Aletheia web app, then click the button below to connect this extension to your account.";
 
   const connect = document.createElement("button");
   connect.id = "connectBtn";
   connect.className = "action-btn primary";
-  connect.textContent = "Connect to Aletheia";
+  const connectLabel = authStatus?.signInRequired
+    ? "Sign in to Aletheia"
+    : "Connect to Aletheia";
+  connect.textContent = connectLabel;
 
   const settings = document.createElement("button");
   settings.id = "openSettingsBtn";
@@ -671,7 +684,8 @@ function showAuthRequired(authStatus) {
   document.getElementById("connectBtn").addEventListener("click", async () => {
     const btn = document.getElementById("connectBtn");
     try {
-      await persistAuthenticationDraft();
+      if (!authStatus?.signInRequired)
+        await persistAuthenticationDraft(authStatus?.user?.id ?? currentUserId);
     } catch {
       showError(
         "Could not preserve your draft. Keep this window open and try connecting again.",
@@ -730,7 +744,7 @@ function showAuthRequired(authStatus) {
           }
           // No pending login or it has timed out
           clearInterval(authPollInterval);
-          btn.textContent = "Connect to Aletheia";
+          btn.textContent = connectLabel;
           btn.disabled = false;
           showError("Connection failed. Please try again.");
         });
@@ -747,7 +761,7 @@ function showAuthRequired(authStatus) {
         setTimeout(() => window.location.reload(), 500);
       } else {
         log.warn("auth.connect_failed", { errorCode: "AUTH_FAILED" });
-        btn.textContent = "Connect to Aletheia";
+        btn.textContent = connectLabel;
         btn.disabled = false;
         const errorMsg = result.error?.includes("timed out")
           ? result.error
@@ -758,7 +772,7 @@ function showAuthRequired(authStatus) {
       clearInterval(authPollInterval);
       if (authResolved) return;
       log.warn("auth.connect_failed", { errorCode: "AUTH_FAILED" });
-      btn.textContent = "Connect to Aletheia";
+      btn.textContent = connectLabel;
       btn.disabled = false;
       showError("Connection failed. Please try again.");
     }
@@ -1207,8 +1221,9 @@ async function generateMessage() {
           )
             return;
         }
-        await persistAuthenticationDraft();
-        showAuthRequired();
+        if (application)
+          await persistAuthenticationDraft(requesterId).catch(() => {});
+        showAuthRequired({ user: { id: requesterId } });
         showAuthError(errMsg);
       } else {
         showGenerationError(presentation);
@@ -2192,9 +2207,10 @@ function showAuthError(message) {
     reauthBtn.textContent = "Connecting...";
     reauthBtn.disabled = true;
     try {
-      // Clear stale auth first so handleAuthenticate() opens login tab
-      await sendBackgroundMessage({ action: "logout" });
-      const result = await sendBackgroundMessage({ action: "authenticate" });
+      const result = await sendBackgroundMessage({
+        action: "authenticate",
+        recoverAccountId: currentUserId,
+      });
       if (result?.success) {
         hideError();
         window.location.reload();
@@ -2565,17 +2581,17 @@ chrome.runtime.onMessage.addListener((message, sender) => {
   }
 });
 
-async function persistAuthenticationDraft() {
+async function persistAuthenticationDraft(ownerId) {
   const questions = document.getElementById("ycQuestionInput");
   const draft = buildApplicationAuthDraft({
     category: document.getElementById("category")?.value,
     jd: document.getElementById("jdInput")?.value,
     questions: questions?.value,
-    ownerId: currentUserId,
+    ownerId,
     skippedQuestions: [...skippedApplicationQuestions],
   });
   if (
-    !currentUserId &&
+    !ownerId &&
     !draft?.jd.trim() &&
     questions?.value.trim() === questions?.defaultValue.trim()
   ) {
@@ -2584,7 +2600,13 @@ async function persistAuthenticationDraft() {
     if (pending?.ownerId && readApplicationAuthDraft(pending, pending.ownerId))
       return;
   }
-  await saveApplicationAuthDraft(draft, chrome.storage.session, chrome.alarms);
+  if (!draft) return;
+  const result = await sendBackgroundMessage({
+    action: "saveApplicationAuthDraft",
+    draft,
+  });
+  if (!result?.success)
+    throw new Error("Could not preserve the application draft.");
 }
 
 async function restoreAuthenticationDraft() {

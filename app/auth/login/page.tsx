@@ -7,7 +7,8 @@ import Image from "next/image";
 import { Mail, Lock } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { ensureProfileAction } from "@/app/auth/actions";
-import { normalizePostAuthRedirect } from "./redirect";
+import { extensionLoginCompletion } from "@/ascendia-extension/lib/extension-login-proof.js";
+import { normalizePostAuthRedirect, readExtensionAuthIntent } from "./redirect";
 
 /* ── Shared theme tokens ─────────────────────────── */
 const T = {
@@ -98,7 +99,8 @@ export default function LoginPage() {
 function LoginForm() {
   const searchParams = useSearchParams();
   const redirectTo = normalizePostAuthRedirect(searchParams.get("redirectTo"));
-  const source = searchParams.get("source");
+  const { extension, switchingAccount, query } =
+    readExtensionAuthIntent(searchParams);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -107,12 +109,12 @@ function LoginForm() {
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
-    if (source !== "extension") return;
+    if (!extension || switchingAccount) return;
     const supabase = createClient();
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) setSuccess(true);
     });
-  }, [source]);
+  }, [extension, switchingAccount]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -120,10 +122,12 @@ function LoginForm() {
     setLoading(true);
 
     const supabase = createClient();
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const { data, error: signInError } = await supabase.auth.signInWithPassword(
+      {
+        email,
+        password,
+      },
+    );
 
     if (signInError) {
       const msg = signInError.message.toLowerCase();
@@ -158,7 +162,19 @@ function LoginForm() {
       return;
     }
 
-    if (source === "extension") {
+    if (extension) {
+      if (switchingAccount) {
+        const completion = await extensionLoginCompletion(
+          data.session?.access_token,
+        );
+        if (completion) {
+          window.location.replace(completion);
+          return;
+        }
+        setError("Could not finish signing in to the extension. Please retry.");
+        setLoading(false);
+        return;
+      }
       setLoading(false);
       setSuccess(true);
       return;
@@ -174,7 +190,10 @@ function LoginForm() {
     await supabase.auth.signInWithOAuth({
       provider,
       options: {
-        redirectTo: `${window.location.origin}/auth/callback${source ? "?source=extension" : ""}`,
+        redirectTo: `${window.location.origin}/auth/callback${extension ? "?source=extension" : ""}`,
+        ...(switchingAccount
+          ? { queryParams: { prompt: "select_account" } }
+          : {}),
       },
     });
   }
@@ -321,7 +340,7 @@ function LoginForm() {
               Password
             </label>
             <Link
-              href={`/auth/forgot-password${source ? `?source=${source}` : ""}`}
+              href={`/auth/forgot-password${query}`}
               style={{
                 fontSize: "0.65rem",
                 fontWeight: 700,
@@ -510,7 +529,7 @@ function LoginForm() {
       >
         Don&apos;t have an account?{" "}
         <Link
-          href={`/auth/register${source ? `?source=${source}` : ""}`}
+          href={`/auth/register${query}`}
           style={{
             color: T.accentText,
             fontWeight: 700,
