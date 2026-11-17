@@ -1,3 +1,21 @@
+## 2026-11-17 — Extension settings sign-out
+
+Critical risk. Settings signs out the displayed extension account and clears
+its local drafts and usage. A persisted sign-out state prevents silent web
+session recovery. A deliberate reconnect opens the web sign-in form and
+binds the verified session to the completion in the extension's login tab.
+Email, Google, and GitHub enter through the existing web authentication flow.
+
+Passed 318 extension tests, 3,246 web tests, 15 guardrails, and 47 Chromium
+cases, including account switching from the built Store archive. The extension
+audit, version policy, type checks, and production build passed. Independent
+review verified the late-cancellation and expired-session recovery corrections.
+
+Deploy the web login and callback changes before distributing extension
+1.0.32. Hosted verification should switch two dedicated accounts, including
+an OAuth account chooser and a tab canceled before completion. Roll back
+the extension package before reverting the web login integration.
+
 ## 2026-11-16 — ALE-73 metered test account
 
 Critical risk. The application-answer service can opt one verified Supabase

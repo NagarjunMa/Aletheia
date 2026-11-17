@@ -66,6 +66,7 @@ let currentSettings = {
   maxDailyUsage: 30,
 };
 let profileExtractionConsent = false;
+let visibleAccountId = null;
 
 async function initializeSettings() {
   // Read the API base URL from chrome.storage.sync (shared across devices)
@@ -115,6 +116,12 @@ function setupEventListeners() {
   document
     .getElementById("disconnectBtn")
     ?.addEventListener("click", handleDisconnect);
+  chrome.storage.onChanged.addListener((changes, area) => {
+    const change = area === "local" ? changes.aletheia_auth : null;
+    if (change && change.oldValue?.user?.id !== change.newValue?.user?.id) {
+      void updateStatusIndicators().then(checkConnectionStatus);
+    }
+  });
   document
     .getElementById("openDashboardBtn")
     ?.addEventListener("click", openDashboard);
@@ -203,7 +210,8 @@ async function updateStatusIndicators() {
   const connectBtn = document.getElementById("connectBtn");
   const disconnectBtn = document.getElementById("disconnectBtn");
 
-  if (authStatus && authStatus.authenticated) {
+  visibleAccountId = authStatus?.user?.id ?? null;
+  if (authStatus?.authenticated) {
     authStatusCard.classList.add("success");
     authStatusCard.classList.remove("error");
     authStatusText.textContent = authStatus.user?.email || "Connected";
@@ -214,11 +222,19 @@ async function updateStatusIndicators() {
   } else {
     authStatusCard.classList.add("error");
     authStatusCard.classList.remove("success");
-    authStatusText.textContent = "Not connected";
+    authStatusText.textContent =
+      authStatus?.code === BACKGROUND_UNAVAILABLE_CODE
+        ? "Account unavailable"
+        : visibleAccountId
+          ? `${authStatus.user.email || "Aletheia account"} (session expired)`
+          : authStatus?.signInRequired
+            ? "Signed out"
+            : "Not connected";
     authStatusText.classList.add("error");
     authStatusText.classList.remove("success");
     if (connectBtn) connectBtn.classList.remove("hidden");
-    if (disconnectBtn) disconnectBtn.classList.add("hidden");
+    if (disconnectBtn)
+      disconnectBtn.classList.toggle("hidden", !visibleAccountId);
   }
 
   // Resume Status
@@ -327,28 +343,20 @@ async function handleConnect() {
   const originalText = btn.textContent;
   btn.textContent = "Connecting...";
   btn.disabled = true;
-  console.log("[SETTINGS] Connect clicked, sending authenticate message...");
-
   try {
     const result = await sendBackgroundMessage({ action: "authenticate" });
-    console.log("[SETTINGS] authenticate response:", JSON.stringify(result));
-
     if (result && result.success) {
-      console.log("[SETTINGS] Connected:", result.user?.email);
-      showStatusMessage("Connected to Aletheia!", "success");
+      showStatusMessage("Signed in to Aletheia.", "success");
       await updateStatusIndicators();
       await checkConnectionStatus();
     } else {
-      console.error("[SETTINGS] Failed:", result?.error);
       showStatusMessage(
-        result?.error ||
-          "Connection failed. Make sure you are logged in to the Aletheia web app.",
+        result?.error || "Sign-in failed. Please try again.",
         "error",
       );
     }
-  } catch (error) {
-    console.error("[SETTINGS] authenticate threw:", error);
-    showStatusMessage("Connection failed: " + error.message, "error");
+  } catch {
+    showStatusMessage("Sign-in failed. Please try again.", "error");
   } finally {
     btn.textContent = originalText;
     btn.disabled = false;
@@ -356,21 +364,35 @@ async function handleConnect() {
 }
 
 async function handleDisconnect() {
-  const confirmed = confirm(
-    "Disconnect from Aletheia? You will need to reconnect to use the extension.",
-  );
-  if (!confirmed) return;
+  const requesterId = visibleAccountId;
+  if (!requesterId || !confirm("Sign out of this account in the extension?"))
+    return;
+  const disconnectBtn = document.getElementById("disconnectBtn");
+  const connectBtn = document.getElementById("connectBtn");
+  disconnectBtn.disabled = true;
+  connectBtn.disabled = true;
 
   try {
-    const result = await sendBackgroundMessage({ action: "logout" });
-
-    if (result && result.success) {
-      showStatusMessage("Disconnected from Aletheia", "success");
-      await updateStatusIndicators();
-      await checkConnectionStatus();
+    const result = await sendBackgroundMessage({
+      action: "logout",
+      requesterId,
+    });
+    await updateStatusIndicators();
+    await checkConnectionStatus();
+    if (result?.success) {
+      showStatusMessage("Signed out. Sign in to choose an account.", "success");
+    } else {
+      showStatusMessage(
+        result?.error || "Could not sign out. Please retry.",
+        "error",
+      );
     }
-  } catch (error) {
-    showStatusMessage("Disconnect failed: " + error.message, "error");
+  } catch {
+    showStatusMessage("Could not sign out. Please retry.", "error");
+  } finally {
+    disconnectBtn.disabled = false;
+    connectBtn.disabled = false;
+    if (!visibleAccountId) connectBtn.focus();
   }
 }
 
@@ -467,7 +489,19 @@ async function clearAllData() {
   try {
     showLoadingOverlay("Clearing all data...");
 
-    await chrome.storage.local.clear();
+    const stored = await chrome.storage.local.get(null);
+    const requesterId = stored.aletheia_auth?.user?.id;
+    if (requesterId) {
+      const result = await sendBackgroundMessage({
+        action: "logout",
+        requesterId,
+      });
+      if (!result?.success)
+        throw new Error(result?.error || "Could not sign out.");
+    }
+    await chrome.storage.local.remove(
+      Object.keys(stored).filter((key) => key !== "aletheia_auth"),
+    );
     await chrome.storage.sync.remove("apiBaseUrl");
 
     currentSettings = {

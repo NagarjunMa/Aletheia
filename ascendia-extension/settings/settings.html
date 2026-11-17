@@ -90,13 +90,13 @@
         <div class="info-card" style="margin-bottom: 16px;">
           <div class="info-icon">i</div>
           <div class="info-content">
-            <p>The extension connects to your Aletheia account automatically. Log in to the web app first, then click
-              "Connect" below.</p>
+            <p>Sign out here to disconnect the account shown above. To switch accounts, select
+              "Sign in to Aletheia" afterward and choose an account in the browser.</p>
           </div>
         </div>
         <div class="form-group" style="display: flex; gap: 8px;">
-          <button id="connectBtn" class="action-btn primary">Connect to Aletheia</button>
-          <button id="disconnectBtn" class="action-btn danger hidden">Disconnect</button>
+          <button id="connectBtn" class="action-btn primary" type="button">Sign in to Aletheia</button>
+          <button id="disconnectBtn" class="action-btn danger hidden" type="button">Sign out</button>
           <button id="openDashboardBtn" class="action-btn secondary">Open Dashboard</button>
         </div>
 
@@ -247,8 +247,8 @@
 
     <!-- Status Messages -->
     <div id="statusMessage" class="status-message hidden">
-      <span id="statusText">Settings saved successfully!</span>
-      <button id="closeStatus" class="close-btn">x</button>
+      <span id="statusText" role="status">Settings saved successfully!</span>
+      <button id="closeStatus" class="close-btn" aria-label="Dismiss status">x</button>
     </div>
 
     <!-- Loading Overlay -->

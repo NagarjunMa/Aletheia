@@ -2,6 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { readExtensionAuthIntent } from "../login/redirect";
 import Link from "next/link";
 import Image from "next/image";
 import { Mail } from "lucide-react";
@@ -23,7 +24,7 @@ export default function ForgotPasswordPage() {
 
 function ForgotPasswordForm() {
   const searchParams = useSearchParams();
-  const source = searchParams.get("source");
+  const { query } = readExtensionAuthIntent(searchParams);
 
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
@@ -39,7 +40,7 @@ function ForgotPasswordForm() {
     const { error: resetError } = await supabase.auth.resetPasswordForEmail(
       email,
       {
-        redirectTo: `${window.location.origin}/auth/reset-password${source ? "?source=extension" : ""}`,
+        redirectTo: `${window.location.origin}/auth/reset-password${query}`,
       },
     );
 
@@ -91,7 +92,7 @@ function ForgotPasswordForm() {
             </button>
           </p>
           <Link
-            href={`/auth/login${source ? `?source=${source}` : ""}`}
+            href={`/auth/login${query}`}
             className="text-sm font-medium text-accent hover:underline"
           >
             &larr; Back to sign in
@@ -177,7 +178,7 @@ function ForgotPasswordForm() {
       <p className="mt-8 text-center text-sm text-[hsl(var(--muted-foreground))]">
         Remember your password?{" "}
         <Link
-          href={`/auth/login${source ? `?source=${source}` : ""}`}
+          href={`/auth/login${query}`}
           className="font-medium text-accent hover:underline"
         >
           Sign in

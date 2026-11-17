@@ -10,6 +10,7 @@ import { dirname, resolve } from "node:path";
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import JSZip from "jszip";
+import { extensionLoginCompletion } from "../ascendia-extension/lib/extension-login-proof.js";
 
 const test = base.extend<{ slowReader: boolean; storeZip: boolean }>({
   slowReader: [false, { option: true }],
@@ -35,6 +36,7 @@ const answer = Array.from({ length: 50 }, (_, index) => `word${index}`).join(
 declare const chrome: {
   tabs: {
     query: (_query: { url: string }) => Promise<Array<{ id: number }>>;
+    get: (_tabId: number) => Promise<{ url?: string }>;
     sendMessage: (_tabId: number, _message: unknown) => Promise<unknown>;
   };
   storage: {
@@ -1286,6 +1288,195 @@ test("uses the selected endpoint, recovers from stale stories and clears before 
   await expect.poll(() => posts.length).toBe(4);
   expect(posts[3]?.path).toBe("/api/extension/generate");
   expect(posts[3]?.body).not.toHaveProperty("selectedEvidenceIds");
+});
+
+test.describe("Store ZIP account switching", () => {
+  test.use({ storeZip: true });
+
+  test("settings sign-out stays signed out until a fresh login in its tab @smoke", async () => {
+    const base = "https://www.aletheia.live";
+    const loginUrl = base + "/auth/login?source=extension";
+    const switchUrl = loginUrl + "&switchAccount=1";
+    const session = (user: string, sessionId: string) => ({
+      access_token: `synthetic.${Buffer.from(
+        JSON.stringify({ session_id: sessionId }),
+      ).toString("base64url")}.token`,
+      refresh_token: "synthetic",
+      expires_at: Math.floor(Date.now() / 1000) + 3600,
+      supabase_url: base,
+      supabase_anon_key: "synthetic",
+      user: { id: user, email: `${user}@example.test` },
+    });
+    const oldA = session("user-a", "a0000000-0000-4000-8000-000000000001");
+    const oldB = session("user-b", "a0000000-0000-4000-8000-000000000002");
+    const newB = session("user-b", "a0000000-0000-4000-8000-000000000003");
+    let withholdCookie = false;
+    let exchanges = 0;
+    let verifiedBearers = 0;
+    await browser.route(base + "/api/extension/session", (route) => {
+      exchanges++;
+      return withholdCookie
+        ? route.fulfill({ status: 401, json: { code: "SESSION_UNAVAILABLE" } })
+        : route.fulfill({ json: oldB });
+    });
+    await browser.route(base + "/api/auth/me", (route) => {
+      verifiedBearers++;
+      expect(route.request().headers().cookie).toBeUndefined();
+      return route.request().headers().authorization ===
+        `Bearer ${newB.access_token}`
+        ? route.fulfill({ json: { authenticated: true, user: newB.user } })
+        : route.fulfill({ status: 401, json: { authenticated: false } });
+    });
+    await browser.route(base + "/api/extension/config", (route) =>
+      route.fulfill({
+        json: { supabase_url: base, supabase_anon_key: "synthetic" },
+      }),
+    );
+    await browser.route(
+      (url) => url.origin === base && url.pathname === "/auth/login",
+      (route) =>
+        route.fulfill({
+          contentType: "text/html",
+          body: "<title>Synthetic sign-in</title>",
+        }),
+    );
+    await browser.route(base + "/api/extension/generate", (route) =>
+      route.fulfill({ json: { success: true } }),
+    );
+    const worker =
+      browser.serviceWorkers()[0] ||
+      (await browser.waitForEvent("serviceworker"));
+    await worker.evaluate(
+      (auth) =>
+        chrome.storage.local.set({
+          aletheia_auth: auth,
+          profileExtractionConsent: true,
+          accepted: [{ ownerId: "user-a", body: "Previous account draft" }],
+          lastGeneration: { ownerId: "user-a", body: "Previous account draft" },
+          serverQuota: { ownerId: "user-a", remaining: 12 },
+        }),
+      oldA,
+    );
+    const panel = await openPanel(worker);
+    const settings = await browser.newPage();
+    await settings.goto(
+      `chrome-extension://${new URL(worker.url()).host}/settings/settings.html`,
+    );
+    await expect(settings.locator("#authStatusText")).toHaveText(
+      "user-a@example.test",
+    );
+    settings.once("dialog", (dialog) => dialog.accept());
+    const signOut = settings.getByRole("button", { name: "Sign out" });
+    await signOut.focus();
+    await settings.keyboard.press("Enter");
+    await expect(settings.locator("#authStatusText")).toHaveText("Signed out");
+    await expect(signOut).toBeHidden();
+    const panelSignIn = panel.getByRole("button", {
+      name: "Sign in to Aletheia",
+    });
+    await expect(panelSignIn).toBeVisible();
+    await panel.reload();
+    await expect(panelSignIn).toBeVisible();
+    expect(exchanges).toBe(0);
+    const cache = await worker.evaluate(() => chrome.storage.local.get(null));
+    expect(cache.aletheia_auth).toMatchObject({ signInRequired: true });
+    expect(cache.aletheia_auth).not.toHaveProperty("access_token");
+    for (const key of ["accepted", "lastGeneration", "serverQuota"])
+      expect(cache).not.toHaveProperty(key);
+
+    const opening = browser.waitForEvent("page");
+    await settings.getByRole("button", { name: "Sign in to Aletheia" }).click();
+    const login = await opening;
+    await expect
+      .poll(() =>
+        worker.evaluate(async () => {
+          const result = await chrome.storage.local.get("_loginPending");
+          const pending = result._loginPending as { tabId: number } | undefined;
+          return pending ? (await chrome.tabs.get(pending.tabId)).url : null;
+        }),
+      )
+      .toBe(switchUrl);
+    if (login.url().startsWith("chrome-error:")) await login.goto(switchUrl);
+    await login.waitForURL(switchUrl);
+    expect(exchanges).toBe(0);
+    await login.goto(loginUrl);
+    await expect(settings.locator("#authStatusText")).toHaveText("Signed out");
+    expect(exchanges).toBe(0);
+    await login.goto(
+      base + (await extensionLoginCompletion(newB.access_token)),
+    );
+    await expect.poll(() => exchanges).toBeGreaterThan(0);
+    await expect(settings.locator("#authStatusText")).toHaveText("Signed out");
+    expect(
+      await worker.evaluate(() => chrome.storage.local.get("aletheia_auth")),
+    ).toMatchObject({ aletheia_auth: { signInRequired: true } });
+
+    withholdCookie = true;
+    await browser.addCookies([
+      {
+        url: base,
+        name: "sb-fixture-auth-token",
+        value:
+          "base64-" +
+          Buffer.from(
+            JSON.stringify({
+              ...newB,
+              user: { ...newB.user, user_metadata: { full_name: "Test 🧪" } },
+            }),
+          ).toString("base64url"),
+        httpOnly: true,
+      },
+    ]);
+    await expect(settings.locator("#authStatusText")).toHaveText(
+      "user-b@example.test",
+      { timeout: 15000 },
+    );
+    await expect(panel.locator("#userBadge")).toContainText(
+      "user-b@example.test",
+    );
+    expect(verifiedBearers).toBeGreaterThan(0);
+    const reopened = await openPanel(worker);
+    await expect(reopened.locator("#output")).toBeHidden();
+  });
+
+  test("can reconnect an expired account from the panel without losing its draft @smoke", async () => {
+    const base = "https://www.aletheia.live";
+    await browser.route(base + "/api/extension/session", (route) =>
+      route.fulfill({ status: 401, json: { code: "SESSION_UNAVAILABLE" } }),
+    );
+    await browser.route(base + "/auth/v1/token?*", (route) =>
+      route.fulfill({ status: 401, json: {} }),
+    );
+    const worker =
+      browser.serviceWorkers()[0] ||
+      (await browser.waitForEvent("serviceworker"));
+    await signIn(worker, "user-a", -60);
+    const panel = await browser.newPage();
+    await panel.goto(
+      `chrome-extension://${new URL(worker.url()).host}/popup/popup.html`,
+    );
+    await panel.locator("#jdInput").fill(jd);
+    await panel
+      .locator("#ycQuestionInput")
+      .fill("Describe your policy testing work.");
+    await panel.getByRole("button", { name: "Connect to Aletheia" }).click();
+    await expect
+      .poll(async () =>
+        Boolean(
+          (
+            await worker.evaluate(() =>
+              chrome.storage.local.get("_loginPending"),
+            )
+          )._loginPending,
+        ),
+      )
+      .toBe(true);
+    expect(
+      await worker.evaluate(() =>
+        chrome.storage.session.get("applicationAuthDraft"),
+      ),
+    ).toMatchObject({ applicationAuthDraft: { ownerId: "user-a" } });
+  });
 });
 
 test.describe("Store ZIP application questions", () => {

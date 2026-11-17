@@ -111,6 +111,7 @@ async function openPopup(page: Page, authenticated = true) {
                 payload?: { questions?: string[] };
                 kind?: string;
                 requesterId?: string;
+                draft?: Record<string, unknown>;
                 record?: Record<string, unknown>;
               },
               callback?: (value: unknown) => void,
@@ -134,11 +135,23 @@ async function openPopup(page: Page, authenticated = true) {
                   };
                   sessionStorage.setItem("test-local", JSON.stringify(local));
                 }
-                response = { authenticated: authed, user: { id: "user-1" } };
+                response = authed
+                  ? { authenticated: true, user: { id: "user-1" } }
+                  : { authenticated: false };
               }
               if (message.action === "authenticate") {
                 sessionStorage.setItem("test-authenticated", "true");
                 response = { success: true, user: { id: "user-1" } };
+              }
+              if (
+                message.action === "saveApplicationAuthDraft" &&
+                message.draft
+              ) {
+                const stored = JSON.parse(
+                  sessionStorage.getItem("test-session") || "{}",
+                );
+                stored.applicationAuthDraft = message.draft;
+                sessionStorage.setItem("test-session", JSON.stringify(stored));
               }
               if (message.action === "saveAccountRecord") {
                 const local = JSON.parse(
