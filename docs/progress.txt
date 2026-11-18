@@ -2376,3 +2376,34 @@ is sent for generation, while skipped positions show Unanswered. The existing
 server grounding and metering paths apply, and Copy All excludes skipped text.
 See docs/operations/ale-73-skip-unsupported-questions.md for the Significant
 risk contract and the hosted acceptance procedure.
+
+## 2026-11-18 — ALE-27 reviewed LinkedIn work titles
+
+Continuing ALE-27 from main 569a8cd on fix/ale-27-reviewed-note-422.
+Significant risk across LinkedIn evidence eligibility and note composition.
+The full repair contract and hosted evidence are recorded in ALE-27.
+
+The production selection was rejected before admission because its current
+reviewed work title began with a completed work verb without an explicit
+first-person subject. LinkedIn now admits this bounded title form using the
+existing exact quotation. Matching role or duties can support an introduction
+from a manually selected story through the same path as automatic selection.
+Required selected roots, review revision checks, exclusions, final provenance,
+and the 200/300-character budgets still apply. Copular, passive and aspirational
+titles remain ineligible. Preferences retain their existing rules.
+
+Regression tests cover the real HTTP generation path and selected/automatic
+titles, withheld/stale/withdrawn facts, ambiguous titles, and intact simulation
+qualifiers. The initial positive cases failed on the baseline. Independent
+review reproduced four negative title cases and the correction passed them.
+The initial 3,267-test coverage run passed. The final corrected coverage run
+passed 3,275 tests in 146 files, with 91.98% line coverage. Build, type check,
+lint, 15 guardrails, engineering policy, extension version policy and the
+configured high-severity dependency audit passed. Lint retains the existing
+refund-admin unused-variable warning; the audit reports 12 existing moderate
+advisories. A failed symlink-based build and disk-full dependency install were
+resolved with a clean locked install after clearing npm's downloaded cache.
+Independent return review resolved R1 on the complete-source qualification
+guard and passed 1,150 tests plus 19 Basic-limit variants. The hosted rerun is
+pending deployment. Rollback restores production dpl_4ZtLwcL98DSFx2LAUgd9hVAuDVPT.
+No packaged extension file changes. Production rerun uses extension 1.0.32.
