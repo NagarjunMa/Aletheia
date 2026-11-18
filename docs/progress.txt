@@ -2404,6 +2404,10 @@ refund-admin unused-variable warning; the audit reports 12 existing moderate
 advisories. A failed symlink-based build and disk-full dependency install were
 resolved with a clean locked install after clearing npm's downloaded cache.
 Independent return review resolved R1 on the complete-source qualification
-guard and passed 1,150 tests plus 19 Basic-limit variants. The hosted rerun is
-pending deployment. Rollback restores production dpl_4ZtLwcL98DSFx2LAUgd9hVAuDVPT.
+guard and passed 1,150 tests plus 19 Basic-limit variants. GitHub CI passed for
+PR #156. Production deployment dpl_2N9Ucdz4vJ2yosYJzXzVNmikoqAb now serves
+24b98a278a2e. The installed 1.0.32 production rerun is prepared with the regular
+account, the original role context and the reviewed HP story. The Mac locked
+before submission. ALE-27 holds the hosted result when the rerun can resume.
+PR #156 awaits merge. Rollback restores dpl_4ZtLwcL98DSFx2LAUgd9hVAuDVPT.
 No packaged extension file changes. Production rerun uses extension 1.0.32.
