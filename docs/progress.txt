@@ -2406,8 +2406,13 @@ resolved with a clean locked install after clearing npm's downloaded cache.
 Independent return review resolved R1 on the complete-source qualification
 guard and passed 1,150 tests plus 19 Basic-limit variants. GitHub CI passed for
 PR #156. Production deployment dpl_2N9Ucdz4vJ2yosYJzXzVNmikoqAb now serves
-24b98a278a2e. The installed 1.0.32 production rerun is prepared with the regular
-account, the original role context and the reviewed HP story. The Mac locked
-before submission. ALE-27 holds the hosted result when the rerun can resume.
+24b98a278a2e. After the Mac became accessible, the installed 1.0.32 production
+rerun used the regular account, original role context and reviewed HP story.
+It returned HTTP 200 in 4,175 ms with a 132-character note. Final grounding
+reported one reviewed evidence source, fallback none, and provenance passed.
+Request wkm25-1795039173835-58e775103c60 identifies the server evidence in ALE-27.
+The automation snapshot still reported Generating after exposing the fresh
+note, so the button's return to idle is unverified. Legacy/YC hosted feedback
+and exact stored-metadata inspection remain open in ALE-27.
 PR #156 awaits merge. Rollback restores dpl_4ZtLwcL98DSFx2LAUgd9hVAuDVPT.
 No packaged extension file changes. Production rerun uses extension 1.0.32.
