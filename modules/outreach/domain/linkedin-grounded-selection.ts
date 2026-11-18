@@ -188,7 +188,7 @@ export function createLinkedinTargetMatcher(
         ? (linkedinScopedAction(candidate.content) ?? candidate.content)
         : candidate.content;
     // Separate sentences may describe unrelated work. Score each on its own.
-    const ranked = affirmativeExperience(candidate)
+    const ranked = linkedinExperience(candidate)
       .flatMap((sentence) =>
         rank(contribution, normalizeImplementationScope(sentence)),
       )
@@ -420,16 +420,34 @@ export function affirmativeExperience({
     .filter(Boolean);
 }
 
+export function linkedinExperience(
+  source: Pick<AtomicSource, "kind" | "content">,
+): string[] {
+  const title = source.content.split(AFFIRMATIVE_BOUNDARY, 1)[0]!.trim();
+  // Reviewed project titles keep their exact quoted wording and actor scope.
+  if (
+    source.kind === "company" &&
+    !source.content.includes("?") &&
+    !/\b(?:am|is|are|was|were|be|been|being|will|would|could|should|may|might|can|want|hope|plan(?:ned|ning)?|learn|future|goal|wish|scheduled|upcoming|aspirational|pending|proposed|intended|to[- ]do)\b/iu.test(
+      source.content,
+    ) &&
+    /^(?:Built|Developed|Implemented|Designed|Created|Maintained|Tested|Operated|Deployed|Monitored|Wrote|Shipped|Configured|Integrated|Refactored|Optimized|Automated)\s+\S/u.test(
+      title,
+    )
+  )
+    return [title];
+  if (
+    !isFirstPersonAssertion(source.content) &&
+    !(source.kind === "action" && linkedinScopedAction(source.content))
+  )
+    return [];
+  return affirmativeExperience(source);
+}
+
 export function isLinkedinExperience(
   source: Pick<AtomicSource, "kind" | "content">,
 ) {
-  const { kind, content } = source;
-  return (
-    kind !== "preference" &&
-    (isFirstPersonAssertion(content) ||
-      (kind === "action" && Boolean(linkedinScopedAction(content)))) &&
-    affirmativeExperience(source).length > 0
-  );
+  return linkedinExperience(source).length > 0;
 }
 
 export type LinkedinCompositions = Readonly<

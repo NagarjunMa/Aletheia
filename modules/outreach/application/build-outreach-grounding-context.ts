@@ -53,6 +53,7 @@ import {
 } from "@/modules/grounding/domain/atomic-claim";
 import {
   affirmativeExperience,
+  linkedinExperience,
   linkedinCandidateFits,
   createLinkedinTargetMatcher,
   isLinkedinExperience,
@@ -360,7 +361,10 @@ export function buildOutreachGroundingContext(input: {
   const rankFact = (
     rank: ReturnType<typeof createEvidenceTargetRanker>,
     fact: CandidateFact,
-    units = affirmativeExperience({ kind: fact.kind, content: fact.excerpt }),
+    units = (linkedin ? linkedinExperience : affirmativeExperience)({
+      kind: fact.kind,
+      content: fact.excerpt,
+    }),
   ) =>
     units
       .flatMap((text) =>
@@ -460,7 +464,12 @@ export function buildOutreachGroundingContext(input: {
         proseLimit.unit,
       ) >= proseLimit.maximum
         ? 0
-        : rankFocus(affirmativeExperience({ kind: fact.kind, content }));
+        : rankFocus(
+            (linkedin ? linkedinExperience : affirmativeExperience)({
+              kind: fact.kind,
+              content,
+            }),
+          );
     focusScores.set(fact, score);
     return score;
   };
@@ -785,14 +794,14 @@ export function buildOutreachGroundingContext(input: {
     );
   if (
     linkedin &&
-    !explicit &&
+    (!explicit || hasDuties || roleSpecified) &&
     !injectionSafeMode &&
     mayUseCandidateIntroduction &&
     !targets.diagnostics.excluded &&
     !targets.diagnostics.unsafeWording &&
     !targetContradicted
   ) {
-    const introductions = allowedEvidence
+    const introductions = (explicit ?? allowedEvidence)
       .flatMap((entry) =>
         (linkedinFacts?.get(entry.id) ?? []).flatMap((fact) => {
           const content = normalizeAtomicSourceText(fact.excerpt);
@@ -810,7 +819,7 @@ export function buildOutreachGroundingContext(input: {
           const match = hasDuties
             ? matchDuty(fact)
             : rankFact(rankIntroduction, fact);
-          if (!match && !allowUnmatchedIntroduction) return [];
+          if (!match && (!allowUnmatchedIntroduction || explicit)) return [];
           return [
             {
               entry,
