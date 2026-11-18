@@ -30,6 +30,7 @@ import {
   candidateEvidenceFactId,
   normalizeAtomicSourceText,
 } from "@/modules/grounding/application/build-atomic-sources";
+import { summarizeOutreachGrounding } from "../domain/outreach-grounding-metadata";
 import { escapeForXmlTag } from "@/lib/ai/prompts/linkedin-connection";
 import { isGroundedTextSafe } from "@/lib/ai/sanitizer";
 import { scanForInjection } from "@/lib/ai/prompts/injection-heuristic";
@@ -967,32 +968,6 @@ export function buildOutreachGroundingContext(input: {
       ),
     );
   }
-  const evidenceCount = sources.filter(
-    (source) => source.type === "evidence",
-  ).length;
-  const profileCount = sources.filter(
-    (source) => source.type === "profile",
-  ).length;
-  const resumeCount = sources.filter(
-    (source) => source.type === "resume",
-  ).length;
-  const groundingLevel = evidenceCount
-    ? "verified_evidence"
-    : profileCount
-      ? "profile_grounded"
-      : resumeCount
-        ? "resume_fallback"
-        : "target_only";
-  const fallbackReason = injectionSafeMode
-    ? "target_injection_detected"
-    : evidenceCount
-      ? "none"
-      : profileCount
-        ? "no_confirmed_evidence"
-        : resumeCount
-          ? "no_profile_context"
-          : "no_resume_context";
-
   const atomicSources = [...prepared.safeAtoms, ...linkedinTargets];
   const emailDutyFactIds = emailDutyExcerpts
     ? new Map(
@@ -1080,13 +1055,9 @@ export function buildOutreachGroundingContext(input: {
       injectionReasons: injectionScan.reasons,
     },
     excludedClaims: input.candidate.profile.excludedClaims,
-    metadata: {
-      groundingLevel,
-      fallbackReason,
-      selectedSourceCount: sources.length,
-      selectedEvidenceCount: evidenceCount,
-      selectedSourceKinds: [...new Set(sources.map((source) => source.type))],
+    metadata: summarizeOutreachGrounding(
+      sources.map(({ type }) => type),
       injectionSafeMode,
-    },
+    ),
   };
 }

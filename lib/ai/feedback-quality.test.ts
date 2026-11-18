@@ -90,3 +90,29 @@ it("drops unknown versions, non-model text, invalid UUIDs and out-of-range count
     }),
   ).toEqual({});
 });
+
+it("persists only consistent final-draft grounding summaries", () => {
+  const grounding = {
+    groundingLevel: "verified_evidence",
+    fallbackReason: "none",
+    selectedSourceCount: 1,
+    selectedEvidenceCount: 1,
+    selectedSourceKinds: ["evidence"],
+    injectionSafeMode: false,
+  };
+  expect(projectFeedbackMetadata({ grounding })).toEqual({});
+  const finalGrounding = { ...grounding, provenanceValidated: true };
+  expect(projectFeedbackMetadata({ grounding: finalGrounding })).toEqual({
+    grounding: finalGrounding,
+  });
+  expect(
+    projectFeedbackMetadata({
+      grounding: { ...finalGrounding, selectedEvidenceCount: 2 },
+    }),
+  ).toEqual({});
+  expect(
+    projectFeedbackMetadata({
+      grounding: { ...finalGrounding, sourceId: "PRIVATE_SOURCE" },
+    }),
+  ).toEqual({});
+});

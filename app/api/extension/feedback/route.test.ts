@@ -464,6 +464,55 @@ describe("POST /api/extension/feedback — dual-behavior persistence contract", 
     );
   });
 
+  it.each(["current", "cached", "private"] as const)(
+    "handles %s grounding metadata from an API v1 client",
+    async (kind) => {
+      const grounding = {
+        groundingLevel: "target_only",
+        fallbackReason: "no_resume_context",
+        selectedSourceCount: 0,
+        selectedEvidenceCount: 0,
+        selectedSourceKinds: [],
+        injectionSafeMode: false,
+        ...(kind === "cached" ? {} : { provenanceValidated: true }),
+        ...(kind === "private" ? { sourceId: "PRIVATE_SOURCE_CANARY" } : {}),
+      };
+      const response = await POST(
+        makeRequest({
+          method: "POST",
+          headers: { authorization: "Bearer test" },
+          body: {
+            ...validBody,
+            evalMetadata: {
+              grounding,
+              generationId: "33333333-3333-4333-8333-333333333333",
+              promptVersion: "1.0.0",
+              model: "claude-sonnet-4-6",
+              temperature: 0.8,
+              category: "linkedin_connection",
+              intent: "networking",
+              generationTimeMs: 1234,
+              inputTokens: 500,
+              outputTokens: 200,
+            },
+          },
+        }),
+      );
+      if (kind === "private") {
+        expect(response.status).toBe(400);
+        expect(mockInsert).not.toHaveBeenCalled();
+        expect(await response.text()).not.toContain("PRIVATE_SOURCE_CANARY");
+        return;
+      }
+      expect(response.status).toBe(200);
+      const metadata = mockInsert.mock.calls[0]![0].metadata;
+      expect(metadata.metrics_trust).toBe("client_reported_unverified");
+      expect(metadata.grounding).toEqual(
+        kind === "current" ? grounding : undefined,
+      );
+    },
+  );
+
   // T8 — fire-and-forget guarantee (RPC error must not affect HTTP response)
   it("returns 200 even when style RPC throws (fire-and-forget guarantee)", async () => {
     mockRpc.mockRejectedValueOnce(new Error("RPC crashed"));

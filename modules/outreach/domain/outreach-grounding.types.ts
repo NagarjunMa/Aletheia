@@ -31,6 +31,7 @@ export const OUTREACH_FALLBACK_REASONS = [
   "no_confirmed_evidence",
   "no_profile_context",
   "no_resume_context",
+  "candidate_context_not_used",
   "target_injection_detected",
 ] as const;
 
@@ -74,7 +75,7 @@ export type OutreachGroundingInput = {
 };
 
 /**
- * Content-free metadata which is safe to attach to internal telemetry. It is
+ * Content-free summary of candidate sources. It is
  * deliberately distinct from CandidateGroundingSource and contains neither
  * source IDs, user IDs, URLs, nor source content.
  */
@@ -85,6 +86,10 @@ export type OutreachGroundingMetadata = {
   selectedEvidenceCount: number;
   selectedSourceKinds: CandidateSourceKind[];
   injectionSafeMode: boolean;
+};
+
+export type FinalOutreachGroundingMetadata = OutreachGroundingMetadata & {
+  provenanceValidated: true;
 };
 
 export type OutreachGroundingContext = {

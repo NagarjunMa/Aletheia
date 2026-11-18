@@ -69,7 +69,7 @@ export function finalizeGroundedOutput(input: {
   }
   if (input.requiredEnding && !body.endsWith(input.requiredEnding))
     throw new AtomicClaimValidationError("CLAIM_COVERAGE");
-  validateAtomicOutput({
+  const usedSources = validateAtomicOutput({
     claims: input.claims,
     sources: input.sources,
     excludedClaims: input.excludedClaims,
@@ -105,5 +105,5 @@ export function finalizeGroundedOutput(input: {
       minimum: 1,
       maximum: EMAIL_SUBJECT_MAX_CHARACTERS,
     });
-  return { fingerprintPatternCount };
+  return { fingerprintPatternCount, usedSources };
 }

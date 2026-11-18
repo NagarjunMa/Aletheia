@@ -189,15 +189,92 @@ try {
   );
   assert.equal(
     sql(query),
-    "cold_email|6.0.0|claude-sonnet-4-6|evidence_led|400|40|400|t",
+    "cold_email|6.0.0|claude-sonnet-4-6|evidence_led|400|40|400|t|||",
   );
   sql(
     `UPDATE user_preferences SET share_analytics=false WHERE user_id<>md5('1')::uuid;`,
   );
   assert.equal(
     sql(query),
-    "cold_email|6.0.0|claude-sonnet-4-6|evidence_led|10|1|10|f",
+    "cold_email|6.0.0|claude-sonnet-4-6|evidence_led|10|1|10|f|||",
   );
+  const byGrounding = query.replace(
+    "SELECT false AS by_grounding",
+    "SELECT true AS by_grounding",
+  );
+  assert.equal(
+    sql(byGrounding),
+    "",
+    "legacy receipts cannot enter grounding cohorts",
+  );
+  const verified = {
+    groundingLevel: "verified_evidence",
+    fallbackReason: "none",
+    selectedSourceCount: 1,
+    selectedEvidenceCount: 1,
+    selectedSourceKinds: ["evidence"],
+    injectionSafeMode: false,
+    provenanceValidated: true,
+  };
+  const targetOnly = {
+    ...verified,
+    groundingLevel: "target_only",
+    fallbackReason: "candidate_context_not_used",
+    selectedSourceCount: 0,
+    selectedEvidenceCount: 0,
+    selectedSourceKinds: [],
+  };
+  const setGrounding = (summary, where) =>
+    sql(
+      `UPDATE user_feedback SET metadata=jsonb_set(metadata,'{grounding}','${JSON.stringify(summary)}'::jsonb) WHERE ${where};`,
+    );
+  setGrounding(verified, "user_id=md5('1')::uuid");
+  setGrounding(targetOnly, "id=md5('1/11')::uuid");
+  setGrounding(verified, "id=md5('2/11')::uuid"); // Consent withdrawn.
+  assert.deepEqual(sql(byGrounding).split("\n").sort(), [
+    "cold_email|6.0.0|claude-sonnet-4-6|evidence_led|1|1|1|f|target_only|candidate_context_not_used|{}",
+    "cold_email|6.0.0|claude-sonnet-4-6|evidence_led|9|1|9|f|verified_evidence|none|{evidence}",
+  ]);
+  setGrounding(
+    { ...verified, provenanceValidated: undefined },
+    "id=md5('1/1')::uuid",
+  );
+  for (const invalid of [
+    { ...verified, sourceId: "PRIVATE_SOURCE_CANARY" },
+    { ...verified, selectedSourceKinds: ["PRIVATE_KIND_CANARY"] },
+    { ...verified, selectedSourceKinds: ["evidence", "evidence"] },
+    { ...verified, selectedEvidenceCount: 2 },
+    { ...verified, groundingLevel: "profile_grounded" },
+    { ...verified, fallbackReason: "no_resume_context" },
+    { ...verified, selectedSourceCount: "1" },
+    "PRIVATE_SUMMARY_CANARY",
+  ]) {
+    setGrounding(invalid, "id=md5('1/10')::uuid");
+    assert.deepEqual(sql(byGrounding).split("\n").sort(), [
+      "cold_email|6.0.0|claude-sonnet-4-6|evidence_led|1|1|1|f|target_only|candidate_context_not_used|{}",
+      "cold_email|6.0.0|claude-sonnet-4-6|evidence_led|8|1|8|f|verified_evidence|none|{evidence}",
+    ]);
+  }
+  const mixedKinds = {
+    ...verified,
+    selectedSourceCount: 2,
+    selectedSourceKinds: ["profile", "evidence"],
+  };
+  setGrounding(mixedKinds, "id=md5('1/9')::uuid");
+  setGrounding(
+    { ...mixedKinds, selectedSourceKinds: ["evidence", "profile"] },
+    "id=md5('1/8')::uuid",
+  );
+  setGrounding(
+    { ...targetOnly, fallbackReason: "no_resume_context" },
+    "id=md5('1/7')::uuid",
+  );
+  assert.deepEqual(sql(byGrounding).split("\n").sort(), [
+    "cold_email|6.0.0|claude-sonnet-4-6|evidence_led|1|1|1|f|target_only|candidate_context_not_used|{}",
+    "cold_email|6.0.0|claude-sonnet-4-6|evidence_led|1|1|1|f|target_only|no_resume_context|{}",
+    "cold_email|6.0.0|claude-sonnet-4-6|evidence_led|2|1|2|f|verified_evidence|none|{evidence,profile}",
+    "cold_email|6.0.0|claude-sonnet-4-6|evidence_led|5|1|5|f|verified_evidence|none|{evidence}",
+  ]);
   const validQuality = sql(
     "SELECT metadata->'quality' FROM user_feedback WHERE metadata->>'quality_version'='1' LIMIT 1;",
   );
@@ -264,7 +341,7 @@ try {
   sql("UPDATE user_preferences SET share_analytics=null;");
   assert.equal(sql(query), "");
   console.log(
-    "Quality SQL passed: canonical PK concurrency, owner/anonymous denial, reassignment denial, consent withdrawal, contribution cap, cohort floor and private-column exclusion.",
+    "Quality SQL passed: canonical PK concurrency, owner/anonymous denial, reassignment denial, consent withdrawal, contribution cap, cohort floor, grounding breakdown and private-column exclusion.",
   );
 } finally {
   if (started)

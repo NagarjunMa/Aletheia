@@ -1,3 +1,41 @@
+## 2026-11-17 — ALE-27 final-draft grounding metadata
+
+Significant risk across generation and feedback. The outreach API reports
+candidate roots that supported the validated final subject or body. Multiple
+facts from a single root count once. Target facts and a verified signature
+do not count as candidate evidence. The metadata and quality log contain
+only known levels, fallback reasons, source kinds, counts and flags.
+Candidate profile and resume labels require actually cited supported
+sources. This change does not expand those sources' eligibility.
+
+Current API v1 clients already echo outreach metadata. The feedback route
+accepts older requests and cached prepared-pool metadata. Only consistent
+summaries marked provenanceValidated are included in new feedback receipts,
+where the existing client-reported trust label applies. The opt-in outreach breakdown in
+docs/evals/quality-feedback-cohorts.sql groups by grounding level, fallback
+and source kinds. It keeps current consent and the existing per-user cap.
+It excludes legacy and malformed summaries, including direct row writes.
+The default report keeps its existing cohort grouping with blank grounding
+columns. The signed-in feedback path and the
+existing JSON field require no migration or extension release. InMail's
+current final validator supplies the ledger even though ALE-26 is open.
+
+Baseline regressions failed for the missing final summary marker and
+feedback projection. Passed 3,254 web tests with coverage, 15 guardrails,
+318 extension tests, type checks, lint, engineering policy, extension
+version policy, and builds. The web build passed on a standard retry after
+the Next.js advisory reminder. Both dependency audit gates fail on the
+picomatch 4.0.7 advisory already present in both main lockfiles. Independent
+review's initial attempt was blocked by reviewer usage limits. A fresh review
+identified the missing cohort breakdown (ALE27-REVIEW-01). Reproduced that
+gap and verified the report correction on disposable PostgreSQL with the
+repository's quality-feedback database suite. Passed 1,559 focused tests
+and 47 packaged Chromium smoke tests. Hosted acceptance is pending.
+
+Deploy the backend before an extension uses this for a grounding indicator.
+If reverting emission or persistence after deployment, retain the feedback
+reader for compatible submissions from cached drafts.
+
 ## 2026-11-17 — Extension settings sign-out
 
 Critical risk. Settings signs out the displayed extension account and clears

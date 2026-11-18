@@ -3,6 +3,7 @@ import {
   CLAIM_KINDS,
   type AtomicSource,
 } from "@/modules/grounding/domain/atomic-claim";
+import type { FinalOutreachGroundingMetadata } from "@/modules/outreach/domain/outreach-grounding.types";
 export const QUALITY_REASONS = [
   "too_generic",
   "too_formal",
@@ -66,6 +67,9 @@ export function buildQualityMetadata(input: {
 export type GenerationQualityHooks = {
   generationId: string;
   onPrepared?: (_sources: readonly AtomicSource[]) => void;
-  onValidated?: (_quality: QualityMetadata) => void;
+  onValidated?: (
+    _quality: QualityMetadata,
+    _grounding?: FinalOutreachGroundingMetadata,
+  ) => void;
   onRejected?: () => void;
 };

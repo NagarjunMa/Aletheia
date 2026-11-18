@@ -37,7 +37,10 @@ import {
   buildAtomicProvenancePrompt,
 } from "@/lib/ai/prompts/atomic-provenance";
 import { AtomicClaimValidationError } from "@/modules/grounding/application/validate-atomic-claims";
-import { validateOutreachProvenance } from "./validate-outreach-provenance";
+import {
+  summarizeValidatedOutreachGrounding,
+  validateOutreachProvenance,
+} from "./validate-outreach-provenance";
 import { NextRequest, NextResponse } from "next/server";
 import {
   getSystemPrompt,
@@ -214,14 +217,17 @@ export async function POST(request: NextRequest) {
     const generationId = crypto.randomUUID();
     let prepared: ReturnType<typeof sourceQualitySummary> | undefined;
     let quality: QualityMetadata | undefined;
+    let grounding:
+      ReturnType<typeof summarizeValidatedOutreachGrounding> | undefined;
     let groundingPassed: boolean | null = null;
     const qualityHooks: GenerationQualityHooks = {
       generationId,
       onPrepared: (sources) => {
         prepared = sourceQualitySummary(sources);
       },
-      onValidated: (value) => {
+      onValidated: (value, finalGrounding) => {
         quality = value;
+        grounding = finalGrounding;
         groundingPassed = true;
       },
       onRejected: () => {
@@ -272,6 +278,7 @@ export async function POST(request: NextRequest) {
         ...(prepared ? { prepared } : {}),
         groundingPassed,
         ...(quality ? { quality } : {}),
+        ...(grounding ? { grounding } : {}),
       });
       recordMeasurement(log, {
         ...summary,
@@ -1100,7 +1107,18 @@ async function handlePost(
       injectionTriggered: injectionScan.triggered,
       safeCandidateSummaryUsed:
         injectionScan.triggered && Boolean(safeCandidateSummary),
-      grounding: preparedGrounding.metadata,
+    };
+
+    const annotateFinalDraft = (
+      quality: QualityMetadata,
+      finalization: ReturnType<typeof finalizeGroundedOutput>,
+    ) => {
+      const grounding = summarizeValidatedOutreachGrounding(
+        preparedGrounding,
+        finalization.usedSources,
+      );
+      qualityHooks.onValidated?.(quality, grounding);
+      return { ...evalMetadata, quality, grounding };
     };
 
     const rateLimitHeaders = createRateLimitHeaders({
@@ -1140,7 +1158,7 @@ async function handlePost(
             : [],
           patternCount: finalization.fingerprintPatternCount,
         });
-        qualityHooks.onValidated?.(quality);
+        const finalMetadata = annotateFinalDraft(quality, finalization);
         const wordCount = countOutputUnits(body, "words");
 
         timing.metrics({
@@ -1161,8 +1179,7 @@ async function handlePost(
             usage: tokenUsage,
             processingTime,
             evalMetadata: {
-              ...evalMetadata,
-              quality,
+              ...finalMetadata,
               identityIncluded: rendered.identityIncluded,
             },
             ...(CREDIT_BILLING_ENABLED
@@ -1252,7 +1269,7 @@ async function handlePost(
               : [],
           patternCount: finalization.fingerprintPatternCount,
         });
-        qualityHooks.onValidated?.(quality);
+        const finalMetadata = annotateFinalDraft(quality, finalization);
         const wordCount = countOutputUnits(finalBody, "words");
 
         timing.metrics({ resultChars: finalBody.length });
@@ -1270,7 +1287,7 @@ async function handlePost(
             character_count: finalBody.length,
             usage: tokenUsage,
             processingTime,
-            evalMetadata: { ...evalMetadata, quality },
+            evalMetadata: finalMetadata,
             ...(CREDIT_BILLING_ENABLED
               ? {
                   billingMode,
@@ -1378,7 +1395,7 @@ async function handlePost(
           : [],
         patternCount: finalization.fingerprintPatternCount,
       });
-      qualityHooks.onValidated?.(quality);
+      const finalMetadata = annotateFinalDraft(quality, finalization);
       timing.metrics({
         resultChars: body.length,
         claimCount: draft.candidate_relevance ? 1 : 0,
@@ -1395,8 +1412,7 @@ async function handlePost(
           usage: tokenUsage,
           processingTime,
           evalMetadata: {
-            ...evalMetadata,
-            quality,
+            ...finalMetadata,
             hasCandidateRelevance: rendered.hasCandidateRelevance,
           },
           ...(CREDIT_BILLING_ENABLED
