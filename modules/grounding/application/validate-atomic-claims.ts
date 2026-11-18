@@ -31,7 +31,7 @@ export function validateAtomicOutput(input: {
   sources: readonly AtomicSource[];
   excludedClaims: readonly string[];
   fields: readonly { text: string; scope: ClaimScope | "either" }[];
-}): void {
+}): AtomicSource[] {
   const parsed = atomicClaimsSchema.safeParse(input.claims);
   if (!parsed.success) throw new AtomicClaimValidationError("CLAIM_SCHEMA");
   const claims = parsed.data;
@@ -73,7 +73,7 @@ export function validateAtomicOutput(input: {
     if (isExcluded(text) || isExcluded(excerpt)) {
       throw new AtomicClaimValidationError("CLAIM_EXCLUDED");
     }
-    return { text, scope: source.scope };
+    return { text, source };
   });
   const used = new Set<number>();
   for (const field of input.fields) {
@@ -82,7 +82,7 @@ export function validateAtomicOutput(input: {
       throw new AtomicClaimValidationError("CLAIM_EXCLUDED");
     const candidates = [
       ...verified.flatMap((claim, index) =>
-        field.scope === "either" || field.scope === claim.scope
+        field.scope === "either" || field.scope === claim.source.scope
           ? [{ text: claim.text, index }]
           : [],
       ),
@@ -106,4 +106,5 @@ export function validateAtomicOutput(input: {
   }
   if (used.size !== claims.length)
     throw new AtomicClaimValidationError("CLAIM_COVERAGE");
+  return verified.map(({ source }) => source);
 }

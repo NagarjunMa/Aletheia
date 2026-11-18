@@ -2787,6 +2787,17 @@ ${long}`,
     expect(response.status).toBe(200);
     const result = await response.json();
     expect(result.evalMetadata.hasCandidateRelevance).toBe(false);
+    expect(result.evalMetadata.grounding).toEqual({
+      groundingLevel: "target_only",
+      fallbackReason: "no_resume_context",
+      selectedSourceCount: 0,
+      selectedEvidenceCount: 0,
+      selectedSourceKinds: [],
+      injectionSafeMode: false,
+      provenanceValidated: true,
+    });
+    expect(JSON.stringify(result.evalMetadata)).not.toContain(record.id);
+    expect(JSON.stringify(result.evalMetadata)).not.toContain(fact);
     expect(result.body).toContain("Engineering Manager role at Example");
     expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(mockAnthropicCreate.mock.calls)).not.toContain(
@@ -5781,6 +5792,18 @@ describe("POST /api/extension/generate", () => {
     expect(body.body).toContain("LLM-assisted review workflow");
     expect(body.body).toMatch(/Open to connecting\? Thank you\.$/);
     expect(body.evalMetadata.hasCandidateRelevance).toBe(true);
+    expect(body.evalMetadata.grounding).toEqual({
+      groundingLevel: "verified_evidence",
+      fallbackReason: "none",
+      selectedSourceCount: 1,
+      selectedEvidenceCount: 1,
+      selectedSourceKinds: ["evidence"],
+      injectionSafeMode: false,
+      provenanceValidated: true,
+    });
+    expect(JSON.stringify(body.evalMetadata)).not.toContain(
+      "evidence:workflow",
+    );
     expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
     expect(mockSanitizeForLinkedIn).not.toHaveBeenCalled();
     expect(body.claims).toBeUndefined();
@@ -6793,6 +6816,15 @@ describe("ALE-46 qualified prose through the HTTP boundary", () => {
     "returns complete qualified %s/%s text without private provenance",
     async (category, emailMode) => {
       const fixture = proseFixture(category, emailMode);
+      fixture.context.sources.push({
+        id: "evidence:unused",
+        label: "UNUSED_PRIVATE_SOURCE_TITLE",
+        type: "evidence",
+        priority: 1,
+        content: "UNUSED_PRIVATE_SOURCE_TEXT",
+      });
+      fixture.context.metadata.selectedSourceCount = 2;
+      fixture.context.metadata.selectedEvidenceCount = 2;
       const before = JSON.stringify(fixture.context);
       mockPrepareOutreachGroundingContext.mockResolvedValue(fixture.context);
       mockAnthropicCreate.mockImplementation(async (input) =>
@@ -6815,8 +6847,17 @@ describe("ALE-46 qualified prose through the HTTP boundary", () => {
       );
       expect(body.word_count).toBe(body.body.split(/\s+/u).length);
       expect(body.character_count).toBe(body.body.length);
+      expect(body.evalMetadata.grounding).toEqual({
+        groundingLevel: "verified_evidence",
+        fallbackReason: "none",
+        selectedSourceCount: 1,
+        selectedEvidenceCount: 1,
+        selectedSourceKinds: ["evidence"],
+        injectionSafeMode: false,
+        provenanceValidated: true,
+      });
       expect(JSON.stringify(body)).not.toMatch(
-        /supporting_excerpt|source_id|provenance|claims|evidence:/u,
+        /supporting_excerpt|source_id|"provenance"|"claims"|evidence:|UNUSED_PRIVATE/u,
       );
       expect(JSON.stringify(fixture.context)).toBe(before);
       expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);

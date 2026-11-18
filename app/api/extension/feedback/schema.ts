@@ -2,10 +2,7 @@ import {
   qualityMetadataSchema,
   QUALITY_REASONS,
 } from "@/lib/ai/generation-quality";
-import {
-  OUTREACH_GROUNDING_LEVELS,
-  OUTREACH_FALLBACK_REASONS,
-} from "@/modules/outreach/domain/outreach-grounding.types";
+import { outreachGroundingMetadataSchema } from "@/modules/outreach/domain/outreach-grounding-metadata";
 import { z } from "zod";
 import { EMAIL_MODES } from "@/lib/ai/email-formatter";
 
@@ -13,19 +10,7 @@ const legacyEvalMetadataSchema = z
   .object({
     generationId: z.string().uuid().optional(),
     quality: qualityMetadataSchema.optional(),
-    grounding: z
-      .object({
-        groundingLevel: z.enum(OUTREACH_GROUNDING_LEVELS),
-        fallbackReason: z.enum(OUTREACH_FALLBACK_REASONS),
-        selectedSourceCount: z.number().int().min(0).max(64),
-        selectedEvidenceCount: z.number().int().min(0).max(64),
-        selectedSourceKinds: z
-          .array(z.enum(["evidence", "profile", "resume"]))
-          .max(3),
-        injectionSafeMode: z.boolean(),
-      })
-      .strict()
-      .optional(),
+    grounding: outreachGroundingMetadataSchema.optional(),
     hasCandidateRelevance: z.boolean().optional(),
     identityIncluded: z.boolean().optional(),
     promptVersion: z.string().max(20),

@@ -1,4 +1,5 @@
 import { isValidCorrelationId } from "@/lib/logging-core";
+import { outreachGroundingMetadataSchema } from "@/modules/outreach/domain/outreach-grounding-metadata";
 import { qualityMetadataSchema } from "./generation-quality";
 /** Client echoes are reports, never trusted server attestations or free-form telemetry. */
 export function projectFeedbackMetadata(
@@ -43,6 +44,9 @@ export function projectFeedbackMetadata(
     "hasCandidateRelevance",
   ])
     if (typeof record[key] === "boolean") result[key] = record[key];
+  const grounding = outreachGroundingMetadataSchema.safeParse(record.grounding);
+  if (grounding.success && grounding.data.provenanceValidated)
+    result.grounding = grounding.data;
   const quality = qualityMetadataSchema.safeParse(record.quality);
   if (quality.success) result.quality = quality.data;
   return result;
