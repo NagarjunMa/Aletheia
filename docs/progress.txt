@@ -1,3 +1,18 @@
+## 2026-11-18 — ALE-27 picomatch audit remediation
+
+Significant risk because the web and extension build tools share a
+transitive matcher. Both clean npm audits reproduced GHSA-fc5q-39xc-vjpf.
+The public upstream release is still 4.0.7. Both lockfiles pin the
+third-party security backport @ryotsu/picomatch@4.0.7-a for 4.x requests.
+The registry signature and source attestation verified. Compared with
+upstream, the published executable changes are confined to the glob parser
+and character constants. The lockfiles changed only this package entry.
+
+Keep existing audit thresholds. Replace both overrides with the official
+supported release once upstream publishes a fix and the native checks pass.
+If the backport causes a regression, revert this dependency commit and
+keep the audit failure visible. Hosted ALE-27 acceptance is separate.
+
 ## 2026-11-17 — ALE-27 final-draft grounding metadata
 
 Significant risk across generation and feedback. The outreach API reports
