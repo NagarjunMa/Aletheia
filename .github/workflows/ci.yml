@@ -65,6 +65,9 @@ jobs:
       - name: Run guardrail tests
         run: npm run test:guardrails -- --run
 
+      - name: Run dashboard database contracts
+        run: DASHBOARD_TEST_PG_BIN="$(pg_config --bindir)" npm run test:dashboard:db
+
       - name: Run focused resume security contracts
         run: npm run test:resume-security
 

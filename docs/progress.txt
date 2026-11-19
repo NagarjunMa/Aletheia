@@ -2376,3 +2376,22 @@ is sent for generation, while skipped positions show Unanswered. The existing
 server grounding and metering paths apply, and Copy All excludes skipped text.
 See docs/operations/ale-73-skip-unsupported-questions.md for the Significant
 risk contract and the hosted acceptance procedure.
+## 2026-11-18 — ALE-75 dashboard metrics backend
+
+Branch feat/ale-75-dashboard-metrics starts from main 569a8cdf. Critical risk
+because the implementation adds service-written activity records and a
+caller-bound aggregate RPC. The contract, metric definitions, data limitations,
+test command and rollout/rollback are in docs/operations/ale-75-dashboard-metrics.md.
+
+The server records content-free outcomes independently of billing and feedback.
+The new authenticated endpoint exposes bounded activity/review aggregates,
+canonical rolling quota and existing profile readiness. ALE-76 owns the UI.
+The existing protected cleanup handles 90-day activity retention.
+
+Four failing persistence assertions established the red state. Focused tests
+and the disposable PostgreSQL migration/ownership/privacy/retention harness pass.
+The 3,277-test coverage suite, 15 guardrails, policy, lint, type check,
+high-severity audit and production build pass. Twelve existing moderate dependency
+advisories remain. Independent review evidence is kept outside source with the
+feature's review packet. Full Supabase replay/type generation and hosted
+acceptance remain pending. Keep ALE-75 open.

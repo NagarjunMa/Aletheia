@@ -34,6 +34,45 @@ export type Database = {
   };
   public: {
     Tables: {
+      dashboard_generation_activity: {
+        Row: {
+          id: string;
+          user_id: string;
+          category: string;
+          status: number;
+          requested_answers: number;
+          successful_outputs: number;
+          provider_attempts: number | null;
+          created_at: string;
+        };
+        Insert: {
+          id: string;
+          user_id: string;
+          category: string;
+          status: number;
+          requested_answers: number;
+          successful_outputs: number;
+          provider_attempts?: number | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          category?: string;
+          status?: number;
+          requested_answers?: number;
+          successful_outputs?: number;
+          provider_attempts?: number | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      dashboard_activity_coverage: {
+        Row: { singleton: boolean; started_at: string };
+        Insert: { singleton?: boolean; started_at?: string };
+        Update: { singleton?: boolean; started_at?: string };
+        Relationships: [];
+      };
       candidate_evidence: {
         Row: {
           fact_review: Json;
@@ -756,6 +795,11 @@ export type Database = {
       };
     };
     Functions: {
+      get_dashboard_metrics: { Args: { p_days?: number }; Returns: Json };
+      cleanup_dashboard_activity: {
+        Args: Record<string, never>;
+        Returns: number;
+      };
       prepare_next_refund_week: { Args: { p_anchor: string }; Returns: Json };
       set_primary_user_resume: {
         Args: { p_resume_id: string };
