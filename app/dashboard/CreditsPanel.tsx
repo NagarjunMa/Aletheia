@@ -1,129 +1,135 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Coins, RefreshCw } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import Link from "next/link";
+import { Coins } from "lucide-react";
 import { Card } from "@/components/ui/card";
-import { cn } from "@/lib/utils";
+import type { DashboardMetrics } from "@/modules/dashboard/domain/dashboard-metrics";
+import { creditSummarySchema, dateLabel } from "./dashboard-presentation";
+import type { z } from "zod";
+import styles from "./dashboard.module.css";
 
-type LedgerRow = {
-  id: string;
-  delta: number;
-  balance_after: number;
-  reason: string;
-  category: string | null;
-  created_at: string;
-};
+type State =
+  | { status: "loading" }
+  | { status: "unavailable" }
+  | { status: "signed_out" }
+  | { status: "ready"; summary: z.infer<typeof creditSummarySchema> };
 
-type CreditSummary = {
-  billingMode?: "credits" | "unlimited_developer";
-  unlimitedCredits?: boolean;
-  balance: number | null;
-  lifetimeCreditsPurchased: number;
-  lifetimeCreditsUsed: number;
-  creditExpiry: null;
-  ledger: LedgerRow[];
-};
-
-export default function CreditsPanel({ className }: { className?: string }) {
-  const [summary, setSummary] = useState<CreditSummary | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
+export default function CreditsPanel({
+  quota,
+  className = "",
+}: {
+  quota?: DashboardMetrics["quota"] | null;
+  className?: string;
+}) {
+  const [state, setState] = useState<State>({ status: "loading" });
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
-    let cancelled = false;
-
-    async function loadCredits() {
+    const controller = new AbortController();
+    async function load() {
+      setState({ status: "loading" });
       try {
-        setIsLoading(true);
-        setError(null);
-        const res = await fetch("/api/billing/credits", {
+        const response = await fetch("/api/billing/credits", {
           credentials: "same-origin",
+          cache: "no-store",
+          signal: controller.signal,
         });
-        if (!res.ok) {
-          throw new Error("Unable to load credits");
+        if (response.status === 401) {
+          if (!controller.signal.aborted) setState({ status: "signed_out" });
+          return;
         }
-        const data = (await res.json()) as CreditSummary;
-        if (!cancelled) setSummary(data);
-      } catch (err) {
-        if (!cancelled) {
-          setError(
-            err instanceof Error ? err.message : "Unable to load credits",
-          );
-        }
-      } finally {
-        if (!cancelled) setIsLoading(false);
+        if (!response.ok) throw new Error("Credits unavailable");
+        const summary = creditSummarySchema.parse(await response.json());
+        if (!controller.signal.aborted) setState({ status: "ready", summary });
+      } catch {
+        if (!controller.signal.aborted) setState({ status: "unavailable" });
       }
     }
-
-    void loadCredits();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    void load();
+    return () => controller.abort();
+  }, [attempt]);
 
   return (
     <Card
-      className={cn(
-        "flex flex-col p-5 transition-[border-color,background-color,transform,translate] duration-300 hover:-translate-y-0.5 hover:border-primary/25 hover:bg-card sm:p-6",
-        className,
-      )}
+      role="region"
+      className={`${styles.card} ${styles.credits} ${className}`}
+      aria-labelledby="credits-title"
     >
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-accent/25 bg-accent/10 text-accent">
-            {isLoading ? (
-              <RefreshCw className="h-4 w-4 animate-spin" aria-hidden={true} />
-            ) : (
-              <Coins className="h-4 w-4" aria-hidden={true} />
-            )}
-          </span>
-          <p className="text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-            Credit balance
+      <h2 className={styles.cardTitle} id="credits-title">
+        <Coins size={16} aria-hidden="true" />
+        Credit balance
+      </h2>
+      <div
+        className={styles.creditContent}
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        {state.status === "loading" ? (
+          <p className={styles.muted}>Loading credits…</p>
+        ) : state.status === "unavailable" ? (
+          <>
+            <p>Credit balance unavailable</p>
+            <button
+              className={styles.quietButton}
+              type="button"
+              onClick={() => setAttempt((n) => n + 1)}
+            >
+              Retry credits
+            </button>
+          </>
+        ) : state.status === "signed_out" ? (
+          <p>
+            <Link className={styles.actionLink} href="/auth/login">
+              Sign in again to view credits
+            </Link>
           </p>
-        </div>
-        <Badge variant="outline">No expiry</Badge>
-      </div>
-
-      <div className="mt-7">
-        <p className="text-5xl font-semibold leading-none tracking-[-0.04em] text-foreground">
-          {isLoading
-            ? "—"
-            : summary?.unlimitedCredits
-              ? "Unlimited"
-              : (summary?.balance ?? 0).toLocaleString()}
-        </p>
-        <p className="mt-3 text-sm leading-6 text-muted-foreground">
-          {summary?.unlimitedCredits
-            ? "Developer access is active. Daily safeguards still apply."
-            : "Connections use 2 credits; email and InMail drafts use 4."}
-        </p>
-        {error && (
-          <p className="mt-3 text-sm font-semibold text-rose-200">{error}</p>
+        ) : (
+          <>
+            <p className={styles.creditValue}>
+              {state.summary.unlimitedCredits ? (
+                "Unlimited"
+              ) : (
+                <>
+                  {state.summary.balance!.toLocaleString()}
+                  <span>credits</span>
+                </>
+              )}
+            </p>
+            <p className={styles.muted}>
+              {state.summary.unlimitedCredits
+                ? "Developer access · daily safeguards apply"
+                : "No expiry · connections 2, other drafts 4"}
+            </p>
+          </>
         )}
       </div>
-
-      <div className="mt-auto grid grid-cols-2 gap-2 pt-7">
-        <CreditFact label="Used" value={summary?.lifetimeCreditsUsed ?? 0} />
-        <CreditFact
-          label="Added"
-          value={summary?.lifetimeCreditsPurchased ?? 0}
-        />
+      <div className={styles.quota}>
+        {quota ? (
+          <>
+            <div>
+              <span className={styles.muted}>24-hour quota</span>
+              <strong>
+                {quota.used} / {quota.limit}
+              </strong>
+            </div>
+            <div className={styles.barTrack} aria-hidden="true">
+              <span
+                style={{
+                  width: `${Math.min(100, (quota.used / quota.limit) * 100)}%`,
+                }}
+              />
+            </div>
+            <p className={styles.muted}>
+              {quota.remaining} requests remain
+              {quota.resetAt
+                ? ` · resets ${dateLabel(quota.resetAt)} at ${new Date(quota.resetAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" })} UTC`
+                : " · starts with your next generation"}
+            </p>
+          </>
+        ) : (
+          <p className={styles.muted}>Quota unavailable</p>
+        )}
       </div>
     </Card>
-  );
-}
-
-function CreditFact({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-lg border border-border/60 bg-background/30 p-3">
-      <p className="text-[0.64rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-        {label}
-      </p>
-      <p className="mt-2 text-lg font-semibold tabular-nums text-foreground">
-        {value.toLocaleString()}
-      </p>
-    </div>
   );
 }
