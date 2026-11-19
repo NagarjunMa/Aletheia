@@ -2618,3 +2618,14 @@ it is corrected by withholding the editor until required context is known,
 without requiring a résumé when the read succeeds. Red-to-green real-page tests
 cover both paths. Independent return review is next. Real hosted account checks,
 VoiceOver/actual zoom and ALE-75's deployment gates remain pending. Keep open.
+
+
+## 2026-11-19 — ALE-78 expected extension diagnostics (local)
+
+- Contract: docs/operations/ale-78-expected-extension-diagnostics.md; Linear ALE-78.
+- Isolated fix/ale-78-expected-extension-diagnostics from main 6039665. Significant shared diagnostic classification; auth/grounding decisions remain unchanged.
+- Expected handled evidence 422 and account-change cancellation events retain redacted local diagnostics at info. Unknown statuses/codes and unhandled/explicit errors retain warning/error visibility. Reserved metadata cannot disguise failures.
+- TDD: nine expected-outcome cases and a metadata-override case failed before their corrections. Final extension suite: 371 tests; 18 local popup browser cases; 11 version tests; extension/root types, extension lint/audit, root policy, version policy and ZIP packaging passed. Xcode blocks make; equivalent npm checks passed directly.
+- Package metadata 1.0.34. No deployment, Chrome reload, Store upload, production calls or unrelated root-checkout changes. Fresh review receipts: /tmp/ale78-review/. Issue remains In Progress for release verification.
+
+- ALE78-R1: fresh review confirmed display normalization could misclassify malformed codes in runtime/popup logs. Five new regressions reproduced the issue; classification now requires exact raw code/event/outcome values. Return review and source receipts remain under /tmp/ale78-review/.

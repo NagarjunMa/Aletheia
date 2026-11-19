@@ -21,6 +21,24 @@ const fixtureAnswers = Array.from({ length: 5 }, (_, index) =>
   Array.from({ length: 50 }, () => `experience${index + 1}`).join(" "),
 );
 
+function captureGenerationDiagnostics(page: Page) {
+  const events: Array<Record<string, unknown>> = [];
+  const errors: string[] = [];
+  page.on("console", (message) => {
+    try {
+      const event = JSON.parse(message.text());
+      if (event.module !== "popup" || event.event !== "generation.complete")
+        return;
+      events.push(event);
+      if (["warning", "error"].includes(message.type()))
+        errors.push(message.text());
+    } catch {
+      // Non-JSON browser messages are outside the structured diagnostic contract.
+    }
+  });
+  return { events, errors };
+}
+
 async function openPopup(page: Page, authenticated = true) {
   await page.setViewportSize({ width: 400, height: 800 });
   await page.route("**/*", async (route) => {
@@ -487,6 +505,7 @@ for (const { code, actionLabel, rationale } of [
   test(`422 ${rationale ? "missing rationale" : code} preserves all five questions for recovery @smoke`, async ({
     page,
   }) => {
+    const diagnostics = captureGenerationDiagnostics(page);
     await openPopup(page);
     await page.selectOption("#category", "yc_application");
     const questions = [
@@ -566,6 +585,28 @@ for (const { code, actionLabel, rationale } of [
     await expect(page.locator("#jdInput")).toHaveValue(jd);
     await expect(page.locator("#ycQuestionInput")).toHaveValue(questions);
     await expect(page.locator("#generateBtn")).toBeEnabled();
+    expect(diagnostics.errors).toEqual([]);
+    expect(diagnostics.events).toContainEqual(
+      expect.objectContaining({
+        level: "info",
+        errorCode: code,
+        status: 422,
+        outcome: "failure",
+      }),
+    );
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const stored = JSON.parse(
+            sessionStorage.getItem("test-session") || "{}",
+          );
+          return stored.aletheia_diagnostic_events_v1?.filter(
+            (event: { event: string; status: number }) =>
+              event.event === "generation.complete" && event.status === 422,
+          );
+        }),
+      )
+      .toEqual([expect.objectContaining({ level: "info", errorCode: code })]);
     await page.evaluate(() => {
       window.aleTest.holdGeneration = false;
     });
@@ -579,6 +620,69 @@ for (const { code, actionLabel, rationale } of [
     );
     expect(requests).toHaveLength(2);
     expect(requests[1]?.payload).toEqual(requests[0]?.payload);
+  });
+}
+
+for (const { code, status, message, level } of [
+  {
+    code: "AUTH_ACCOUNT_CHANGED",
+    status: 409,
+    message:
+      "The connected account changed. Reopen the extension and try again.",
+    level: "info",
+  },
+  {
+    code: "YC_TOOL_SCHEMA",
+    status: 502,
+    message: "We couldn't generate this draft. Please try again.",
+    level: "warn",
+  },
+]) {
+  test(`${code} keeps clear recovery guidance and ${level} diagnostics @smoke`, async ({
+    page,
+  }) => {
+    const diagnostics = captureGenerationDiagnostics(page);
+    await openPopup(page);
+    await page.selectOption("#category", "yc_application");
+    const questions = Array.from(
+      { length: 5 },
+      (_, i) => `Describe your work on project ${i + 1}?`,
+    ).join("\n");
+    await page.fill("#jdInput", jd);
+    await page.fill("#ycQuestionInput", questions);
+    await page.evaluate(
+      ({ code, status, message }) => {
+        window.aleTest.holdGeneration = true;
+        window.aleTest.generationResponse = {
+          success: false,
+          code,
+          status,
+          message,
+        };
+      },
+      { code, status, message },
+    );
+    await page.click("#generateBtn");
+    await page.evaluate(
+      ({ code, status, message }) => {
+        window.aleTest.generationCallback?.({
+          success: false,
+          code,
+          status,
+          message,
+        });
+      },
+      { code, status, message },
+    );
+    await expect(page.locator("#errorMessage")).toContainText(message);
+    await expect(page.locator("#errorMessage")).not.toContainText(code);
+    await expect(page.locator("#ycQuestionInput")).toHaveValue(questions);
+    await expect(page.locator("#jdInput")).toHaveValue(jd);
+    await expect(page.locator(".application-answer")).toHaveCount(0);
+    expect(diagnostics.events).toContainEqual(
+      expect.objectContaining({ level, errorCode: code, status }),
+    );
+    expect(diagnostics.errors).toHaveLength(level === "warn" ? 1 : 0);
   });
 }
 

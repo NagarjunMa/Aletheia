@@ -1,7 +1,11 @@
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { isValidOperationId } from "../lib/logger-core.js";
+import {
+  createExtensionLogger,
+  flushExtensionDiagnostics,
+} from "../lib/logger.js";
 import { serializeGenerationError } from "./generation-core.js";
 import { getGenerationErrorPresentation } from "../popup/popup-core.js";
 const source = readFileSync(
@@ -13,6 +17,68 @@ const fn = source.slice(
   source.indexOf("\nasync function handleHealthCheck("),
 );
 describe("HTTP attempt diagnostics", () => {
+  afterEach(async () => {
+    await flushExtensionDiagnostics();
+    await chrome.storage.session.clear();
+    vi.restoreAllMocks();
+  });
+
+  it.each(["GROUNDING_PROFILE_INCOMPLETE", "INSUFFICIENT_GROUNDING"])(
+    "retains %s slot guidance through worker serialization without warning console output",
+    async (code) => {
+      const warn = vi
+        .spyOn(console, "warn")
+        .mockImplementation(() => undefined);
+      vi.spyOn(console, "log").mockImplementation(() => undefined);
+      const fetch = vi.fn(async () => ({
+        ok: false,
+        status: 422,
+        headers: new Headers(),
+        json: async () => ({
+          code,
+          billing: "none",
+          missingFields: ["confirmed_evidence"],
+          evidenceGap: {
+            reason: "missing_reviewed_facts",
+            questionNumbers: [4],
+          },
+          applicationProfileUrl: "https://example.test/dashboard#evidence",
+        }),
+      }));
+      const failure = await runInNewContext(
+        `(${fn})("/api/extension/generate", {}, null, "123e4567-e89b-42d3-a456-426614174000")`,
+        {
+          CONFIG: {
+            DEFAULT_API_URL: "https://example.test",
+            MAX_RETRIES: 3,
+            TIMEOUT: 30000,
+          },
+          Date,
+          AbortController,
+          setTimeout,
+          clearTimeout,
+          fetch,
+          isValidOperationId,
+          log: createExtensionLogger("service-worker"),
+          getAletheiaRequestHeaders: (value: unknown) => value,
+          getSafeErrorCode: () => code,
+        },
+      ).catch((error: unknown) => error);
+      const response = serializeGenerationError(failure);
+      expect(response).toMatchObject({ code, status: 422, billing: "none" });
+      const presentation = getGenerationErrorPresentation(
+        response,
+        Array.from({ length: 5 }, (_, i) => `Describe project ${i + 1}?`),
+      );
+      expect(presentation.evidenceGuidance).toContain(
+        "Question 4 needs a matching reviewed fact",
+      );
+      expect(presentation.actionLabel).toBe("Review application evidence");
+      expect(warn).not.toHaveBeenCalled();
+      expect(fetch).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it.each(["WORK_BUDGET_REACHED", "SHORT_WINDOW_LIMIT_REACHED"])(
     "preserves retry guidance across HTTP, worker serialization and popup for %s",
     async (code) => {

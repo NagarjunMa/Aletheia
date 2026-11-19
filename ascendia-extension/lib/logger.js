@@ -45,9 +45,9 @@ export function createExtensionLogger(module, { persist = true } = {}) {
   function log(level, event, fields = {}) {
     const entry = buildDiagnosticEvent({ module, level, event, fields });
     const line = JSON.stringify(entry);
-    if (level === "error") console.error(line);
-    else if (level === "warn") console.warn(line);
-    else if (level === "debug") console.debug(line);
+    if (entry.level === "error") console.error(line);
+    else if (entry.level === "warn") console.warn(line);
+    else if (entry.level === "debug") console.debug(line);
     else console.log(line);
     if (persist) void persistDiagnosticEvent(entry);
     return entry;

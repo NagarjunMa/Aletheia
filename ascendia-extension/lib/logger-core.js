@@ -3,6 +3,17 @@ export const DIAGNOSTIC_BUFFER_KEY = "aletheia_diagnostic_events_v1";
 export const MAX_DIAGNOSTIC_EVENTS = 80;
 export const DIAGNOSTIC_EVENT_TTL_MS = 60 * 60 * 1000;
 
+const HANDLED_OUTCOME_EVENTS = new Set([
+  "generation.complete",
+  "api.request.complete",
+  "runtime.message.complete",
+  "auth.interactive.complete",
+]);
+const EVIDENCE_GUIDANCE_CODES = new Set([
+  "GROUNDING_PROFILE_INCOMPLETE",
+  "INSUFFICIENT_GROUNDING",
+]);
+
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PROHIBITED_KEY =
@@ -65,7 +76,8 @@ export function buildDiagnosticEvent({
   fields = {},
   now = Date.now(),
 }) {
-  return {
+  const entry = {
+    ...redactFields(fields),
     schemaVersion: EXTENSION_LOG_SCHEMA_VERSION,
     time: new Date(now).toISOString(),
     level,
@@ -74,8 +86,19 @@ export function buildDiagnosticEvent({
     ...(isValidOperationId(operationId)
       ? { operationId: operationId.toLowerCase() }
       : {}),
-    ...redactFields(fields),
   };
+  // Match exact inputs; redaction must not turn malformed failures into guidance.
+  if (
+    level === "warn" &&
+    fields.outcome === "failure" &&
+    HANDLED_OUTCOME_EVENTS.has(event) &&
+    ((fields.status === 422 && EVIDENCE_GUIDANCE_CODES.has(fields.errorCode)) ||
+      (fields.errorCode === "AUTH_ACCOUNT_CHANGED" &&
+        (fields.status === undefined || fields.status === 409)))
+  ) {
+    entry.level = "info";
+  }
+  return entry;
 }
 
 export function appendDiagnosticEvent(existing, event, now = Date.now()) {
