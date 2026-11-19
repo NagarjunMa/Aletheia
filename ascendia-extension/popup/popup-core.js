@@ -1,3 +1,8 @@
+import {
+  readOutreachGrounding,
+  readLegacyOutreachDraft,
+  sanitizeOutreachGrounding,
+} from "../lib/outreach-grounding.js";
 import { readApplicationEvidenceGap } from "../lib/application-evidence-gap.js";
 import { normalizeConnectionNoteLimit } from "../lib/linkedin-connection-limit.js";
 
@@ -29,11 +34,27 @@ function countWords(text) {
   return normalized ? normalized.split(/\s+/u).length : 0;
 }
 
+const GROUNDING_LABELS = {
+  verified_evidence: "Based on reviewed evidence",
+  profile_grounded: "Based on your profile",
+  resume_fallback: "Based on your résumé",
+  target_only: "No candidate evidence used",
+};
+
+export function getGroundingStatusPresentation(output) {
+  const grounding = readOutreachGrounding(output);
+  if (!grounding) return null;
+  return {
+    label: GROUNDING_LABELS[grounding.groundingLevel],
+    showProfileLink: grounding.groundingLevel !== "verified_evidence",
+  };
+}
+
 /**
  * Parse a generation response, extracting JSON for cold_email/inmail.
  */
 export function parseGenerationResponse(output, expectedQuestions) {
-  const processed = { ...output };
+  const processed = { ...sanitizeOutreachGrounding(output) };
   if (
     expectedQuestions &&
     (output.category !== YC_APPLICATION_CATEGORY ||
@@ -92,33 +113,7 @@ export function parseGenerationResponse(output, expectedQuestions) {
     return processed;
   }
 
-  if (
-    (output.category === "cold_email" ||
-      output.category === "linkedin_inmail") &&
-    typeof output.body === "string"
-  ) {
-    try {
-      let jsonString = output.body.trim();
-
-      if (jsonString.startsWith("```json")) {
-        jsonString = jsonString
-          .replace(/^```json\s*/, "")
-          .replace(/\s*```$/, "");
-      } else if (jsonString.startsWith("```")) {
-        jsonString = jsonString.replace(/^```\s*/, "").replace(/\s*```$/, "");
-      }
-
-      if (jsonString.startsWith("{") || jsonString.startsWith('"')) {
-        const parsed = JSON.parse(jsonString);
-        if (parsed.subject_line || parsed.body) {
-          processed.subject_line = parsed.subject_line || output.subject_line;
-          processed.body = parsed.body || output.body;
-        }
-      }
-    } catch {
-      // JSON parse failed — keep original body
-    }
-  }
+  Object.assign(processed, readLegacyOutreachDraft(output));
 
   return processed;
 }

@@ -1192,6 +1192,165 @@ test("remembers the LinkedIn note limit and sends it with and without a job desc
   await expect(limit).toBeHidden();
 });
 
+test.describe("Store ZIP grounding status", () => {
+  test.use({ storeZip: true });
+
+  test("shows only safe grounding and clears it on older responses and errors @smoke", async () => {
+    const target = "https://www.linkedin.com/in/grounding-status-fixture";
+    await browser.route(target, (route) =>
+      route.fulfill({
+        contentType: "text/html",
+        body: "<title>Alex Example | LinkedIn</title><main>Alex Example leads policy evaluation and data platform tooling at Example Labs.</main>",
+      }),
+    );
+    const statusFixture = {
+      groundingLevel: "verified_evidence",
+      fallbackReason: "none",
+      selectedSourceCount: 1,
+      selectedEvidenceCount: 1,
+      selectedSourceKinds: ["evidence"],
+      injectionSafeMode: false,
+      provenanceValidated: true,
+    };
+    const fallback = {
+      ...statusFixture,
+      groundingLevel: "target_only",
+      fallbackReason: "candidate_context_not_used",
+      selectedSourceCount: 0,
+      selectedEvidenceCount: 0,
+      selectedSourceKinds: [],
+    };
+    const canary = "PRIVATE_GROUNDING_SOURCE_EXCERPT";
+    const variants = [
+      statusFixture,
+      undefined,
+      fallback,
+      {
+        ...statusFixture,
+        excerpt: canary,
+        applicationProfileUrl: "https://example.test/unsafe",
+      },
+      fallback,
+    ];
+    let generated = 0;
+    await browser.route(
+      "https://www.aletheia.live/api/extension/generate",
+      (route) => {
+        const index = generated++;
+        if (index > variants.length) {
+          const { category } = route.request().postDataJSON();
+          return route.fulfill({
+            json: {
+              success: true,
+              category,
+              body: JSON.stringify({
+                subject_line: "Hello",
+                body: "Hi Alex, open to connecting?",
+              }),
+              evalMetadata: { category, grounding: statusFixture },
+            },
+          });
+        }
+        if (index >= variants.length)
+          return route.fulfill({
+            status: 422,
+            json: {
+              success: false,
+              code: "INSUFFICIENT_GROUNDING",
+              message: "No usable facts.",
+            },
+          });
+        return route.fulfill({
+          json: {
+            success: true,
+            category: "linkedin_connection",
+            body: `Hi Alex, open to connecting? Draft ${index + 1}.`,
+            ...(variants[index]
+              ? { evalMetadata: { grounding: variants[index] } }
+              : {}),
+          },
+        });
+      },
+    );
+    const worker =
+      browser.serviceWorkers()[0] ??
+      (await browser.waitForEvent("serviceworker"));
+    await signIn(worker, "grounding-owner");
+    const profile = await browser.newPage();
+    await profile.goto(target);
+    const panel = await browser.newPage();
+    await profile.bringToFront();
+    await panel.goto(
+      `chrome-extension://${new URL(worker.url()).host}/popup/popup.html`,
+    );
+    await expect(panel.locator("#profileName")).toHaveText("Alex Example");
+    const generate = panel.locator("#generateBtn");
+    const status = panel.locator("#groundingStatus");
+    const link = panel.locator("#groundingProfileLink");
+    const message = panel.locator("#messageText");
+    const draft = async (number: number) => {
+      await generate.click();
+      await expect(message).toContainText(`Draft ${number}.`);
+      await expect(generate).toBeEnabled();
+    };
+
+    await draft(1);
+    await expect(status).toContainText("Based on reviewed evidence");
+    await expect(link).toBeHidden();
+    await expect(panel.locator("#output")).toHaveAttribute(
+      "aria-live",
+      "polite",
+    );
+
+    await draft(2);
+    await expect(status).toBeHidden();
+
+    await draft(3);
+    await expect(status).toContainText("No candidate evidence used");
+    await expect(link).toHaveAttribute(
+      "href",
+      "https://www.aletheia.live/profile/application",
+    );
+    await expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    await expect(panel.locator("#output")).toBeFocused();
+    await panel.keyboard.press("Tab");
+    await expect(link).toBeFocused();
+
+    await draft(4);
+    await expect(status).toBeHidden();
+    expect(await panel.locator("body").textContent()).not.toContain(canary);
+    const storage = await worker.evaluate(async () => ({
+      local: await chrome.storage.local.get(null),
+      session: await chrome.storage.session.get(null),
+    }));
+    expect(JSON.stringify(storage)).not.toContain(canary);
+    expect(JSON.stringify(storage)).not.toContain(
+      "https://example.test/unsafe",
+    );
+
+    await draft(5);
+    await expect(status).toBeVisible();
+    await generate.click();
+    await expect(panel.locator("#errorText")).toContainText("No usable facts.");
+    await expect(status).toBeHidden();
+    await expect(message).toContainText("Draft 5.");
+
+    for (const category of ["cold_email", "linkedin_inmail"]) {
+      await panel.locator("#category").selectOption(category);
+      await generate.click();
+      await expect(message).toHaveText("Hi Alex, open to connecting?");
+      await expect(status).toBeHidden();
+      await expect(generate).toBeEnabled();
+      const { lastGeneration } = await worker.evaluate(() =>
+        chrome.storage.local.get("lastGeneration"),
+      );
+      expect(lastGeneration.output.evalMetadata).not.toHaveProperty(
+        "grounding",
+      );
+    }
+  });
+});
+
 test("uses the selected endpoint, recovers from stale stories and clears before automatic generation", async () => {
   const posts: Array<{ path: string; body: Record<string, unknown> }> = [];
   let refusal: 422 | 405 | null = null;

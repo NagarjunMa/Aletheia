@@ -23,6 +23,7 @@ import {
   calculateCharCount,
   getCategoryUiState,
   getGenerationErrorPresentation,
+  getGroundingStatusPresentation,
   isAuthError,
   isPersonalUsageReminderReached,
   parseGenerationResponse,
@@ -75,6 +76,7 @@ function resetMessageFocus() {
   if (focusedDraftTarget) {
     focusedDraftTarget = null;
     currentOutput = null;
+    renderGroundingStatus();
     document.getElementById("output")?.classList.add("hidden");
     document.getElementById("reject-reason")?.classList.add("hidden");
     document.getElementById("messageText")?.replaceChildren();
@@ -531,6 +533,7 @@ function setupEventListeners() {
 
   // Category change handler
   document.getElementById("category")?.addEventListener("change", async () => {
+    renderGroundingStatus();
     resetApplicationQuestions();
     storyPicker.resetContext();
     resetMessageFocus();
@@ -933,6 +936,7 @@ function getConnectionNoteLimit() {
 
 async function generateMessage() {
   if (generationInFlight || feedbackInFlight) return;
+  renderGroundingStatus();
   const generationStartedAt = Date.now();
   const profile = currentProfile;
   const category = document.getElementById("category").value;
@@ -1347,10 +1351,23 @@ function displayOutput(output, target = null, applicationSlots = null) {
   }
 
   displayValidationFeedback(processedOutput);
+  renderGroundingStatus(processedOutput);
 
   outputSection.classList.remove("hidden");
   hideError();
   outputSection.focus({ preventScroll: true });
+}
+
+function renderGroundingStatus(output) {
+  const presentation = getGroundingStatusPresentation(output);
+  document.getElementById("groundingStatusText").textContent =
+    presentation?.label ?? "";
+  document
+    .getElementById("groundingStatus")
+    .classList.toggle("hidden", !presentation);
+  document
+    .getElementById("groundingProfileLink")
+    .classList.toggle("hidden", !presentation?.showProfileLink);
 }
 
 function updateCharacterCountDisplay(text, category) {
