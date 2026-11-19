@@ -325,9 +325,8 @@ export function buildOutreachGroundingContext(input: {
   const hasDuties = Boolean(job?.hasDuties);
   const roleHints = job?.roles ?? [];
   const roleSpecified = roleHints.length > 0 || Boolean(job?.hasNamedOpening);
-  const sparseEmail =
-    initialEmail && (!job?.hasOtherDetail || roleSpecified) && !hasDuties;
-  const rankedEmail = initialEmail && (sparseEmail || hasDuties);
+  const hasJobDetail = hasDuties || Boolean(job?.hasOtherDetail);
+  const rankedEmail = initialEmail;
   // A repeated duty must not multiply comparisons with every reviewed fact.
   const distinctDuties = [
     ...new Map(
@@ -349,15 +348,22 @@ export function buildOutreachGroundingContext(input: {
   const roleRank = createEvidenceTargetRanker(
     roleHints.map(normalizeImplementationScope),
   );
+  const detailRank = createEvidenceTargetRanker(
+    (job?.otherDetails ?? []).map(normalizeImplementationScope),
+    undefined,
+    { requireAiAgent: initialEmail },
+  );
   const profileRank = createEvidenceTargetRanker([
     normalizeImplementationScope(target.profileMarkdown),
   ]);
   const rankIntroduction = hasDuties
     ? dutyRank
-    : roleSpecified
-      ? roleRank
-      : profileRank;
-  const allowUnmatchedIntroduction = !hasDuties && !roleSpecified;
+    : job?.hasOtherDetail
+      ? detailRank
+      : roleSpecified
+        ? roleRank
+        : profileRank;
+  const allowUnmatchedIntroduction = !hasJobDetail && !roleSpecified;
   const rankFact = (
     rank: ReturnType<typeof createEvidenceTargetRanker>,
     fact: CandidateFact,
@@ -685,10 +691,10 @@ export function buildOutreachGroundingContext(input: {
                 ? undefined
                 : hasDuties
                   ? matchDuty(fact)
-                  : roleSpecified
-                    ? rankFact(roleRank, fact)
+                  : hasJobDetail || roleSpecified
+                    ? rankFact(rankIntroduction, fact)
                     : undefined;
-              if (hasDuties && !explicit && !dutyMatch) continue;
+              if (hasJobDetail && !explicit && !dutyMatch) continue;
               const score = recordFocusMatch(entry, fact);
               for (const match of matchTargets({
                 id: fact.id,
@@ -777,7 +783,7 @@ export function buildOutreachGroundingContext(input: {
           isLinkedinProfileRoleOnly(source)),
     );
   const mayUseCandidateIntroduction =
-    hasDuties ||
+    hasJobDetail ||
     (roleSpecified && winningLinkedinFact && !winningLinkedinFact.dutyMatch) ||
     (!winningLinkedinFact &&
       ((roleSpecified && (!hasJobTarget || hasRoleTarget)) ||
@@ -794,7 +800,7 @@ export function buildOutreachGroundingContext(input: {
     );
   if (
     linkedin &&
-    (!explicit || hasDuties || roleSpecified) &&
+    (!explicit || hasJobDetail || roleSpecified) &&
     !injectionSafeMode &&
     mayUseCandidateIntroduction &&
     !targets.diagnostics.excluded &&
@@ -844,9 +850,19 @@ export function buildOutreachGroundingContext(input: {
       (!winningLinkedinFact ||
         winner.focusScore > winningLinkedinFact.focusScore ||
         (winner.focusScore === winningLinkedinFact.focusScore &&
-          (hasDuties || roleSpecified) &&
+          (hasJobDetail || roleSpecified) &&
           compareRelevance(winner.match, winningLinkedinFact.dutyMatch) < 0))
     ) {
+      if (!explicit && winner.match)
+        selectionDiagnostics = {
+          outcome: "matched",
+          consideredCount: allowedEvidence.length,
+          matchedCount: new Set(
+            introductions
+              .filter(({ match }) => match)
+              .map(({ entry }) => entry.id),
+          ).size,
+        };
       const { entry, fact, content } = winner;
       selectedEvidence = [entry];
       winningLinkedinFact = {

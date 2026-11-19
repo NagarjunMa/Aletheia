@@ -1,3 +1,26 @@
+## 2026-11-19 — ALE-77 unrecognized job-context relevance
+
+Isolated fix/ale-77-unrecognized-job-context starts from synchronized main 6039665.
+Reproduced the museum/archive JD through real preparation at the HTTP boundary:
+11 intended failures before implementation. The parser now retains meaningful
+unclassified detail; selection checks it before using profile-matching or generic
+reviewed proof. Matching complete archive facts survive with qualifications.
+Ordinary networking and blank/sparse intros keep their supported behavior.
+
+Added 17 HTTP and nine pure builder cases for 200/300 limits, relevant/unrelated
+facts, headings/bullets/commas, target-only metadata, exclusions, stale/unreviewed
+and injected facts, imperative negation and metered denial before admission/model.
+Recognized duty policies and existing InMail/follow-up behavior remain unchanged.
+The Message Focus cap fixture now exceeds the candidate-only Basic composition;
+it still cannot drop or shorten the complete fact.
+
+Passed 3,335 tests with coverage, 15 guardrails, types, lint, policy and the high
+security-audit threshold. Twelve inherited moderate advisories remain. First build
+compiled but exited 1 on an inherited Next.js security notice; final build/smoke
+and fresh independent review receipts are tracked separately in Linear and
+/tmp/ale77-review-report-1.md. See docs/operations/ale-77-job-context.md for scope.
+No commits, push, provider calls, production changes or issue completion.
+
 ## 2026-11-19 UTC — ALE-28 acceptance and final audit complete
 
 Regular-account-only live testing passed with installed Release QA 1.0.33.
