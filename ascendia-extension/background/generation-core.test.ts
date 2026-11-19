@@ -4,6 +4,122 @@ import {
   serializeGenerationError,
 } from "./generation-core.js";
 
+import { sanitizeOutreachGrounding } from "../lib/outreach-grounding.js";
+import {
+  getGroundingStatusPresentation,
+  parseGenerationResponse,
+} from "../popup/popup-core.js";
+
+const grounding = {
+  groundingLevel: "verified_evidence",
+  fallbackReason: "none",
+  selectedSourceCount: 1,
+  selectedEvidenceCount: 1,
+  selectedSourceKinds: ["evidence"],
+  injectionSafeMode: false,
+  provenanceValidated: true,
+};
+const draft = {
+  success: true,
+  category: "linkedin_inmail",
+  body: "Draft",
+  evalMetadata: { generationId: "receipt", grounding },
+};
+
+describe("grounding metadata on the worker bridge", () => {
+  it("preserves the safe summary, receipt and an older response's draft", () => {
+    expect(sanitizeOutreachGrounding(draft, draft.category)).toEqual(draft);
+    const old = { success: true, category: draft.category, body: draft.body };
+    expect(sanitizeOutreachGrounding(old, draft.category)).toEqual(old);
+  });
+
+  it.each([
+    { provenanceValidated: undefined },
+    { groundingLevel: "<img src=x>" },
+    { fallbackReason: "unexpected_reason" },
+    { fallbackReason: "no_profile_context" },
+    { selectedSourceCount: 65 },
+    { selectedEvidenceCount: 2 },
+    { selectedSourceKinds: ["evidence", "PRIVATE_KIND_CANARY"] },
+    { sourceIds: ["PRIVATE_SOURCE_CANARY"] },
+    { applicationProfileUrl: "https://example.test/unsafe" },
+  ])("drops inconsistent, legacy or unknown fields %#", (invalid) => {
+    const output = sanitizeOutreachGrounding(
+      {
+        ...draft,
+        evalMetadata: {
+          ...draft.evalMetadata,
+          grounding: { ...grounding, ...invalid },
+        },
+      },
+      draft.category,
+    );
+    expect(output.evalMetadata).toEqual({ generationId: "receipt" });
+    expect(output.body).toBe(draft.body);
+  });
+
+  it("does not surface outreach grounding for errors, YC or category mismatches", () => {
+    for (const [output, requested] of [
+      [{ ...draft, success: false }, "linkedin_inmail"],
+      [{ ...draft, success: "false" }, "linkedin_inmail"],
+      [{ ...draft, category: "yc_application" }, "yc_application"],
+      [draft, "cold_email"],
+      [
+        {
+          ...draft,
+          evalMetadata: { ...draft.evalMetadata, category: "cold_email" },
+        },
+        "linkedin_inmail",
+      ],
+    ] as const) {
+      expect(
+        sanitizeOutreachGrounding(output, requested).evalMetadata,
+      ).not.toHaveProperty("grounding");
+    }
+  });
+
+  it.each([undefined, "   ", 123])(
+    "drops grounding when the draft body is missing or invalid (%s)",
+    (body) => {
+      expect(
+        sanitizeOutreachGrounding({ ...draft, body }, draft.category)
+          .evalMetadata,
+      ).not.toHaveProperty("grounding");
+    },
+  );
+
+  it("drops the optional metadata envelope when no safe fields remain", () => {
+    const malformed = {
+      ...draft,
+      evalMetadata: { grounding: { sourceIds: ["PRIVATE_SOURCE_CANARY"] } },
+    };
+    expect(sanitizeOutreachGrounding(malformed, draft.category)).toEqual({
+      success: true,
+      category: draft.category,
+      body: draft.body,
+    });
+  });
+
+  for (const category of ["cold_email", "linkedin_inmail"]) {
+    it.each(["", "   ", "Hi Alex, open to connecting?"])(
+      category + " preserves legacy rendering without a final grounding badge (%s)",
+      (body) => {
+        const encoded = JSON.stringify({ subject_line: "Hello", body });
+        for (const wrapper of [encoded, `\`\`\`json\n${encoded}\n\`\`\``]) {
+          const response = { ...draft, category, body: wrapper };
+          const safe = sanitizeOutreachGrounding(response, category);
+          expect(safe.evalMetadata).toEqual({ generationId: "receipt" });
+          expect(safe.body).toBe(wrapper);
+          const parsed = parseGenerationResponse(safe);
+          expect(parsed.body).toBe(body || wrapper);
+          expect(parsed.subject_line).toBe("Hello");
+          expect(getGroundingStatusPresentation(parsed)).toBeNull();
+        }
+      },
+    );
+  }
+});
+
 describe("generation background bridge", () => {
   it("derives retry guidance from a bounded server reset when the header is absent", () => {
     const resetTime = Date.now() + 60_000;

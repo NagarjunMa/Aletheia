@@ -40,6 +40,7 @@ import {
   serializeGenerationError,
 } from "./generation-core.js";
 import { normalizeMessageFocus } from "../lib/message-focus.js";
+import { sanitizeOutreachGrounding } from "../lib/outreach-grounding.js";
 import { generateWithAuthRecovery } from "./generate-auth-recovery.js";
 import {
   createExtensionLogger,
@@ -1109,7 +1110,7 @@ async function handleGenerateRequest(
           throw responseError;
         }
 
-        return result;
+        return sanitizeOutreachGrounding(result, payload.category);
       },
     };
     // Reconnection can invalidate an explicit story or recipient-bound focus.

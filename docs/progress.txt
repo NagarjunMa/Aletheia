@@ -1,3 +1,128 @@
+## 2026-11-19 UTC — ALE-28 acceptance and final audit complete
+
+Regular-account-only live testing passed with installed Release QA 1.0.33.
+A read-only local feasibility check selected the synthetic quantum-spectrometry
+hiring context without editing profile data, facts, resume or approvals.
+Production 5a10d2ccda36 returned target_only/candidate_context_not_used with zero
+candidate/evidence sources, no source kinds, injectionSafeMode=false and final
+provenance validation. The 132-character note completed in 10,700 ms. The live
+panel showed No candidate evidence used. Tab focused Review application profile
+with a visible outline; Return opened the same signed-in regular account at
+/profile/application, redirecting to /dashboard#candidate-profile. The visible
+test input was cleared. Daily quota was 27 remaining after this third successful
+draft across the acceptance sessions. The private feasibility snapshot was
+removed. No second account, approval edits or extra generation retries were used.
+
+Corrected the earlier pending list: profile_grounded and resume_fallback are
+compatibility states in the current final-summary pipeline. Candidate atoms are
+emitted only from confirmed evidence; final summaries count only cited roots.
+They have passing controlled mapping coverage and are not claimed as hosted
+passes. Reviewed-evidence and target-only are the reachable live classifications,
+and both passed. The source-boundary finding was independently confirmed.
+
+Remote CI on runtime/test commit 7c49ba3 passed 3,275 web tests with coverage,
+344 extension tests, 15 guardrails, 146 focused resume-security contracts and
+59 Chromium smoke cases, plus policy, lint, types, audits, build and Preview.
+The initial CI/Preview failure was a test-only TS18046 storage access in the
+new packaged case. Its type-safe positive-envelope and negative-grounding
+assertions passed root types, the focused Store ZIP case and the subsequent CI.
+
+Fresh-context independent review found no material findings at commit 7c49ba3,
+tree a4ed1ef7b54b4188cdf1f38a23aeb3380ff91ae3. It independently passed all 344
+extension tests, root and extension types, extension lint, version policy, diff
+checks and 1.0.33 ZIP/entrypoint integrity using an external archived source copy
+on Node 24.16.0. Final risk is Significant. No extension runtime files changed
+after the reviewed/tested snapshot. This final handoff addition is docs-only.
+
+PR #158 contains the candidate and remote CI evidence. All requested non-VoiceOver
+acceptance checks are satisfied. VoiceOver remains explicitly deferred by the
+user. ALE-77 retains the separate unrelated-job-context relevance investigation.
+Merge approval and Chrome Web Store publication remain separate actions; the QA
+package is not represented as a Store release. Rollback publishes the previous
+popup behavior under a higher extension version and retains the backend reader.
+
+## 2026-11-18 EST / 2026-11-19 UTC — ALE-28 installed Chrome acceptance
+
+Loaded the existing QA installation with Store ZIP 1.0.33, retaining its account
+and permissions. All non-manifest files match the archive; only the QA display
+name differs. ZIP SHA-256 55a139c83437a51282ac50b677d29a0f49049bba5f9c31ce35478cf3527290ce.
+The 1.0.32 backup is in the temporary aletheia-ale28-qa-backup.pjgtetbr folder.
+
+Passed 344 extension tests, all 48 packaged Chromium cases, extension lint,
+types, audit (zero vulnerabilities), version policy against origin/main and diff
+checks. The screenshot-only replay of the existing packaged case also passed;
+its temporary test copy was removed. Runtime implementation files are unchanged.
+
+On production 5a10d2ccda36, the regular account produced a fresh 218-character
+reviewed-evidence note in 3,976 ms. The badge, output focus, exact Copy Answer and
+Copy All, and persisted 1.0.33 feedback metadata passed. A second context-control
+request succeeded in 3,013 ms but reused the generic frontend introduction.
+The parser reports no roles/duties despite hasOtherDetail=true; ALE-77 records
+this separate relevance gap and its regression plan. The indicator itself
+accurately described the reviewed evidence used.
+
+A synthetic injection fixture returned the expected 422 in 1,376 ms; the previous
+draft stayed visible and its badge cleared. Daily quota remained 28 after two
+successes. Test input was cleared. The production application-profile destination
+resolved to the signed-in dashboard candidate-profile anchor. No personal facts,
+resume approvals or billing settings changed. No outbound LinkedIn messages.
+
+ALE-27 is closed, merged and deployed. ALE-28 stays In Progress. All four mappings
+have controlled coverage; fresh production profile/resume/target-only fallback
+states and installed fallback-link activation remain unobserved. Remote PR CI
+and publication remain open. VoiceOver stays deferred. See Linear for safe request
+references. Do not remove personal approvals to manufacture fallback labels.
+
+## 2026-11-18 — ALE-28 final development verification
+
+Risk remains Significant across the API, worker, popup and cached draft.
+The audit confirmed that a legacy JSON email wrapper could keep a newer
+final-validation marker while the popup unpacked its body. Reused the
+existing legacy parser in the shared outreach module. Drop the summary
+before forwarding or caching a response requiring that transformation.
+Existing legacy body and subject behavior is preserved.
+
+Six failing regressions reproduced the issue for cold email and InMail
+with empty, whitespace and populated bodies. All now pass, along with
+344 extension tests, 3,254 web tests with the coverage gate, 15 guardrails
+and all 48 packaged Chromium cases. The ZIP case checks both legacy email
+channels retain their drafts and omit the grounding summary in storage.
+Extension audit, types, lint, version policy, 1.0.33 ZIP build/integrity,
+web types/lint and engineering policy pass.
+
+The web audit passes its high-severity gate and reports 12 moderate
+advisories. Web dependencies match the base; this verification does not
+remediate those advisories. Manual installed Chrome and VoiceOver checks,
+CI and ALE-27 hosted acceptance remain pending. Keep ALE-28 In Progress.
+Rollback uses the previous popup behavior under a higher Store version.
+
+## 2026-11-18 — ALE-28 extension grounding status
+
+Significant risk across the API response, worker bridge, draft cache and
+packaged extension. Render one fixed local label in the draft's existing
+polite live region. Profile, résumé and target-only fallbacks link to the
+fixed Aletheia application profile route. The generated draft remains usable
+with older APIs, and unmarked prepared-pool summaries are hidden.
+
+The worker and popup both validate the marked ALE-27 summary. Unknown fields,
+contradictory counts, invalid values and cross-category summaries are dropped
+rather than copied into draft storage or sent back with feedback. Clear the
+status when generation begins or its visible draft is reset. Other feedback
+fields still pass through the existing API contract.
+
+The regression reproduced an untrusted private source field surviving popup
+parsing on main. Added regressions for independent review findings about
+non-boolean success, contradictory categories and missing or invalid draft
+bodies. The extension audit, lint, types, 338 unit tests, version
+policy, 1.0.33 ZIP integrity and 48
+Chromium cases pass. The ZIP test exercises keyboard navigation, legacy and
+error responses, and removal of private content from DOM and storage. Root
+types and engineering policy checks pass.
+
+Manual Chrome and screen-reader smoke remain pending. ALE-27's backend
+contract is merged and its hosted acceptance remains a release dependency.
+Rollback can ship the previous popup behavior under a higher Store version.
+
 ## 2026-11-18 — ALE-27 picomatch audit remediation
 
 Significant risk because the web and extension build tools share a

@@ -673,6 +673,24 @@ textarea::placeholder {
   opacity: 0.6;
 }
 
+/* Part of the draft's existing polite live region. */
+.grounding-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-3);
+  margin-bottom: var(--space-4);
+  color: var(--green-lightest);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.grounding-profile-link {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .output-item {
   position: relative;
   margin-bottom: var(--space-5);

@@ -396,6 +396,7 @@ it.each([
       createOperationId: () => "11111111-1111-4111-8111-111111111111",
       dismissMessageFocusRecovery: vi.fn(),
       dismissApplicationEvidenceGuidance: vi.fn(),
+      renderGroundingStatus: vi.fn(),
       setGeneratingState: vi.fn(),
       setGenerationPhase: vi.fn(),
       chrome: {
@@ -452,6 +453,7 @@ describe("ALE-38 popup elapsed time", () => {
         validateGenerationInput: () => ({ valid: true }),
         dismissMessageFocusRecovery: vi.fn(),
         dismissApplicationEvidenceGuidance: vi.fn(),
+        renderGroundingStatus: vi.fn(),
         setGeneratingState: vi.fn(),
         setGenerationPhase: vi.fn(),
         chrome: {
