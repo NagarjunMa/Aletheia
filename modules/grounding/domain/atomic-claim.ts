@@ -1132,8 +1132,10 @@ const COMPANY_DESCRIPTION =
   /^(?:[Ww]e|[Oo]ur (?:company|team)|[\p{Lu}][\p{L}\p{N}&+'-]*(?:\s+[\p{Lu}][\p{L}\p{N}&+'-]*){0,5})\s+(?:make|makes|build|builds|help|helps|serve|serves|provide|provides|sell|sells|offer|offers)\b/u;
 const NON_SPECIFIC_WORK =
   /^(?:you(?: will|['’]ll) )?(?:work (?:without (?:close )?supervision|independently|with (?:others|the team))|take ownership|solve ambiguous problems)[.!]?$/iu;
+const NETWORKING_CONTEXT =
+  /^(?:general networking|(?:I(?: would|[’']d)? (?:like|want) to )?connect)[.!]?$/iu;
 const NON_AFFIRMATIVE_DUTY =
-  /^(?:(?:you|(?:the|this) (?:role|candidate))\s+(?:will not|won['’]t|will never|do not|don['’]t)|(?:you['’]ll|responsible for)\s+(?:not|never))\b/iu;
+  /^(?:(?:you|(?:the|this) (?:role|candidate))\s+(?:will not|won['’]t|will never|do not|don['’]t)|(?:you['’]ll|responsible for)\s+(?:not|never)|do not|don['’]t|never|not)\b/iu;
 
 function dutyTopic(text: string) {
   return (
@@ -1163,7 +1165,7 @@ export function outreachJobSignals(value: string) {
     paragraph: number;
   }[] = [];
   const roles: string[] = [];
-  let hasOtherDetail = false;
+  const otherDetails: string[] = [];
   let hasNamedOpening = false;
   let hasDuties = false;
   let inOtherSection = false;
@@ -1257,12 +1259,20 @@ export function outreachJobSignals(value: string) {
           !JD_LOGISTICS.test(text) &&
           !OPTIONAL_EXPERIENCE.test(text)
         ) {
-          hasOtherDetail = true;
+          if (!NETWORKING_CONTEXT.test(text))
+            otherDetails.push(affirmativeDuty(text));
         }
       }
     }
   }
-  return { duties, roles, hasDuties, hasOtherDetail, hasNamedOpening };
+  return {
+    duties,
+    roles,
+    hasDuties,
+    hasOtherDetail: otherDetails.length > 0,
+    otherDetails,
+    hasNamedOpening,
+  };
 }
 
 function hasNegatedHiringSearch(value: string): boolean {

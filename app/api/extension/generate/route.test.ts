@@ -164,6 +164,161 @@ describe("LinkedIn real target preparation through the HTTP boundary", () => {
       const related =
         "I built policy evaluation tools for a prototype; I did not deploy it.";
 
+      describe("ALE-77 unrecognized job context", () => {
+        const museum =
+          "Museum catalogue specialist. Preserve paper manuscripts and organize archival collections.";
+        const frontend =
+          "I built software engineering dashboards and maintained the design system.";
+        const archive =
+          "I preserved paper manuscripts and organized archival collections.";
+        const profile = "Engineering Manager at Example | Software Engineering";
+        const descriptions = [
+          museum,
+          "Museum catalogue specialist\nResponsibilities:\n- Preserve paper manuscripts\n- Organize archival collections",
+          "Museum catalogue specialist\n• Preserve paper manuscripts, organize archival collections.",
+          "Frontend Engineer. Preserve paper manuscripts and organize archival collections.",
+        ];
+
+        it.each(
+          ([200, 300] as const).flatMap((limit) =>
+            descriptions.map((jd) => ({ limit, jd })),
+          ),
+        )(
+          "does not substitute profile-matching evidence for unrecognized detail at $limit (%$)",
+          async ({ limit, jd }) => {
+            await useRealPreparation([], [reviewed(frontend)]);
+            const response = await generateSparse(jd, profile, limit);
+            expect(response.status).toBe(200);
+            const result = await response.json();
+            expect(result.body).not.toContain(frontend);
+            expect(result.character_count).toBeLessThanOrEqual(limit);
+            expect(result.evalMetadata.hasCandidateRelevance).toBe(false);
+            expect(result.evalMetadata.grounding.selectedEvidenceCount).toBe(0);
+            expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
+          },
+        );
+
+        it.each([200, 300] as const)(
+          "uses matching reviewed archival work at %i",
+          async (limit) => {
+            await useRealPreparation(
+              [],
+              [reviewed(frontend), reviewed(archive, undefined, 1)],
+            );
+            const response = await generateSparse(museum, profile, limit);
+            expect(response.status).toBe(200);
+            const result = await response.json();
+            expect(result.body).toContain(archive);
+            expect(result.body).not.toContain(frontend);
+            expect(result.character_count).toBeLessThanOrEqual(limit);
+            expect(result.evalMetadata.grounding).toMatchObject({
+              selectedEvidenceCount: 1,
+              provenanceValidated: true,
+            });
+            expect(JSON.stringify(result)).not.toMatch(
+              /supporting_excerpt|evidence:/,
+            );
+          },
+        );
+
+        it("rejects unusable unrecognized context before quota or provider calls", async () => {
+          await useRealPreparation([], [reviewed(frontend)]);
+          const response = await generateSparse(museum, "Page unavailable");
+          expect(response.status).toBe(422);
+          expect(mockRpc).not.toHaveBeenCalled();
+          expect(mockAnthropicCreate).not.toHaveBeenCalled();
+        });
+
+        it.each([
+          museum,
+          "Frontend Engineer. Preserve paper manuscripts and organize archival collections.",
+        ])(
+          "rejects unrecognized unrelated cold-email detail before metered admission (%j)",
+          async (jd) => {
+            billingForCapture.enabled = true;
+            try {
+              await useRealPreparation(
+                [],
+                [reviewed(frontend)],
+                {},
+                "cold_email",
+              );
+              const response = await POST(
+                makeRequest({
+                  method: "POST",
+                  headers: { authorization: "Bearer test" },
+                  body: {
+                    category: "cold_email",
+                    jd,
+                    profileMarkdown: profile,
+                  },
+                }),
+              );
+              expect(response.status).toBe(422);
+              expect((await response.json()).code).toBe(
+                "INSUFFICIENT_GROUNDING",
+              );
+              expect(mockRpc).not.toHaveBeenCalled();
+              expect(mockAnthropicCreate).not.toHaveBeenCalled();
+            } finally {
+              billingForCapture.enabled = false;
+            }
+          },
+        );
+
+        it("generates cold email from genuinely relevant reviewed archival facts", async () => {
+          const fixture = proseFixture("cold_email", "initial_outreach");
+          const first = fixture.action.replaceAll(
+            "policy evaluation prototype",
+            "archival collections and paper manuscripts preservation prototype",
+          );
+          const second = fixture.outcome.replaceAll(
+            "policy evaluation prototype",
+            "archival collections and paper manuscripts preservation prototype",
+          );
+          await useRealPreparation(
+            [],
+            [
+              reviewed(frontend),
+              reviewed(first, undefined, 1),
+              reviewed(second, undefined, 2),
+            ],
+            {},
+            "cold_email",
+          );
+          const response = await POST(
+            makeRequest({
+              method: "POST",
+              headers: { authorization: "Bearer test" },
+              body: {
+                category: "cold_email",
+                jd: museum,
+                profileMarkdown: profile,
+              },
+            }),
+          );
+          expect(response.status).toBe(200);
+          const result = await response.json();
+          expect(result.body).toContain(first);
+          expect(result.body).not.toContain(frontend);
+          expect(result.evalMetadata.grounding).toMatchObject({
+            selectedEvidenceCount: 2,
+            provenanceValidated: true,
+          });
+          expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
+        });
+
+        it.each(["", "General networking.", "I would like to connect."])(
+          "preserves ordinary networking introductions (%j)",
+          async (jd) => {
+            await useRealPreparation([], [reviewed(frontend)]);
+            const response = await generateSparse(jd, "Page unavailable");
+            expect(response.status).toBe(200);
+            expect((await response.json()).body).toContain(frontend);
+          },
+        );
+      });
+
       it.each([true, false])(
         "uses a reviewed completed-work title in a Premium note (explicit=%s)",
         async (explicit) => {
