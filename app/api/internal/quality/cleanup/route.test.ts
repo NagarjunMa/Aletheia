@@ -1,6 +1,7 @@
 import { beforeEach, it, expect, vi } from "vitest";
 import { makeRequest } from "@/__tests__/helpers/request";
 const cleanup = vi.hoisted(() => vi.fn());
+const activityCleanup = vi.hoisted(() => vi.fn());
 const service = vi.hoisted(() => vi.fn(() => ({})));
 vi.mock("@/lib/supabase/server", () => ({
   createStatelessServiceClient: service,
@@ -8,10 +9,14 @@ vi.mock("@/lib/supabase/server", () => ({
 vi.mock("@/lib/ai/quality-retention", () => ({
   cleanupQualityFeedback: cleanup,
 }));
+vi.mock("@/modules/dashboard/infrastructure/cleanup-activity", () => ({
+  cleanupDashboardActivity: activityCleanup,
+}));
 import { GET } from "./route";
 beforeEach(() => {
   vi.clearAllMocks();
   process.env.CRON_SECRET = "a-secure-test-secret";
+  activityCleanup.mockResolvedValue({ removed: 2, saturated: false });
 });
 it("authenticates before creating a privileged client", async () => {
   for (const authorization of ["", "Bearer wrong"])
@@ -39,6 +44,7 @@ it.each([false, true])(
       success: true,
       removed: saturated ? 500 : 1,
       saturated,
+      activity: { removed: 2, saturated: false },
     });
   },
 );
