@@ -2446,3 +2446,27 @@ first stopped at the existing Next.js security advisory; the unchanged
 confirmation build passed. Existing moderate dependency advisories remain.
 Full Supabase replay/type comparison and hosted gates remain pending.
 Keep ALE-75 In Progress.
+
+## 2026-11-18 — ALE-76 dashboard frontend
+
+User confirmed ALE-76, not the preserved ALE-28 work. Created
+feat/ale-76-dashboard-frontend from ALE-75 580575b, including main 5a10d2c.
+Significant risk across account-scoped dashboard data, charts and motion.
+See docs/operations/ale-76-dashboard-frontend.md for the contract and delivery.
+
+The compact glass overview uses the ALE-75 contract for all four activity
+categories, review reasons/rates, quota and staged readiness. Credits retain
+their API with validated account-keyed cancellable state and explicit failures.
+Identity and profile actions are first, résumé context follows metrics, and
+recent messages are last. The old archive/reviewed-count tiles are removed.
+The beam can be paused, respects reduced motion/transparency and hidden tabs.
+
+The original 503 credit-display failure was reproduced before replacement.
+Eleven boundary tests, the 3,309-test coverage suite, 15 guardrails, policy,
+types, lint and build pass. Nineteen synthetic browser scenarios, the existing
+fact-review editor browser checks, 69 original smoke cases and the new signed-out
+dashboard guard pass. Review found the inherited unknown-résumé readiness issue;
+it is corrected by withholding the editor until required context is known,
+without requiring a résumé when the read succeeds. Red-to-green real-page tests
+cover both paths. Independent return review is next. Real hosted account checks,
+VoiceOver/actual zoom and ALE-75's deployment gates remain pending. Keep open.

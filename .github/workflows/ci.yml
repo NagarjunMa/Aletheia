@@ -138,6 +138,9 @@ jobs:
       - name: Install Chromium for landing smoke test
         run: npx playwright install --with-deps chromium
 
+      - name: Check dashboard components and account-safe states
+        run: npm run test:dashboard:ui
+
       - name: Build extension for Chromium evidence picker smoke
         run: |
           npm ci --prefix ascendia-extension
@@ -157,5 +160,5 @@ jobs:
 
           echo "Testing health endpoint..."
           curl -f http://localhost:3000/api/health || exit 1
-          npx playwright test e2e/landing-navigation.spec.ts e2e/frontend-theme.spec.ts e2e/extension-evidence-picker.spec.ts --project=chromium
+          npx playwright test e2e/landing-navigation.spec.ts e2e/frontend-theme.spec.ts e2e/dashboard-auth.spec.ts e2e/extension-evidence-picker.spec.ts --project=chromium
           npm run test:candidate-fact-review:ui
