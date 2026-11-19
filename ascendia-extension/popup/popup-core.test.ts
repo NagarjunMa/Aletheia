@@ -5,6 +5,7 @@ import {
   buildApplicationAuthDraft,
   readApplicationAuthDraft,
   parseGenerationResponse,
+  getGroundingStatusPresentation,
   selectApplicationQuestions,
   projectApplicationSlots,
   skippableApplicationQuestions,
@@ -90,9 +91,85 @@ describe("personal usage reminder", () => {
   });
 });
 
+describe("grounding status presentation", () => {
+  it.each([
+    [
+      "verified_evidence",
+      "none",
+      ["evidence"],
+      1,
+      "Based on reviewed evidence",
+    ],
+    [
+      "profile_grounded",
+      "no_confirmed_evidence",
+      ["profile"],
+      0,
+      "Based on your profile",
+    ],
+    [
+      "resume_fallback",
+      "no_profile_context",
+      ["resume"],
+      0,
+      "Based on your résumé",
+    ],
+    [
+      "target_only",
+      "candidate_context_not_used",
+      [],
+      0,
+      "No candidate evidence used",
+    ],
+  ])(
+    "maps the validated %s level to fixed copy",
+    (level, fallback, kinds, evidence, label) => {
+      expect(
+        getGroundingStatusPresentation({
+          success: true,
+          category: "cold_email",
+          body: "Hi Alex, open to connecting?",
+          evalMetadata: {
+            grounding: {
+              groundingLevel: level,
+              fallbackReason: fallback,
+              selectedSourceCount: kinds.length,
+              selectedEvidenceCount: evidence,
+              selectedSourceKinds: kinds,
+              injectionSafeMode: false,
+              provenanceValidated: true,
+            },
+          },
+        }),
+      ).toEqual({ label, showProfileLink: level !== "verified_evidence" });
+    },
+  );
+});
+
 // ─── parseGenerationResponse ───
 
 describe("parseGenerationResponse", () => {
+  it("discards invalid grounding metadata while keeping the draft and feedback ID", () => {
+    const generationId = "33333333-3333-4333-8333-333333333333";
+    const draft = {
+      category: "linkedin_connection",
+      body: "Hi Alex, open to connecting?",
+      evalMetadata: {
+        generationId,
+        grounding: {
+          groundingLevel: "verified_evidence",
+          selectedSourceIds: ["PRIVATE_REVIEW_CANARY"],
+          provenanceValidated: true,
+        },
+      },
+    };
+    expect(parseGenerationResponse(draft)).toEqual({
+      category: draft.category,
+      body: draft.body,
+      evalMetadata: { generationId },
+    });
+  });
+
   it("rejects body-only fallback for a live multi-question request", () => {
     expect(() =>
       parseGenerationResponse(
