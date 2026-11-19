@@ -1,3 +1,46 @@
+## 2026-11-19 UTC — ALE-28 acceptance and final audit complete
+
+Regular-account-only live testing passed with installed Release QA 1.0.33.
+A read-only local feasibility check selected the synthetic quantum-spectrometry
+hiring context without editing profile data, facts, resume or approvals.
+Production 5a10d2ccda36 returned target_only/candidate_context_not_used with zero
+candidate/evidence sources, no source kinds, injectionSafeMode=false and final
+provenance validation. The 132-character note completed in 10,700 ms. The live
+panel showed No candidate evidence used. Tab focused Review application profile
+with a visible outline; Return opened the same signed-in regular account at
+/profile/application, redirecting to /dashboard#candidate-profile. The visible
+test input was cleared. Daily quota was 27 remaining after this third successful
+draft across the acceptance sessions. The private feasibility snapshot was
+removed. No second account, approval edits or extra generation retries were used.
+
+Corrected the earlier pending list: profile_grounded and resume_fallback are
+compatibility states in the current final-summary pipeline. Candidate atoms are
+emitted only from confirmed evidence; final summaries count only cited roots.
+They have passing controlled mapping coverage and are not claimed as hosted
+passes. Reviewed-evidence and target-only are the reachable live classifications,
+and both passed. The source-boundary finding was independently confirmed.
+
+Remote CI on runtime/test commit 7c49ba3 passed 3,275 web tests with coverage,
+344 extension tests, 15 guardrails, 146 focused resume-security contracts and
+59 Chromium smoke cases, plus policy, lint, types, audits, build and Preview.
+The initial CI/Preview failure was a test-only TS18046 storage access in the
+new packaged case. Its type-safe positive-envelope and negative-grounding
+assertions passed root types, the focused Store ZIP case and the subsequent CI.
+
+Fresh-context independent review found no material findings at commit 7c49ba3,
+tree a4ed1ef7b54b4188cdf1f38a23aeb3380ff91ae3. It independently passed all 344
+extension tests, root and extension types, extension lint, version policy, diff
+checks and 1.0.33 ZIP/entrypoint integrity using an external archived source copy
+on Node 24.16.0. Final risk is Significant. No extension runtime files changed
+after the reviewed/tested snapshot. This final handoff addition is docs-only.
+
+PR #158 contains the candidate and remote CI evidence. All requested non-VoiceOver
+acceptance checks are satisfied. VoiceOver remains explicitly deferred by the
+user. ALE-77 retains the separate unrelated-job-context relevance investigation.
+Merge approval and Chrome Web Store publication remain separate actions; the QA
+package is not represented as a Store release. Rollback publishes the previous
+popup behavior under a higher extension version and retains the backend reader.
+
 ## 2026-11-18 EST / 2026-11-19 UTC — ALE-28 installed Chrome acceptance
 
 Loaded the existing QA installation with Store ZIP 1.0.33, retaining its account
