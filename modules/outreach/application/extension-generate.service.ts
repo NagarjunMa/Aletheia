@@ -31,6 +31,10 @@ import {
   recordFailedGeneration,
   type FailureContext,
 } from "@/modules/refund-review/application/capture-generation-failure";
+import {
+  recordGenerationActivity,
+  type GenerationActivityContext,
+} from "@/modules/dashboard/infrastructure/record-generation-activity";
 import { recordMeasurement } from "@/lib/provider-attempt-timing";
 import {
   getAtomicProvenanceInstructions,
@@ -215,6 +219,19 @@ export async function POST(request: NextRequest) {
     const rhetoricalPlans = rhetoricalPlansEnabled();
     const failureContext = createFailureContext();
     const generationId = crypto.randomUUID();
+    const activity: GenerationActivityContext = {
+      answerCount: 1,
+      providerAttempts: 0,
+    };
+    let observedAttempts = 0;
+    const activityLog: SafeLogger = {
+      ...log,
+      info(fields, message) {
+        if (typeof fields === "object" && fields.event === "provider.attempt")
+          observedAttempts++;
+        log.info(fields, message);
+      },
+    };
     let prepared: ReturnType<typeof sourceQualitySummary> | undefined;
     let quality: QualityMetadata | undefined;
     let grounding:
@@ -240,11 +257,12 @@ export async function POST(request: NextRequest) {
     try {
       const response = await handlePost(
         request,
-        log,
+        activityLog,
         timing,
         failureContext,
         rhetoricalPlans,
         qualityHooks,
+        activity,
       );
       status = response.status;
       return response;
@@ -252,6 +270,9 @@ export async function POST(request: NextRequest) {
       // Exactly one bounded summary, including rejected/failed requests. No
       // response-body parsing. Failure queue capture is separately bounded.
       const summary = timing.finish(status);
+      activity.providerAttempts =
+        summary.stages.model === null ? 0 : observedAttempts || null;
+      await recordGenerationActivity(activity, generationId, status, log);
       await recordFailedGeneration(failureContext, status, summary.errorCode);
       const templateVersion =
         summary.category === "yc_application"
@@ -369,6 +390,7 @@ async function handlePost(
   failureContext: FailureContext,
   rhetoricalPlans: boolean,
   qualityHooks: GenerationQualityHooks,
+  activity: GenerationActivityContext,
 ) {
   const corsHeaders = createGenerateCorsHeaders(request);
 
@@ -431,6 +453,10 @@ async function handlePost(
 
       failureContext.userId = authResult.userId;
       failureContext.category = "yc_application";
+      activity.userId = authResult.userId;
+      activity.category = "yc_application";
+      activity.answerCount =
+        "questions" in parsed.data ? parsed.data.questions.length : 1;
       return generateYcApplication({
         onCreditReserved: (id) => {
           failureContext.debitId = id;
@@ -458,6 +484,8 @@ async function handlePost(
     const basicConnectionNote =
       connectionNoteLimit === LINKEDIN_BASIC_CONNECTION_MAX_CHARACTERS;
     timing.category(validatedData.category);
+    activity.userId = authResult.userId;
+    activity.category = validatedData.category;
     const messageFocus =
       validatedData.messageFocus &&
       stripSurrogates(validatedData.messageFocus).trim();

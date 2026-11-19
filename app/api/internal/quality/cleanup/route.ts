@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { withRequestLifecycle } from "@/lib/request-lifecycle";
 import { createStatelessServiceClient } from "@/lib/supabase/server";
 import { cleanupQualityFeedback } from "@/lib/ai/quality-retention";
+import { cleanupDashboardActivity } from "@/modules/dashboard/infrastructure/cleanup-activity";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
@@ -21,9 +22,11 @@ export async function GET(request: NextRequest) {
         { status: 401 },
       );
     try {
-      const result = await cleanupQualityFeedback(
-        createStatelessServiceClient(),
-      );
+      const db = createStatelessServiceClient();
+      const [result, activity] = await Promise.all([
+        cleanupQualityFeedback(db),
+        cleanupDashboardActivity(db),
+      ]);
       log.info(
         {
           event: "quality.cleanup",
@@ -32,7 +35,7 @@ export async function GET(request: NextRequest) {
         },
         "Quality metadata retention",
       );
-      return NextResponse.json({ success: true, ...result });
+      return NextResponse.json({ success: true, ...result, activity });
     } catch {
       log.error(
         { errorCode: "QUALITY_CLEANUP_FAILED" },
