@@ -164,6 +164,49 @@ describe("LinkedIn real target preparation through the HTTP boundary", () => {
       const related =
         "I built policy evaluation tools for a prototype; I did not deploy it.";
 
+      it.each([true, false])(
+        "uses a reviewed completed-work title in a Premium note (explicit=%s)",
+        async (explicit) => {
+          const record = {
+            ...reviewed("I automated enterprise device configuration."),
+            title:
+              "Automated enterprise BIOS and device-provisioning workflows at Example",
+          };
+          const entry = {
+            ...record,
+            factReview: prepareFactReview(record, [
+              {
+                id: "11111111-1111-4111-8111-111111111111",
+                kind: "company",
+                excerpt: record.title,
+                confirmed: true,
+              },
+            ]),
+          };
+          await useRealPreparation([], [entry]);
+          const response = await generateSparse(
+            "Enterprise Engineer. Build BIOS configuration and OS provisioning workflows for hardware testing teams. Work with PowerShell and device-management APIs.",
+            "Full Stack AI Engineer | Next.js + TypeScript, RAG & Agents on AWS Bedrock | LangGraph, LangChain, FastAPI | Forward-Deployed Engineer",
+            300,
+            "",
+            explicit ? [record.id] : undefined,
+          );
+          expect(response.status).toBe(200);
+          const result = await response.json();
+          expect(result.body).toContain(
+            `My background includes: "${record.title}"`,
+          );
+          expect(result.body).not.toContain(record.actions);
+          expect(result.character_count).toBeLessThanOrEqual(300);
+          expect(result.evalMetadata.grounding).toMatchObject({
+            groundingLevel: "verified_evidence",
+            selectedEvidenceCount: 1,
+            provenanceValidated: true,
+          });
+          expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
+        },
+      );
+
       it.each(
         ([200, 300] as const).flatMap((limit) =>
           [

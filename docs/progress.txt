@@ -2395,3 +2395,54 @@ high-severity audit and production build pass. Twelve existing moderate dependen
 advisories remain. Independent review evidence is kept outside source with the
 feature's review packet. Full Supabase replay/type generation and hosted
 acceptance remain pending. Keep ALE-75 open.
+
+## 2026-11-18 — ALE-27 reviewed LinkedIn work titles
+
+Continuing ALE-27 from main 569a8cd on fix/ale-27-reviewed-note-422.
+Significant risk across LinkedIn evidence eligibility and note composition.
+The full repair contract and hosted evidence are recorded in ALE-27.
+
+The production selection was rejected before admission because its current
+reviewed work title began with a completed work verb without an explicit
+first-person subject. LinkedIn now admits this bounded title form using the
+existing exact quotation. Matching role or duties can support an introduction
+from a manually selected story through the same path as automatic selection.
+Required selected roots, review revision checks, exclusions, final provenance,
+and the 200/300-character budgets still apply. Copular, passive and aspirational
+titles remain ineligible. Preferences retain their existing rules.
+
+Regression tests cover the real HTTP generation path and selected/automatic
+titles, withheld/stale/withdrawn facts, ambiguous titles, and intact simulation
+qualifiers. The initial positive cases failed on the baseline. Independent
+review reproduced four negative title cases and the correction passed them.
+The initial 3,267-test coverage run passed. The final corrected coverage run
+passed 3,275 tests in 146 files, with 91.98% line coverage. Build, type check,
+lint, 15 guardrails, engineering policy, extension version policy and the
+configured high-severity dependency audit passed. Lint retains the existing
+refund-admin unused-variable warning; the audit reports 12 existing moderate
+advisories. A failed symlink-based build and disk-full dependency install were
+resolved with a clean locked install after clearing npm's downloaded cache.
+Independent return review resolved R1 on the complete-source qualification
+guard and passed 1,150 tests plus 19 Basic-limit variants. GitHub CI passed for
+PR #156. Production deployment dpl_2N9Ucdz4vJ2yosYJzXzVNmikoqAb now serves
+24b98a278a2e. After the Mac became accessible, the installed 1.0.32 production
+rerun used the regular account, original role context and reviewed HP story.
+It returned HTTP 200 in 4,175 ms with a 132-character note. Final grounding
+reported one reviewed evidence source, fallback none, and provenance passed.
+Request wkm25-1795039173835-58e775103c60 identifies the server evidence in ALE-27.
+The automation snapshot still reported Generating after exposing the fresh
+note, so the button's return to idle is unverified. Legacy/YC hosted feedback
+and exact stored-metadata inspection remain open in ALE-27.
+PR #156 awaits merge. Rollback restores dpl_4ZtLwcL98DSFx2LAUgd9hVAuDVPT.
+No packaged extension file changes. Production rerun uses extension 1.0.32.
+
+## 2026-11-18 — ALE-75 merge conflict reconciliation
+
+Merged main 5a10d2c into feat/ale-75-dashboard-metrics for PR #157.
+The sole conflict was concurrent appends to this progress log; both the ALE-75
+and ALE-27 entries are preserved. Main's reviewed-title changes and ALE-75's metrics implementation remain intact. The merged source passed 3,298 tests with coverage, 15 guardrails, policy,
+type check, lint and the disposable PostgreSQL contracts. The build compiled but
+first stopped at the existing Next.js security advisory; the unchanged
+confirmation build passed. Existing moderate dependency advisories remain.
+Full Supabase replay/type comparison and hosted gates remain pending.
+Keep ALE-75 In Progress.
