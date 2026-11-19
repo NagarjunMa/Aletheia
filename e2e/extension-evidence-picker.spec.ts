@@ -1344,9 +1344,8 @@ test.describe("Store ZIP grounding status", () => {
       const { lastGeneration } = await worker.evaluate(() =>
         chrome.storage.local.get("lastGeneration"),
       );
-      expect(lastGeneration.output.evalMetadata).not.toHaveProperty(
-        "grounding",
-      );
+      expect(lastGeneration).toHaveProperty("output.evalMetadata");
+      expect(lastGeneration).not.toHaveProperty("output.evalMetadata.grounding");
     }
   });
 });
