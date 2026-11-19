@@ -2,6 +2,10 @@
 
 ## Active Work
 
+ALE-77 job-context relevance: see `docs/operations/ale-77-job-context.md`.
+Meaningful unclassified JD detail constrains reviewed candidate proof; preserve
+blank/sparse introductions and existing target-only/422 channel policies.
+
 ALE-49 constrained rhetorical plans: see `docs/operations/ale-49-rhetorical-plans.md`.
 Server-only `RHETORICAL_PLANS_ENABLED` defaults off; validated request-local plans
 vary complete fact ordering in the existing single model call. Preserve the exact

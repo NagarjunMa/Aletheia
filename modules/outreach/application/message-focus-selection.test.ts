@@ -247,7 +247,7 @@ describe("ALE-61 deterministic confirmed-evidence focus", () => {
     const story = reviewedStory(
       policyId,
       "Policy evaluation",
-      "I built policy evaluation tooling for data platforms and documented the deployment checks, release criteria, and review handoff for the warehouse team.",
+      "I built policy evaluation tooling for data platforms and documented the deployment checks, release criteria, and review handoff for the warehouse team in a personal prototype.",
     );
     const legacy = select("linkedin_connection", {
       stories: [story],
