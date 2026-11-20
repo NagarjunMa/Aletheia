@@ -100,7 +100,7 @@ export const EVIDENCE_KIND_OPTIONS: EvidenceKindOption[] = [
   {
     value: "ai_usage",
     label: "AI in daily work",
-    prompt: "How you use AI tools in everyday work and verify the output.",
+    prompt: "Describe one real example of using AI in your work.",
   },
   {
     value: "production_scale",
@@ -108,6 +108,16 @@ export const EVIDENCE_KIND_OPTIONS: EvidenceKindOption[] = [
     prompt: "What you shipped end to end and how it operated at real scale.",
   },
 ];
+
+export const AI_EVIDENCE_GUIDANCE = {
+  context: "Name the tool or model and the engineering task you used it for.",
+  actions:
+    "Describe your contribution and the tests, review, or other checks you used to verify the output.",
+  outcome:
+    "Say what you observed. Include only numbers you can verify. A qualitative result is fine.",
+  example:
+    "For a staging-only API change, I used Claude to draft regression tests. I rewrote the assertions and ran them against the old and patched handlers. One test caught a missing error path before merge.",
+};
 
 export function parseListInput(value: string, maxItems = 20): string[] {
   const seen = new Set<string>();

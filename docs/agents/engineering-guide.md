@@ -2,6 +2,10 @@
 
 ## Active Work
 
+ALE-31 adds AI usage guidance to the existing evidence editor. The
+[grounded outreach rollout runbook](../runbooks/grounded-outreach-rollout.md)
+covers source selection, failure triage, extension packaging, and rollback.
+
 ALE-30 completes the remaining grounding-aware feedback/reporting gaps using
 ALE-51/ALE-27: see `docs/operations/ale-30-grounding-feedback.md`. Preserve
 legacy feedback and generation behavior; the report retains existing consent gates.
