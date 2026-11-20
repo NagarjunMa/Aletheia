@@ -9,6 +9,7 @@ export const QUALITY_REASONS = [
   "too_formal",
   "too_repetitive",
   "weak_target_relevance",
+  "weak_evidence",
   "unsupported_feeling",
   "wrong_ask",
   "wrong_tone",

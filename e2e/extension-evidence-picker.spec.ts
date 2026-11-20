@@ -2254,3 +2254,100 @@ test.describe("delayed profile read", () => {
     await expect(page.locator("#profileName")).toHaveText("Bob");
   });
 });
+
+test.describe("ALE-30 Store ZIP feedback", () => {
+  test.use({ storeZip: true });
+  for (const status of [200, 400]) {
+    test(`submits a keyboard-selected evidence reason and preserves the draft on feedback ${status} @smoke`, async () => {
+      const target = "https://www.linkedin.com/in/ale30-synthetic";
+      const feedback: Record<string, unknown>[] = [];
+      let generations = 0;
+      await browser.route("https://**/*", (route) => route.abort());
+      await browser.route(target, (route) =>
+        route.fulfill({
+          contentType: "text/html",
+          body: "<title>Alex Example | LinkedIn</title><main>Alex Example leads policy evaluation and data platform tooling at Example Labs.</main>",
+        }),
+      );
+      await browser.route("https://www.aletheia.live/**", async (route) => {
+        const path = new URL(route.request().url()).pathname;
+        if (path === "/api/extension/feedback") {
+          feedback.push(route.request().postDataJSON());
+          return route.fulfill({
+            status,
+            json:
+              status === 200 ? { success: true } : { error: "Invalid request" },
+          });
+        }
+        if (path === "/api/extension/generate") {
+          generations++;
+          return route.fulfill({
+            json: {
+              success: true,
+              category: "cold_email",
+              body: "Hi Alex, I built policy evaluation tools. Open to a brief chat?",
+              evalMetadata: {
+                generationId: "33333333-3333-4333-8333-333333333333",
+                promptVersion: "6.0.0",
+                model: "claude-sonnet-4-6",
+                category: "cold_email",
+                emailMode: "follow_up",
+                temperature: 0.8,
+                intent: "networking",
+                generationTimeMs: 10,
+                inputTokens: 10,
+                outputTokens: 10,
+              },
+            },
+          });
+        }
+        if (path === "/api/extension/evidence")
+          return route.fulfill({ json: { success: true, evidence: [first] } });
+        return route.fulfill({ json: {} });
+      });
+      const worker =
+        browser.serviceWorkers()[0] ??
+        (await browser.waitForEvent("serviceworker"));
+      await signIn(worker, "user-a");
+      const profile = await browser.newPage();
+      await profile.goto(target);
+      const panel = await browser.newPage();
+      await profile.bringToFront();
+      await panel.goto(
+        `chrome-extension://${new URL(worker.url()).host}/popup/popup.html`,
+      );
+      await expect(panel.locator("#profileName")).toHaveText("Alex Example");
+      await panel.locator("#category").selectOption("cold_email");
+      await panel.locator("#emailMode").selectOption("follow_up");
+      await panel.locator("#generateBtn").click();
+      await expect(panel.locator("#messageText")).toContainText(
+        "I built policy evaluation tools.",
+      );
+      await panel.locator("#rejectBtn").click();
+      const reason = panel.getByRole("button", {
+        name: "Wrong evidence selected",
+        exact: true,
+      });
+      await expect(reason).toBeVisible();
+      await reason.focus();
+      await reason.press("Enter");
+      await expect.poll(() => feedback.length).toBe(1);
+      expect(feedback[0]).toMatchObject({
+        approved: false,
+        category: "cold_email",
+        rejectionReason: "weak_evidence",
+        evalMetadata: { emailMode: "follow_up" },
+      });
+      if (status === 400) {
+        await expect(panel.locator("#errorMessage")).toContainText(
+          "Feedback could not be saved",
+        );
+        await expect(panel.locator("#messageText")).toContainText(
+          "I built policy evaluation tools.",
+        );
+        await expect(reason).toBeEnabled();
+        expect(generations).toBe(1);
+      }
+    });
+  }
+});

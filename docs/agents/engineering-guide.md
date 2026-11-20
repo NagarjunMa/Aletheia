@@ -2,6 +2,10 @@
 
 ## Active Work
 
+ALE-30 completes the remaining grounding-aware feedback/reporting gaps using
+ALE-51/ALE-27: see `docs/operations/ale-30-grounding-feedback.md`. Preserve
+legacy feedback and generation behavior; the report retains existing consent gates.
+
 ALE-77 job-context relevance: see `docs/operations/ale-77-job-context.md`.
 Meaningful unclassified JD detail constrains reviewed candidate proof; preserve
 blank/sparse introductions and existing target-only/422 channel policies.
