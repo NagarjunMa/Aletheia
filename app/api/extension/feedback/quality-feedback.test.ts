@@ -104,3 +104,53 @@ it("turns thrown storage failures into retryable outcomes", async () => {
     }),
   ).resolves.toEqual({ state: "unavailable" });
 });
+
+it.each(["legacy", "summary"])(
+  "accepts weak evidence separately from target relevance in %s feedback",
+  (format) => {
+    const base = { category: "cold_email", approved: false };
+    const payload =
+      format === "legacy"
+        ? {
+            ...base,
+            message: "Synthetic draft.",
+            rejectionReason: "weak_evidence",
+          }
+        : {
+            ...base,
+            format: "quality_summary",
+            generationId: id,
+            qualityReason: "weak_evidence",
+          };
+    expect(feedbackSchema.safeParse(payload).success).toBe(true);
+    expect(
+      feedbackSchema.safeParse({ ...payload, approved: true }).success,
+    ).toBe(format === "legacy");
+  },
+);
+it("preserves the accepted legacy approval shape while reports count only rejections", () => {
+  expect(
+    feedbackSchema.safeParse({
+      message: "Synthetic draft.",
+      category: "cold_email",
+      approved: true,
+      rejectionReason: "too_generic",
+    }).success,
+  ).toBe(true);
+});
+
+it("keeps the canonical report aligned with supported quality reasons and email modes", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const { QUALITY_REASONS } = await import("@/lib/ai/generation-quality");
+  const query = await readFile(
+    new URL(
+      "../../../../docs/evals/quality-feedback-cohorts.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  for (const reason of QUALITY_REASONS)
+    expect(query).toContain(`'${reason}', count(*) FILTER`);
+  const { EMAIL_MODES } = await import("@/lib/ai/email-formatter");
+  for (const mode of EMAIL_MODES) expect(query).toContain(`'${mode}'`);
+});

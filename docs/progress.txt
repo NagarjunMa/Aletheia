@@ -1,3 +1,49 @@
+## 2026-11-19 — ALE-30 remaining grounding feedback/reporting
+
+Started feat/ale-30-grounding-feedback from synchronized main bbd6578 in an isolated
+worktree. Reconciled the stale August plan against ALE-51 and ALE-27. Reused the
+seven existing reasons, strict summaries, final-source metadata, owner receipt PK,
+style threshold, retention and cohort eligibility. Added only weak_evidence, safe
+emailMode persistence, a fixed popup reason/clearer unsupported label and optional
+mode/atomic-kind/rejection counts in the existing report. No generation selector,
+prompt, finalizer, admission/refund/account/receipt/style or migration change.
+
+Extension 1.0.35 follows merged ALE-78 1.0.34. The branch was rebased onto
+main bbd6578, preserving its expected-diagnostic logging fix and progress entry. Existing dashboard unknown-reason handling remains Other. Replaced unsafe
+historical Q1–Q6 report examples with the canonical consent-gated report reference.
+
+Passed 3,347 web tests with coverage, 15 guardrails, 344 extension tests, types/lint/policy,
+version/ZIP, root high audit and zero-vulnerability extension audit. Two packaged
+Chromium tests cover keyboard submission and older-backend rejection recovery.
+PostgreSQL 17 checks actual report/owner isolation, PK concurrency, consent/cap/floor,
+all grounding levels, mode/kind/reason counters and canary exclusion. First build
+compiled but stopped on inherited Next.js security notice; repeat/final smoke and
+independent review receipts are outside source in Linear and /tmp/ale30-review-report-1.md.
+All 73 smoke cases and the normal build repeat passed. Round1 review confirmed
+ALE30-R1: four existing email modes collapsed into unreported in the SQL. Red SQL
+and enum-parity regressions reproduce it; the report now preserves all six modes.
+API/projector cases cover the canonical enum; native PostgreSQL exercises every
+mode. Final corrected-source web coverage passes 3,355 tests and lint/types/policy
+pass. No generation mode behavior changed. Final checks and return review are
+tracked in /tmp/ale30-review-report-2.md and Linear.
+One inherited lint warning and 12 moderate root advisories remain. Full scope/evidence:
+docs/operations/ale-30-grounding-feedback.md. No commit/push/live provider or
+production action; keep In Progress until remaining acceptance passes.
+
+
+Latest-main integration: rebased uncommitted ALE-30 onto bbd6578 (merged ALE-78).
+Preserved both progress entries, its expected-diagnostic runtime/tests unchanged,
+and extension 1.0.34 -> 1.0.35. Saved pre-rebase patch, stash and backup ref.
+On this integrated source: 3,355 root tests/154 files with unchanged coverage,
+15 guardrails, 371 extension tests/25 files, root/extension lint and types,
+policy, audits, version policy and ZIP packaging pass. Native PostgreSQL17 passes
+all six modes with owner/consent/retention/cap/floor controls. Protected runtime
+paths match bbd6578. Integrated production build and 75-case Chromium smoke are
+being verified; their exact outcomes and return review are external receipts in
+/tmp/ale30-main-build.log, /tmp/ale30-main-smoke.log,
+/tmp/ale30-review-report-2.md and Linear. No hosted acceptance claim.
+
+
 ## 2026-11-19 — ALE-77 unrecognized job-context relevance
 
 Isolated fix/ale-77-unrecognized-job-context starts from synchronized main 6039665.

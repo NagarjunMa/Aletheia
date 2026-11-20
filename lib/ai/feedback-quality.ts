@@ -1,3 +1,4 @@
+import { EMAIL_MODES } from "./email-formatter";
 import { isValidCorrelationId } from "@/lib/logging-core";
 import { outreachGroundingMetadataSchema } from "@/modules/outreach/domain/outreach-grounding-metadata";
 import { qualityMetadataSchema } from "./generation-quality";
@@ -8,6 +9,8 @@ export function projectFeedbackMetadata(
   if (!input || typeof input !== "object" || Array.isArray(input)) return {};
   const record = input as Record<string, unknown>;
   const result: Record<string, unknown> = {};
+  if (EMAIL_MODES.some((mode) => record.emailMode === mode))
+    result.emailMode = record.emailMode;
   if (isValidCorrelationId(record.generationId))
     result.generationId = record.generationId;
   if (

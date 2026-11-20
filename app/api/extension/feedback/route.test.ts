@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { feedbackSchema } from "./schema";
+import { EMAIL_MODES } from "@/lib/ai/email-formatter";
 
 describe("ALE-37 summary-only feedback", () => {
   const payload = {
@@ -441,6 +442,50 @@ describe("POST /api/extension/feedback — dual-behavior persistence contract", 
     expect(await response.text()).not.toContain("PRIVATE");
     expect(mockRpc).not.toHaveBeenCalled();
   });
+
+  it.each(EMAIL_MODES)(
+    "persists ALE-30 reason and bounded mode without draft text (%s)",
+    async (emailMode) => {
+      const response = await POST(
+        makeRequest({
+          method: "POST",
+          headers: { authorization: "Bearer test" },
+          body: {
+            message: "PRIVATE_DRAFT_CANARY",
+            category: "cold_email",
+            approved: false,
+            rejectionReason: "weak_evidence",
+            evalMetadata: {
+              generationId: "33333333-3333-4333-8333-333333333333",
+              promptVersion: "6.0.0",
+              model: "claude-sonnet-4-6",
+              category: "cold_email",
+              emailMode,
+              intent: "networking",
+              temperature: 0.8,
+              generationTimeMs: 10,
+              inputTokens: 10,
+              outputTokens: 10,
+            },
+          },
+        }),
+      );
+      expect(response.status).toBe(200);
+      expect(mockInsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          feedback_type: "rejected",
+          metadata: expect.objectContaining({
+            quality_reason: "weak_evidence",
+            emailMode,
+            metrics_trust: "client_reported_unverified",
+          }),
+        }),
+      );
+      expect(JSON.stringify(mockInsert.mock.calls)).not.toContain(
+        "PRIVATE_DRAFT_CANARY",
+      );
+    },
+  );
 
   // T8 — sync user_feedback insert + 200
   it("inserts user_feedback row synchronously and returns 200", async () => {

@@ -1,7 +1,9 @@
 -- Read-only exploratory aggregate. No private comment, style, source or draft is selected.
 -- Client-echoed metrics are unverified. This query never activates a feature.
--- Set by_grounding to true for the outreach breakdown. The default retains all cohorts.
-WITH settings AS (SELECT false AS by_grounding),
+-- Set by_grounding for outreach source classes; by_feedback adds mode/claim kinds/reasons.
+-- Defaults retain the existing first eleven columns/cohorts, plus three null columns.
+-- Rejection counts use the same cohort/denominator as approvals; never group by raw text.
+WITH settings AS (SELECT false AS by_grounding, false AS by_feedback),
 eligible AS (
   SELECT f.user_id, f.created_at, f.feedback_type,
     f.metadata->>'category' AS category,
@@ -11,6 +13,17 @@ eligible AS (
     CASE WHEN by_grounding THEN summary->>'groundingLevel' END AS grounding_level,
     CASE WHEN by_grounding THEN summary->>'fallbackReason' END AS grounding_fallback,
     CASE WHEN by_grounding THEN source_kinds END AS grounding_source_kinds,
+    by_feedback,
+    CASE WHEN by_feedback THEN
+      CASE WHEN f.metadata->>'category' NOT IN ('cold_email','linkedin_inmail') THEN 'not_applicable'
+        WHEN f.metadata->>'emailMode' IN ('initial_outreach','founder_ceo_outreach','follow_up','clarification','role_fit_summary','referral_request') THEN f.metadata->>'emailMode'
+        ELSE 'unreported' END END AS email_mode,
+    CASE WHEN by_feedback THEN ARRAY(
+      SELECT kind FROM unnest(ARRAY['role','company','technology','action','outcome','metric','preference','target_observation','cta_rationale']) AS allowed(kind)
+      WHERE f.metadata->'quality'->'selectedSourceKinds' ? kind ORDER BY kind
+    ) END AS atomic_claim_kinds,
+    CASE WHEN f.metadata->>'quality_reason' IN ('too_generic','too_formal','too_repetitive','weak_target_relevance','weak_evidence','unsupported_feeling','wrong_ask','wrong_tone','unsupported_claim','missed_question','formatting','other')
+      THEN f.metadata->>'quality_reason' ELSE 'unreported' END AS rejection_reason,
     row_number() OVER (
       PARTITION BY f.user_id, f.metadata->>'category', f.metadata->>'promptVersion',
         f.metadata->>'model', f.metadata->'quality'->>'archetype'
@@ -85,9 +98,25 @@ SELECT category,prompt_version,model,archetype,
   count(*) FILTER (WHERE feedback_type='approved') AS approvals,
   count(*) >= 200 AND count(DISTINCT user_id) >= 30
     AND max(created_at)-min(created_at) >= interval '14 days' AS exploratory_floor_met,
-  grounding_level,grounding_fallback,grounding_source_kinds
+  grounding_level,grounding_fallback,grounding_source_kinds,
+  email_mode,atomic_claim_kinds,
+  CASE WHEN by_feedback THEN jsonb_build_object(
+    'too_generic', count(*) FILTER (WHERE feedback_type='rejected' AND rejection_reason='too_generic'),
+    'too_formal', count(*) FILTER (WHERE feedback_type='rejected' AND rejection_reason='too_formal'),
+    'too_repetitive', count(*) FILTER (WHERE feedback_type='rejected' AND rejection_reason='too_repetitive'),
+    'weak_target_relevance', count(*) FILTER (WHERE feedback_type='rejected' AND rejection_reason='weak_target_relevance'),
+    'weak_evidence', count(*) FILTER (WHERE feedback_type='rejected' AND rejection_reason='weak_evidence'),
+    'unsupported_feeling', count(*) FILTER (WHERE feedback_type='rejected' AND rejection_reason='unsupported_feeling'),
+    'wrong_ask', count(*) FILTER (WHERE feedback_type='rejected' AND rejection_reason='wrong_ask'),
+    'wrong_tone', count(*) FILTER (WHERE feedback_type='rejected' AND rejection_reason='wrong_tone'),
+    'unsupported_claim', count(*) FILTER (WHERE feedback_type='rejected' AND rejection_reason='unsupported_claim'),
+    'missed_question', count(*) FILTER (WHERE feedback_type='rejected' AND rejection_reason='missed_question'),
+    'formatting', count(*) FILTER (WHERE feedback_type='rejected' AND rejection_reason='formatting'),
+    'other', count(*) FILTER (WHERE feedback_type='rejected' AND rejection_reason='other'),
+    'unreported', count(*) FILTER (WHERE feedback_type='rejected' AND rejection_reason='unreported')) END AS rejection_reasons
 FROM eligible WHERE contribution<=10
 GROUP BY category,prompt_version,model,archetype,
-  grounding_level,grounding_fallback,grounding_source_kinds;
+  grounding_level,grounding_fallback,grounding_source_kinds,
+  by_feedback,email_mode,atomic_claim_kinds;
 -- Approval rates remain conditional on responders, not all generation requests.
 -- The floor is not proof of power, causality or rollout readiness. Phase 6 owns those decisions.

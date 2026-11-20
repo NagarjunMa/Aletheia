@@ -189,14 +189,31 @@ try {
   );
   assert.equal(
     sql(query),
-    "cold_email|6.0.0|claude-sonnet-4-6|evidence_led|400|40|400|t|||",
+    "cold_email|6.0.0|claude-sonnet-4-6|evidence_led|400|40|400|t||||||",
+  );
+  const feedbackOnly = query.replace(
+    "false AS by_feedback",
+    "true AS by_feedback",
+  );
+  const allFeedback = sql(feedbackOnly).split("|");
+  assert.equal(allFeedback.length, 14);
+  assert.deepEqual(allFeedback.slice(4, 8), ["400", "40", "400", "t"]);
+  assert.equal(
+    allFeedback[11],
+    "unreported",
+    "old receipts must not invent an email mode",
+  );
+  assert.equal(allFeedback[12], "{action}");
+  assert.ok(
+    Object.values(JSON.parse(allFeedback[13])).every((count) => count === 0),
+    "approvals must never become rejection counts or expose comments",
   );
   sql(
     `UPDATE user_preferences SET share_analytics=false WHERE user_id<>md5('1')::uuid;`,
   );
   assert.equal(
     sql(query),
-    "cold_email|6.0.0|claude-sonnet-4-6|evidence_led|10|1|10|f|||",
+    "cold_email|6.0.0|claude-sonnet-4-6|evidence_led|10|1|10|f||||||",
   );
   const byGrounding = query.replace(
     "SELECT false AS by_grounding",
@@ -232,8 +249,8 @@ try {
   setGrounding(targetOnly, "id=md5('1/11')::uuid");
   setGrounding(verified, "id=md5('2/11')::uuid"); // Consent withdrawn.
   assert.deepEqual(sql(byGrounding).split("\n").sort(), [
-    "cold_email|6.0.0|claude-sonnet-4-6|evidence_led|1|1|1|f|target_only|candidate_context_not_used|{}",
-    "cold_email|6.0.0|claude-sonnet-4-6|evidence_led|9|1|9|f|verified_evidence|none|{evidence}",
+    "cold_email|6.0.0|claude-sonnet-4-6|evidence_led|1|1|1|f|target_only|candidate_context_not_used|{}|||",
+    "cold_email|6.0.0|claude-sonnet-4-6|evidence_led|9|1|9|f|verified_evidence|none|{evidence}|||",
   ]);
   setGrounding(
     { ...verified, provenanceValidated: undefined },
@@ -251,8 +268,8 @@ try {
   ]) {
     setGrounding(invalid, "id=md5('1/10')::uuid");
     assert.deepEqual(sql(byGrounding).split("\n").sort(), [
-      "cold_email|6.0.0|claude-sonnet-4-6|evidence_led|1|1|1|f|target_only|candidate_context_not_used|{}",
-      "cold_email|6.0.0|claude-sonnet-4-6|evidence_led|8|1|8|f|verified_evidence|none|{evidence}",
+      "cold_email|6.0.0|claude-sonnet-4-6|evidence_led|1|1|1|f|target_only|candidate_context_not_used|{}|||",
+      "cold_email|6.0.0|claude-sonnet-4-6|evidence_led|8|1|8|f|verified_evidence|none|{evidence}|||",
     ]);
   }
   const mixedKinds = {
@@ -270,10 +287,10 @@ try {
     "id=md5('1/7')::uuid",
   );
   assert.deepEqual(sql(byGrounding).split("\n").sort(), [
-    "cold_email|6.0.0|claude-sonnet-4-6|evidence_led|1|1|1|f|target_only|candidate_context_not_used|{}",
-    "cold_email|6.0.0|claude-sonnet-4-6|evidence_led|1|1|1|f|target_only|no_resume_context|{}",
-    "cold_email|6.0.0|claude-sonnet-4-6|evidence_led|2|1|2|f|verified_evidence|none|{evidence,profile}",
-    "cold_email|6.0.0|claude-sonnet-4-6|evidence_led|5|1|5|f|verified_evidence|none|{evidence}",
+    "cold_email|6.0.0|claude-sonnet-4-6|evidence_led|1|1|1|f|target_only|candidate_context_not_used|{}|||",
+    "cold_email|6.0.0|claude-sonnet-4-6|evidence_led|1|1|1|f|target_only|no_resume_context|{}|||",
+    "cold_email|6.0.0|claude-sonnet-4-6|evidence_led|2|1|2|f|verified_evidence|none|{evidence,profile}|||",
+    "cold_email|6.0.0|claude-sonnet-4-6|evidence_led|5|1|5|f|verified_evidence|none|{evidence}|||",
   ]);
   const validQuality = sql(
     "SELECT metadata->'quality' FROM user_feedback WHERE metadata->>'quality_version'='1' LIMIT 1;",
@@ -340,8 +357,156 @@ try {
   );
   sql("UPDATE user_preferences SET share_analytics=null;");
   assert.equal(sql(query), "");
+  // ALE-30 reuses the same canonical cohort eligibility and ten-outcome cap.
+  sql(`UPDATE user_preferences SET share_analytics=(user_id=md5('1')::uuid);
+    UPDATE user_feedback SET feedback_type='approved',
+      metadata=jsonb_set(jsonb_set(jsonb_set(metadata,'{quality}','${validQuality}'::jsonb),
+        '{emailMode}','"initial_outreach"'::jsonb),'{grounding}','${JSON.stringify(verified)}'::jsonb)
+      WHERE user_id=md5('1')::uuid;
+    UPDATE user_feedback SET feedback_type='rejected',
+      metadata=metadata||'{"emailMode":"follow_up","quality_reason":"weak_evidence"}'::jsonb
+      WHERE id=md5('1/11')::uuid;
+    UPDATE user_feedback SET feedback_type='rejected',
+      metadata=metadata||'{"emailMode":"follow_up","quality_reason":"unsupported_feeling"}'::jsonb
+      WHERE id=md5('1/10')::uuid;
+    UPDATE user_feedback SET feedback_type='rejected',
+      metadata=metadata||'{"quality_reason":"PRIVATE_REASON_CANARY"}'::jsonb
+      WHERE id=md5('1/9')::uuid;
+    UPDATE user_feedback SET metadata=metadata||'{"emailMode":"PRIVATE_MODE_CANARY"}'::jsonb
+      WHERE id=md5('1/8')::uuid;
+    UPDATE user_feedback SET metadata=jsonb_set(jsonb_set(metadata,'{quality,selectedSourceKinds}',
+      '["technology","action"]'::jsonb),'{quality,selectedSourceCount}','2'::jsonb) WHERE id=md5('1/11')::uuid;
+    UPDATE user_feedback SET metadata=jsonb_set(jsonb_set(metadata,'{quality,selectedSourceKinds}',
+      '["action","technology"]'::jsonb),'{quality,selectedSourceCount}','2'::jsonb) WHERE id=md5('1/10')::uuid;`);
+  const feedbackQuery = byGrounding.replace(
+    "false AS by_feedback",
+    "true AS by_feedback",
+  );
+  const feedbackRows = sql(feedbackQuery)
+    .split("\n")
+    .map((row) => row.split("|"));
+  assert.equal(
+    feedbackRows.length,
+    3,
+    "mode breakdown must distinguish follow-up, initial and unreported",
+  );
+  assert.equal(
+    feedbackRows.reduce((sum, row) => sum + Number(row[4]), 0),
+    10,
+    "new dimensions must not multiply the parent contribution cap",
+  );
+  const followUp = feedbackRows.find((row) => row[11] === "follow_up");
+  assert.ok(followUp);
+  assert.deepEqual(followUp.slice(4, 8), ["2", "1", "0", "f"]);
+  assert.equal(followUp[12], "{action,technology}");
+  const reasons = JSON.parse(followUp[13]);
+  assert.equal(reasons.weak_evidence, 1);
+  assert.equal(reasons.unsupported_feeling, 1);
+  assert.equal(
+    Object.values(reasons).reduce((sum, count) => sum + count, 0),
+    2,
+  );
+  const initial = feedbackRows.find((row) => row[11] === "initial_outreach");
+  assert.ok(initial);
+  assert.deepEqual(initial.slice(4, 8), ["7", "1", "6", "f"]);
+  assert.equal(JSON.parse(initial[13]).unreported, 1);
+  assert.equal(feedbackRows.find((row) => row[11] === "unreported")?.[4], "1");
+  assert.doesNotMatch(
+    JSON.stringify(feedbackRows),
+    /PRIVATE|[0-9a-f]{8}-[0-9a-f-]{27}/u,
+  );
+  for (const [index, summary] of [
+    [
+      7,
+      {
+        ...verified,
+        groundingLevel: "profile_grounded",
+        fallbackReason: "no_confirmed_evidence",
+        selectedEvidenceCount: 0,
+        selectedSourceKinds: ["profile"],
+      },
+    ],
+    [
+      6,
+      {
+        ...verified,
+        groundingLevel: "resume_fallback",
+        fallbackReason: "no_profile_context",
+        selectedEvidenceCount: 0,
+        selectedSourceKinds: ["resume"],
+      },
+    ],
+    [5, targetOnly],
+  ])
+    setGrounding(summary, `id=md5('1/${index}')::uuid`);
+  const levels = sql(feedbackQuery)
+    .split("\n")
+    .map((row) => row.split("|"));
+  assert.deepEqual([...new Set(levels.map((row) => row[8]))].sort(), [
+    "profile_grounded",
+    "resume_fallback",
+    "target_only",
+    "verified_evidence",
+  ]);
+  assert.equal(
+    levels.reduce((sum, row) => sum + Number(row[4]), 0),
+    10,
+  );
+  sql(
+    `UPDATE user_feedback SET metadata=metadata||'{"emailMode":"follow_up"}'::jsonb WHERE id=md5('1/4')::uuid;`,
+  );
+  setGrounding(
+    { ...verified, sourceId: "PRIVATE_SOURCE_CANARY" },
+    "id=md5('1/4')::uuid",
+  );
+  const safeRows = sql(feedbackQuery);
+  assert.doesNotMatch(safeRows, /PRIVATE/u);
+  assert.equal(
+    safeRows
+      .split("\n")
+      .reduce((sum, row) => sum + Number(row.split("|")[4]), 0),
+    10,
+    "the next eligible receipt may refill the unchanged contribution cap",
+  );
+  assert.equal(
+    safeRows
+      .split("\n")
+      .map((row) => row.split("|"))
+      .find((row) => row[11] === "follow_up")?.[4],
+    "2",
+    "malformed grounding must not add a third follow-up outcome",
+  );
+  for (const mode of [
+    "initial_outreach",
+    "founder_ceo_outreach",
+    "follow_up",
+    "clarification",
+    "role_fit_summary",
+    "referral_request",
+  ]) {
+    sql(
+      `UPDATE user_feedback SET metadata=jsonb_set(metadata,'{emailMode}','"${mode}"'::jsonb) WHERE user_id=md5('1')::uuid;`,
+    );
+    const rows = sql(feedbackQuery)
+      .split("\n")
+      .map((row) => row.split("|"));
+    assert.ok(
+      rows.every((row) => row[11] === mode),
+      `${mode} must not collapse to unreported`,
+    );
+    assert.equal(
+      rows.reduce((sum, row) => sum + Number(row[4]), 0),
+      10,
+    );
+  }
+  sql("UPDATE user_preferences SET share_analytics=false;");
+  assert.equal(
+    sql(feedbackQuery),
+    "",
+    "withdrawal must remove prior breakdown data",
+  );
   console.log(
-    "Quality SQL passed: canonical PK concurrency, owner/anonymous denial, reassignment denial, consent withdrawal, contribution cap, cohort floor, grounding breakdown and private-column exclusion.",
+    "Quality SQL passed: canonical PK concurrency, owner/anonymous denial, reassignment denial, consent withdrawal, contribution cap, cohort floor, grounding/mode/claim-kind/reason breakdown, stable approval denominators and private-column exclusion.",
   );
 } finally {
   if (started)

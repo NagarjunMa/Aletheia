@@ -1,4 +1,5 @@
 import { expect, it } from "vitest";
+import { EMAIL_MODES } from "./email-formatter";
 import { projectFeedbackMetadata } from "./feedback-quality";
 import {
   QUALITY_SOURCE_KINDS,
@@ -116,3 +117,16 @@ it("persists only consistent final-draft grounding summaries", () => {
     }),
   ).toEqual({});
 });
+
+it.each(EMAIL_MODES)(
+  "preserves the already-supported email mode %s in private metadata",
+  (emailMode) => {
+    expect(projectFeedbackMetadata({ emailMode })).toEqual({ emailMode });
+  },
+);
+it.each([undefined, null, "PRIVATE_MODE_CANARY", { body: "PRIVATE_CANARY" }])(
+  "does not guess or store an invalid email mode %j",
+  (emailMode) => {
+    expect(projectFeedbackMetadata({ emailMode })).toEqual({});
+  },
+);
