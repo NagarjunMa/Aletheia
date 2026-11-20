@@ -1,5 +1,10 @@
 # ALE-30 — Grounding-aware feedback and reporting
 
+Production follow-up, 2026-11-20: the user separately authorized fixing the
+Initial Outreach preflight failures discovered during hosted feedback acceptance.
+See [concise initial-email diagnosis and contract](ale-30-initial-email-preflight.md).
+This is distinct from the original feedback-only increment below.
+
 ## 1. Execution context
 
 [Issue](https://linear.app/aletheia-connection-builder/issue/ALE-30/42-add-grounding-aware-rejection-taxonomy-and-telemetry), 2026-11-19.
@@ -212,7 +217,6 @@ validation attempts (not passes); only this task's generated build/dependency co
 was removed, retaining exact matching shared dependencies. Once space recovered,
 native PostgreSQL17 and Vitest reproduced ALE30-R1 without the resource failure.
 No unrelated caches, worktrees, source or installed shared dependencies were removed.
-
 
 Latest-main integration: rebased uncommitted ALE-30 onto bbd6578 (merged ALE-78).
 Preserved both progress entries, its expected-diagnostic runtime/tests unchanged,

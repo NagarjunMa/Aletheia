@@ -15,7 +15,7 @@ import {
   countOutputUnits,
   resolveOutputConstraint,
 } from "@/lib/ai/output-constraints";
-import type { EmailMode } from "@/lib/ai/email-formatter";
+import { getEmailWordLimit, type EmailMode } from "@/lib/ai/email-formatter";
 import {
   allowedClaimTexts,
   type AtomicSource,
@@ -132,6 +132,7 @@ export function buildProseCompositions(input: {
     return priority(a.source) - priority(b.source);
   });
   const constraint = resolveOutputConstraint({ category, emailMode });
+  const preferredMinimum = getEmailWordLimit(category, emailMode).preferredMin;
   const prefix = createHash("sha256")
     .update(
       JSON.stringify([
@@ -179,10 +180,17 @@ export function buildProseCompositions(input: {
     : 0;
   // Target-aware drafts are preferred. InMail can use candidate-only proof when a complete target would exceed its shorter budget.
   let validationAttempts = 0;
-  search: for (const target of [
-    ...(domainAwareEmail ? [undefined, ...targets] : targets),
-    ...(category === "linkedin_inmail" ? [undefined] : []),
-  ]) {
+  // Preserve fuller options when available; use concise proof only if none fit.
+  const minimums = preferredMinimum
+    ? [preferredMinimum, constraint.minimum]
+    : [constraint.minimum];
+  search: for (const { minimum, target } of minimums.flatMap((minimum) =>
+    [
+      ...(domainAwareEmail ? [undefined, ...targets] : targets),
+      ...(category === "linkedin_inmail" ? [undefined] : []),
+    ].map((target) => ({ minimum, target })),
+  )) {
+    if (options.length && minimum !== minimums[0]) break;
     if ((!target || domainAwareEmail) && options.length) break;
     for (const facts of combinations(candidates)) {
       if (!facts.some(({ source }) => relevantFactIds.has(source.id))) continue;
@@ -220,7 +228,7 @@ export function buildProseCompositions(input: {
               signatureWords
             : 2 + countOutputUnits(cta, "words");
         const words = factualWords + overhead;
-        if (words < constraint.minimum || words > constraint.maximum) continue;
+        if (words < minimum || words > constraint.maximum) continue;
         // Bound expensive safety checks even when every fitting combination is excluded.
         if (validationAttempts++ === MAX_VALIDATION_ATTEMPTS) break search;
         const claims = [
@@ -277,7 +285,7 @@ export function buildProseCompositions(input: {
           validateOutreachProvenance({
             body,
             subject: "A brief introduction",
-            bodyConstraint: constraint,
+            bodyConstraint: { ...constraint, minimum },
             claims,
             context,
             platform: category === "cold_email" ? "email" : "linkedin",

@@ -21,6 +21,24 @@ function violationRules(result: ReturnType<typeof evaluateEmailQuality>) {
 }
 
 describe("email quality evals", () => {
+  it.each([
+    [39, false],
+    [40, true],
+    [119, true],
+    [120, true],
+    [185, true],
+    [186, false],
+  ])("checks the shared initial email length at %i words", (count, passed) => {
+    const result = evaluateEmailQuality(
+      Array(count).fill("synthetic").join(" "),
+      {
+        mode: "initial_outreach",
+        rules: ["word_count_within_mode_limit"],
+      },
+    );
+    expect(result.passed).toBe(passed);
+  });
+
   it.each(cases)("passes the preferred golden output for $id", (goldenCase) => {
     const result = evaluateEmailQuality(goldenCase.preferred, {
       mode: goldenCase.emailMode,
