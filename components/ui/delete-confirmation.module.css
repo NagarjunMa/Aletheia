@@ -1,0 +1,166 @@
+.trigger,
+.cancel,
+.confirm,
+.alternative {
+  min-height: 40px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.trigger,
+.cancel,
+.confirm {
+  border: 1px solid #78b49b66;
+  border-radius: 10px;
+  background: linear-gradient(155deg, #78b49b24, #285d4929);
+  box-shadow:
+    inset 0 1px #b1e5cd26,
+    0 5px 14px #02040328;
+}
+
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding-inline: 11px;
+  color: #bde6d2;
+  font-size: 12px;
+}
+
+.trigger:hover:not(:disabled),
+.cancel:hover,
+.confirm:hover:not(:disabled) {
+  border-color: var(--ref-phthalo-400);
+}
+
+.trigger:disabled,
+.confirm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dialog {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(420px, calc(100% - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+  padding: clamp(18px, 5vw, 28px);
+  border: 1px solid #78b49b70;
+  border-top-color: #b1e5cdab;
+  border-radius: 18px;
+  background: var(--ref-phthalo-950);
+  color: var(--ref-white);
+  box-shadow:
+    inset 0 1px #b1e5cd24,
+    0 24px 80px #020403a6;
+}
+
+@supports (
+  (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))
+) {
+  @media (prefers-reduced-transparency: no-preference) {
+    .dialog {
+      background: linear-gradient(145deg, #1e4938e0, #091814f5 65%);
+      backdrop-filter: blur(18px) saturate(125%);
+      -webkit-backdrop-filter: blur(18px) saturate(125%);
+    }
+  }
+}
+
+.dialog::backdrop {
+  background: #0204039e;
+}
+
+.dialog h2 {
+  font-size: 23px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+
+.dialog p {
+  font-size: 14px;
+  line-height: 1.6;
+  color: #c6d8ce;
+}
+
+.dialog .item {
+  margin-block: 10px 2px;
+  overflow-wrap: anywhere;
+  color: var(--ref-white);
+  font-weight: 600;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.cancel,
+.confirm {
+  padding: 9px 14px;
+  font-size: 13px;
+}
+
+.confirm {
+  position: relative;
+  isolation: isolate;
+  min-width: 150px;
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+  background: #19392d;
+  color: #f0fff7;
+}
+
+.confirm[data-holding="true"] {
+  border-color: var(--ref-phthalo-400);
+  background-color: #214537;
+}
+
+.fill {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, #285d49, #427e65);
+  transform: scaleX(0);
+  transform-origin: left;
+  pointer-events: none;
+}
+
+.label {
+  position: relative;
+  pointer-events: none;
+}
+
+.alternative {
+  display: block;
+  margin: 5px 0 0 auto;
+  padding-inline: 4px;
+  color: #bde6d2;
+  font-size: 12px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce), (forced-colors: active) {
+  .fill {
+    display: none;
+  }
+
+  .confirm[data-holding="true"] {
+    outline: 2px solid currentColor;
+    outline-offset: -4px;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .trigger,
+  .cancel {
+    background: var(--ref-phthalo-950);
+  }
+}

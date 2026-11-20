@@ -451,100 +451,6 @@
   }
 }
 
-/* ── Navbar — CSS-driven so no hydration flash ────────────
-   Dark theme only — light theme removed.
-   ─────────────────────────────────────────────────────────── */
-.landing-navbar {
-  background: transparent;
-  border-bottom: 1px solid transparent;
-  -webkit-backdrop-filter: blur(0px);
-  backdrop-filter: blur(0px);
-  will-change: background-color, backdrop-filter, border-color;
-  transition:
-    background-color 0.35s ease,
-    border-color 0.35s ease,
-    box-shadow 0.35s ease,
-    backdrop-filter 0.35s ease;
-}
-
-.landing-navbar.scrolled {
-  background: rgba(5, 8, 6, 0.72);
-  border-bottom-color: rgba(247, 250, 249, 0.1);
-  -webkit-backdrop-filter: blur(18px);
-  backdrop-filter: blur(18px);
-  box-shadow: 0 10px 30px -20px rgba(0, 0, 0, 0.45);
-}
-
-/* Logo text */
-.landing-nav-logo {
-  color: var(--ref-mint);
-  transition: color 0.4s ease;
-}
-
-/* Nav links */
-.landing-nav-link {
-  color: var(--l-text-dim);
-  transition: color 0.2s ease;
-}
-
-.landing-nav-link:hover,
-.landing-nav-link.active {
-  color: var(--ref-mint);
-}
-
-/* Mobile menu */
-.landing-mobile-menu {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  background: rgba(5, 8, 6, 0.97);
-  border-bottom: 1px solid rgba(247, 250, 249, 0.12);
-  clip-path: inset(0 0 100% 0);
-  opacity: 0;
-  pointer-events: none;
-  visibility: hidden;
-  transform: translateY(-8px);
-  transition:
-    clip-path 0.42s cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 0.24s ease,
-    transform 0.32s ease,
-    visibility 0s linear 0.42s;
-}
-
-.landing-mobile-menu.open {
-  clip-path: inset(0 0 0 0);
-  opacity: 1;
-  pointer-events: auto;
-  visibility: visible;
-  transform: translateY(0);
-  transition:
-    clip-path 0.48s cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 0.24s ease,
-    transform 0.32s ease,
-    visibility 0s;
-}
-
-/* Mobile menu icon colour */
-.landing-menu-icon {
-  color: var(--ref-mint);
-}
-
-.landing-nav-active-line {
-  transform-origin: center;
-  animation: nav-line-grow 0.28s ease-out both;
-}
-
-@keyframes nav-line-grow {
-  from {
-    transform: scaleX(0);
-  }
-
-  to {
-    transform: scaleX(1);
-  }
-}
-
 .landing-hero-word {
   animation: hero-word-rise 0.72s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
@@ -676,13 +582,10 @@
   .landing-hero-underline-path,
   .landing-section-reveal,
   .landing-scroll-indicator,
-  .landing-scroll-dot,
-  .landing-nav-active-line {
+  .landing-scroll-dot {
     animation: none;
   }
 
-  .landing-mobile-menu,
-  .landing-navbar,
   .landing-faq-panel {
     transition: none;
   }
@@ -1446,72 +1349,10 @@
   transform: translateY(0);
 }
 
-.landing-marketing .landing-navbar {
-  padding-top: env(safe-area-inset-top);
-}
-
-.landing-marketing .landing-navbar.scrolled {
-  background: rgba(3, 7, 5, 0.78);
-  border-bottom-color: var(--l-border);
-  box-shadow: 0 22px 60px -42px rgba(0, 0, 0, 0.9);
-}
-
-.landing-marketing .landing-brand,
-.landing-marketing .landing-nav-link,
-.landing-marketing .landing-menu-icon {
-  border-radius: 3px;
-  touch-action: manipulation;
-}
-
-.landing-marketing .landing-brand:focus-visible,
-.landing-marketing .landing-nav-link:focus-visible,
-.landing-marketing .landing-menu-icon:focus-visible,
-.landing-marketing footer a:focus-visible,
-.landing-marketing footer button:focus-visible,
 .landing-marketing #trust a:focus-visible,
 .landing-marketing #faq button:focus-visible {
   outline: 2px solid var(--l-accent);
   outline-offset: 4px;
-}
-
-.landing-marketing .landing-nav-logo {
-  font-family: var(--font-flaviotte), var(--font-cormorant), Georgia, serif;
-  font-size: 1.28rem;
-  font-weight: 400;
-  letter-spacing: 0.045em;
-}
-
-.landing-marketing .landing-nav-link {
-  padding: 0.5rem 0;
-  color: var(--l-text-dim);
-  font-size: 0.68rem;
-  font-weight: 650;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.landing-marketing .landing-nav-link {
-  transition: none;
-}
-
-.landing-marketing .landing-nav-link:hover,
-.landing-marketing .landing-nav-link.active {
-  color: var(--l-text);
-}
-
-.landing-marketing .landing-menu-icon {
-  display: inline-flex;
-  min-width: 44px;
-  min-height: 44px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--l-border);
-  background: rgba(5, 8, 6, 0.28);
-}
-
-.landing-marketing .landing-mobile-menu {
-  overscroll-behavior: contain;
-  background: rgba(3, 7, 5, 0.98);
 }
 
 .landing-marketing .landing-hero {

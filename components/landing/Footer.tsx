@@ -1,112 +1,93 @@
-import Image from "next/image";
 import Link from "next/link";
+import { ArrowUpRight } from "lucide-react";
+import styles from "./site-chrome.module.css";
 
-const CHROME_WEB_STORE_URL =
+const storeUrl =
   process.env.NEXT_PUBLIC_CHROME_WEB_STORE_URL ??
   "https://chromewebstore.google.com/detail/pneenlhefkghefjpaafgllkjkpfjnkgg";
 
-type FooterLink =
-  | { label: string; type: "scroll"; href: string }
-  | { label: string; type: "route"; href: string };
-
-const footerLinks: FooterLink[] = [
-  { label: "Product", type: "scroll", href: "#product" },
-  { label: "How it works", type: "scroll", href: "#how-it-works" },
-  { label: "Trust", type: "scroll", href: "#trust" },
-  { label: "Pricing", type: "scroll", href: "#pricing" },
-  { label: "FAQ", type: "scroll", href: "#faq" },
-  { label: "Demo", type: "route", href: "/demo" },
-  { label: "Install", type: "route", href: "/install" },
-  { label: "Status", type: "route", href: "/status" },
-  { label: "Privacy", type: "route", href: "/privacy" },
-  { label: "Terms", type: "route", href: "/terms" },
-];
-
-const linkClasses =
-  "cursor-pointer text-[10px] font-bold tracking-widest uppercase transition-colors duration-150";
+const groups = [
+  {
+    title: "Product",
+    links: [
+      ["LinkedIn notes", "/#connection-notes"],
+      ["Cold email and InMail", "/#outreach-drafts"],
+      ["Application answers", "/#application-answers"],
+      ["How it works", "/#how-it-works"],
+      ["Pricing", "/#pricing"],
+    ],
+  },
+  {
+    title: "Resources",
+    links: [
+      ["Demo", "/demo"],
+      ["Install", "/install"],
+      ["FAQ", "/#faq"],
+      ["Status", "/status"],
+    ],
+  },
+  {
+    title: "Aletheia",
+    links: [
+      ["About", "/#founder"],
+      ["Trust", "/#trust"],
+      ["Privacy", "/privacy"],
+      ["Terms", "/terms"],
+      ["Contact", "mailto:hello@aletheia.live"],
+    ],
+  },
+] as const;
 
 export default function Footer() {
   return (
-    <footer
-      className="relative px-5 sm:px-8 py-12"
-      style={{ background: "var(--l-bg)" }}
-    >
-      <div className="divider" />
-
-      <div className="mx-auto max-w-7xl pt-12">
-        <div className="flex flex-col gap-8 md:flex-row md:items-center md:justify-between">
-          {/* Logo */}
-          <Link href="/" className="flex items-center gap-2.5 cursor-pointer">
-            <Image src="/Aletheia.svg" alt="Aletheia" width={18} height={18} />
-            <span
-              style={{
-                fontFamily:
-                  "var(--font-flaviotte), var(--font-cormorant), Georgia, serif",
-                fontWeight: 300,
-                fontSize: "1.2rem",
-                color: "var(--l-text)",
-                letterSpacing: "0.04em",
-                transition: "color 0.4s ease",
-              }}
-            >
-              Aletheia
-            </span>
-          </Link>
-
-          {/* Nav links */}
-          <nav className="flex flex-wrap gap-8">
-            {footerLinks.map((link) =>
-              link.type === "route" ? (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className={`${linkClasses} text-[var(--l-text-dim)] hover:text-[var(--l-text)] transition-colors duration-150`}
-                >
-                  {link.label}
-                </Link>
-              ) : (
-                <a
-                  key={link.href}
-                  href={link.href}
-                  className={`${linkClasses} text-[var(--l-text-dim)] hover:text-[var(--l-text)] transition-colors duration-150`}
-                >
-                  {link.label}
-                </a>
-              ),
-            )}
+    <footer className={styles.footer}>
+      <div className={styles.footerInner}>
+        <div className={styles.footerTop}>
+          <div>
+            <p className={styles.footerLead}>
+              Professional drafts, grounded in your experience.
+            </p>
             <a
-              href={CHROME_WEB_STORE_URL}
+              className={styles.footerStore}
+              href={storeUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className={`${linkClasses} text-[var(--l-text-dim)] hover:text-[var(--l-text)] transition-colors duration-150`}
             >
-              Chrome Web Store
-            </a>
-          </nav>
-
-          {/* Copyright + disclaimer */}
-          <div className="flex flex-col gap-1 md:items-end">
-            <p
-              className="text-[10px] tracking-widest uppercase"
-              style={{ color: "var(--l-text-dim)" }}
-            >
-              © {new Date().getFullYear()} Aletheia
-            </p>
-            <p
-              className="max-w-xs text-[9px] leading-relaxed md:text-right"
-              style={{ color: "var(--l-text-dim)" }}
-            >
-              Not affiliated with, endorsed by, or sponsored by LinkedIn
-              Corporation or Apollo.io. Aletheia is an independent product.
-            </p>
-            <a
-              href="mailto:hello@aletheia.live"
-              className="text-[9px]"
-              style={{ color: "var(--l-blue)" }}
-            >
-              hello@aletheia.live
+              Chrome Web Store <ArrowUpRight size={15} aria-hidden="true" />
             </a>
           </div>
+          <nav className={styles.footerNav} aria-label="Footer navigation">
+            {groups.map(({ title, links }) => (
+              <div key={title}>
+                <h2 className={styles.groupLabel}>{title}</h2>
+                <ul>
+                  {links.map(([label, href]) => (
+                    <li key={href}>
+                      {href.startsWith("/") ? (
+                        <Link href={href}>{label}</Link>
+                      ) : (
+                        <a href={href}>{label}</a>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </nav>
+        </div>
+        <Link
+          href="/"
+          className={styles.footerWordmark}
+          aria-label="Aletheia home"
+        >
+          Aletheia
+        </Link>
+        <div className={styles.footerLegal}>
+          <p>© {new Date().getFullYear()} Aletheia</p>
+          <p>
+            Aletheia is an independent product, unaffiliated with LinkedIn
+            Corporation or Apollo.io.
+          </p>
         </div>
       </div>
     </footer>

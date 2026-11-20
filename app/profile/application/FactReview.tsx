@@ -125,6 +125,7 @@ export default function FactReview({
 
   return (
     <section
+      data-dashboard-surface="inset"
       aria-label={`Review facts for ${evidence.title}`}
       className="mt-4 space-y-5 rounded-xl border border-accent/25 bg-background/65 p-5"
     >

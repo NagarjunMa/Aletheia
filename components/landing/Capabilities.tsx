@@ -2,12 +2,14 @@ import { BookOpenCheck, Mail, MessageSquareText, Sparkles } from "lucide-react";
 
 const capabilities = [
   {
+    id: "connection-notes",
     icon: MessageSquareText,
     eyebrow: "Thoughtful introductions",
     title: "Make the first note feel considered.",
     body: "Shape a LinkedIn connection note around the profile you selected and the purpose you bring to the conversation. You decide what earns a place in the final draft.",
   },
   {
+    id: "outreach-drafts",
     icon: Mail,
     eyebrow: "Longer-form outreach",
     title: "Carry the same care into email and InMail.",

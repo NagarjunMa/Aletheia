@@ -134,3 +134,89 @@ test("button beam responds to focus and becomes still with reduced motion @smoke
   await page.emulateMedia({ reducedMotion: "reduce" });
   expect(await beamAnimation()).toBe("none");
 });
+
+test("offerings disclosure explains drafts and restores keyboard focus @smoke", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  const nav = page.getByRole("navigation", { name: "Primary navigation" });
+  const toggle = nav.getByRole("button", { name: "What we offer" });
+  await toggle.focus();
+  await page.keyboard.press("Enter");
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  const linkedin = nav.getByRole("link", {
+    name: /LinkedIn connection notes/u,
+  });
+  await expect(linkedin).toContainText("selected profile");
+  await expect(
+    nav.getByRole("link", { name: /Cold email and InMail/u }),
+  ).toBeVisible();
+  await expect(
+    nav.getByRole("link", { name: /Application answers/u }),
+  ).toBeVisible();
+  await page.keyboard.press("Tab");
+  await expect(linkedin).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(toggle).toBeFocused();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(linkedin).toBeHidden();
+  await toggle.click();
+  await page.locator("main").click({ position: { x: 12, y: 120 } });
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+});
+
+test("compact menu explains offerings and links back from legal pages @smoke", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 780 });
+  await page.goto("/privacy");
+  const nav = page.getByRole("navigation", { name: "Primary navigation" });
+  await nav.getByRole("button", { name: "Open navigation menu" }).click();
+  const menu = nav.locator("#landing-mobile-navigation");
+  await expect(menu.getByText("What we offer", { exact: true })).toBeVisible();
+  await menu.getByRole("link", { name: /Application answers/u }).click();
+  await expect(page).toHaveURL(/\/#application-answers$/u);
+  await expect(menu).toBeHidden();
+  const footer = page
+    .getByRole("contentinfo")
+    .getByRole("navigation", { name: "Footer navigation" });
+  await expect(
+    footer.getByRole("link", { name: "Privacy", exact: true }),
+  ).toHaveAttribute("href", "/privacy");
+});
+
+test("landing progress follows the full page and remains readable on mobile @smoke", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/");
+  await page.evaluate(() => document.fonts.ready);
+  const indicator = page.locator("[data-landing-scroll-progress]");
+  await expect(indicator).toHaveText("0%");
+  await page.evaluate(() => {
+    const end = document.documentElement.scrollHeight - window.innerHeight;
+    window.scrollTo({ top: end / 2, behavior: "instant" });
+  });
+  await expect(indicator).toHaveText("50%");
+  await expect
+    .poll(() =>
+      indicator.locator("span > span").evaluate((fill) => {
+        const scale = new DOMMatrix(getComputedStyle(fill).transform).d;
+        return Math.abs(scale - 0.5);
+      }),
+    )
+    .toBeLessThan(0.01);
+  await page.setViewportSize({ width: 390, height: 780 });
+  await page.evaluate(() =>
+    window.scrollTo({
+      top: document.documentElement.scrollHeight,
+      behavior: "instant",
+    }),
+  );
+  await expect(indicator).toBeVisible();
+  await expect(indicator).toHaveText("100%");
+  await page.getByRole("link", { name: "Privacy", exact: true }).click();
+  await expect(page).toHaveURL(/\/privacy$/u);
+  await expect(indicator).toHaveCount(0);
+});
