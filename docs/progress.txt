@@ -1,3 +1,15 @@
+## 2026-11-20 — Dashboard PR #163 smoke test harness fix
+
+CI on c5a058e passed the 66 Playwright cases, then the separate fact-review
+browser harness stopped before launching Chromium. ApplicationProfileEditor now
+loads DeleteConfirmation, which brings in a CSS module. The harness had no
+esbuild output path and assumed one JavaScript file. Standard risk, scoped to
+the local test server. Reproduced the exact failure with
+`npm run test:candidate-fact-review:ui`, then configured in-memory JavaScript and
+CSS output and served the generated styles with the existing global CSS.
+The full fact-review harness passed at 375, 900 and 1440 px. No application
+runtime, tests' assertions, or CI workflow changes. Roll back with a revert.
+
 ## 2026-11-19 — Dashboard glass and delete confirmation
 
 From main a4eb41e, refine the dashboard's existing hierarchy with frosted section
