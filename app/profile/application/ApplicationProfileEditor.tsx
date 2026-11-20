@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import DeleteConfirmation from "@/components/ui/DeleteConfirmation";
 import {
   CheckCircle2,
   ChevronDown,
@@ -10,7 +11,6 @@ import {
   Plus,
   Save,
   ShieldCheck,
-  Trash2,
   X,
 } from "lucide-react";
 import {
@@ -97,7 +97,10 @@ export default function ApplicationProfileEditor({
   const [profileNotice, setProfileNotice] = useState<ProfileNotice>(null);
   const [evidenceNotice, setEvidenceNotice] = useState<Notice>(null);
   const [profilePending, startProfileTransition] = useTransition();
-  const [evidencePending, startEvidenceTransition] = useTransition();
+  const [savingEvidence, startEvidenceTransition] = useTransition();
+  const [deletingEvidence, setDeletingEvidence] = useState(false);
+  const evidencePending = savingEvidence || deletingEvidence;
+  const evidenceHeading = useRef<HTMLHeadingElement>(null);
   const evidenceSection = useRef<HTMLDetailsElement>(null);
 
   useEffect(() => {
@@ -184,23 +187,31 @@ export default function ApplicationProfileEditor({
     setReviewId(null);
   }
 
-  const removeEvidence = (item: CandidateEvidenceRecord) => {
-    if (!window.confirm(`Delete “${item.title}”?`)) return;
+  const removeEvidence = async (item: CandidateEvidenceRecord) => {
+    if (evidencePending || editor || reviewId) return;
+    evidenceHeading.current?.focus();
+    setDeletingEvidence(true);
     setEvidenceNotice(null);
-    startEvidenceTransition(async () => {
+    try {
       const result = await deleteCandidateEvidence(item.id);
       if (!result.ok) {
         setEvidenceNotice({ type: "error", message: result.error });
         return;
       }
       setEvidence((items) => items.filter((entry) => entry.id !== item.id));
-      if (editor?.id === item.id) setEditor(null);
       setEvidenceNotice({
         type: "success",
         message: "Evidence story deleted.",
       });
       router.refresh();
-    });
+    } catch {
+      setEvidenceNotice({
+        type: "error",
+        message: "Could not delete this evidence story. Try again.",
+      });
+    } finally {
+      setDeletingEvidence(false);
+    }
   };
 
   return (
@@ -458,6 +469,7 @@ export default function ApplicationProfileEditor({
         <details
           id="evidence"
           ref={evidenceSection}
+          data-dashboard-surface="panel"
           className="group scroll-mt-6 rounded-xl border border-border/70 bg-card/75 shadow-[0_18px_55px_rgba(2,4,3,0.16)] backdrop-blur-xl transition-colors open:border-primary/25 open:bg-card"
         >
           <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-5 marker:content-none sm:px-6 [&::-webkit-details-marker]:hidden">
@@ -478,7 +490,11 @@ export default function ApplicationProfileEditor({
           <div className="border-t border-border/65 px-5 py-6 sm:px-6">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div>
-                <h2 className="text-2xl font-semibold text-foreground">
+                <h2
+                  ref={evidenceHeading}
+                  tabIndex={-1}
+                  className="text-2xl font-semibold text-foreground"
+                >
                   Build claims from proof, not keywords
                 </h2>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
@@ -540,6 +556,7 @@ export default function ApplicationProfileEditor({
                   return (
                     <article
                       key={item.id}
+                      data-dashboard-surface="inset"
                       className="rounded-lg border border-accent/13 bg-background/42 p-4"
                     >
                       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -552,7 +569,7 @@ export default function ApplicationProfileEditor({
                           className="min-w-0 text-left"
                         >
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-xs uppercase tracking-[0.14em] text-accent/58">
+                            <span className="text-xs uppercase tracking-[0.14em] text-accent">
                               {option?.label ?? item.kind}
                             </span>
                             <EvidenceStatus
@@ -568,7 +585,7 @@ export default function ApplicationProfileEditor({
                             {item.outcome || item.actions}
                           </p>
                         </button>
-                        <div className="flex shrink-0 items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <button
                             type="button"
                             disabled={
@@ -596,17 +613,14 @@ export default function ApplicationProfileEditor({
                           >
                             Review facts
                           </button>
-                          <button
-                            type="button"
-                            aria-label={`Delete ${item.title}`}
+                          <DeleteConfirmation
+                            kind="evidence"
+                            name={item.title}
                             disabled={
                               evidencePending || Boolean(editor || reviewId)
                             }
-                            onClick={() => removeEvidence(item)}
-                            className="rounded-lg border border-rose-300/20 p-2 text-rose-200 transition hover:bg-rose-400/10 disabled:opacity-50"
-                          >
-                            <Trash2 className="h-4 w-4" aria-hidden={true} />
-                          </button>
+                            onConfirm={() => removeEvidence(item)}
+                          />
                         </div>
                       </div>
                       {reviewId === item.id ? (
@@ -646,10 +660,13 @@ export default function ApplicationProfileEditor({
       </div>
 
       <aside className="lg:sticky lg:top-6 lg:h-fit">
-        <div className="rounded-xl border border-accent/18 bg-background/58 p-5 shadow-[0_24px_70px_rgba(2,4,3,0.3)] backdrop-blur-2xl">
+        <div
+          data-dashboard-surface="panel"
+          className="rounded-xl border border-accent/18 bg-background/58 p-5 shadow-[0_24px_70px_rgba(2,4,3,0.3)] backdrop-blur-2xl"
+        >
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-xs uppercase tracking-[0.18em] text-accent/60">
+              <p className="text-xs uppercase tracking-[0.18em] text-accent">
                 Application readiness
               </p>
               <p className="mt-2 text-4xl font-bold text-white">
@@ -746,6 +763,7 @@ function ProfileSection({
       id={`candidate-${category.id}`}
       open={isOpen}
       onToggle={(event) => setIsOpen(event.currentTarget.open)}
+      data-dashboard-surface="panel"
       className="group scroll-mt-6 rounded-xl border border-border/70 bg-card/75 shadow-[0_18px_55px_rgba(2,4,3,0.16)] backdrop-blur-xl transition-colors open:border-primary/25 open:bg-card"
     >
       <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-5 marker:content-none sm:px-6 [&::-webkit-details-marker]:hidden">
@@ -930,6 +948,7 @@ function EvidenceEditor({
     <form
       ref={form}
       onSubmit={onSubmit}
+      data-dashboard-surface="inset"
       className="mt-6 rounded-xl border border-accent/22 bg-background/55 p-5"
     >
       <div className="flex items-start justify-between gap-4">
@@ -1133,7 +1152,7 @@ function ReadinessList({
 }) {
   return (
     <div className="mt-5">
-      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent/58">
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">
         {title}
       </p>
       <ul className="mt-2 space-y-2">

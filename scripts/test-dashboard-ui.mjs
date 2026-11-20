@@ -28,8 +28,11 @@ const output = await build({
 import {useEffect,useState} from 'react'; import {createRoot} from 'react-dom/client';
 import DashboardView from './app/dashboard/DashboardView'; import {dashboardFixture} from './__tests__/helpers/dashboard-fixtures';
 import DashboardPage from './app/dashboard/page';
+import ResumeManager from './app/profile/ResumeManager';
+function ResumeBoundary(){return <div className="product-shell"><ResumeManager initialResumes={dashboardFixture().resumes} maxResumes={3}/></div>;}
 function PageBoundary(){const[view,setView]=useState(null);useEffect(()=>{let active=true;DashboardPage().then(value=>{if(active)setView(value)});return()=>{active=false}},[]);return view;}
-function App(){ const [state,setState]=useState({mode:new URLSearchParams(location.search).get('mode')||'populated',owner:'a'});useEffect(()=>{window.setFixture=(mode,owner='a')=>setState({mode,owner});window.refreshFixture=()=>setState({mode:window.refreshMode||'empty',owner:'a'});},[]);const data=dashboardFixture(state.mode,state.owner);return <DashboardView key={state.owner} ownerId={state.owner} name={data.profileName} email={state.owner+'@example.test'} data={data} candidateEditor={<p>Saved candidate details are editable here.</p>}/>;}createRoot(document.getElementById('root')).render(new URLSearchParams(location.search).has('page-boundary')?<PageBoundary/>:<App/>);`,
+function App(){ const [state,setState]=useState({mode:new URLSearchParams(location.search).get('mode')||'populated',owner:'a'});useEffect(()=>{window.setFixture=(mode,owner='a')=>setState({mode,owner});window.refreshFixture=()=>setState({mode:window.refreshMode||'empty',owner:'a'});},[]);const data=dashboardFixture(state.mode,state.owner);return <DashboardView key={state.owner} ownerId={state.owner} name={data.profileName} email={state.owner+'@example.test'} data={data} candidateEditor={<p>Saved candidate details are editable here.</p>}/>;}const params=new URLSearchParams(location.search);
+createRoot(document.getElementById('root')).render(params.has('resume-manager')?<ResumeBoundary/>:params.has('page-boundary')?<PageBoundary/>:<App/>);`,
   },
   plugins: [
     {
@@ -71,19 +74,20 @@ function App(){ const [state,setState]=useState({mode:new URLSearchParams(locati
             "import{dashboardFixture}from'./__tests__/helpers/dashboard-fixtures';export async function loadDashboard(){return dashboardFixture(new URLSearchParams(location.search).get('mode')||'populated')}",
         }));
         api.onLoad({ filter: /^profile-actions$/, namespace: "mock" }, () => ({
-          contents: [
-            "saveCandidateProfileCategory",
-            "saveCandidateEvidence",
-            "deleteCandidateEvidence",
-            "saveCandidateFactReview",
-            "loadResumeFactReview",
-            "saveResumeFactReview",
-          ]
-            .map(
-              (name) =>
-                `export async function ${name}(){throw new Error('Action outside test scope')}`,
-            )
-            .join(";"),
+          contents:
+            [
+              "saveCandidateProfileCategory",
+              "saveCandidateEvidence",
+              "saveCandidateFactReview",
+              "loadResumeFactReview",
+              "saveResumeFactReview",
+            ]
+              .map(
+                (name) =>
+                  `export async function ${name}(){throw new Error('Action outside test scope')}`,
+              )
+              .join(";") +
+            ";export async function deleteCandidateEvidence(id){(window.evidenceDeletes??=[]).push(id);return window.evidenceDeleteFailure?{ok:false,error:'Evidence could not be deleted.'}:{ok:true}}",
         }));
         api.onLoad({ filter: /^link$/, namespace: "mock" }, () => ({
           loader: "jsx",
@@ -583,6 +587,189 @@ try {
       });
     await p.close();
   });
+  await check(
+    "dashboard uses glass on profile sections and evidence",
+    async () => {
+      const profile = await page(1280, "populated&page-boundary=1");
+      const work = profile.getByLabel("Current role", { exact: true });
+      await expect(work).toBeVisible();
+      const panel = work.locator("xpath=ancestor::details[1]");
+      await expect(panel).toHaveCSS("backdrop-filter", /blur\(/u);
+      await expect(panel).toHaveCSS(
+        "border-top-color",
+        "rgba(177, 229, 205, 0.38)",
+      );
+      await profile.locator("#evidence > summary").click();
+      const story = profile.locator("#evidence article").first();
+      await expect(story).toBeVisible();
+      await expect(story).toHaveCSS("backdrop-filter", "none");
+      const rim = (element) =>
+        getComputedStyle(element, "::before").animationName;
+      assert.match(await panel.evaluate(rim), /dashboard-rim-orbit/u);
+      await story.hover();
+      assert.match(await story.evaluate(rim), /dashboard-rim-orbit/u);
+      if (screenshots)
+        await profile.screenshot({
+          path: resolve(screenshots, "dashboard-evidence.png"),
+        });
+      const session = await profile.context().newCDPSession(profile);
+      await session.send("Emulation.setEmulatedMedia", {
+        features: [{ name: "prefers-reduced-transparency", value: "reduce" }],
+      });
+      await expect(panel).toHaveCSS("backdrop-filter", "none");
+      await expect(work).toHaveCSS("background-color", "rgb(9, 24, 20)");
+      await profile.close();
+    },
+  );
+  await check(
+    "evidence delete cancels short presses and commits a complete hold once",
+    async () => {
+      const profile = await page(1280, "populated&page-boundary=1");
+      await profile.locator("#evidence > summary").click();
+      const launch = profile
+        .getByRole("button", { name: /^Delete PRIVATE_SOURCE_CANARY$/ })
+        .first();
+      await launch.click();
+      const dialog = profile.getByRole("dialog", { name: "Delete evidence?" });
+      const hold = dialog.getByRole("button", {
+        name: "Hold to delete",
+        exact: true,
+      });
+      await expect(
+        dialog.getByRole("button", { name: "Cancel", exact: true }),
+      ).toBeFocused();
+      await hold.click();
+      await expect(hold).toBeVisible();
+      assert.deepEqual(
+        await profile.evaluate(() => window.evidenceDeletes ?? []),
+        [],
+      );
+
+      await hold.focus();
+      await profile.keyboard.down("Space");
+      await expect(hold).toHaveAttribute("data-holding", "true");
+      await profile.keyboard.up("Space");
+      await expect(hold).toHaveAttribute("data-holding", "false");
+      await profile.keyboard.press("Escape");
+      await expect(dialog).not.toBeVisible();
+      await expect(launch).toBeFocused();
+      await profile.waitForTimeout(1250);
+      assert.deepEqual(
+        await profile.evaluate(() => window.evidenceDeletes ?? []),
+        [],
+      );
+
+      await launch.click();
+      await hold.hover();
+      await profile.mouse.down();
+      await expect(hold).toHaveAttribute("data-holding", "true");
+      await profile.mouse.move(0, 0);
+      await expect(hold).toHaveAttribute("data-holding", "false");
+      await profile.mouse.up();
+      assert.deepEqual(
+        await profile.evaluate(() => window.evidenceDeletes ?? []),
+        [],
+      );
+
+      await hold.hover();
+      await profile.mouse.down({ button: "left" });
+      await profile.mouse.down({ button: "right" });
+      await profile.mouse.up({ button: "left" });
+      await expect(hold).toHaveAttribute("data-holding", "false");
+      await profile.mouse.up({ button: "right" });
+      assert.deepEqual(
+        await profile.evaluate(() => window.evidenceDeletes ?? []),
+        [],
+      );
+
+      await hold.hover();
+      await profile.mouse.down();
+      await expect(hold).toHaveAttribute("data-holding", "true");
+      if (screenshots)
+        await profile.screenshot({
+          path: resolve(screenshots, "evidence-hold.png"),
+        });
+      await expect(dialog).not.toBeVisible({ timeout: 3000 });
+      await profile.mouse.up();
+      await expect(profile.getByText("Evidence story deleted.")).toBeVisible();
+      assert.deepEqual(await profile.evaluate(() => window.evidenceDeletes), [
+        "11111111-1111-4111-8111-111111111111",
+      ]);
+      await expect(profile.locator("#evidence article")).toHaveCount(1);
+      await profile.close();
+    },
+  );
+  await check(
+    "résumé confirmation is accessible and retryable after a failed delete",
+    async () => {
+      const resumePage = await browser.newPage({
+        viewport: { width: 390, height: 800 },
+        reducedMotion: "reduce",
+        hasTouch: true,
+        isMobile: true,
+      });
+      let deletes = 0;
+      await resumePage.route("**/*", (route) =>
+        new URL(route.request().url()).origin === origin
+          ? route.continue()
+          : route.abort(),
+      );
+      await resumePage.route("**/api/resumes/**", (route) => {
+        assert.equal(route.request().method(), "DELETE");
+        assert.equal(
+          new URL(route.request().url()).pathname,
+          "/api/resumes/33333333-3333-4333-8333-333333333333",
+        );
+        deletes++;
+        return route.fulfill(
+          deletes === 1
+            ? { status: 503, json: { error: "Could not delete this résumé." } }
+            : { json: { success: true } },
+        );
+      });
+      await resumePage.route("**/api/resumes", (route) =>
+        route.fulfill({ json: { resumes: [] } }),
+      );
+      await resumePage.goto(`${origin}/profile?resume-manager=1`);
+      const launch = resumePage.getByRole("button", {
+        name: "Delete Platform engineering",
+      });
+      const dialog = resumePage.getByRole("dialog", { name: "Delete résumé?" });
+      await launch.tap();
+      await expect(dialog).toBeVisible();
+      const hold = dialog.getByRole("button", {
+        name: "Hold to delete",
+        exact: true,
+      });
+      await hold.tap();
+      assert.equal(deletes, 0);
+      await dialog
+        .getByRole("button", { name: "Confirm without holding" })
+        .focus();
+      await resumePage.keyboard.down("Enter");
+      const confirm = dialog.getByRole("button", {
+        name: "Delete permanently",
+      });
+      await expect(confirm).toBeFocused();
+      await resumePage.keyboard.down("Enter");
+      await resumePage.keyboard.up("Enter");
+      await expect(confirm).toBeFocused();
+      assert.equal(deletes, 0);
+      await confirm.press("Enter");
+      await expect(resumePage.getByRole("alert")).toContainText(
+        "Could not delete this résumé.",
+      );
+      assert.equal(deletes, 1);
+      await launch.tap();
+      await hold.focus();
+      await resumePage.keyboard.down("Space");
+      await expect(resumePage.getByText("Resume deleted.")).toBeVisible();
+      await resumePage.keyboard.up("Space");
+      await expect(launch).toHaveCount(0);
+      assert.equal(deletes, 2);
+      await resumePage.close();
+    },
+  );
   await check("screen-reader semantics and privacy", async () => {
     const snapshot = await p.locator("main").ariaSnapshot();
     assert.ok(snapshot.includes("Profile completion"));

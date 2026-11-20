@@ -1,248 +1,215 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Menu, X } from "lucide-react";
+import { usePathname } from "next/navigation";
+import {
+  ArrowUpRight,
+  ChevronDown,
+  ClipboardList,
+  Mail,
+  Menu,
+  MessageSquareText,
+  X,
+} from "lucide-react";
+import styles from "./site-chrome.module.css";
 
-const CHROME_WEB_STORE_URL: string =
+const storeUrl =
   process.env.NEXT_PUBLIC_CHROME_WEB_STORE_URL ??
   "https://chromewebstore.google.com/detail/pneenlhefkghefjpaafgllkjkpfjnkgg";
 
-const navLinks = [
-  { label: "Product", href: "#product" },
-  { label: "How it works", href: "#how-it-works" },
-  { label: "Application answers", href: "#application-answers" },
-  { label: "Trust", href: "#trust" },
-  { label: "Pricing", href: "#pricing" },
-  { label: "FAQ", href: "#faq" },
+const offerings = [
+  {
+    title: "LinkedIn connection notes",
+    description:
+      "Start a conversation with a short draft based on the selected profile.",
+    anchor: "#connection-notes",
+    icon: MessageSquareText,
+  },
+  {
+    title: "Cold email and InMail",
+    description:
+      "Draft introductions and follow-ups with a clear reason to reach out.",
+    anchor: "#outreach-drafts",
+    icon: Mail,
+  },
+  {
+    title: "Application answers",
+    description:
+      "Answer job application questions with experience you’ve reviewed.",
+    anchor: "#application-answers",
+    icon: ClipboardList,
+  },
 ];
 
+const links = [
+  ["How it works", "#how-it-works"],
+  ["Trust", "#trust"],
+  ["Pricing", "#pricing"],
+  ["FAQ", "#faq"],
+] as const;
+
 export default function Navbar() {
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const [scrolled, setScrolled] = useState(false);
-  const [activeSection, setActiveSection] = useState<string>("");
-  const headerRef = useRef<HTMLElement>(null);
+  const prefix = usePathname() === "/" ? "" : "/";
+  const [open, setOpen] = useState<"offerings" | "mobile" | null>(null);
+  const nav = useRef<HTMLElement>(null);
+  const offeringsButton = useRef<HTMLButtonElement>(null);
+  const mobileButton = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    const hero = document.getElementById("hero");
-    const getThreshold = () =>
-      hero ? Math.max(hero.offsetHeight - 80, 40) : 40;
-    const onScroll = () => setScrolled(window.scrollY > getThreshold());
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-
+    if (!open) return;
+    const desktop = window.matchMedia("(min-width: 1280px)");
+    const close = () => setOpen(null);
+    function closeOutside(event: Event) {
+      if (event.target instanceof Node && !nav.current?.contains(event.target))
+        close();
+    }
+    function onEscape(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      close();
+      (open === "offerings" ? offeringsButton : mobileButton).current?.focus();
+    }
+    desktop.addEventListener("change", close);
+    document.addEventListener("pointerdown", closeOutside);
+    document.addEventListener("focusin", closeOutside);
+    document.addEventListener("keydown", onEscape);
     return () => {
-      window.removeEventListener("scroll", onScroll);
+      desktop.removeEventListener("change", close);
+      document.removeEventListener("pointerdown", closeOutside);
+      document.removeEventListener("focusin", closeOutside);
+      document.removeEventListener("keydown", onEscape);
     };
-  }, []);
+  }, [open]);
 
-  useEffect(() => {
-    const sections = navLinks.map((l) =>
-      document.querySelector(l.href),
-    ) as HTMLElement[];
-    if (sections.every((s) => !s)) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries
-          .filter((e) => e.isIntersecting)
-          .sort((a, b) => b.intersectionRatio - a.intersectionRatio);
-        if (visible[0]) setActiveSection(visible[0].target.id);
-      },
-      { threshold: [0.2, 0.5], rootMargin: "-60px 0px -30% 0px" },
+  function offeringLinks() {
+    return (
+      <ul className={styles.offerings}>
+        {offerings.map(({ title, description, anchor, icon: Icon }) => (
+          <li key={anchor}>
+            <a href={prefix + anchor} onClick={() => setOpen(null)}>
+              <Icon className={styles.offerIcon} size={19} aria-hidden="true" />
+              <span>
+                <strong>{title}</strong>
+                <span>{description}</span>
+              </span>
+              <ArrowUpRight
+                className={styles.offerArrow}
+                size={15}
+                aria-hidden="true"
+              />
+            </a>
+          </li>
+        ))}
+      </ul>
     );
+  }
 
-    sections.forEach((s) => s && observer.observe(s));
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
-    document.body.style.overflow = mobileOpen ? "hidden" : "";
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setMobileOpen(false);
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.body.style.overflow = "";
-      window.removeEventListener("keydown", onKeyDown);
-    };
-  }, [mobileOpen]);
-
-  const closeMobileMenu = () => {
-    setMobileOpen(false);
-  };
+  const actions = (
+    <div className={styles.actions}>
+      <Link href="/dashboard" onClick={() => setOpen(null)}>
+        Open Dashboard
+      </Link>
+      <a
+        className={styles.install}
+        href={storeUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={() => setOpen(null)}
+      >
+        Get on Chrome Web Store
+        <ArrowUpRight size={15} aria-hidden="true" />
+      </a>
+    </div>
+  );
 
   return (
-    /* ↓ Base bg via .landing-navbar; scrolled glass handled by CSS */
-    <header
-      ref={headerRef}
-      className={`landing-navbar fixed top-0 left-0 right-0 z-50 ${scrolled ? "scrolled" : ""}`}
-    >
-      <nav
-        className="mx-auto flex max-w-[90rem] items-center justify-between px-5 py-4 sm:px-8 lg:px-12"
-        aria-label="Primary navigation"
-      >
-        {/* Logo — color driven by .landing-nav-logo CSS class */}
+    <header className={`landing-navbar ${styles.header}`}>
+      <nav ref={nav} className={styles.nav} aria-label="Primary navigation">
         <Link
-          href="#hero"
-          className="landing-brand flex items-center gap-2.5"
+          href="/"
+          className={styles.brand}
           aria-label="Aletheia home"
+          onClick={() => setOpen(null)}
         >
-          <Image src="/Aletheia.svg" alt="Aletheia" width={22} height={22} />
-          <span className="landing-nav-logo">Aletheia</span>
+          <Image src="/Aletheia.svg" alt="Aletheia" width={23} height={23} />
+          <span>Aletheia</span>
         </Link>
 
-        {/* Desktop Nav — colors via .landing-nav-link */}
-        <div className="hidden items-center gap-10 xl:flex">
-          {navLinks.map((link) => {
-            const sectionId = link.href.replace("#", "");
-            const isActive = activeSection === sectionId;
-            return (
+        <div className={styles.desktop}>
+          <div className={styles.offeringsAnchor}>
+            <button
+              ref={offeringsButton}
+              type="button"
+              className={styles.navLink}
+              aria-expanded={open === "offerings"}
+              aria-controls="landing-offerings"
+              onClick={() => setOpen(open === "offerings" ? null : "offerings")}
+            >
+              What we offer
+              <ChevronDown size={15} aria-hidden="true" />
+            </button>
+            <div
+              id="landing-offerings"
+              className={styles.offeringsPanel}
+              hidden={open !== "offerings"}
+            >
+              {offeringLinks()}
+            </div>
+          </div>
+          {links.map(([label, anchor]) => (
+            <a
+              className={styles.navLink}
+              key={anchor}
+              href={prefix + anchor}
+              onClick={() => setOpen(null)}
+            >
+              {label}
+            </a>
+          ))}
+        </div>
+
+        <div className={styles.desktopActions}>{actions}</div>
+        <button
+          ref={mobileButton}
+          type="button"
+          className={styles.mobileToggle}
+          aria-label={
+            open === "mobile" ? "Close navigation menu" : "Open navigation menu"
+          }
+          aria-expanded={open === "mobile"}
+          aria-controls="landing-mobile-navigation"
+          onClick={() => setOpen(open === "mobile" ? null : "mobile")}
+        >
+          {open === "mobile" ? (
+            <X size={22} aria-hidden="true" />
+          ) : (
+            <Menu size={22} aria-hidden="true" />
+          )}
+        </button>
+
+        <div
+          id="landing-mobile-navigation"
+          className={styles.mobilePanel}
+          hidden={open !== "mobile"}
+        >
+          <p className={styles.groupLabel}>What we offer</p>
+          {offeringLinks()}
+          <div className={styles.mobileLinks}>
+            {links.map(([label, anchor]) => (
               <a
-                key={link.href}
-                href={link.href}
-                className={`landing-nav-link relative ${isActive ? "active" : ""}`}
-                aria-current={isActive ? "location" : undefined}
+                className={styles.navLink}
+                key={anchor}
+                href={prefix + anchor}
+                onClick={() => setOpen(null)}
               >
-                {link.label}
-                {isActive && (
-                  <span
-                    className="landing-nav-active-line"
-                    style={{
-                      position: "absolute",
-                      bottom: -2,
-                      left: 0,
-                      right: 0,
-                      height: "1.5px",
-                      background: "var(--l-accent)",
-                    }}
-                  />
-                )}
+                {label}
               </a>
-            );
-          })}
-        </div>
-
-        {/* Right side: CTA */}
-        <div className="hidden xl:flex items-center gap-3">
-          <Link
-            href="/dashboard"
-            className="btn-secondary"
-            style={{ fontSize: "0.68rem", padding: "0.65rem 1.1rem" }}
-          >
-            Open Dashboard
-          </Link>
-          <a
-            href={CHROME_WEB_STORE_URL}
-            target={
-              CHROME_WEB_STORE_URL.startsWith("http") ? "_blank" : undefined
-            }
-            rel={
-              CHROME_WEB_STORE_URL.startsWith("http")
-                ? "noopener noreferrer"
-                : undefined
-            }
-            className="btn-primary"
-            style={{ fontSize: "0.68rem", padding: "0.65rem 1.4rem" }}
-          >
-            Get on Chrome Web Store
-          </a>
-        </div>
-
-        {/* Mobile */}
-        <div className="flex xl:hidden items-center gap-3">
-          <button
-            type="button"
-            onClick={() => setMobileOpen(!mobileOpen)}
-            className="landing-menu-icon"
-            aria-label={
-              mobileOpen ? "Close navigation menu" : "Open navigation menu"
-            }
-            aria-expanded={mobileOpen}
-            aria-controls="landing-mobile-navigation"
-          >
-            {mobileOpen ? (
-              <X size={22} aria-hidden="true" />
-            ) : (
-              <Menu size={22} aria-hidden="true" />
-            )}
-          </button>
+            ))}
+          </div>
+          {actions}
         </div>
       </nav>
-
-      {/* Mobile Menu — GSAP orchestrated easeReverse.
-          Open: expo.out clip-path reveal + items stagger in.
-          Close: items snap out with elastic.out + random rotation (snappy return,
-          not the forward ease played backward). */}
-      <div
-        id="landing-mobile-navigation"
-        className={`landing-mobile-menu xl:hidden px-5 sm:px-8 pb-6 pt-2 max-h-[calc(100dvh-64px)] overflow-y-auto ${
-          mobileOpen ? "open" : ""
-        }`}
-        aria-hidden={!mobileOpen}
-      >
-        {navLinks.map((link) => {
-          const sectionId = link.href.replace("#", "");
-          const isActive = activeSection === sectionId;
-          return (
-            <a
-              key={link.href}
-              href={link.href}
-              data-mobile-item
-              onClick={closeMobileMenu}
-              className={`landing-nav-link block w-full py-3.5 text-left ${isActive ? "active" : ""}`}
-              aria-current={isActive ? "location" : undefined}
-              style={{
-                fontWeight: isActive ? 800 : 700,
-                fontSize: "0.68rem",
-                letterSpacing: "0.14em",
-                textTransform: "uppercase",
-                borderBottom: "1px solid var(--l-border)",
-              }}
-            >
-              {isActive && (
-                <span
-                  style={{ color: "var(--l-accent)", marginRight: "0.5rem" }}
-                >
-                  ·
-                </span>
-              )}
-              {link.label}
-            </a>
-          );
-        })}
-        <div data-mobile-item className="mt-5">
-          <Link
-            href="/dashboard"
-            onClick={closeMobileMenu}
-            className="btn-secondary"
-            style={{
-              width: "100%",
-              display: "flex",
-              justifyContent: "center",
-              marginBottom: "0.75rem",
-            }}
-          >
-            Open Dashboard
-          </Link>
-          <a
-            href={CHROME_WEB_STORE_URL}
-            target={
-              CHROME_WEB_STORE_URL.startsWith("http") ? "_blank" : undefined
-            }
-            rel={
-              CHROME_WEB_STORE_URL.startsWith("http")
-                ? "noopener noreferrer"
-                : undefined
-            }
-            className="btn-primary"
-            style={{ width: "100%", display: "flex", justifyContent: "center" }}
-          >
-            Get on Chrome Web Store
-          </a>
-        </div>
-      </div>
     </header>
   );
 }

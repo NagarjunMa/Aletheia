@@ -121,6 +121,7 @@ export default function ResumeFactReview() {
 
   return (
     <section
+      data-dashboard-surface="inset"
       aria-labelledby={id}
       className="mt-5 space-y-3 rounded-xl border border-accent/20 bg-background/55 p-4 sm:p-5"
     >

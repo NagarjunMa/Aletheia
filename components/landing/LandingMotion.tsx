@@ -3,6 +3,7 @@
 import { useRef, type ReactNode } from "react";
 import { useGSAP } from "@gsap/react";
 import gsap from "gsap";
+import styles from "./site-chrome.module.css";
 
 gsap.registerPlugin(useGSAP);
 
@@ -12,6 +13,8 @@ type LandingMotionProps = {
 
 export default function LandingMotion({ children }: LandingMotionProps) {
   const rootRef = useRef<HTMLDivElement>(null);
+  const progressFill = useRef<HTMLSpanElement>(null);
+  const progressLabel = useRef<HTMLSpanElement>(null);
 
   useGSAP(
     () => {
@@ -109,7 +112,15 @@ export default function LandingMotion({ children }: LandingMotionProps) {
         },
       );
 
-      return () => media.revert();
+      const stopProgress = trackScrollProgress(
+        root,
+        progressFill.current,
+        progressLabel.current,
+      );
+      return () => {
+        stopProgress?.();
+        media.revert();
+      };
     },
     { scope: rootRef },
   );
@@ -117,6 +128,56 @@ export default function LandingMotion({ children }: LandingMotionProps) {
   return (
     <div ref={rootRef} className="landing landing-marketing">
       {children}
+      <div
+        className={styles.scrollProgress}
+        aria-hidden="true"
+        data-landing-scroll-progress
+      >
+        <span className={styles.scrollTrack}>
+          <span ref={progressFill} className={styles.scrollFill} />
+        </span>
+        <span ref={progressLabel}>0%</span>
+      </div>
     </div>
   );
+}
+
+function trackScrollProgress(
+  root: HTMLElement,
+  fill: HTMLSpanElement | null,
+  label: HTMLSpanElement | null,
+) {
+  const page = document.scrollingElement;
+  if (!page || !fill || !label) return;
+
+  const setFill = gsap.quickSetter(fill, "scaleY");
+  let frame = 0;
+  let lastPercent = 0;
+  const sync = () => {
+    frame = 0;
+    const maximum = page.scrollHeight - page.clientHeight;
+    const progress =
+      maximum > 0 ? gsap.utils.clamp(0, 1, page.scrollTop / maximum) : 0;
+    setFill(progress);
+    const percent = Math.round(progress * 100);
+    if (percent !== lastPercent) {
+      label.textContent = `${percent}%`;
+      lastPercent = percent;
+    }
+  };
+  const schedule = () => {
+    if (!frame) frame = requestAnimationFrame(sync);
+  };
+  // Late sections and fonts can change the scroll range without a scroll event.
+  const layout = new ResizeObserver(schedule);
+  layout.observe(root);
+  window.addEventListener("scroll", schedule, { passive: true });
+  window.addEventListener("resize", schedule);
+  sync();
+  return () => {
+    layout.disconnect();
+    window.removeEventListener("scroll", schedule);
+    window.removeEventListener("resize", schedule);
+    cancelAnimationFrame(frame);
+  };
 }

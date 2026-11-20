@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import DeleteConfirmation from "@/components/ui/DeleteConfirmation";
 import { createClient } from "@/lib/supabase/client";
 import {
   MAX_RESUME_BYTES,
@@ -150,6 +151,8 @@ export default function ResumeManager({ initialResumes, maxResumes }: Props) {
   const [uploadPhase, setUploadPhase] = useState<UploadPhase>(null);
   const [activeUploadId, setActiveUploadId] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [deletingResume, setDeletingResume] = useState(false);
+  const resumeHeading = useRef<HTMLHeadingElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const canceledUploadsRef = useRef(new Set<string>());
 
@@ -426,10 +429,10 @@ export default function ResumeManager({ initialResumes, maxResumes }: Props) {
     }
   };
 
-  const deleteResume = async (id: string, label: string) => {
-    const confirmed = window.confirm(`Delete "${label}"?`);
-    if (!confirmed) return;
-
+  const deleteResume = async (id: string) => {
+    if (deletingResume) return;
+    resumeHeading.current?.focus();
+    setDeletingResume(true);
     setStatus({ type: "idle", message: "" });
     try {
       const res = await fetch(`/api/resumes/${id}`, { method: "DELETE" });
@@ -442,6 +445,8 @@ export default function ResumeManager({ initialResumes, maxResumes }: Props) {
         type: "error",
         message: err instanceof Error ? err.message : "Could not delete resume",
       });
+    } finally {
+      setDeletingResume(false);
     }
   };
 
@@ -451,7 +456,13 @@ export default function ResumeManager({ initialResumes, maxResumes }: Props) {
     <section className="glass rounded-2xl p-6 space-y-5" aria-label="Resumes">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h3 className="text-lg font-semibold text-white">Resumes</h3>
+          <h3
+            ref={resumeHeading}
+            tabIndex={-1}
+            className="text-lg font-semibold text-white"
+          >
+            Resumes
+          </h3>
           <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
             Upload up to {maxResumes} PDF or TXT resumes and choose one default
             for generation.
@@ -593,13 +604,12 @@ export default function ResumeManager({ initialResumes, maxResumes }: Props) {
                   >
                     Rename
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => void deleteResume(resume.id, resume.label)}
-                    className="rounded-lg border border-red-400/30 px-3 py-1.5 text-xs font-semibold text-red-300 transition-colors hover:bg-red-500/10"
-                  >
-                    Delete
-                  </button>
+                  <DeleteConfirmation
+                    kind="résumé"
+                    name={resume.label}
+                    disabled={deletingResume}
+                    onConfirm={() => deleteResume(resume.id)}
+                  />
                 </div>
               </div>
             </article>

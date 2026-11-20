@@ -1,3 +1,38 @@
+## 2026-11-19 — Dashboard glass and delete confirmation
+
+From main a4eb41e, refine the dashboard's existing hierarchy with frosted section
+surfaces and recessed controls, fields and content inside them. Retain contrast,
+keyboard focus, fixed blur and solid fallbacks. Keep the same dashboard data and
+resume/evidence delete operations. Significant risk: a shared interaction gates
+destructive actions. Test real browser pointer and keyboard holds, cancellation,
+one request on confirmation, accessible click confirmation and failure recovery
+using mocked synthetic data. A 1.2-second hold is deliberate and interruptible.
+Use the existing GSAP dependency for the local fill, with reduced-motion support.
+The public navbar and footer use Aletheia's own wordmark and product copy,
+with keyboard-operable offerings and links to existing sections. The vertical
+landing progress indicator uses the live document scroll range and a GSAP
+transform. Observing content resize corrected stale progress after mobile reflow.
+The delete dialog offers Cancel and a separate two-step confirmation for users
+who cannot hold. No fake undo is shown after permanent deletion. Backend delete
+routes/actions and ownership checks are reused. Rollback is a frontend revert.
+
+Initial browser regressions caught default Card blur leaking into the reduced
+transparency fallback, focus/route behavior in the site chrome, and stale scroll
+progress after viewport resize. Focused local Chromium checks passed after
+correction, including four dashboard widths, keyboard and touch interactions,
+and visual inspection with synthetic data. Final build, smoke and review evidence
+are recorded outside the tree in /tmp/aletheia-glass-final-*.log and
+/tmp/aletheia-glass-review*.md. No hosted or manual VoiceOver run.
+
+The independent review reproduced GLASS-01 (held Enter activated both steps)
+and GLASS-02 (releasing the primary button did not cancel while a secondary
+mouse button stayed down). Suppress activation repeats after focus moves and
+check the live primary-button bit when moving the captured pointer. The real
+résumé and evidence browser harness covers both. The branch now includes
+merged ALE-30 from main a4eb41e, with its progress entry and code preserved.
+
+
+
 ## 2026-11-19 — ALE-30 remaining grounding feedback/reporting
 
 Started feat/ale-30-grounding-feedback from synchronized main bbd6578 in an isolated
