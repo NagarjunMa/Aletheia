@@ -11,6 +11,29 @@ import {
 import { validateOutreachProvenance } from "./validate-outreach-provenance";
 import { resolveOutputConstraint } from "@/lib/ai/output-constraints";
 
+it.each([false, true])(
+  "keeps full initial email options when sufficient reviewed proof exists (plans=%s)",
+  (rhetoricalPlans) => {
+    const { context, action, outcome } = proseFixture(
+      "cold_email",
+      "initial_outreach",
+    );
+    const options = buildProseCompositions({
+      category: "cold_email",
+      emailMode: "initial_outreach",
+      context,
+      rhetoricalPlans,
+    });
+    for (const option of options) {
+      expect(option.body.trim().split(/\s+/u).length).toBeGreaterThanOrEqual(
+        120,
+      );
+      expect(option.body).toContain(action);
+      expect(option.body).toContain(outcome);
+    }
+  },
+);
+
 it.each(
   (["cold_email", "linkedin_inmail"] as const).flatMap((category) =>
     EMAIL_MODES.map((emailMode) => [category, emailMode] as const),

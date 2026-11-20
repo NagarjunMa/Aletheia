@@ -75,6 +75,85 @@ describe("LinkedIn real target preparation through the HTTP boundary", () => {
     );
   }
 
+  describe("concise Initial Outreach from reviewed stories", () => {
+    const frontendFacts = [
+      "I built authenticated frontend dashboards using TypeScript and Next.js, connected API routes to Supabase, and checked the Chrome extension workflow with local tests.",
+      "I implemented review forms and keyboard navigation for the frontend dashboard, connected the saved state to server API routes, and verified the complete workflow before release.",
+    ];
+    const deviceFacts = [
+      "Automated enterprise BIOS and device provisioning workflows locally.",
+      "For the device provisioning workflow, I used PowerShell scripts and a controlled configuration file to automate BIOS settings and verify each device before delivery.",
+      "The BIOS automation reduced setup time from four days to fifteen minutes while retaining manual review for exceptions.",
+    ];
+    const cases = [
+      { name: "frontend automatic", facts: frontendFacts, explicit: false },
+      { name: "frontend selected", facts: frontendFacts, explicit: true },
+      {
+        name: "device automation selected",
+        facts: deviceFacts,
+        explicit: true,
+      },
+    ];
+    it.each(cases)(
+      "generates complete short proof for $name",
+      async ({ facts, explicit }) => {
+        const entry = {
+          id: "ae550000-1111-4111-8111-111111111111",
+          kind: "technical_project" as const,
+          title: "Synthetic reviewed project",
+          context: "",
+          actions: facts.join("\n"),
+          outcome: "",
+          metrics: [],
+          skills: [],
+          links: [],
+          confirmed: true,
+          sortOrder: 0,
+        };
+        const device = facts === deviceFacts;
+        const evidence = {
+          ...entry,
+          factReview: prepareFactReview(
+            entry,
+            facts.map((excerpt, i) => ({
+              id: `11111111-1111-4111-8111-11111111111${i}`,
+              kind: device
+                ? (["company", "technology", "outcome"] as const)[i]!
+                : ("action" as const),
+              excerpt,
+              confirmed: true,
+            })),
+          ),
+        };
+        await useRealPreparation([], [evidence], {}, "cold_email");
+        const response = await POST(
+          makeRequest({
+            method: "POST",
+            headers: { authorization: "Bearer test" },
+            body: {
+              category: "cold_email",
+              emailMode: "initial_outreach",
+              profileMarkdown: "Synthetic Candidate | LinkedIn Member",
+              jd: device
+                ? "The Device Automation team at Example is hiring Software Engineers! The role focuses on BIOS automation and device provisioning."
+                : "The Developer Tools team at Example is hiring Full Stack Engineers! The role focuses on Next.js, TypeScript, authenticated dashboards, Chrome extensions, and Supabase API routes.",
+              ...(explicit ? { selectedEvidenceIds: [entry.id] } : {}),
+            },
+          }),
+        );
+        expect(response.status).toBe(200);
+        const result = await response.json();
+        expect(result.word_count).toBeGreaterThanOrEqual(40);
+        expect(result.word_count).toBeLessThan(120);
+        expect(facts.some((fact) => result.body.includes(fact))).toBe(true);
+        expect(result.evalMetadata.grounding).toMatchObject({
+          groundingLevel: "verified_evidence",
+        });
+        expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
+      },
+    );
+  });
+
   describe("pasted LinkedIn context and reviewed qualifications", () => {
     const profile = "We’re building auditable AI agents for customer support.";
     const unrelatedProfile = "Senior Security Engineer at Example Labs";
@@ -742,7 +821,7 @@ describe("LinkedIn real target preparation through the HTTP boundary", () => {
         });
 
         it.each([
-          ["", 422],
+          ["", 200],
           [floorDuty, 200],
           ["Responsibilities:\n- " + floorDuty, 200],
           ["Responsibilities: " + floorDuty, 200],

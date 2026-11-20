@@ -7,6 +7,39 @@ import {
 } from "./output-constraints";
 
 describe("output constraints", () => {
+  it("allows concise initial cold emails without changing other channel limits", () => {
+    expect(
+      resolveOutputConstraint({
+        category: "cold_email",
+        emailMode: "initial_outreach",
+      }),
+    ).toMatchObject({ minimum: 40, maximum: 185 });
+    expect(
+      resolveOutputConstraint({
+        category: "linkedin_inmail",
+        emailMode: "initial_outreach",
+      }),
+    ).toMatchObject({ minimum: 80, maximum: 120 });
+    expect(
+      resolveOutputConstraint({
+        category: "cold_email",
+        emailMode: "founder_ceo_outreach",
+      }),
+    ).toMatchObject({ minimum: 105, maximum: 155 });
+  });
+
+  it.each([
+    ["founder_ceo_outreach", 105, 155],
+    ["follow_up", 30, 90],
+    ["clarification", 40, 90],
+    ["role_fit_summary", 40, 110],
+    ["referral_request", 70, 130],
+  ] as const)("preserves %s bounds", (emailMode, minimum, maximum) => {
+    expect(
+      resolveOutputConstraint({ category: "cold_email", emailMode }),
+    ).toMatchObject({ minimum, maximum });
+  });
+
   it("keeps LinkedIn connection notes on the 300-character contract", () => {
     expect(
       resolveOutputConstraint({ category: "linkedin_connection" }),

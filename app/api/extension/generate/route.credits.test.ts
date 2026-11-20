@@ -185,10 +185,13 @@ describe("ALE-60 focus accounting", () => {
     const focusFact = [...context.proseRelevantFactIds!][0]!;
     mockPrepareOutreachGroundingContext.mockResolvedValueOnce({
       ...context,
-      // A partial evidence pool cannot meet the 120-word initial email minimum.
-      atomicSources: context.atomicSources?.filter(
-        ({ id }) => id === focusFact,
-      ),
+      // Complete but short proof still cannot meet the 40-word initial floor.
+      atomicSources: context.atomicSources
+        ?.filter(({ id }) => id === focusFact)
+        .map((source) => ({
+          ...source,
+          content: "I built policy evaluation tools.",
+        })),
       domainAwareEmail: true,
       focusSelection: { outcome: "matched" },
       focusFactIds: new Set([focusFact]),

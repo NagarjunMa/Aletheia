@@ -2722,3 +2722,11 @@ VoiceOver/actual zoom and ALE-75's deployment gates remain pending. Keep open.
 - Package metadata 1.0.34. No deployment, Chrome reload, Store upload, production calls or unrelated root-checkout changes. Fresh review receipts: /tmp/ale78-review/. Issue remains In Progress for release verification.
 
 - ALE78-R1: fresh review confirmed display normalization could misclassify malformed codes in runtime/popup logs. Five new regressions reproduced the issue; classification now requires exact raw code/event/outcome values. Return review and source receipts remain under /tmp/ale78-review/.
+
+## 2026-11-20 — ALE-30 production preflight follow-up
+
+- User-authorized diagnosis/fix for two explicit Initial Outreach 422s, separate from the merged feedback increment. Isolated fix/ale-30-grounded-outreach-preflight from main ad26957; unrelated root changes preserved.
+- Read-only review counts and local real-builder reproduction show confirmed short facts cannot meet the former 120-word floor. Prefer existing complete 120–185-word options; offer grounded 40–119-word options only when none survive. Keep InMail/other modes, source validation, selected roots, exclusions, injection and admission/billing unchanged.
+- Contract/location map/evaluation evidence: docs/operations/ale-30-initial-email-preflight.md. Four red-first regressions, short selected frontend/device success, automatic frontend, full-option preference and independent mode/boundary assertions. Actual-account local options succeed with synthetic context; no provider calls or account mutations.
+- Passed: 3,372 web tests / 154 files, coverage thresholds, 15 guards, lint (one inherited warning), engineering policy and production build. Initial symlink build failed; locked local dependency install and normal build resolved the setup issue. No dependency changes. Final types and fresh independent-review receipts: /tmp/ale30-preflight-*-final.log and /tmp/ale30-preflight-review-*.
+- Keep ALE-30 In Progress. New hosted generation/quality verification remains after authorized deployment; VoiceOver remains deferred. Automatic device-story affirmative-experience eligibility, 200-character LinkedIn fitting and richer profile extraction are unchanged limitations. No commit/push/deploy/publication.
