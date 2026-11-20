@@ -1,4 +1,5 @@
 /** Browser component diagnostic: real component/CSS, mock action, no external I/O. */
+import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -8,7 +9,7 @@ import tailwind from "@tailwindcss/postcss";
 import { chromium, expect } from "@playwright/test";
 
 const cssPath = resolve("app/globals.css");
-const css = (
+const globalCss = (
   await postcss([tailwind()]).process(readFileSync(cssPath, "utf8"), {
     from: cssPath,
   })
@@ -25,6 +26,7 @@ const output = await build({
   format: "esm",
   jsx: "automatic",
   platform: "browser",
+  outfile: "bundle.js",
   stdin: {
     resolveDir: process.cwd(),
     loader: "tsx",
@@ -117,7 +119,12 @@ const output = await build({
     },
   ],
 });
-const bundle = output.outputFiles[0].text;
+const bundle = output.outputFiles.find((file) => file.path.endsWith(".js"));
+const componentCss = output.outputFiles.find((file) =>
+  file.path.endsWith(".css"),
+);
+assert.ok(bundle && componentCss);
+const css = `${globalCss}\n${componentCss.text}`;
 const server = createServer((req, res) => {
   res.setHeader(
     "Content-Type",
@@ -129,7 +136,7 @@ const server = createServer((req, res) => {
   );
   res.end(
     req.url === "/bundle.js"
-      ? bundle
+      ? bundle.text
       : req.url === "/styles.css"
         ? css
         : '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/styles.css"></head><body><div id="root"></div><script type="module" src="/bundle.js"></script></body></html>',
