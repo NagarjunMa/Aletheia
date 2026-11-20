@@ -158,6 +158,55 @@ try {
   await editorPage.goto(origin + "/dashboard?editor#evidence");
   await expect(editorPage.locator("#evidence")).toHaveAttribute("open", "");
   await editorPage.getByRole("button", { name: "Add evidence" }).click();
+  const kind = editorPage.getByLabel("Evidence type", { exact: true });
+  const draftActions = editorPage.locator("#evidence-actions");
+  await draftActions.fill("I checked the output against existing tests.");
+  await kind.selectOption("ai_usage");
+  await expect(
+    editorPage.getByLabel("AI tool and workflow"),
+  ).toHaveAccessibleDescription(/tool or model.*engineering task/i);
+  const aiActions = editorPage.getByLabel("What you did and checked");
+  await expect(aiActions).toHaveAccessibleDescription(
+    /tests, review, or other checks/i,
+  );
+  await expect(aiActions).toHaveValue(
+    "I checked the output against existing tests.",
+  );
+  await expect(
+    editorPage.getByLabel("Outcome", { exact: true }),
+  ).toHaveAccessibleDescription(/only numbers you can verify/i);
+  const example = editorPage.getByText("See a fictional example", {
+    exact: true,
+  });
+  const exampleContent = editorPage.getByText(/a staging-only API change/i);
+  await expect(exampleContent).toBeHidden();
+  await editorPage.getByLabel("Short title", { exact: true }).focus();
+  await editorPage.keyboard.press("Tab");
+  await expect(example).toBeFocused();
+  await editorPage.keyboard.press("Enter");
+  await expect(exampleContent).toBeVisible();
+  await expect(editorPage.getByLabel("AI tool and workflow")).toHaveValue("");
+  await expect(editorPage.getByLabel("Outcome", { exact: true })).toHaveValue(
+    "",
+  );
+  for (const width of [375, 900, 1440]) {
+    await editorPage.setViewportSize({ width, height: 900 });
+    await expect(exampleContent).toBeVisible();
+    expect(
+      await editorPage.evaluate(
+        () => document.documentElement.scrollWidth > innerWidth,
+      ),
+    ).toBe(false);
+  }
+  await editorPage.setViewportSize({ width: 375, height: 900 });
+  await editorPage.keyboard.press("Enter");
+  await expect(exampleContent).toBeHidden();
+  await kind.selectOption("achievement");
+  await expect(example).toHaveCount(0);
+  await expect(editorPage.getByLabel("Challenge and context")).toBeVisible();
+  await expect(editorPage.getByLabel("What you personally did")).toHaveValue(
+    "I checked the output against existing tests.",
+  );
   await editorPage.locator("#evidence-title").fill("Policy rollout");
   await editorPage
     .locator("#evidence-actions")
@@ -390,7 +439,7 @@ try {
   ).toBeVisible();
   await resumePage.close();
   console.log(
-    "Fact review browser checks passed at 375/900/1440px: unconfirmed suggestions, explicit type/confirmation, save/reload, withdrawal, unsupported excerpt and no overflow/runtime errors.",
+    "Fact review browser checks passed at 375/900/1440px: AI guidance and keyboard disclosure, unconfirmed suggestions, explicit type/confirmation, save/reload, withdrawal, unsupported excerpt and no overflow/runtime errors.",
   );
 } finally {
   await browser?.close();

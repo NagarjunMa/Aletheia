@@ -1,3 +1,43 @@
+## 2026-11-20 — ALE-31 AI evidence guidance and operator runbook
+
+Start from main ad26957 on feat/ale-31-evidence-guidance. Linear ALE-31, its
+parent and master plan were reviewed. ALE-28 is Done. Standard risk: visible,
+kind-specific guidance in the existing editor, plus operational instructions.
+Use existing context, actions and outcome fields. Put the verification prompt
+with Actions and a fictional example behind a native disclosure. Keep the
+payload, schema, eligibility, confirmation, generation and rollout flags intact.
+
+Acceptance: AI guidance covers tool/model, workflow, personal action,
+verification and a real outcome. Check descriptions and keyboard access on the
+real editor, kind changes without draft loss, and responsiveness. Re-run existing
+save/delete/readiness and fact review coverage. Audit the runbook against the
+source, response contracts, workflows and rollback procedures.
+
+Implemented. The new browser assertion failed on main because the AI-specific
+label and accessible description were absent. The final Chromium run passed at
+375/900/1440 px, including keyboard disclosure, empty fields after opening the
+example, draft retention on type changes and existing fact review scenarios.
+Visually checked the editor at all three widths. Dashboard smoke passed all
+22 scenarios. Coverage passed 3,355 tests in 154 files (92.22% line coverage),
+and all 15 guardrail tests passed. Policy, lint, type-check and the production
+build with local build-only configuration passed. The build passed on retry
+after local disk pressure and the existing Next.js advisory notice. Lint
+reported one existing warning in refund-admin; the root audit passed its high
+severity threshold while reporting 12 moderate advisories from main.
+
+Final pre-push audit (2026-11-20): reread Linear acceptance criteria and reviewed
+the complete diff against ad26957, the evidence save boundary, and the runbook
+links and checked-in contracts. Final risk is Standard. No material in-scope
+findings. Repeated the web checks and passed the extension CI target (371 tests),
+ZIP build, local health and version routes, and offline grounding gate with
+zero provider calls. Chromium smoke passed all 66 on a serial rerun. The first
+smoke run overlapped extension packaging and lost the ZIP. After rebuilding
+it, the parallel rerun had one extension service-worker startup timeout.
+Both setup failures cleared on the serial run. PR policy accepted the draft
+description. Hosted CI and manual VoiceOver were not run. The Aletheia-specific
+Linear connector was unavailable for a write. Roll back this web-only release
+by reverting the editor and runbook change.
+
 ## 2026-11-20 — Dashboard PR #163 smoke test harness fix
 
 CI on c5a058e passed the 66 Playwright cases, then the separate fact-review

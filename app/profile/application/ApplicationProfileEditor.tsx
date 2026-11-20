@@ -29,6 +29,7 @@ import {
   saveCandidateProfileCategory,
 } from "./actions";
 import {
+  AI_EVIDENCE_GUIDANCE,
   EVIDENCE_KIND_OPTIONS,
   PROFILE_CATEGORY_OPTIONS,
   formatListInput,
@@ -845,6 +846,7 @@ function TextAreaField({
   label,
   value,
   placeholder,
+  hint,
   maxLength,
   rows,
   onChange,
@@ -852,7 +854,8 @@ function TextAreaField({
   id: string;
   label: string;
   value: string;
-  placeholder: string;
+  placeholder: string | undefined;
+  hint?: string | undefined;
   maxLength: number;
   rows: number;
   onChange: (_value: string) => void;
@@ -873,9 +876,18 @@ function TextAreaField({
         maxLength={maxLength}
         rows={rows}
         placeholder={placeholder}
+        aria-describedby={hint ? `${id}-hint` : undefined}
         onChange={(event) => onChange(event.target.value)}
         className={`${inputClass} resize-y leading-6`}
       />
+      {hint && (
+        <p
+          id={`${id}-hint`}
+          className="mt-1 text-xs leading-5 text-muted-foreground"
+        >
+          {hint}
+        </p>
+      )}
     </div>
   );
 }
@@ -936,6 +948,7 @@ function EvidenceEditor({
   onSubmit: (_event: React.FormEvent) => void;
 }) {
   const form = useRef<HTMLFormElement>(null);
+  const aiGuidance = value.kind === "ai_usage" ? AI_EVIDENCE_GUIDANCE : null;
   useEffect(() => {
     form.current?.querySelector<HTMLInputElement>("#evidence-title")?.focus();
   }, []);
@@ -982,6 +995,7 @@ function EvidenceEditor({
           </label>
           <select
             id="evidence-kind"
+            aria-describedby="evidence-kind-hint"
             value={value.kind}
             onChange={(event) =>
               update(
@@ -997,7 +1011,10 @@ function EvidenceEditor({
               </option>
             ))}
           </select>
-          <p className="mt-2 text-xs leading-5 text-muted-foreground">
+          <p
+            id="evidence-kind-hint"
+            className="mt-2 text-xs leading-5 text-muted-foreground"
+          >
             {
               EVIDENCE_KIND_OPTIONS.find(
                 (option) => option.value === value.kind,
@@ -1010,37 +1027,67 @@ function EvidenceEditor({
           label="Short title"
           value={value.title}
           maxLength={160}
-          placeholder="Reduced release time from hours to minutes"
+          placeholder={
+            aiGuidance
+              ? "Regression testing with AI"
+              : "Reduced release time from hours to minutes"
+          }
           onChange={(next) => update("title", next)}
         />
       </div>
 
+      {aiGuidance && (
+        <details className="mt-4 text-xs leading-5 text-muted-foreground">
+          <summary className="w-fit cursor-pointer font-semibold text-accent">
+            See a fictional example
+          </summary>
+          <p className="mt-2 max-w-prose">{aiGuidance.example}</p>
+        </details>
+      )}
+
       <div className="mt-5 grid gap-5">
         <TextAreaField
           id="evidence-context"
-          label="Challenge and context"
+          label={aiGuidance ? "AI tool and workflow" : "Challenge and context"}
+          hint={aiGuidance?.context}
           value={value.context}
           maxLength={1000}
           rows={3}
-          placeholder="What was difficult, constrained, unclear, or at risk?"
+          placeholder={
+            aiGuidance
+              ? undefined
+              : "What was difficult, constrained, unclear, or at risk?"
+          }
           onChange={(next) => update("context", next)}
         />
         <TextAreaField
           id="evidence-actions"
-          label="What you personally did"
+          label={
+            aiGuidance ? "What you did and checked" : "What you personally did"
+          }
+          hint={aiGuidance?.actions}
           value={value.actions}
           maxLength={2000}
           rows={5}
-          placeholder="Describe your decisions, implementation, collaboration, and verification."
+          placeholder={
+            aiGuidance
+              ? undefined
+              : "Describe your decisions, implementation, collaboration, and verification."
+          }
           onChange={(next) => update("actions", next)}
         />
         <TextAreaField
           id="evidence-outcome"
           label="Outcome"
+          hint={aiGuidance?.outcome}
           value={value.outcome}
           maxLength={1200}
           rows={3}
-          placeholder="What changed for users, the system, or the business?"
+          placeholder={
+            aiGuidance
+              ? undefined
+              : "What changed for users, the system, or the business?"
+          }
           onChange={(next) => update("outcome", next)}
         />
         <div className="grid gap-5 md:grid-cols-3">
