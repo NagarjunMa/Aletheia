@@ -11,9 +11,10 @@ export type EmailMode = (typeof EMAIL_MODES)[number];
 
 export const EMAIL_MODE_WORD_LIMITS: Record<
   EmailMode,
-  { min: number; max: number }
+  { min: number; max: number; preferredMin?: number }
 > = {
-  initial_outreach: { min: 120, max: 185 },
+  // Complete reviewed proof can support a concise introduction without filler.
+  initial_outreach: { min: 40, max: 185, preferredMin: 120 },
   founder_ceo_outreach: { min: 105, max: 155 },
   follow_up: { min: 30, max: 90 },
   clarification: { min: 40, max: 90 },
@@ -383,11 +384,11 @@ function normalizeBodyParagraphs(body: string, mode: EmailMode): string {
 export function getEmailWordLimit(
   category: EmailCategory,
   mode: EmailMode,
-): { min: number; max: number } {
+): { min: number; max: number; preferredMin?: number } {
   const modeLimit = EMAIL_MODE_WORD_LIMITS[mode];
   if (category === "linkedin_inmail") {
     return {
-      min: Math.min(modeLimit.min, 80),
+      min: mode === "initial_outreach" ? 80 : Math.min(modeLimit.min, 80),
       max: Math.min(modeLimit.max, 120),
     };
   }
