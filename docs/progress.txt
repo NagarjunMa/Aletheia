@@ -1,3 +1,24 @@
+## 2026-11-22 — ALE-29 synthetic outreach coverage
+
+Start from main d9fd52b on test/ale-29-grounded-outreach-evals. Read Linear
+ALE-29 and its phase/master plan. ALE-28 is Done. Standard risk: synthetic
+test coverage using existing evaluators and production contracts. The acceptance
+matrix and verification belong in docs/evals/eval-log.md.
+
+Added nine synthetic golden tests and one new InMail safety row. The ALE-48
+release baseline stays locked and Nordnet passes with the rest of the suite.
+Final local results include 201 focused tests, 3,382 web tests and 15
+guardrail tests. The offline gate passed with zero provider calls.
+
+Pre-merge review on 2026-11-22 compared the complete test and documentation
+diff against current main d9fd52b. Standard risk, with no material findings.
+The focused suite, full coverage and offline gate passed again. The web
+dependency audit passed its high-severity threshold with 12 existing moderate
+advisories. Keep ALE-29 In Progress pending PR CI. The rollout is tracked
+under ALE-32. Revert the test and documentation commit to roll back.
+The first pre-commit build ran out of disk space. Removed only ignored
+compiler caches from earlier worktrees before retrying the full hook.
+
 ## 2026-11-20 — ALE-31 AI evidence guidance and operator runbook
 
 Start from main ad26957 on feat/ale-31-evidence-guidance. Linear ALE-31, its
