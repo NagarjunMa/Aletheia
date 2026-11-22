@@ -53,6 +53,16 @@ action. Do not average rates or sum distinct users across overlapping cohorts.
 
 ## Entries
 
+### 2026-11-22 — ALE-32 local release baseline
+
+- Source and renderers: `a44a22d`. Packaged extension: `1.0.35`, API `1`.
+- Locked ALE-48 gate: matched the checked-in fingerprint and passed with zero
+  provider calls. The configured outreach prompt and model are `6.1.0` and
+  `claude-sonnet-4-6`. The Nordnet regression and ALE-29 supplemental tests
+  passed in the focused suite.
+- The [release checklist](../validation/grounded-outreach-release-checklist.md)
+  records the package hash, local checks and hosted evidence still required.
+
 ### 2026-11-22 — ALE-29 synthetic outreach coverage
 
 **Contract and risk.** Standard. Extend the deterministic test corpus on
