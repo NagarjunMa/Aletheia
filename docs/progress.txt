@@ -1,3 +1,19 @@
+## 2026-11-22 — ALE-32 grounded outreach rollout validation
+
+Started on test/ale-32-grounded-outreach-rollout from current main a44a22d.
+ALE-29, ALE-30 and ALE-31 are Done. Significant risk for release evidence
+across app, extension and provider boundaries. Use the pinned package and
+isolated synthetic accounts. docs/validation/grounded-outreach-release-checklist.md
+holds the verification matrix, version observations, and rollout decision.
+
+Local gates passed after a build retry. The initial Next.js advisory failure
+and remaining moderate advisories are recorded in the checklist. The pinned
+1.0.35 ZIP passed intercepted Chromium smoke.
+Public version metadata reports source 1.0.35 and published 1.0.9. The
+protected gate lacks isolated preview and fixture-account configuration.
+Keep ALE-32 In Progress with the release decision on hold until hosted
+authorization, metering, installed-package and rollback evidence is available.
+
 ## 2026-11-22 — ALE-29 synthetic outreach coverage
 
 Start from main d9fd52b on test/ale-29-grounded-outreach-evals. Read Linear

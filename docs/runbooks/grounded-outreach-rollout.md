@@ -71,6 +71,9 @@ as review feedback, separately from successful HTTP requests.
 
 ## Release and rollback
 
+Use the [ALE-32 release checklist](../validation/grounded-outreach-release-checklist.md)
+for pinned package evidence, the hosted acceptance matrix, and the rollout decision.
+
 1. Run the applicable local checks, including
    `npm run gate:grounded-response:offline` for generation changes. For
    flag-controlled changes, use the [protected draft-quality gate][quality] or
