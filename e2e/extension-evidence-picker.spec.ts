@@ -210,6 +210,149 @@ test.describe("Message Focus worker boundary", () => {
     return { panel, profile, requests, worker };
   }
 
+  test("ALE-79 warnings preserve inputs and invalidate drafts @smoke", async () => {
+    const { panel } = await openFocusPanel(true);
+    let mode = "success";
+    let release: (() => void) | undefined;
+    await browser.route(
+      "https://www.aletheia.live/api/extension/generate",
+      async (route) => {
+        if (mode === "late")
+          await new Promise<void>((resolve) => {
+            release = resolve;
+          });
+        if (mode === "success" || mode === "late")
+          return route.fulfill({
+            json: {
+              success: true,
+              category: "linkedin_connection",
+              body: "Previous complete draft.",
+            },
+          });
+        return route.fulfill({
+          status: mode === "server" ? 503 : 422,
+          json: {
+            code:
+              mode === "server"
+                ? "PROVIDER_UNAVAILABLE"
+                : "INSUFFICIENT_GROUNDING",
+            error:
+              mode === "safety"
+                ? "The selected context contains instruction-like or encoded text. Try another profile or remove that text from the job description."
+                : "No usable facts.",
+            ...(mode === "legacy" || mode === "server" || mode === "safety"
+              ? {}
+              : {
+                  linkedinGuidance: {
+                    reason: mode,
+                    connectionNoteLimit: 200,
+                    excerpt: "PRIVATE_GUIDANCE_CANARY",
+                  },
+                }),
+          },
+        });
+      },
+    );
+    await panel.locator("#connectionNoteLimit").selectOption("200");
+    await panel.locator("#generateBtn").click();
+    await expect(panel.locator("#messageText")).toHaveText(
+      "Previous complete draft.",
+    );
+    await expect(panel.locator("#generateBtn")).toBeEnabled();
+    await panel
+      .locator("#jdInput")
+      .fill(
+        "Museum catalogue specialist. Preserve paper manuscripts and organize archival collections.",
+      );
+    await expect(panel.locator("#output")).toBeHidden();
+    for (const [reason, title, guidance] of [
+      ["no_matching_evidence", "Matching reviewed evidence needed", "matching"],
+      ["note_limit", "Complete fact exceeds note limit", "200-character"],
+      ["missing_context", "More context needed", "Job Description"],
+      ["legacy", "More context or reviewed evidence needed", "reviewed"],
+      [
+        "safety",
+        "More context or reviewed evidence needed",
+        "remove that text",
+      ],
+    ]) {
+      mode = reason!;
+      await panel.locator("#generateBtn").click();
+      const warning = panel.locator("#errorMessage");
+      await expect(warning).toHaveClass(/evidence-warning/);
+      await expect(warning).toContainText(title!);
+      await expect(warning).toContainText(guidance!);
+      await expect(warning).toBeFocused();
+      await expect(warning).toHaveAttribute("role", "alert");
+      await expect(warning).not.toContainText(
+        /HTTP|INSUFFICIENT_GROUNDING|PRIVATE_GUIDANCE_CANARY/,
+      );
+      await expect(panel.locator("#jdInput")).toHaveValue(/Museum catalogue/);
+      await expect(panel.locator("#connectionNoteLimit")).toHaveValue("200");
+      await expect(panel.locator("#output")).toBeHidden();
+      if (reason === "no_matching_evidence") {
+        await panel.keyboard.press("Tab");
+        await expect(panel.locator("#errorAction")).toBeFocused();
+      }
+      await expect(panel.locator("#generateBtn")).toBeEnabled();
+    }
+    mode = "server";
+    await panel.locator("#generateBtn").click();
+    await expect(panel.locator("#errorText")).toContainText("No usable facts.");
+    await expect(panel.locator("#errorMessage")).not.toHaveClass(
+      /evidence-warning/,
+    );
+    await expect(panel.locator("#generateBtn")).toBeEnabled();
+    mode = "late";
+    await panel.locator("#generateBtn").click();
+    await expect.poll(() => Boolean(release)).toBe(true);
+    await panel.locator("#jdInput").evaluate((node) => {
+      (node as HTMLTextAreaElement).value = "Changed during generation";
+      node.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    release!();
+    await expect(panel.locator("#generateBtn")).toBeEnabled();
+    await expect(panel.locator("#output")).toBeHidden();
+  });
+
+  for (const field of [
+    "connectionNoteLimit",
+    "intent",
+    "category",
+    "messageFocus",
+    "story",
+  ]) {
+    test(`ALE-79 clears previous outreach after ${field} changes @smoke`, async () => {
+      const { panel } = await openFocusPanel(true);
+      await browser.route(
+        "https://www.aletheia.live/api/extension/evidence",
+        (route) =>
+          route.fulfill({ json: { success: true, evidence: [first] } }),
+      );
+      await panel.locator("#generateBtn").click();
+      await expect(panel.locator("#output")).toBeVisible();
+      await expect(panel.locator("#generateBtn")).toBeEnabled();
+      if (field === "story") {
+        await panel.locator("#evidencePicker summary").click();
+        await panel.locator("#evidenceChoices input").check();
+      } else if (field === "messageFocus") {
+        await panel
+          .locator("#messageFocus")
+          .fill("Focus on reviewed implementation work");
+      } else {
+        const value =
+          field === "connectionNoteLimit"
+            ? "200"
+            : field === "intent"
+              ? "referral"
+              : "cold_email";
+        await panel.locator(`#${field}`).selectOption(value);
+      }
+      await expect(panel.locator("#output")).toBeHidden();
+      await expect(panel.locator("#messageText")).toBeEmpty();
+    });
+  }
+
   for (const supported of [undefined, false]) {
     test(`hides focus and omits it from the request when capability is ${supported}`, async () => {
       const { panel, requests } = await openFocusPanel(supported);
@@ -1182,8 +1325,8 @@ test("remembers the LinkedIn note limit and sends it with and without a job desc
   expect(posts[1]).toMatchObject({ connectionNoteLimit: 300, jd });
 
   await limit.selectOption("200");
-  await expect(count).toHaveText("280/200");
-  await expect(count).toHaveClass(/over-limit/);
+  await expect(panel.locator("#output")).toBeHidden();
+  await expect(panel.locator("#messageText")).toBeEmpty();
   await generate.click();
   await expect(count).toHaveText("190/200");
   expect(posts[2]).toMatchObject({ connectionNoteLimit: 200, jd });
@@ -1331,9 +1474,12 @@ test.describe("Store ZIP grounding status", () => {
     await draft(5);
     await expect(status).toBeVisible();
     await generate.click();
-    await expect(panel.locator("#errorText")).toContainText("No usable facts.");
+    await expect(panel.locator("#errorMessage")).toContainText(
+      "More context or reviewed evidence needed",
+    );
     await expect(status).toBeHidden();
-    await expect(message).toContainText("Draft 5.");
+    await expect(panel.locator("#output")).toBeHidden();
+    await expect(message).toBeEmpty();
 
     for (const category of ["cold_email", "linkedin_inmail"]) {
       await panel.locator("#category").selectOption(category);
@@ -1345,7 +1491,9 @@ test.describe("Store ZIP grounding status", () => {
         chrome.storage.local.get("lastGeneration"),
       );
       expect(lastGeneration).toHaveProperty("output.evalMetadata");
-      expect(lastGeneration).not.toHaveProperty("output.evalMetadata.grounding");
+      expect(lastGeneration).not.toHaveProperty(
+        "output.evalMetadata.grounding",
+      );
     }
   });
 });
