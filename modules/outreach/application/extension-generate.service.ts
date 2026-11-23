@@ -1550,6 +1550,9 @@ async function handlePost(
           error: error.publicMessage,
           code: "INSUFFICIENT_GROUNDING",
           reasonCodes: error.reasonCodes,
+          ...(error.linkedinGuidance
+            ? { linkedinGuidance: error.linkedinGuidance }
+            : {}),
           ...compensation,
         },
         { status: 422, headers: corsHeaders },

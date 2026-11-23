@@ -1,3 +1,4 @@
+import { readLinkedinGuidance } from "../lib/linkedin-guidance.js";
 import {
   readOutreachGrounding,
   readLegacyOutreachDraft,
@@ -349,7 +350,12 @@ export function getApplicationEvidenceGuidance(response, questions, ordinals) {
   return `${subject} ${single ? "needs" : "need"} ${need}. Add or review evidence in your application profile. ${detail} Then generate again.`;
 }
 
-export function getGenerationErrorPresentation(response, questions, ordinals) {
+export function getGenerationErrorPresentation(
+  response,
+  questions,
+  ordinals,
+  category,
+) {
   const evidenceGuidance = getApplicationEvidenceGuidance(
     response,
     questions,
@@ -381,6 +387,49 @@ export function getGenerationErrorPresentation(response, questions, ordinals) {
       divisor === 3600 ? "hour" : divisor === 60 ? "minute" : "second";
     const count = Math.ceil(seconds / divisor);
     message += ` Retry in about ${count} ${unit}${count === 1 ? "" : "s"}.`;
+  }
+
+  if (
+    category === "linkedin_connection" &&
+    response?.status === 422 &&
+    response.code === "INSUFFICIENT_GROUNDING"
+  ) {
+    const guidance = readLinkedinGuidance(response);
+    const reason = guidance?.reason;
+    const limit = guidance?.connectionNoteLimit;
+    const warningTitle =
+      reason === "missing_context"
+        ? "More context needed"
+        : reason === "no_matching_evidence"
+          ? "Matching reviewed evidence needed"
+          : reason === "note_limit"
+            ? "Complete fact exceeds note limit"
+            : "More context or reviewed evidence needed";
+    const publicMessage =
+      typeof response.error === "string"
+        ? response.error.replace(/^HTTP 422:\s*/u, "").trim()
+        : "";
+    const recovery =
+      reason === "missing_context"
+        ? "In Job Description, add a short role or work detail. You can also add relevant experience and confirm its facts."
+        : reason === "no_matching_evidence"
+          ? "No matching reviewed evidence could support this note. Add relevant work and confirm its facts, or use context supported by your reviewed experience."
+          : reason === "note_limit"
+            ? `No complete matching fact fits this ${limit}-character note. ${limit === 200 ? "Choose 300 characters if available, or " : ""}review a shorter complete fact without removing qualifications.`
+            : `${publicMessage ? publicMessage + " " : ""}Review facts relevant to this note, or adjust the role or work detail in Job Description. Your inputs are kept for another attempt.`;
+    return {
+      message:
+        response.billing === "refund_pending"
+          ? `${recovery} ${message}`
+          : response.quotaRestoration === "pending_review"
+            ? `${recovery} Daily quota restoration is pending review.`
+            : recovery,
+      warningTitle,
+      actionLabel: "Review application evidence",
+      actionUrl: "https://www.aletheia.live/profile/application",
+      missingFields: [],
+      recommendedFields: [],
+    };
   }
 
   const needsReviewedEvidence =

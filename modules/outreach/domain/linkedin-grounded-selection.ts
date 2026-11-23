@@ -13,7 +13,10 @@ import { createHash } from "node:crypto";
 import { createEvidenceTargetRanker } from "@/modules/candidate-context/application/rank-evidence";
 import { escapeForXmlTag } from "@/lib/ai/prompts/linkedin-connection";
 import type { CandidateGroundingSource } from "@/modules/candidate-context/domain/candidate-context.types";
-import type { OutreachGroundingContext } from "./outreach-grounding.types";
+import type {
+  LinkedinRecoveryReason,
+  OutreachGroundingContext,
+} from "./outreach-grounding.types";
 import {
   isFirstPersonAssertion,
   isLinkedinImplementationAction,
@@ -33,6 +36,10 @@ import {
 export class LinkedinGroundingUnavailableError extends Error {
   readonly reasonCodes: string[];
   readonly publicMessage: string;
+  readonly linkedinGuidance?: {
+    reason: LinkedinRecoveryReason;
+    connectionNoteLimit: LinkedinConnectionNoteLimit;
+  };
   constructor(
     diagnostics?: OutreachGroundingContext["targetDiagnostics"],
     unsupportedWording = false,
@@ -65,6 +72,19 @@ export class LinkedinGroundingUnavailableError extends Error {
     } else if (diagnostics?.contradicted) {
       this.publicMessage =
         "The supplied context contradicts the role or work detail. Use a current job post or another profile.";
+    } else if (
+      diagnostics?.linkedinRecovery &&
+      !diagnostics.excluded &&
+      !diagnostics.unsafeWording
+    ) {
+      const reason = diagnostics.linkedinRecovery;
+      this.linkedinGuidance = { reason, connectionNoteLimit: limit };
+      this.publicMessage =
+        reason === "note_limit"
+          ? `No complete matching fact fits this ${limit}-character note. ${limit === 200 ? "Choose 300 characters if available, or " : ""}review a shorter complete fact without removing qualifications.`
+          : reason === "no_matching_evidence"
+            ? "No matching reviewed evidence could support this note. Add relevant work and confirm its facts, or use context supported by your reviewed experience."
+            : "In Job Description, add a short role or work detail, or add and review a relevant experience fact.";
     } else if (wordingRejected) {
       this.publicMessage =
         "We couldn't use the available context for a grounded note. In Job Description, add a short role or work detail.";

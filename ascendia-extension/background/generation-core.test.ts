@@ -6,6 +6,7 @@ import {
 
 import { sanitizeOutreachGrounding } from "../lib/outreach-grounding.js";
 import {
+  getGenerationErrorPresentation,
   getGroundingStatusPresentation,
   parseGenerationResponse,
 } from "../popup/popup-core.js";
@@ -102,7 +103,8 @@ describe("grounding metadata on the worker bridge", () => {
 
   for (const category of ["cold_email", "linkedin_inmail"]) {
     it.each(["", "   ", "Hi Alex, open to connecting?"])(
-      category + " preserves legacy rendering without a final grounding badge (%s)",
+      category +
+        " preserves legacy rendering without a final grounding badge (%s)",
       (body) => {
         const encoded = JSON.stringify({ subject_line: "Hello", body });
         for (const wrapper of [encoded, `\`\`\`json\n${encoded}\n\`\`\``]) {
@@ -121,6 +123,80 @@ describe("grounding metadata on the worker bridge", () => {
 });
 
 describe("generation background bridge", () => {
+  it.each([
+    "The selected context contains instruction-like or encoded text. Try another profile or remove that text from the job description.",
+    "The supplied context contradicts the role or work detail. Use a current job post or another profile.",
+    "The available context matches your saved exclusions. Add a role or work detail outside those exclusions.",
+  ])(
+    "keeps the public safety guidance across the legacy bridge (%s)",
+    (publicMessage) => {
+      const response = serializeGenerationError({
+        status: 422,
+        code: "INSUFFICIENT_GROUNDING",
+        message: `HTTP 422: ${publicMessage}`,
+        apiResponse: { error: publicMessage },
+      });
+      const presentation = getGenerationErrorPresentation(
+        response,
+        undefined,
+        undefined,
+        "linkedin_connection",
+      );
+      expect(presentation.message).toContain(publicMessage);
+      expect(presentation.message).not.toMatch(/HTTP|INSUFFICIENT_GROUNDING/);
+    },
+  );
+
+  it("projects bounded LinkedIn guidance without private extras", () => {
+    const result = serializeGenerationError({
+      status: 422,
+      code: "INSUFFICIENT_GROUNDING",
+      requestId: "safe-request",
+      apiResponse: {
+        linkedinGuidance: {
+          reason: "note_limit",
+          connectionNoteLimit: 200,
+          excerpt: "PRIVATE_CANARY",
+        },
+      },
+    });
+    expect(result.linkedinGuidance).toEqual({
+      reason: "note_limit",
+      connectionNoteLimit: 200,
+    });
+    expect(result).toMatchObject({
+      status: 422,
+      code: "INSUFFICIENT_GROUNDING",
+      requestId: "safe-request",
+    });
+    expect(JSON.stringify(result)).not.toContain("PRIVATE_CANARY");
+  });
+
+  it.each([
+    { status: 503 },
+    { status: "422" },
+    { code: "PROVIDER_ERROR" },
+    {
+      linkedinGuidance: { reason: "PRIVATE_REASON", connectionNoteLimit: 200 },
+    },
+    { linkedinGuidance: { reason: "note_limit", connectionNoteLimit: "200" } },
+    { linkedinGuidance: { reason: "note_limit", connectionNoteLimit: 201 } },
+    { linkedinGuidance: null },
+  ])("drops invalid LinkedIn guidance %j", (override) => {
+    const { linkedinGuidance, ...transport } = override;
+    const result = serializeGenerationError({
+      status: 422,
+      code: "INSUFFICIENT_GROUNDING",
+      ...transport,
+      apiResponse: {
+        linkedinGuidance:
+          "linkedinGuidance" in override
+            ? linkedinGuidance
+            : { reason: "note_limit", connectionNoteLimit: 200 },
+      },
+    });
+    expect(result).not.toHaveProperty("linkedinGuidance");
+  });
   it("derives retry guidance from a bounded server reset when the header is absent", () => {
     const resetTime = Date.now() + 60_000;
     expect(

@@ -70,18 +70,24 @@ let errorDismissalTimer;
 const skippedApplicationQuestions = new Set();
 let applicationSkipCandidates = [];
 let applicationDraftRevision = 0;
+let outreachDraftRevision = 0;
+
+function invalidateOutreachDraft() {
+  outreachDraftRevision++;
+  if (currentOutput?.category === YC_APPLICATION_CATEGORY) return;
+  currentOutput = null;
+  feedbackOutput = null;
+  focusedDraftTarget = null;
+  renderGroundingStatus();
+  document.getElementById("output")?.classList.add("hidden");
+  document.getElementById("reject-reason")?.classList.add("hidden");
+  document.getElementById("messageText")?.replaceChildren();
+  document.getElementById("subjectText")?.replaceChildren();
+}
 
 function resetMessageFocus() {
   focusContextRevision++;
-  if (focusedDraftTarget) {
-    focusedDraftTarget = null;
-    currentOutput = null;
-    renderGroundingStatus();
-    document.getElementById("output")?.classList.add("hidden");
-    document.getElementById("reject-reason")?.classList.add("hidden");
-    document.getElementById("messageText")?.replaceChildren();
-    document.getElementById("subjectText")?.replaceChildren();
-  }
+  invalidateOutreachDraft();
   const field = document.getElementById("messageFocus");
   if (field) field.value = "";
   dismissMessageFocusRecovery();
@@ -395,6 +401,7 @@ function setupEventListeners() {
     getCategory: () => document.getElementById("category")?.value,
     onContextChange: () => {
       applicationDraftRevision++;
+      invalidateOutreachDraft();
       dismissApplicationEvidenceGuidance();
     },
     send: sendBackgroundMessage,
@@ -503,10 +510,8 @@ function setupEventListeners() {
   document
     .getElementById("connectionNoteLimit")
     .addEventListener("change", async () => {
-      if (currentOutput?.category === "linkedin_connection") {
-        updateCharacterCountDisplay(currentOutput.body, currentOutput.category);
-        displayValidationFeedback(currentOutput);
-      }
+      invalidateOutreachDraft();
+      hideError();
       try {
         await chrome.storage.local.set({
           connectionNoteLimit: getConnectionNoteLimit(),
@@ -517,6 +522,8 @@ function setupEventListeners() {
     });
 
   document.getElementById("messageFocus")?.addEventListener("input", () => {
+    invalidateOutreachDraft();
+    dismissApplicationEvidenceGuidance();
     updateMessageFocus();
     updateGenerateAvailability();
   });
@@ -949,7 +956,9 @@ async function generateMessage() {
   const focusRevision = focusContextRevision;
   const focusTarget = messageFocus ? profileTab : undefined;
   const focusIsCurrent = () =>
-    !messageFocus || focusRevision === focusContextRevision;
+    (!messageFocus || focusRevision === focusContextRevision) &&
+    (category === YC_APPLICATION_CATEGORY ||
+      outreachRevision === outreachDraftRevision);
   const questionValue = document
     .getElementById("ycQuestionInput")
     ?.value.trim();
@@ -978,6 +987,8 @@ async function generateMessage() {
     document.getElementById("connectBtn")?.click();
     return;
   }
+  if (!application) invalidateOutreachDraft();
+  const outreachRevision = outreachDraftRevision;
   const operationId = createOperationId();
   const requesterId = currentUserId;
   const applicationRevision = applicationDraftRevision;
@@ -1189,6 +1200,7 @@ async function generateMessage() {
         response,
         currentQuestions,
         applicationSelection?.ordinals,
+        category,
       );
       const errMsg = presentation.message;
       if (
@@ -2108,13 +2120,22 @@ function showGenerationError(presentation) {
     return;
   }
 
+  const title = document.getElementById("evidenceWarningTitle");
+  if (title)
+    title.textContent =
+      presentation.warningTitle || "More reviewed evidence needed";
   const guidance = document.getElementById("applicationEvidenceGuidance");
-  if (guidance && presentation.evidenceGuidance) {
-    guidance.textContent = presentation.evidenceGuidance;
+  if (
+    guidance &&
+    (presentation.evidenceGuidance || presentation.warningTitle)
+  ) {
+    guidance.textContent =
+      presentation.evidenceGuidance || presentation.message;
     guidance.hidden = false;
     errorText.hidden = true;
     errorEl.classList.add("evidence-warning");
-    document.getElementById("ycQuestionGroup")?.append(errorEl);
+    if (presentation.evidenceGuidance)
+      document.getElementById("ycQuestionGroup")?.append(errorEl);
   } else {
     errorText.textContent = presentation.message;
   }

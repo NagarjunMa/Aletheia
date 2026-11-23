@@ -1,3 +1,28 @@
+## 2026-11-22 — ALE-79 actionable LinkedIn grounding warnings
+
+Implemented on fix/ale-79-grounding-warnings from main a44a22d in an isolated
+worktree. Significant risk: optional API guidance, strict worker projection and
+popup asynchronous result state. Contract and evidence:
+docs/operations/ale-79-grounding-warnings.md. Only eligible/relevant complete facts
+can produce a length diagnosis. Inputs stay in place; known preflight failures
+use actionable warning text, and outreach context edits/new attempts hide old
+drafts and reject late results. Unknown failures retain error visibility.
+
+Passed locally: 3,392 root tests with coverage, 15 guardrails, 389 extension tests,
+root/extension lint/types, policy, version guard, audits at their existing thresholds,
+production and extension builds, eight web/health smoke checks. Extension browser
+matrix and fresh review receipts are in /tmp/ale79-*.log and
+/tmp/ale79-review-report-2.md. Round-1 findings ALE79-R1/R2 were reproduced and
+corrected: raw target length cannot replace semantic no-match, and legacy public
+safety guidance remains visible. Full-suite red/green and return-review evidence
+are kept separately. The legacy limit-change browser assertion now verifies the
+new hidden-draft contract and passed its affected rerun. Extension 1.0.36 unpacked
+build exists locally. Independent return review resolved ALE79-R1/R2 with no
+material findings on snapshot 69b8d68c; the dated Linear verification comment
+retains the results if historical /tmp receipts are unavailable. Commit and branch
+push authorized 2026-11-22. Merge/deployment and hosted acceptance remain pending;
+ALE-79 stays In Progress, VoiceOver deferred. Preserve unrelated checkout changes.
+
 ## 2026-11-22 — ALE-32 grounded outreach rollout validation
 
 Started on test/ale-32-grounded-outreach-rollout from current main a44a22d.

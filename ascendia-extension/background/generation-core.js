@@ -1,3 +1,4 @@
+import { readLinkedinGuidance } from "../lib/linkedin-guidance.js";
 import { readApplicationEvidenceGap } from "../lib/application-evidence-gap.js";
 
 // Pure helpers for the generation message boundary. Keeping these functions
@@ -21,6 +22,11 @@ export function serializeGenerationError(error) {
     status: error?.status,
     code,
     evidenceGap: details.evidenceGap,
+  });
+  const linkedinGuidance = readLinkedinGuidance({
+    status: error?.status,
+    code,
+    linkedinGuidance: details.linkedinGuidance,
   });
   const now = Date.now();
   const resetTime =
@@ -59,6 +65,7 @@ export function serializeGenerationError(error) {
     ...(error?.status ? { status: error.status } : {}),
     ...(code ? { code } : {}),
     ...(evidenceGap ? { evidenceGap } : {}),
+    ...(linkedinGuidance ? { linkedinGuidance } : {}),
     ...(error?.requestId ? { requestId: error.requestId } : {}),
     ...(error?.authCause || details.cause
       ? { cause: error?.authCause || details.cause }

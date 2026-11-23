@@ -585,6 +585,7 @@ export function buildOutreachGroundingContext(input: {
     explicit ??
     (emailSelection ? emailSelection.map(({ entry }) => entry) : rankedProse) ??
     [];
+  let matchingLinkedinFactTooLong = false;
   let winningLinkedinFact:
     | {
         entryId: string;
@@ -814,18 +815,23 @@ export function buildOutreachGroundingContext(input: {
           if (!(
             content.length <= MAX_SUPPORTING_EXCERPT &&
             isLinkedinExperience({ kind: fact.kind, content }) &&
-            isGroundedTextSafe(content, "linkedin") &&
-            linkedinCandidateFits(
-              { id: fact.id, kind: fact.kind, scope: "candidate", content },
-              [],
-              target.connectionNoteLimit,
-            )
+            isGroundedTextSafe(content, "linkedin")
           ))
             return [];
           const match = hasDuties
             ? matchDuty(fact)
             : rankFact(rankIntroduction, fact);
           if (!match && (!allowUnmatchedIntroduction || explicit)) return [];
+          if (
+            !linkedinCandidateFits(
+              { id: fact.id, kind: fact.kind, scope: "candidate", content },
+              [],
+              target.connectionNoteLimit,
+            )
+          ) {
+            matchingLinkedinFactTooLong = true;
+            return [];
+          }
           return [
             {
               entry,
@@ -1076,6 +1082,15 @@ export function buildOutreachGroundingContext(input: {
     ...(proseRelevantFactIds ? { proseRelevantFactIds } : {}),
     targetDiagnostics: {
       ...targets.diagnostics,
+      ...(linkedin && !winningLinkedinFact
+        ? {
+            linkedinRecovery: matchingLinkedinFactTooLong
+              ? ("note_limit" as const)
+              : hasJobDetail || roleSpecified
+                ? ("no_matching_evidence" as const)
+                : ("missing_context" as const),
+          }
+        : {}),
       ...(targetContradicted ? { contradicted: true } : {}),
       injectionReasons: injectionScan.reasons,
     },

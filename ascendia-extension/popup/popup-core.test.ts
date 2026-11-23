@@ -990,3 +990,73 @@ it.each([
     expect(build([])).not.toHaveProperty("selectedEvidenceIds");
   },
 );
+
+describe("ALE-79 LinkedIn warning presentation", () => {
+  const response = {
+    status: 422,
+    code: "INSUFFICIENT_GROUNDING",
+    message: "HTTP 422: unavailable",
+    linkedinGuidance: { reason: "note_limit", connectionNoteLimit: 200 },
+  };
+  it("explains the selected limit without raw HTTP diagnostics", () => {
+    const result = getGenerationErrorPresentation(
+      response,
+      undefined,
+      undefined,
+      "linkedin_connection",
+    );
+    expect(result.warningTitle).toBe("Complete fact exceeds note limit");
+    expect(result.message).toContain("200-character");
+    expect(result.message).toContain("300");
+    expect(result.message).not.toContain("HTTP");
+  });
+  it.each([{ status: 503 }, { code: "UNKNOWN_ERROR" }, { status: "422" }])(
+    "does not conceal unexpected failures %j",
+    (override) => {
+      const result = getGenerationErrorPresentation(
+        { ...response, ...override },
+        undefined,
+        undefined,
+        "linkedin_connection",
+      );
+      expect(result.warningTitle).toBeUndefined();
+      expect(result.message).toBe(response.message);
+    },
+  );
+  it("uses generic recovery for a legacy LinkedIn grounding denial", () => {
+    const result = getGenerationErrorPresentation(
+      { ...response, linkedinGuidance: undefined },
+      undefined,
+      undefined,
+      "linkedin_connection",
+    );
+    expect(result.warningTitle).toBe(
+      "More context or reviewed evidence needed",
+    );
+    expect(result.message).not.toContain("HTTP");
+  });
+  it("preserves credit and quota restoration guidance", () => {
+    const result = getGenerationErrorPresentation(
+      {
+        ...response,
+        billing: "refund_pending",
+        quotaRestoration: "pending_review",
+      },
+      undefined,
+      undefined,
+      "linkedin_connection",
+    );
+    expect(result.message).toContain("Credit restoration pending");
+    expect(result.message).toContain("quota restoration");
+  });
+  it("does not apply LinkedIn guidance to another channel", () => {
+    expect(
+      getGenerationErrorPresentation(
+        response,
+        undefined,
+        undefined,
+        "cold_email",
+      ).warningTitle,
+    ).toBeUndefined();
+  });
+});

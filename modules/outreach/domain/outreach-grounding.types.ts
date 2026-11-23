@@ -8,6 +8,9 @@ import type {
 } from "@/modules/candidate-context/domain/candidate-context.types";
 import type { AtomicSource } from "@/modules/grounding/domain/atomic-claim";
 
+export type LinkedinRecoveryReason =
+  "missing_context" | "no_matching_evidence" | "note_limit";
+
 export const OUTREACH_GROUNDING_CATEGORIES = [
   "linkedin_connection",
   "cold_email",
@@ -115,6 +118,7 @@ export type OutreachGroundingContext = {
   excludedClaims?: string[];
   /** Internal counters only; not part of public eval metadata. */
   targetDiagnostics?: {
+    linkedinRecovery?: LinkedinRecoveryReason;
     examined: number;
     excluded: number;
     overlength: number;

@@ -258,6 +258,120 @@ describe("LinkedIn real target preparation through the HTTP boundary", () => {
           "Frontend Engineer. Preserve paper manuscripts and organize archival collections.",
         ];
 
+        describe("ALE-79 actionable preflight warnings", () => {
+          const completeFact =
+            "I built and maintained frontend dashboards with accessible navigation and keyboard controls for a university portal, and documented the design decisions; I did not measure live outcomes.";
+          it.each([
+            { jd: "", facts: [] as string[], reason: "missing_context" },
+            { jd: museum, facts: [frontend], reason: "no_matching_evidence" },
+            {
+              jd: museum,
+              facts: [completeFact],
+              reason: "no_matching_evidence",
+            },
+            {
+              jd: "Frontend Engineer",
+              facts: [completeFact],
+              reason: "note_limit",
+            },
+          ])(
+            "identifies $reason without paid work ($jd)",
+            async ({ jd, facts, reason }) => {
+              await useRealPreparation(
+                [],
+                facts.map((fact) => reviewed(fact)),
+              );
+              const response = await generateSparse(
+                jd,
+                "Page unavailable",
+                200,
+              );
+              expect(response.status).toBe(422);
+              const result = await response.json();
+              expect(result.linkedinGuidance).toEqual({
+                reason,
+                connectionNoteLimit: 200,
+              });
+              expect(result.code).toBe("INSUFFICIENT_GROUNDING");
+              expect(result.reasonCodes.length).toBeGreaterThan(0);
+              expect(mockRpc).not.toHaveBeenCalled();
+              expect(mockAnthropicCreate).not.toHaveBeenCalled();
+              expect(JSON.stringify(result)).not.toContain(completeFact);
+            },
+          );
+          it.each(["unreviewed", "stale", "unconfirmed"])(
+            "does not diagnose a note limit from %s facts",
+            async (state) => {
+              const entry: CandidateGroundingData["confirmedEvidence"][number] =
+                reviewed(completeFact);
+              if (state === "unreviewed") delete entry.factReview;
+              if (state === "stale") entry.actions += " Changed after review.";
+              if (state === "unconfirmed") entry.confirmed = false;
+              await useRealPreparation([], [entry]);
+              const response = await generateSparse(
+                "Frontend Engineer",
+                "Page unavailable",
+                200,
+              );
+              expect(response.status).toBe(422);
+              expect(await response.json()).toMatchObject({
+                linkedinGuidance: {
+                  reason: "no_matching_evidence",
+                  connectionNoteLimit: 200,
+                },
+              });
+              expect(mockRpc).not.toHaveBeenCalled();
+              expect(mockAnthropicCreate).not.toHaveBeenCalled();
+            },
+          );
+
+          it.each([200, 300] as const)(
+            "keeps a long unrelated museum description as an evidence gap at %i",
+            async (limit) => {
+              await useRealPreparation([], [reviewed(frontend)]);
+              const response = await generateSparse(
+                "Museum catalogue specialist. " +
+                  Array(5)
+                    .fill(
+                      "Preserve paper manuscripts and organize archival collections.",
+                    )
+                    .join(" "),
+                Array(7)
+                  .fill(
+                    "Alex builds evaluation tools for policy-grounded agents.",
+                  )
+                  .join(" "),
+                limit,
+              );
+              expect(response.status).toBe(422);
+              expect(await response.json()).toMatchObject({
+                linkedinGuidance: {
+                  reason: "no_matching_evidence",
+                  connectionNoteLimit: limit,
+                },
+              });
+              expect(mockRpc).not.toHaveBeenCalled();
+              expect(mockAnthropicCreate).not.toHaveBeenCalled();
+            },
+          );
+
+          it("keeps the full reviewed fact in the matching Premium control", async () => {
+            await useRealPreparation([], [reviewed(completeFact)]);
+            const response = await generateSparse(
+              "Frontend Engineer",
+              "Page unavailable",
+              300,
+            );
+            expect(response.status).toBe(200);
+            const result = await response.json();
+            expect(result.body).toContain(completeFact);
+            expect(result.character_count).toBeGreaterThan(200);
+            expect(result.character_count).toBeLessThanOrEqual(300);
+            expect(result).not.toHaveProperty("linkedinGuidance");
+            expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
+          });
+        });
+
         it.each(
           ([200, 300] as const).flatMap((limit) =>
             descriptions.map((jd) => ({ limit, jd })),
@@ -3516,7 +3630,7 @@ ${long}`,
     expect(res.status).toBe(200);
     expect((await res.json()).body).toContain("Evaluation team at Example");
   });
-  it("explains an unusable target against the 200-character budget before paid work", async () => {
+  it("asks for usable context when only an overlong raw target is available", async () => {
     await useRealPreparation();
     const response = await POST(
       makeRequest({
@@ -3531,7 +3645,8 @@ ${long}`,
     );
     expect(response.status).toBe(422);
     expect(await response.json()).toMatchObject({
-      error: expect.stringContaining("200-character note"),
+      error: expect.stringContaining("add a short role or work detail"),
+      linkedinGuidance: { reason: "missing_context", connectionNoteLimit: 200 },
       reasonCodes: ["TARGET_FACT_TOO_LONG"],
     });
     expect(mockRpc).not.toHaveBeenCalled();
