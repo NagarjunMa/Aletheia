@@ -2856,3 +2856,4 @@ VoiceOver/actual zoom and ALE-75's deployment gates remain pending. Keep open.
 ## 2026-11-24 — ALE-80 Overjet question coverage
 
 - Added an impact paraphrase and four multi-project sibling questions to the existing service regression suite. The three- and five-question batches assert the approved answer for every question in display order. The full service file passed 193 tests. Live selection quality remains open.
+- The PR's hosted smoke job stalled while downloading Chromium dependency packages from the runner's EC2 Ubuntu mirror. The smoke install now uses the runner's official Ubuntu HTTPS fallbacks when available and times out after five minutes. The browser, dependencies and smoke assertions stay the same.

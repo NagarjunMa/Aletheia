@@ -136,7 +136,13 @@ jobs:
         run: npm run build
 
       - name: Install Chromium for landing smoke test
-        run: npx playwright install --with-deps chromium
+        timeout-minutes: 5
+        run: |
+          # Use Ubuntu's HTTPS mirrors when the runner has the official fallbacks configured.
+          if grep -qs '^https://archive\.ubuntu\.com/ubuntu/' /etc/apt/apt-mirrors.txt; then
+            sudo sed -i -E '/^http:\/\/(azure\.archive|us-east-2\.ec2\.archive)\.ubuntu\.com\/ubuntu\/?([[:space:]]|$)/d' /etc/apt/apt-mirrors.txt
+          fi
+          npx playwright install --with-deps chromium
 
       - name: Check dashboard components and account-safe states
         run: npm run test:dashboard:ui
