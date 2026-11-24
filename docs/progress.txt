@@ -2852,3 +2852,7 @@ VoiceOver/actual zoom and ALE-75's deployment gates remain pending. Keep open.
 - Removed generated shortening. Drafts use the exact approved statement, including literal glyphs. The Cal fixture uses an independently approved compact excerpt alongside the longer fact.
 - Check cited claims against complete known project names from the reviewed pool, including uncited and unselected projects. Preserve separate project paragraphs and check project titles again with current approval. The complete name catalog stays server-side.
 - Eight red regressions and their green rerun cover the two review findings and adjacent cases. Hosted acceptance remains open. See docs/operations/ale-80-reviewed-evidence.md.
+
+## 2026-11-24 — ALE-80 Overjet question coverage
+
+- Added an impact paraphrase and four multi-project sibling questions to the existing service regression suite. The three- and five-question batches assert the approved answer for every question in display order. The full service file passed 193 tests. Live selection quality remains open.

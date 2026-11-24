@@ -58,3 +58,7 @@ The red suite reproduced eight failures involving literal names, compatibility c
 
 
 The first independent return found that a hyphenated modifier could conceal a known foreign project name. Conflict checks now recognize the full known name inside a compound. An unresolved compound alone cannot establish a project lead. Approved leads with the reproduced relational modifiers remain usable. The verbatim path retains the previous Unicode-normalized exclusion checks. Five red regressions reproduced the modifier and exclusion issues and passed after the fixes.
+
+### Overjet question coverage
+
+The application-answer service suite runs the exact Overjet impact question and a plain-language rephrasing with and without job context. Three- and five-question batches add fictional examples of auditing an automated decision, improving device setup, making a volunteer integration reliable, and giving users control over a draft. Each batch checks the exact original question and its expected approved answer in order, even if the provider returns the items in reverse order. The unsupported slot-4 case still tests compensation and retry. All 193 service tests passed locally. The provider is mocked in CI, so live relevance and writing quality remain Preview checks.

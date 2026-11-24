@@ -3616,6 +3616,8 @@ it.each([
 describe("ALE-80 Overjet reviewed drafting and skip", () => {
   const impact =
     "What is the impact you're most proud of having driven through something you built?";
+  const impactRephrased =
+    "Pick something you built that made a difference. What changed because of your work?";
   const overjet =
     "# Forward Deployed Engineer\n\n## The role\nForward Deployed Engineers close the gap between what Overjet’s platform does today and what our largest customers need it to do.\n\n## What you’ll do\n- Build and own production integrations between Overjet and customer systems.\n- Build custom AI agent workflows on top of Overjet’s agentic platform.\n- Operate safely inside a regulated environment.";
   const action =
@@ -3631,7 +3633,33 @@ describe("ALE-80 Overjet reviewed drafting and skip", () => {
     id: "ae800000-1111-4111-8111-111111111110",
     sortOrder: 0,
   };
-  const accompanyingFacts = acceptanceFixture.cases.slice(0, 4);
+  // Fictional analogues of the work discussed during the live testing.
+  const accompanyingFacts = [
+    {
+      title: "Refund decision review",
+      question: "How did you make an automated decision easy to audit?",
+      reviewedAction:
+        "I built a prototype refund agent that recorded the policy rule, supporting record, and reason for each recommendation. I routed uncertain cases to a reviewer and checked the audit trail against synthetic refund requests before showing the prototype to the team. I used that review to verify that someone who had not written the rules could trace each decision.",
+    },
+    {
+      title: "Device setup automation",
+      question: "Tell us about a manual workflow you improved. How did you measure the result?",
+      reviewedAction:
+        "I wrote a script to apply and verify device settings on a lab fleet. In a controlled trial, I measured the setup time before and after the change and found that the script reduced the median time per device from forty minutes to twelve minutes. I checked the applied settings after each run to verify that the faster setup still produced the expected configuration.",
+    },
+    {
+      title: "Volunteer scheduling backend",
+      question: "Describe a time you made an integration more reliable for its operators.",
+      reviewedAction:
+        "I added retry handling and duplicate detection to a prototype volunteer scheduling integration. I replayed a synthetic stream of failed and repeated signups and checked that operators saw one assignment per volunteer and a clear status for each failed import. I showed the results to the scheduling team so they could distinguish unresolved imports from signups that had recovered.",
+    },
+    {
+      title: "Browser draft assistant",
+      question: "What did you build that gave users more control over AI output?",
+      reviewedAction:
+        "I built a preview and edit step for a prototype browser assistant. Users could inspect the proposed draft, change its wording, or discard it before copying, and I tested that no draft could be sent by the assistant. I also tested that the copy action used the latest edit instead of the original generated draft.",
+    },
+  ];
   const candidate = {
     identity: { fullName: "", linkedinUrl: "" },
     resume: { source: "none" as const, text: "" },
@@ -3648,8 +3676,13 @@ describe("ALE-80 Overjet reviewed drafting and skip", () => {
           },
         ]),
       },
-      ...accompanyingFacts.map(({ reviewedAction }, index) => {
-        const detail = { ...story, actions: reviewedAction };
+      ...accompanyingFacts.map(({ title, reviewedAction }, index) => {
+        const detail = {
+          ...story,
+          id: `ae800000-1111-4111-8111-11111111113${index}`,
+          title,
+          actions: reviewedAction,
+        };
         return {
           ...detail,
           factReview: prepareFactReview(detail, [
@@ -3702,7 +3735,7 @@ describe("ALE-80 Overjet reviewed drafting and skip", () => {
             if (index + 1 === gapSlot)
               return { id, gap: "missing_reviewed_facts" };
             const target =
-              question === impact || repeated
+              question === impact || question === impactRephrased || repeated
                 ? action
                 : accompanyingFacts.find(
                     (entry) => entry.question === question,
@@ -3755,13 +3788,18 @@ describe("ALE-80 Overjet reviewed drafting and skip", () => {
     expect(context.readiness.ready).toBe(false);
   });
 
-  it.each([overjet, ""])(
-    "answers the exact impact question with context %j",
-    async (jd) => {
-      const { response, result, deps } = await run([impact], jd);
+  it.each([
+    [impact, overjet],
+    [impact, ""],
+    [impactRephrased, overjet],
+    [impactRephrased, ""],
+  ])(
+    "answers %s with context %j",
+    async (question, jd) => {
+      const { response, result, deps } = await run([question], jd);
       expect(response.status).toBe(200);
       expect(result.answers).toMatchObject([
-        { question: impact, body: action },
+        { question, body: action },
       ]);
       expect(result).toMatchObject({ creditCost: 4, creditsRemaining: 36 });
       expect(deps.createMessage).toHaveBeenCalledTimes(1);
@@ -3772,18 +3810,19 @@ describe("ALE-80 Overjet reviewed drafting and skip", () => {
   it.each([3, 5])(
     "returns each of %i drafts in the original order",
     async (count) => {
-      const questions = [
-        impact,
-        ...accompanyingFacts.map(({ question }) => question),
+      const cases = [
+        { question: impact, reviewedAction: action },
+        ...accompanyingFacts,
       ].slice(0, count);
+      const questions = cases.map(({ question }) => question);
       const { response, result, deps } = await run(questions, overjet);
       expect(response.status).toBe(200);
-      expect(
-        result.answers.map(({ question }: { question: string }) => question),
-      ).toEqual(questions);
-      expect(
-        new Set(result.answers.map(({ body }: { body: string }) => body)).size,
-      ).toBe(count);
+      expect(result.answers).toMatchObject(
+        cases.map(({ question, reviewedAction }) => ({
+          question,
+          body: reviewedAction,
+        })),
+      );
       expect(deps.createMessage).toHaveBeenCalledTimes(1);
       expect(deps.reserveCredits).toHaveBeenCalledTimes(1);
     },
