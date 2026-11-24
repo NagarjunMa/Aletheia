@@ -1829,7 +1829,6 @@ function updateUIForCategory() {
   const ycQuestionGroup = document.getElementById("ycQuestionGroup");
   const contextInputLabel = document.getElementById("contextInputLabel");
   const contextInput = document.getElementById("jdInput");
-  const contextInputHelp = document.getElementById("contextInputHelp");
   const contextMaxCount = document.getElementById("contextMaxCount");
   const outputLabel = document.getElementById("messageOutputLabel");
   const fillButton = document.getElementById("fillBtn");
@@ -1855,12 +1854,6 @@ function updateUIForCategory() {
       uiState.contextRequired ? "true" : "false",
     );
     contextMaxCount.textContent = String(uiState.contextMaxLength);
-    if (contextInputHelp) {
-      contextInputHelp.textContent = uiState.contextRequired
-        ? "Required · paste at least 80 characters so the answer can be role-specific."
-        : "";
-      contextInputHelp.classList.toggle("hidden", !uiState.contextRequired);
-    }
     updateCharacterCount();
   }
 

@@ -1,3 +1,4 @@
+import { prepareYcGroundingContext } from "./prepare-yc-grounding-context";
 import acceptanceFixture from "./fixtures/ale-68-reviewed-evidence.json";
 import { allowedClaimTexts } from "@/modules/grounding/domain/atomic-claim";
 import { describe, expect, it, vi } from "vitest";
@@ -727,7 +728,7 @@ describe("generateYcApplication", () => {
       creditsRemaining: 36,
       evalMetadata: {
         generationId: "33333333-3333-4333-8333-333333333333",
-        promptVersion: "yc-2.3.0",
+        promptVersion: "yc-2.4.0",
         model: "claude-test-model",
         category: "yc_application",
         profileFieldCount: 2,
@@ -2759,7 +2760,7 @@ it.each([false, true])(
       expect(deps.refundCredits).toHaveBeenCalledTimes(1);
       expect(deps.releaseRateLimit).toHaveBeenCalledTimes(1);
     } else {
-      expect(body.evalMetadata.promptVersion).toBe("yc-3.1.0");
+      expect(body.evalMetadata.promptVersion).toBe("yc-3.2.0");
       expect(deps.refundCredits).not.toHaveBeenCalled();
     }
   },
@@ -3610,4 +3611,255 @@ it.each([
     /supporting_excerpt|source_id|evidence:/u,
   );
   expect(deps.refundCredits).not.toHaveBeenCalled();
+});
+
+describe("ALE-80 Overjet reviewed drafting and skip", () => {
+  const impact =
+    "What is the impact you're most proud of having driven through something you built?";
+  const overjet =
+    "# Forward Deployed Engineer\n\n## The role\nForward Deployed Engineers close the gap between what Overjet’s platform does today and what our largest customers need it to do.\n\n## What you’ll do\n- Build and own production integrations between Overjet and customer systems.\n- Build custom AI agent workflows on top of Overjet’s agentic platform.\n- Operate safely inside a regulated environment.";
+  const action =
+    "I built a review queue for a prototype support agent. I added an approval screen so operators could inspect the proposed resolution and the source record before any action. For the internal pilot, I measured the review flow across sample cases and found that the queue reduced manual sorting from twenty minutes to seven minutes per batch.";
+  const unsupported = "Which spectrometer resolved molecular absorption lines?";
+  const story = {
+    ...candidateEvidenceInputSchema.parse({
+      kind: "technical_project",
+      title: "Support review queue",
+      actions: action,
+      confirmed: true,
+    }),
+    id: "ae800000-1111-4111-8111-111111111110",
+    sortOrder: 0,
+  };
+  const accompanyingFacts = acceptanceFixture.cases.slice(0, 4);
+  const candidate = {
+    identity: { fullName: "", linkedinUrl: "" },
+    resume: { source: "none" as const, text: "" },
+    profile: candidateProfileInputSchema.parse({}),
+    confirmedEvidence: [
+      {
+        ...story,
+        factReview: prepareFactReview(story, [
+          {
+            id: "ae800000-1111-4111-8111-111111111111",
+            kind: "action",
+            excerpt: action,
+            confirmed: true as const,
+          },
+        ]),
+      },
+      ...accompanyingFacts.map(({ reviewedAction }, index) => {
+        const detail = { ...story, actions: reviewedAction };
+        return {
+          ...detail,
+          factReview: prepareFactReview(detail, [
+            {
+              id: `ae800000-1111-4111-8111-11111111112${index}`,
+              kind: "action",
+              excerpt: reviewedAction,
+              confirmed: true as const,
+            },
+          ]),
+        };
+      }),
+    ],
+  };
+
+  async function run(
+    questions: string[],
+    jd: string,
+    gapSlot = 0,
+    forged = false,
+    revoke = false,
+    repeated = false,
+  ) {
+    const loadCandidateData = vi
+      .fn()
+      .mockResolvedValueOnce(candidate)
+      .mockResolvedValue(
+        revoke ? { ...candidate, confirmedEvidence: [] } : candidate,
+      );
+    const deps = dependencies({
+      prepareGrounding: (input) =>
+        prepareYcGroundingContext(input, {
+          loadCandidateData,
+          recordGrounding: () => {},
+        }),
+      createMessage: vi
+        .fn()
+        .mockImplementation(async ({ reviewedDraft, userPrompt }) => {
+          expect(reviewedDraft).toBe(true);
+          const payload = JSON.parse(userPrompt);
+          expect(payload.jobDescription).toBe(jd);
+          expect(
+            payload.questions.map(
+              ({ question }: { question: string }) => question,
+            ),
+          ).toEqual(questions);
+          expect(payload.facts).toHaveLength(5);
+          const items = questions.map((question, index) => {
+            const id = `q${index + 1}`;
+            if (index + 1 === gapSlot)
+              return { id, gap: "missing_reviewed_facts" };
+            const target =
+              question === impact || repeated
+                ? action
+                : accompanyingFacts.find(
+                    (entry) => entry.question === question,
+                  )!.reviewedAction;
+            const fact = payload.facts.find(
+              ({ content }: { content: string }) => content === target,
+            );
+            const text = forged
+              ? target.replace("prototype", "production")
+              : target;
+            return { id, body: text, claims: [{ id: fact.id, text }] };
+          });
+          return {
+            stop_reason: "tool_use",
+            content: [
+              {
+                type: "tool_use",
+                name: "return_reviewed_drafts",
+                input: { items: items.reverse() },
+              },
+            ],
+            usage: { input_tokens: 682, output_tokens: 265 },
+          };
+        }),
+    });
+    vi.stubEnv("REVIEWED_DRAFTS_ENABLED", "true");
+    try {
+      const response = await generateYcApplication(
+        {
+          caller,
+          request: { category: "yc_application", questions, jd },
+          corsHeaders: {},
+          applicationBaseUrl: "https://aletheia.live",
+        },
+        deps,
+      );
+      return { response, deps, result: await response.json() };
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  }
+
+  it("reproduces the keyword false negative on the prior grounding path", () => {
+    const context = buildYcGroundingContext({
+      question: impact,
+      questions: [impact],
+      jobDescription: overjet,
+      candidate,
+    });
+    expect(context.readiness.ready).toBe(false);
+  });
+
+  it.each([overjet, ""])(
+    "answers the exact impact question with context %j",
+    async (jd) => {
+      const { response, result, deps } = await run([impact], jd);
+      expect(response.status).toBe(200);
+      expect(result.answers).toMatchObject([
+        { question: impact, body: action },
+      ]);
+      expect(result).toMatchObject({ creditCost: 4, creditsRemaining: 36 });
+      expect(deps.createMessage).toHaveBeenCalledTimes(1);
+      expect(deps.refundCredits).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([3, 5])(
+    "returns each of %i drafts in the original order",
+    async (count) => {
+      const questions = [
+        impact,
+        ...accompanyingFacts.map(({ question }) => question),
+      ].slice(0, count);
+      const { response, result, deps } = await run(questions, overjet);
+      expect(response.status).toBe(200);
+      expect(
+        result.answers.map(({ question }: { question: string }) => question),
+      ).toEqual(questions);
+      expect(
+        new Set(result.answers.map(({ body }: { body: string }) => body)).size,
+      ).toBe(count);
+      expect(deps.createMessage).toHaveBeenCalledTimes(1);
+      expect(deps.reserveCredits).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("returns a slot-4 gap and restores reservations before retrying the supported four", async () => {
+    const questions = [
+      impact,
+      ...accompanyingFacts.map(({ question }) => question),
+    ];
+    questions[3] = unsupported;
+    const first = await run(questions, overjet, 4);
+    expect(first.response.status).toBe(422);
+    expect(first.result).toMatchObject({
+      code: "INSUFFICIENT_GROUNDING",
+      billing: "refunded",
+      evidenceGap: { reason: "missing_reviewed_facts", questionNumbers: [4] },
+    });
+    expect(first.result).not.toHaveProperty("answers");
+    expect(first.deps.refundCredits).toHaveBeenCalledTimes(1);
+    expect(first.deps.releaseRateLimit).toHaveBeenCalledTimes(1);
+    const remaining = questions.filter((_, index) => index !== 3);
+    const retried = await run(remaining, overjet);
+    expect(retried.response.status).toBe(200);
+    expect(
+      retried.result.answers.map(
+        ({ question }: { question: string }) => question,
+      ),
+    ).toEqual(remaining);
+    expect(retried.deps.reserveCredits).toHaveBeenCalledTimes(1);
+  });
+
+  it("refunds a fabricated deployment despite a valid reviewed fact ID", async () => {
+    const { response, result, deps } = await run([impact], overjet, 0, true);
+    expect(response.status).toBe(502);
+    expect(result).toMatchObject({
+      code: "YC_OUTPUT_INVALID",
+      billing: "refunded",
+    });
+    expect(deps.refundCredits).toHaveBeenCalledTimes(1);
+    expect(deps.releaseRateLimit).toHaveBeenCalledTimes(1);
+  });
+
+  it("refunds repeated reviewed claims for distinct questions", async () => {
+    const questions = [impact, accompanyingFacts[0]!.question];
+    const { response, result, deps } = await run(
+      questions,
+      overjet,
+      0,
+      false,
+      false,
+      true,
+    );
+    expect(response.status).toBe(502);
+    expect(result).toMatchObject({
+      code: "YC_OUTPUT_INVALID",
+      billing: "refunded",
+    });
+    expect(deps.refundCredits).toHaveBeenCalledTimes(1);
+  });
+
+  it("refunds a draft when approval was revoked during the model request", async () => {
+    const { response, result, deps } = await run(
+      [impact],
+      overjet,
+      0,
+      false,
+      true,
+    );
+    expect(response.status).toBe(502);
+    expect(result).toMatchObject({
+      code: "YC_OUTPUT_INVALID",
+      billing: "refunded",
+    });
+    expect(result).not.toHaveProperty("answers");
+    expect(deps.refundCredits).toHaveBeenCalledTimes(1);
+    expect(deps.releaseRateLimit).toHaveBeenCalledTimes(1);
+  });
 });

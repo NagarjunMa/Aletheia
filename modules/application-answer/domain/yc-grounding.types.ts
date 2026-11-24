@@ -1,3 +1,4 @@
+import type { ReviewedEvidence } from "@/modules/grounding/application/reviewed-draft";
 import type {
   CandidateGroundingSource,
   EvidenceSelectionDiagnostics,
@@ -20,6 +21,7 @@ export type YcGroundingReadiness = {
 };
 
 export type YcGroundingContext = {
+  reviewedEvidence?: ReviewedEvidence;
   /** Server-only roots that must be used in the result. */
   requiredEvidenceRoots?: readonly string[];
   /** Strongest reviewed fact IDs in the current answer scope. */

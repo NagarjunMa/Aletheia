@@ -1,3 +1,4 @@
+import { groundedSignature } from "@/modules/grounding/application/finalize-grounded-output";
 import { includesSelectedEvidence } from "@/modules/candidate-context/application/selected-evidence";
 import {
   buildRhetoricalPlan,
@@ -170,14 +171,10 @@ export function buildProseCompositions(input: {
     subject: string;
     rhetorical_plan?: ReturnType<typeof planSelection>;
   }> = [];
-  const signatureWords = context.identity.fullName
-    ? countOutputUnits(
-        ["Best,", context.identity.fullName, context.identity.linkedinUrl]
-          .filter(Boolean)
-          .join("\n"),
-        "words",
-      )
-    : 0;
+  const signatureWords = countOutputUnits(
+    groundedSignature(context.identity),
+    "words",
+  );
   // Target-aware drafts are preferred. InMail can use candidate-only proof when a complete target would exceed its shorter budget.
   let validationAttempts = 0;
   // Preserve fuller options when available; use concise proof only if none fit.

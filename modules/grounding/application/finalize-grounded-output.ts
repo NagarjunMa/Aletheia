@@ -20,6 +20,14 @@ export function prepareGroundedText(value: string): string {
   return normalizeClaimText(value);
 }
 
+export function groundedSignature(identity: CandidateIdentity): string {
+  return identity.fullName
+    ? ["Best,", identity.fullName, identity.linkedinUrl]
+        .filter(Boolean)
+        .join("\n")
+    : "";
+}
+
 export class GroundedOutputLimitError extends Error {
   readonly code = "OUTPUT_LIMIT";
   readonly actualCount: number;
@@ -43,11 +51,18 @@ export function finalizeGroundedOutput(input: {
   excludedClaims: readonly string[];
   platform: "linkedin" | "email" | "general";
   scopedFields?: readonly { text: string; scope: ClaimScope | "either" }[];
+  neutralFraming?: readonly string[];
+  requireVerbatimClaims?: boolean;
   /** Caller-scoped server identity, allowed only for the exact rendered terminal block. */
   trustedIdentity?: CandidateIdentity;
 }) {
-  let fingerprintPatternCount = inspectGroundedText(input.body, input.platform)
-    .fingerprintPatterns.length;
+  const inspectedBody = input.requireVerbatimClaims
+    ? normalizeClaimText(input.body)
+    : input.body;
+  let fingerprintPatternCount = inspectGroundedText(
+    inspectedBody,
+    input.platform,
+  ).fingerprintPatterns.length;
   if (input.subject !== undefined)
     fingerprintPatternCount += inspectGroundedText(
       input.subject,
@@ -55,24 +70,22 @@ export function finalizeGroundedOutput(input: {
     ).fingerprintPatterns.length;
   let body = input.body;
   if (input.trustedIdentity?.fullName) {
-    const signature = [
-      "Best,",
-      input.trustedIdentity.fullName,
-      input.trustedIdentity.linkedinUrl,
-    ]
-      .filter(Boolean)
-      .join("\n");
-    const terminal = `\n\n${signature}`;
+    const terminal = `\n\n${groundedSignature(input.trustedIdentity)}`;
     if (!body.endsWith(terminal))
       throw new AtomicClaimValidationError("CLAIM_COVERAGE");
     body = body.slice(0, -terminal.length);
   }
   if (input.requiredEnding && !body.endsWith(input.requiredEnding))
     throw new AtomicClaimValidationError("CLAIM_COVERAGE");
-  const usedSources = validateAtomicOutput({
+  const proof = {
     claims: input.claims,
     sources: input.sources,
     excludedClaims: input.excludedClaims,
+    ...(input.neutralFraming ? { neutralFraming: input.neutralFraming } : {}),
+    ...(input.requireVerbatimClaims ? { requireVerbatimClaims: true } : {}),
+  };
+  const usedSources = validateAtomicOutput({
+    ...proof,
     fields: [
       ...(input.subject !== undefined
         ? [{ text: input.subject, scope: "either" as const }]
@@ -80,14 +93,8 @@ export function finalizeGroundedOutput(input: {
       { text: body, scope: "either" },
     ],
   });
-  if (input.scopedFields) {
-    validateAtomicOutput({
-      claims: input.claims,
-      sources: input.sources,
-      excludedClaims: input.excludedClaims,
-      fields: input.scopedFields,
-    });
-  }
+  if (input.scopedFields)
+    validateAtomicOutput({ ...proof, fields: input.scopedFields });
   const actualCount = countOutputUnits(input.body, input.bodyConstraint.unit);
   if (
     actualCount < input.bodyConstraint.minimum ||

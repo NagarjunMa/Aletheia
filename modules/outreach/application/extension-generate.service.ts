@@ -1,4 +1,12 @@
 import {
+  parseReviewedDrafts,
+  reviewedDraftPrompt,
+  ReviewedContextTooLargeError,
+  ReviewedDraftGap,
+  REVIEWED_DRAFT_PROMPT_VERSION,
+  validateReviewedDraft,
+} from "@/modules/grounding/application/reviewed-draft";
+import {
   includesSelectedEvidence,
   SelectedEvidenceUnavailableError,
 } from "@/modules/candidate-context/application/selected-evidence";
@@ -16,6 +24,7 @@ import {
 } from "./prose-compositions";
 import {
   finalizeGroundedOutput,
+  groundedSignature,
   GroundedOutputLimitError,
   prepareGroundedText,
 } from "@/modules/grounding/application/finalize-grounded-output";
@@ -92,6 +101,7 @@ import {
 } from "@/lib/extension-contract";
 import {
   generateRequestSchema,
+  outreachJobDescriptionSchema,
   ycApplicationRequestSchema,
 } from "@/app/api/extension/generate/schema";
 import {
@@ -275,16 +285,18 @@ export async function POST(request: NextRequest) {
       await recordGenerationActivity(activity, generationId, status, log);
       await recordFailedGeneration(failureContext, status, summary.errorCode);
       const templateVersion =
-        summary.category === "yc_application"
-          ? rhetoricalPlans
-            ? RHETORICAL_YC_PROMPT_VERSION
-            : summary.config.claimSelection === "reviewed_batch"
-              ? YC_REVIEWED_BATCH_PROMPT_VERSION
-              : YC_APPLICATION_PROMPT_VERSION
-          : outreachPromptVersion(
-              rhetoricalPlans,
-              summary.config.messageFocus === "enabled",
-            );
+        summary.config.claimSelection === "reviewed_draft"
+          ? REVIEWED_DRAFT_PROMPT_VERSION
+          : summary.category === "yc_application"
+            ? rhetoricalPlans
+              ? RHETORICAL_YC_PROMPT_VERSION
+              : summary.config.claimSelection === "reviewed_batch"
+                ? YC_REVIEWED_BATCH_PROMPT_VERSION
+                : YC_APPLICATION_PROMPT_VERSION
+            : outreachPromptVersion(
+                rhetoricalPlans,
+                summary.config.messageFocus === "enabled",
+              );
       recordMeasurement(log, {
         event: "generation.quality",
         generationId,
@@ -398,6 +410,8 @@ async function handlePost(
   // after a successful checkRateLimit. Used by the catch block to refund
   // the slot on any failure between reservation and successful response.
   let reservedSlot: { userId: string; id: string } | undefined;
+  let failureConnectionNoteLimit: LinkedinConnectionNoteLimit =
+    LINKEDIN_CONNECTION_MAX_CHARACTERS;
   let activeAttempt: { userId: string; id: string } | undefined;
   let reservedCredit: ReservedCredit | undefined;
   let creditCost: number | undefined;
@@ -481,6 +495,7 @@ async function handlePost(
     const validatedData = generateRequestSchema.parse(dispatchBody);
     const connectionNoteLimit =
       validatedData.connectionNoteLimit ?? LINKEDIN_CONNECTION_MAX_CHARACTERS;
+    failureConnectionNoteLimit = connectionNoteLimit;
     const basicConnectionNote =
       connectionNoteLimit === LINKEDIN_BASIC_CONNECTION_MAX_CHARACTERS;
     timing.category(validatedData.category);
@@ -537,6 +552,7 @@ async function handlePost(
       });
       completeGrounding("success");
     } catch (error) {
+      if (error instanceof ReviewedContextTooLargeError) throw error;
       if (error instanceof SelectedEvidenceUnavailableError) {
         completeGrounding("failure", {
           errorCode: "EVIDENCE_SELECTION_UNAVAILABLE",
@@ -553,6 +569,8 @@ async function handlePost(
       return candidateContextUnavailableResponse(corsHeaders);
     }
 
+    const reviewedEvidence = preparedGrounding.reviewedEvidence;
+    if (reviewedEvidence) timing.config({ claimSelection: "reviewed_draft" });
     if (messageFocus && preparedGrounding.focusSelection?.outcome !== "matched")
       return rejectFocus();
     const focusFactIds = preparedGrounding.focusFactIds;
@@ -560,7 +578,7 @@ async function handlePost(
     qualityHooks.onPrepared?.(preparedGrounding.atomicSources ?? []);
     let proseCompositions: ProseCompositions | undefined;
     let linkedinCompositions: LinkedinCompositions | undefined;
-    if (validatedData.category === "linkedin_connection") {
+    if (!reviewedEvidence && validatedData.category === "linkedin_connection") {
       const atoms = preparedGrounding.atomicSources ?? [];
       const eligibleTargets = atoms.filter((source) =>
         linkedinTargetFits(source, connectionNoteLimit),
@@ -640,7 +658,7 @@ async function handlePost(
       }
     }
 
-    if (validatedData.category !== "linkedin_connection") {
+    if (!reviewedEvidence && validatedData.category !== "linkedin_connection") {
       try {
         proseCompositions = buildProseCompositions({
           category: validatedData.category,
@@ -680,7 +698,9 @@ async function handlePost(
       ({ draft }) => draft.target_observation === null,
     );
     const candidateOnlyOutreach =
-      candidateOnlyConnection || preparedGrounding.domainAwareEmail;
+      Boolean(reviewedEvidence) ||
+      candidateOnlyConnection ||
+      preparedGrounding.domainAwareEmail;
     let styleProfile: StylePatterns | undefined;
     if (!candidateOnlyOutreach) {
       timing.enter("styleLoad");
@@ -850,12 +870,20 @@ async function handlePost(
     let resumeSource: ResumeSource = "none";
     let jdFromBody = jd || "";
     try {
-      const primaryResume = await getPrimaryResumeForGeneration(
-        authResult.userId,
-        log,
-      );
-      resumeForGeneration = primaryResume.text;
-      resumeSource = primaryResume.source;
+      if (!reviewedEvidence) {
+        const primaryResume = await getPrimaryResumeForGeneration(
+          authResult.userId,
+          log,
+        );
+        resumeForGeneration = primaryResume.text;
+        resumeSource = primaryResume.source;
+      } else if (
+        reviewedEvidence.facts.some(({ rootId }) =>
+          rootId?.startsWith("evidence:resume-"),
+        )
+      ) {
+        resumeSource = "user_resumes";
+      }
     } catch {
       log.warn(
         {
@@ -866,7 +894,11 @@ async function handlePost(
       );
     }
 
-    if (!jdFromBody.trim() && !preparedGrounding.requiredEvidenceRoots) {
+    if (
+      !jdFromBody.trim() &&
+      !candidateOnlyOutreach &&
+      !preparedGrounding.requiredEvidenceRoots
+    ) {
       try {
         const targetJobDescription = await getProfileTargetJobDescription(
           authResult.userId,
@@ -898,9 +930,12 @@ async function handlePost(
     const sanitizedResume = resumeForGeneration
       ? stripSurrogates(resumeForGeneration).slice(0, 8000)
       : resumeForGeneration;
-    const sanitizedJd = jdFromBody
-      ? stripSurrogates(jdFromBody).slice(0, 4000)
-      : jdFromBody;
+    const { jd: boundedJd } = z
+      .object({ jd: outreachJobDescriptionSchema })
+      .parse({
+        jd: jdFromBody,
+      });
+    const sanitizedJd = stripSurrogates(boundedJd);
     const sanitizedConversationContext = conversationContext
       ? stripSurrogates(conversationContext).slice(0, 12000)
       : "";
@@ -914,7 +949,9 @@ async function handlePost(
     // by dropping the high-value secrets (raw resume + jd) from the prompt
     // when red flags are present. If possible, keep a safe high-level resume
     // summary so the draft does not incorrectly claim missing background.
-    const injectionScan = scanForInjection(cleanMarkdown);
+    const injectionScan = scanForInjection(
+      [cleanMarkdown, sanitizedJd].join("\n"),
+    );
     const safeCandidateSummary = sanitizedResume
       ? deriveSafeCandidateSummary(sanitizedResume)
       : "";
@@ -928,13 +965,16 @@ async function handlePost(
           resumeSource,
           safeCandidateSummaryUsed: Boolean(safeCandidateSummary),
         },
-        "Injection patterns in target profile — using safe resume summary",
+        "Injection patterns in target context — using safe resume summary",
       );
     }
     const resumeForPrompt = injectionScan.triggered
       ? safeCandidateSummary
       : sanitizedResume || "";
-    const jdForPrompt = injectionScan.triggered ? "" : sanitizedJd || "";
+    const jdForPrompt =
+      injectionScan.triggered || preparedGrounding.metadata.injectionSafeMode
+        ? ""
+        : sanitizedJd;
 
     log.info(
       {
@@ -956,7 +996,7 @@ async function handlePost(
     const promptInput: GenerateInput = {
       profileMarkdown: candidateOnlyOutreach ? "" : cleanMarkdown,
       resume: candidateOnlyOutreach ? "" : resumeForPrompt,
-      jd: candidateOnlyOutreach ? "" : jdForPrompt,
+      jd: jdForPrompt,
       conversationContext: candidateOnlyOutreach
         ? ""
         : sanitizedConversationContext,
@@ -1008,14 +1048,48 @@ async function handlePost(
       promptInput.styleProfile = styleProfile;
     }
     const userPrompt = `${buildPrompt(promptInput)}\n\n${buildAtomicProvenancePrompt(promptAtomicSources)}${messageFocus ? `\n\n${buildMessageFocusPrompt(messageFocus)}` : ""}`;
-    const promptVersion = outreachPromptVersion(
-      rhetoricalPlans,
-      Boolean(messageFocus),
-    );
+    const constraint = resolveOutputConstraint({
+      category,
+      emailMode,
+      connectionNoteLimit,
+    });
+    const signatureWords =
+      reviewedEvidence && category === "cold_email"
+        ? countOutputUnits(
+            groundedSignature(preparedGrounding.identity),
+            "words",
+          )
+        : 0;
+    const activePrompt = reviewedEvidence
+      ? reviewedDraftPrompt({
+          category,
+          jobDescription: jdForPrompt,
+          questions: [
+            {
+              id: "q1",
+              question: "Write a draft for the intended recipient and purpose.",
+            },
+          ],
+          facts: reviewedEvidence.facts,
+          requiredRoots: reviewedEvidence.requiredRoots,
+          recipientContext: cleanMarkdown,
+          conversation: sanitizedConversationContext,
+          intent: intent ?? "networking",
+          mode: emailMode,
+          minimum: Math.max(1, constraint.minimum - signatureWords),
+          maximum: constraint.maximum - signatureWords,
+        })
+      : { systemPrompt, userPrompt };
+    const promptVersion = reviewedEvidence
+      ? REVIEWED_DRAFT_PROMPT_VERSION
+      : outreachPromptVersion(rhetoricalPlans, Boolean(messageFocus));
     const focusMetadata = messageFocus
       ? { selectionStatus: "matched" as const }
       : {};
-    timing.metrics({ inputChars: systemPrompt.length + userPrompt.length });
+    timing.metrics({
+      inputChars:
+        activePrompt.systemPrompt.length + activePrompt.userPrompt.length,
+    });
     const admission = await startGenerationAttempt(
       authResult.userId,
       reservedSlot.id,
@@ -1067,10 +1141,10 @@ async function handlePost(
     timing.enter("model");
     const startTime = Date.now();
     const response = await createOutreachDraftMessage({
-      systemPrompt,
-      userPrompt,
+      ...activePrompt,
       category,
       emailMode,
+      ...(reviewedEvidence ? { reviewedDraft: true } : {}),
       atomicSources: preparedGrounding.atomicSources ?? [],
       ...(proseCompositions ? { proseCompositions } : {}),
       ...(linkedinCompositions ? { linkedinCompositions } : {}),
@@ -1153,6 +1227,74 @@ async function handlePost(
       ...rateCheck,
       dailyLimit: getDailyLimit(),
     });
+
+    if (reviewedEvidence) {
+      const [item] = parseReviewedDrafts(response, 1);
+      if (!item) throw new AtomicClaimValidationError("CLAIM_SCHEMA");
+      const draft = validateReviewedDraft({
+        item,
+        facts: reviewedEvidence.facts,
+        excludedClaims: reviewedEvidence.excludedClaims,
+        requiredRoots: reviewedEvidence.requiredRoots,
+        projectTitles: reviewedEvidence.projectTitles,
+        constraint,
+        ...(category === "cold_email"
+          ? { trustedIdentity: preparedGrounding.identity }
+          : {}),
+      });
+      await reviewedEvidence.recheck(draft.usedSources);
+      const quality = buildQualityMetadata({
+        claims: draft.claims,
+        sources: reviewedEvidence.facts,
+        archetypes: [],
+        patternCount: draft.fingerprintPatternCount,
+      });
+      const finalMetadata = annotateFinalDraft(quality, draft);
+      timing.metrics({
+        resultChars: draft.body.length,
+        claimCount: draft.claims.length,
+      });
+      reservedSlot = undefined;
+      reservedCredit = undefined;
+      return NextResponse.json(
+        {
+          success: true,
+          category,
+          body: draft.body,
+          character_count: draft.body.length,
+          ...(draft.subject
+            ? {
+                subject_line: draft.subject,
+                word_count: countOutputUnits(draft.body, "words"),
+              }
+            : {}),
+          usage: tokenUsage,
+          processingTime,
+          evalMetadata: {
+            ...finalMetadata,
+            ...(category === "linkedin_connection"
+              ? { hasCandidateRelevance: true }
+              : {}),
+            ...(category === "cold_email"
+              ? {
+                  identityIncluded: Boolean(
+                    preparedGrounding.identity.fullName,
+                  ),
+                }
+              : {}),
+          },
+          ...(CREDIT_BILLING_ENABLED
+            ? {
+                billingMode,
+                creditCost,
+                creditsRemaining,
+                unlimitedCredits: unlimitedCreditUser,
+              }
+            : {}),
+        },
+        { headers: { ...corsHeaders, ...rateLimitHeaders } },
+      );
+    }
 
     // Cold email is rendered only from validated semantic composition. The
     // source ledger and identity stay server-side and are never public.
@@ -1496,7 +1638,19 @@ async function handlePost(
       );
     }
   } catch (error) {
-    if (error instanceof LinkedinGroundingUnavailableError)
+    const invalidReviewedDraft =
+      error instanceof AtomicClaimValidationError ||
+      error instanceof GroundedTextSanitizationError ||
+      error instanceof GroundedOutputLimitError;
+    if (invalidReviewedDraft) {
+      timing.failure("OUTPUT_VALIDATION_FAILED");
+      qualityHooks.onRejected?.();
+    } else if (error instanceof ReviewedContextTooLargeError)
+      timing.failure("INPUT_VALIDATION_FAILED");
+    else if (
+      error instanceof ReviewedDraftGap ||
+      error instanceof LinkedinGroundingUnavailableError
+    )
       timing.failure("INSUFFICIENT_GROUNDING");
     else if (error instanceof z.ZodError)
       timing.failure("INPUT_VALIDATION_FAILED");
@@ -1529,11 +1683,67 @@ async function handlePost(
     reservedCredit = undefined;
     reservedSlot = undefined;
 
+    if (error instanceof ReviewedContextTooLargeError)
+      return NextResponse.json(
+        {
+          success: false,
+          code: "REVIEWED_CONTEXT_TOO_LARGE",
+          error: error.message,
+          message: error.message,
+          ...compensation,
+        },
+        { status: 400, headers: corsHeaders },
+      );
+    if (error instanceof ReviewedDraftGap) {
+      const message =
+        "Review a fact that describes work relevant to this opportunity.";
+      return NextResponse.json(
+        {
+          success: false,
+          error: "More reviewed evidence needed",
+          message,
+          code: "INSUFFICIENT_GROUNDING",
+          ...(activity.category === "linkedin_connection"
+            ? {
+                linkedinGuidance: {
+                  reason: "no_matching_evidence",
+                  connectionNoteLimit: failureConnectionNoteLimit,
+                },
+              }
+            : {}),
+          ...compensation,
+        },
+        { status: 422, headers: corsHeaders },
+      );
+    }
+    if (invalidReviewedDraft)
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Generated draft could not be safely validated.",
+          code: "PARSE_FAILED",
+          ...compensation,
+        },
+        { status: 502, headers: corsHeaders },
+      );
+
     if (error instanceof z.ZodError) {
+      const jobDescriptionTooLong = error.issues.some(
+        (issue) =>
+          issue.code === "too_big" &&
+          issue.path.length === 1 &&
+          issue.path[0] === "jd",
+      );
       return NextResponse.json(
         {
           success: false,
           error: "Invalid request",
+          ...(jobDescriptionTooLong
+            ? {
+                message:
+                  "Paste a shorter job description or shorten the one saved in your profile. The limit is 20,000 characters.",
+              }
+            : {}),
           details: toZodErrorDetails(error),
           ...compensation,
         },

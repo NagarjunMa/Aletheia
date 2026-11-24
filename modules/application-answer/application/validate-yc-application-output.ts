@@ -53,6 +53,15 @@ function countWords(value: string): number {
   return value.length === 0 ? 0 : value.split(/\s+/u).length;
 }
 
+export function assertApplicationAnswerFraming(body: string) {
+  if (FORBIDDEN_FRAMING.some((pattern) => pattern.test(body))) {
+    throw new YcApplicationOutputValidationError(
+      "Answer contains forbidden framing",
+      "YC_FORBIDDEN_FRAMING",
+    );
+  }
+}
+
 export function validateYcApplicationOutput(input: {
   output: YcApplicationToolOutput;
   context: YcGroundingContext;
@@ -67,12 +76,7 @@ export function validateYcApplicationOutput(input: {
   const body = normalizeText(input.output.body);
   const wordCount = countWords(body);
 
-  if (FORBIDDEN_FRAMING.some((pattern) => pattern.test(body))) {
-    throw new YcApplicationOutputValidationError(
-      "Answer contains forbidden framing",
-      "YC_FORBIDDEN_FRAMING",
-    );
-  }
+  assertApplicationAnswerFraming(body);
 
   const compactBody = compactClaim(body);
   for (const excludedClaim of input.context.excludedClaims) {

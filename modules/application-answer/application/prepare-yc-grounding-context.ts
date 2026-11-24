@@ -1,3 +1,9 @@
+import {
+  collectReviewedEvidence,
+  reviewedDraftsEnabled,
+  recheckReviewedEvidence,
+  safeReviewedDraftInput,
+} from "@/modules/grounding/application/reviewed-draft";
 import { createLogger, startTimedStage, type SafeLogger } from "@/lib/logger";
 import type { GenerationTiming } from "@/lib/generation-timing";
 import type { YcGroundingContext } from "../domain/yc-grounding.types";
@@ -59,22 +65,63 @@ export async function prepareYcGroundingContext(
   let context: YcGroundingContext;
   try {
     input.timing?.enter("groundingLoad");
-    const candidate = dependencies.loadCandidateData
-      ? await dependencies.loadCandidateData(input.caller)
-      : await loadCandidateGroundingData(input.caller, {
-          logger: operationLog,
-          includeResumeReviews: true,
-        });
+    const load = () =>
+      dependencies.loadCandidateData
+        ? dependencies.loadCandidateData(input.caller)
+        : loadCandidateGroundingData(input.caller, {
+            logger: operationLog,
+            includeResumeReviews: true,
+          });
+    const candidate = await load();
     input.timing?.enter("groundingBuild");
-    context = buildYcGroundingContext({
-      question: input.question,
-      ...(input.questions ? { questions: input.questions } : {}),
-      jobDescription: input.jobDescription,
-      candidate,
-      ...(input.selectedEvidenceIds
-        ? { selectedEvidenceIds: input.selectedEvidenceIds }
-        : {}),
-    });
+    const reviewedEvidence =
+      reviewedDraftsEnabled() &&
+      safeReviewedDraftInput(
+        [...(input.questions ?? [input.question]), input.jobDescription].join(
+          "\n",
+        ),
+      )
+        ? collectReviewedEvidence(candidate, input.selectedEvidenceIds)
+        : undefined;
+    if (reviewedEvidence) {
+      const { facts, requiredRoots, excludedClaims } = reviewedEvidence;
+      const evidenceCount = new Set(facts.map(({ rootId }) => rootId)).size;
+      context = {
+        reviewedEvidence: {
+          ...reviewedEvidence,
+          recheck: recheckReviewedEvidence(load),
+        },
+        question: input.question,
+        jobDescription: input.jobDescription,
+        sources: reviewedEvidence.sources,
+        atomicSources: facts,
+        excludedClaims,
+        requiredEvidenceRoots: requiredRoots,
+        readiness: {
+          ready: facts.length > 0,
+          missingFields: facts.length ? [] : ["confirmed_evidence"],
+          recommendedFields: [],
+        },
+        metadata: {
+          profileFieldCount: 0,
+          confirmedEvidenceCount: evidenceCount,
+          resumeSource: facts.some(({ rootId }) =>
+            rootId?.startsWith("evidence:resume-"),
+          )
+            ? candidate.resume.source
+            : "none",
+        },
+      };
+    } else
+      context = buildYcGroundingContext({
+        question: input.question,
+        ...(input.questions ? { questions: input.questions } : {}),
+        jobDescription: input.jobDescription,
+        candidate,
+        ...(input.selectedEvidenceIds
+          ? { selectedEvidenceIds: input.selectedEvidenceIds }
+          : {}),
+      });
   } catch (error) {
     complete("failure", { errorCode: "YC_GROUNDING_UNAVAILABLE" });
     throw error;

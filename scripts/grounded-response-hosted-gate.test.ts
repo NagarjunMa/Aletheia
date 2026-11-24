@@ -228,11 +228,11 @@ describe("paired hosted workload", () => {
       const evalMetadata = {
         promptVersion: isYc
           ? enabled
-            ? "yc-3.1.0"
-            : "yc-2.3.0"
+            ? "yc-3.2.0"
+            : "yc-2.4.0"
           : enabled && defect !== "wrong-prompt"
-            ? "7.1.0"
-            : "6.1.0",
+            ? "7.3.0"
+            : "6.3.0",
         inputTokens: 100,
         outputTokens: 20,
         injectionTriggered: injection,

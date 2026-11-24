@@ -175,7 +175,7 @@ export function prepareResumeFactReview(
   }));
 }
 
-// Only YC projects these approvals into its existing exact-claim pipeline.
+// Represent each current résumé approval as an evidence record.
 export function reviewedResumeEvidence(
   text: string,
   stored: unknown,

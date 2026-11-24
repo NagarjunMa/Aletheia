@@ -419,7 +419,7 @@ describe("getSystemPrompt", () => {
 
 describe("prose instructions match the exact grounding contract", () => {
   it("versions the prose contract repair", () => {
-    expect(PROMPT_VERSION).toBe("6.1.0");
+    expect(PROMPT_VERSION).toBe("6.3.0");
   });
   it.each([COLD_EMAIL_PROMPT, LINKEDIN_INMAIL_PROMPT])(
     "requires one current option without model-authored factual fields",

@@ -111,9 +111,13 @@ export const NEUTRAL_FRAMING = [
   "A quick look at my background:",
 ] as const;
 
+export function normalizeVerbatimClaimText(value: string): string {
+  return value.replace(/\r\n?/gu, "\n").trim();
+}
+
 /** Inner whitespace can be part of a literal value; only encoding and outer trim are equivalent. */
 export function normalizeClaimText(value: string): string {
-  return value.normalize("NFKC").replace(/\r\n?/gu, "\n").trim();
+  return normalizeVerbatimClaimText(value.normalize("NFKC"));
 }
 
 /** Recognize an explicit actor without expanding contractions or changing the source. */
