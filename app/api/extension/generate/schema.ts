@@ -17,10 +17,14 @@ const selectedEvidenceIds = z
   .transform((ids) => (ids.length ? ids : undefined))
   .optional();
 
+export const outreachJobDescriptionSchema = z.string().max(20_000, {
+  error: "Paste a job description of at most 20,000 characters.",
+});
+
 const legacyGenerateRequestFields = {
   profileMarkdown: z.string().trim().min(10).max(10000),
   resume: z.string().max(50000).nullish().default(""),
-  jd: z.string().max(20000).nullish().default(""),
+  jd: outreachJobDescriptionSchema.nullish().default(""),
   messageFocus: messageFocusSchema,
   selectedEvidenceIds,
   conversationContext: z.string().max(12000).nullish().default(""),
@@ -97,7 +101,6 @@ export const generateRequestSchema = legacyGenerateBaseSchema
 
 export const DEFAULT_YC_APPLICATION_QUESTION =
   "Why are you a strong candidate for this role?";
-export const YC_APPLICATION_JOB_DESCRIPTION_MIN_CHARS = 80;
 export const YC_APPLICATION_JOB_DESCRIPTION_MAX_CHARS = 20_000;
 export const YC_APPLICATION_QUESTION_MIN_CHARS = 10;
 export const YC_APPLICATION_QUESTION_MAX_CHARS = 1_000;
@@ -105,7 +108,7 @@ export const YC_APPLICATION_MIN_WORDS = APPLICATION_ANSWER_MIN_WORDS;
 export const YC_APPLICATION_MAX_WORDS = APPLICATION_ANSWER_MAX_WORDS;
 
 function normalizeYcInput(value: string): string {
-  return value.normalize("NFKC").replace(/\r\n?/gu, "\n").trim();
+  return value.replace(/\r\n?/gu, "\n").trim();
 }
 
 function normalizedBoundedString(minimum: number, maximum: number) {
@@ -114,7 +117,8 @@ function normalizedBoundedString(minimum: number, maximum: number) {
     .transform(normalizeYcInput)
     .pipe(z.string().max(maximum))
     .superRefine((value, context) => {
-      if (value.length < minimum) {
+      const normalizedLength = value.normalize("NFKC").length;
+      if (normalizedLength < minimum) {
         context.addIssue({
           code: "too_small",
           origin: "string",
@@ -122,7 +126,7 @@ function normalizedBoundedString(minimum: number, maximum: number) {
           inclusive: true,
         });
       }
-      if (value.length > maximum) {
+      if (normalizedLength > maximum) {
         context.addIssue({
           code: "custom",
           message: "Input exceeds its character limit",
@@ -136,9 +140,9 @@ const legacyYcApplicationRequestSchema = z
     category: z.literal("yc_application"),
     selectedEvidenceIds,
     jd: normalizedBoundedString(
-      YC_APPLICATION_JOB_DESCRIPTION_MIN_CHARS,
+      0,
       YC_APPLICATION_JOB_DESCRIPTION_MAX_CHARS,
-    ),
+    ).default(""),
     question: normalizedBoundedString(
       YC_APPLICATION_QUESTION_MIN_CHARS,
       YC_APPLICATION_QUESTION_MAX_CHARS,
@@ -153,9 +157,9 @@ const canonicalYcApplicationRequestSchema = z
     category: z.literal("yc_application"),
     selectedEvidenceIds,
     jd: normalizedBoundedString(
-      YC_APPLICATION_JOB_DESCRIPTION_MIN_CHARS,
+      0,
       YC_APPLICATION_JOB_DESCRIPTION_MAX_CHARS,
-    ),
+    ).default(""),
     questions: z
       .array(
         normalizedBoundedString(YC_APPLICATION_QUESTION_MIN_CHARS, 500).refine(

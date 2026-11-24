@@ -1,3 +1,4 @@
+import { reviewedDraftTool } from "@/modules/grounding/application/reviewed-draft";
 import { renderYcAnswer } from "../domain/render-yc-answer";
 import type {
   YcPlannedOptions,
@@ -284,6 +285,7 @@ export async function createYcApplicationMessage(input: {
   userPrompt: string;
   questionCount?: number;
   reviewedOptions?: YcReviewedOptions;
+  reviewedDraft?: boolean;
   plannedOptions?: YcPlannedOptions;
 }) {
   const timeout =
@@ -300,22 +302,27 @@ export async function createYcApplicationMessage(input: {
         system: input.systemPrompt,
         messages: [{ role: "user", content: input.userPrompt }],
         tools: [
-          input.plannedOptions
-            ? buildYcPlannedTool(
-                input.plannedOptions,
-                input.questionCount !== undefined,
-              )
-            : input.questionCount === undefined
-              ? ycApplicationTool
-              : input.reviewedOptions
-                ? reviewedBatchSelectionTool(input.reviewedOptions)
-                : applicationBatchTool,
+          input.reviewedDraft
+            ? reviewedDraftTool
+            : input.plannedOptions
+              ? buildYcPlannedTool(
+                  input.plannedOptions,
+                  input.questionCount !== undefined,
+                )
+              : input.questionCount === undefined
+                ? ycApplicationTool
+                : input.reviewedOptions
+                  ? reviewedBatchSelectionTool(input.reviewedOptions)
+                  : applicationBatchTool,
         ],
         tool_choice: {
           type: "tool",
-          ...(input.reviewedOptions ? { disable_parallel_tool_use: true } : {}),
-          name:
-            input.questionCount === undefined
+          ...(input.reviewedOptions || input.reviewedDraft
+            ? { disable_parallel_tool_use: true }
+            : {}),
+          name: input.reviewedDraft
+            ? reviewedDraftTool.name
+            : input.questionCount === undefined
               ? YC_APPLICATION_TOOL_NAME
               : applicationBatchTool.name,
         },
@@ -334,6 +341,7 @@ export async function createYcApplicationDraft(input: {
   userPrompt: string;
   questionCount?: number;
   reviewedOptions?: YcReviewedOptions;
+  reviewedDraft?: boolean;
   plannedOptions?: YcPlannedOptions;
   logger?: SafeLogger;
 }) {

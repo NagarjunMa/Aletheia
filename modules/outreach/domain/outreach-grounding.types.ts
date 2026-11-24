@@ -1,3 +1,4 @@
+import type { ReviewedEvidence } from "@/modules/grounding/application/reviewed-draft";
 import type { LinkedinConnectionNoteLimit } from "@/lib/ai/output-constraints";
 import type { EmailMode } from "@/lib/ai/email-formatter";
 import type {
@@ -96,6 +97,7 @@ export type FinalOutreachGroundingMetadata = OutreachGroundingMetadata & {
 };
 
 export type OutreachGroundingContext = {
+  reviewedEvidence?: ReviewedEvidence;
   /** Internal outcome for an explicit focus request, with no text or identifiers. */
   focusSelection?: { outcome: "matched" | "no_match" | "selection_conflict" };
   /** Reviewed facts eligible to satisfy the explicit focus in a complete draft. */

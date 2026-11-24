@@ -13,7 +13,6 @@ import { normalizeConnectionNoteLimit } from "../lib/linkedin-connection-limit.j
 export const YC_APPLICATION_CATEGORY = "yc_application";
 export const DEFAULT_YC_APPLICATION_QUESTION =
   "Why are you a strong candidate for this role?";
-export const YC_APPLICATION_JOB_DESCRIPTION_MIN_CHARS = 80;
 export const YC_APPLICATION_JOB_DESCRIPTION_MAX_CHARS = 20000;
 export const YC_APPLICATION_QUESTION_MIN_CHARS = 10;
 export const YC_APPLICATION_QUESTION_MAX_CHARS = 1000;
@@ -211,10 +210,9 @@ export function getCategoryUiState(category, emailMode = "initial_outreach") {
       showIntent: false,
       showEmailMode: false,
       showQuestion: true,
-      contextRequired: true,
-      contextLabel: "Job Description",
-      contextPlaceholder:
-        "Paste the complete job description (minimum 80 characters)...",
+      contextRequired: false,
+      contextLabel: "Job Description (Optional)",
+      contextPlaceholder: "Paste the complete job description if available...",
       contextMaxLength: YC_APPLICATION_JOB_DESCRIPTION_MAX_CHARS,
       generateLabel: "Generate Answers · 4 credits",
       outputLabel: "Application Answers",
@@ -273,14 +271,10 @@ export function validateGenerationInput({
   const jd = normalizeApplicationInput(contextValue);
   const questions = parseApplicationQuestions(questionValue);
 
-  if (jd.length < YC_APPLICATION_JOB_DESCRIPTION_MIN_CHARS) {
-    return {
-      valid: false,
-      code: "YC_JOB_DESCRIPTION_TOO_SHORT",
-      message: `Paste at least ${YC_APPLICATION_JOB_DESCRIPTION_MIN_CHARS} characters of the job description.`,
-    };
-  }
-  if (jd.length > YC_APPLICATION_JOB_DESCRIPTION_MAX_CHARS) {
+  if (
+    jd.length > YC_APPLICATION_JOB_DESCRIPTION_MAX_CHARS ||
+    jd.normalize("NFKC").length > YC_APPLICATION_JOB_DESCRIPTION_MAX_CHARS
+  ) {
     return {
       valid: false,
       code: "YC_JOB_DESCRIPTION_TOO_LONG",
@@ -294,11 +288,16 @@ export function validateGenerationInput({
       message: "Enter one to five questions, one per line.",
     };
   for (const [index, question] of questions.entries()) {
-    if (question.length < 10 || question.length > 500)
+    const normalizedLength = question.normalize("NFKC").length;
+    if (
+      normalizedLength < 10 ||
+      normalizedLength > 500 ||
+      question.length > 500
+    )
       return {
         valid: false,
         code:
-          question.length < 10
+          normalizedLength < 10
             ? "YC_QUESTION_TOO_SHORT"
             : "YC_QUESTION_TOO_LONG",
         message: `Question ${index + 1} must contain 10–500 characters.`,
@@ -511,7 +510,6 @@ export function isAuthError(message) {
 
 export function normalizeApplicationInput(value) {
   return String(value ?? "")
-    .normalize("NFKC")
     .replace(/\r\n?/gu, "\n")
     .trim();
 }

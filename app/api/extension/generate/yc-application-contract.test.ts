@@ -7,7 +7,6 @@ import {
   generateRequestSchema,
   YC_APPLICATION_ERROR_CONTRACTS,
   YC_APPLICATION_JOB_DESCRIPTION_MAX_CHARS,
-  YC_APPLICATION_JOB_DESCRIPTION_MIN_CHARS,
   YC_APPLICATION_MAX_WORDS,
   YC_APPLICATION_MIN_WORDS,
   YC_APPLICATION_QUESTION_MAX_CHARS,
@@ -45,7 +44,7 @@ describe.each([
       for (const prefix of ["", "😀😀😀"]) {
         // The ligature expands to two UTF-16 units during NFKC normalization.
         const rest = "x".repeat(length - prefix.length - 2);
-        const normalized = prefix + "ff" + rest;
+        const preserved = prefix + "ﬀ" + rest;
         const raw = `  ${prefix}ﬀ${rest}\r\n`;
         const input = (value: string) => ({
           category: "yc_application",
@@ -57,7 +56,7 @@ describe.each([
           result.success,
           `${field}: ${length} units (emoji: ${!!prefix})`,
         ).toBe(accepted);
-        if (result.success) expect(result.data).toEqual(input(normalized));
+        if (result.success) expect(result.data).toEqual(input(preserved));
         else
           expect(result.error.issues).toContainEqual(
             expect.objectContaining({
@@ -79,7 +78,7 @@ describe.each([
     );
 
     it.each([
-      [79, false],
+      [79, true],
       [80, true],
       [81, true],
       [19_999, true],
@@ -138,7 +137,7 @@ describe("ALE-37 additive batch request compatibility", () => {
   );
 
   it.each([
-    [79, false],
+    [79, true],
     [80, true],
     [81, true],
     [19_999, true],
@@ -147,7 +146,6 @@ describe("ALE-37 additive batch request compatibility", () => {
   ])(
     "validates a canonical job description at %i normalized units",
     (length, accepted) => {
-      const normalized = "f".repeat(length);
       const pasted =
         "ﬀ".repeat(Math.floor(length / 2)) + "f".repeat(length % 2);
       const result = ycApplicationRequestSchema.safeParse({
@@ -157,7 +155,7 @@ describe("ALE-37 additive batch request compatibility", () => {
       });
 
       expect(result.success).toBe(accepted);
-      if (result.success) expect(result.data.jd).toBe(normalized);
+      if (result.success) expect(result.data.jd).toBe(pasted);
       else
         expect(result.error.issues).toContainEqual(
           expect.objectContaining({ path: ["jd"] }),
@@ -185,7 +183,7 @@ describe("ALE-37 additive batch request compatibility", () => {
       if (result.success) {
         expect(result.data).toEqual({
           ...base,
-          questions: ["Why this role?", "f".repeat(length)],
+          questions: ["Why this role?", pasted],
         });
       } else {
         expect(result.error.issues).toContainEqual(
@@ -519,7 +517,7 @@ describe("YC application request contract", () => {
     expect(parsed).not.toHaveProperty("profileUrl");
   });
 
-  it("normalizes Unicode, line endings, and surrounding whitespace", () => {
+  it("preserves Unicode wording while trimming input boundaries", () => {
     const parsed = generateRequestContractSchema.parse({
       category: "yc_application",
       jd: `  ${validJobDescription.replaceAll("AI", "ＡＩ")}\r\n  `,
@@ -530,23 +528,22 @@ describe("YC application request contract", () => {
     if (parsed.category !== "yc_application") {
       throw new Error("Expected the YC application request branch");
     }
-    expect(parsed.jd).toBe(validJobDescription);
+    expect(parsed.jd).toBe(validJobDescription.replaceAll("AI", "ＡＩ"));
     if (!("question" in parsed)) throw new Error("Expected legacy request");
     expect(parsed.question).toBe("Why does this candidate fit the role?");
   });
 
-  it("requires a bounded job description", () => {
+  it("accepts an omitted job description and bounds supplied context", () => {
     expect(
-      generateRequestContractSchema.safeParse({
+      generateRequestContractSchema.parse({
         category: "yc_application",
-      }).success,
-    ).toBe(false);
-    expect(
-      generateRequestContractSchema.safeParse({
-        category: "yc_application",
-        jd: "x".repeat(YC_APPLICATION_JOB_DESCRIPTION_MIN_CHARS - 1),
-      }).success,
-    ).toBe(false);
+        questions: ["What did you build?"],
+      }),
+    ).toEqual({
+      category: "yc_application",
+      questions: ["What did you build?"],
+      jd: "",
+    });
     expect(
       generateRequestContractSchema.safeParse({
         category: "yc_application",

@@ -508,9 +508,9 @@ describe("ALE-37 canonical question entry", () => {
     });
   });
 
-  it("normalizes Unicode and preserves repeated questions as distinct entries", () => {
+  it("preserves compatibility characters and question order", () => {
     expect(payload("  Why ＡＩ products?\rWhy AI products?  ")).toMatchObject({
-      questions: ["Why AI products?", "Why AI products?"],
+      questions: ["Why ＡＩ products?", "Why AI products?"],
     });
   });
 
@@ -688,7 +688,7 @@ describe("YC category UI and validation", () => {
         showIntent: false,
         showEmailMode: false,
         showQuestion: true,
-        contextRequired: true,
+        contextRequired: false,
         contextMaxLength: 20000,
         generateLabel: "Generate Answers · 4 credits",
         outputLabel: "Application Answers",
@@ -698,7 +698,7 @@ describe("YC category UI and validation", () => {
   });
 
   it.each([
-    { jd: 79, question: 10, code: "YC_JOB_DESCRIPTION_TOO_SHORT" },
+    { jd: 79, question: 10, code: null },
     { jd: 80, question: 9, code: "YC_QUESTION_TOO_SHORT" },
     { jd: 80, question: 10, code: null },
     { jd: 81, question: 11, code: null },
@@ -719,16 +719,19 @@ describe("YC category UI and validation", () => {
     },
   );
 
-  it("requires an 80-character YC job description", () => {
-    expect(
-      validateGenerationInput({
-        category: "yc_application",
-        hasProfile: false,
-        contextValue: "Too short",
-        questionValue: DEFAULT_YC_APPLICATION_QUESTION,
-      }),
-    ).toMatchObject({ valid: false, code: "YC_JOB_DESCRIPTION_TOO_SHORT" });
-  });
+  it.each(["", "Forward Deployed Engineer"])(
+    "accepts optional YC job context (%j)",
+    (contextValue) => {
+      expect(
+        validateGenerationInput({
+          category: "yc_application",
+          hasProfile: false,
+          contextValue,
+          questionValue: DEFAULT_YC_APPLICATION_QUESTION,
+        }),
+      ).toEqual({ valid: true });
+    },
+  );
 
   it("allows YC generation on a non-LinkedIn page when inputs are ready", () => {
     expect(

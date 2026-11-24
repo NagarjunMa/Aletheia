@@ -1,3 +1,4 @@
+import { reviewedDraftTool } from "@/modules/grounding/application/reviewed-draft";
 import {
   buildProseSelectionTool,
   resolveProseSelection,
@@ -258,6 +259,7 @@ export async function createOutreachDraftMessage(input: {
   emailMode: EmailMode;
   atomicSources?: readonly AtomicSource[];
   proseCompositions?: ProseCompositions;
+  reviewedDraft?: boolean;
   linkedinCompositions?: LinkedinCompositions;
   intent?: LinkedinIntent;
   rhetoricalPlans?: boolean;
@@ -269,11 +271,13 @@ export async function createOutreachDraftMessage(input: {
   });
   if (
     input.category !== "linkedin_connection" &&
+    !input.reviewedDraft &&
     !input.proseCompositions?.length
   )
     throw new ProseGroundingUnavailableError();
-  const tool =
-    input.category === "cold_email"
+  const tool = input.reviewedDraft
+    ? reviewedDraftTool
+    : input.category === "cold_email"
       ? buildProseSelectionTool("cold_email", input.proseCompositions!)
       : input.category === "linkedin_connection"
         ? buildLinkedinSelectionTool(
@@ -299,6 +303,7 @@ export async function createOutreachDraftMessage(input: {
         tool_choice: {
           type: "tool" as const,
           name: toolName,
+          ...(input.reviewedDraft ? { disable_parallel_tool_use: true } : {}),
         },
       },
       { timeout: GENERATION_MODEL_TIMEOUT_MS, signal },

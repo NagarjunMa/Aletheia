@@ -2832,3 +2832,23 @@ VoiceOver/actual zoom and ALE-75's deployment gates remain pending. Keep open.
 - Contract/location map/evaluation evidence: docs/operations/ale-30-initial-email-preflight.md. Four red-first regressions, short selected frontend/device success, automatic frontend, full-option preference and independent mode/boundary assertions. Actual-account local options succeed with synthetic context; no provider calls or account mutations.
 - Passed: 3,372 web tests / 154 files, coverage thresholds, 15 guards, lint (one inherited warning), engineering policy and production build. Initial symlink build failed; locked local dependency install and normal build resolved the setup issue. No dependency changes. Final types and fresh independent-review receipts: /tmp/ale30-preflight-*-final.log and /tmp/ale30-preflight-review-*.
 - Keep ALE-30 In Progress. New hosted generation/quality verification remains after authorized deployment; VoiceOver remains deferred. Automatic device-story affirmative-experience eligibility, 200-character LinkedIn fitting and richer profile extraction are unchanged limitations. No commit/push/deploy/publication.
+
+## 2026-11-23 — ALE-80 original opportunity context
+
+- Started feat/ale-80-reviewed-evidence from main 1f2e353. Linear ALE-80 is In Progress. The execution context, regression cases and remaining provider work are in docs/operations/ale-80-reviewed-evidence.md.
+- The first increment sends bounded original job context to outreach selection and preserves application question order and job qualifications in the prompt. It separates post hashtags, bounds legacy saved input, and keeps the existing source validation and resource compensation paths.
+- The local Cal and Overjet tests verify the provider payload. Review corrections keep saved profile context outside candidate-only calls and make the oversized-context guidance visible in the extension. The current relevance veto and prewritten options still require replacement. Hosted quality, credit and latency checks remain open.
+
+
+## 2026-11-23 — ALE-80 reviewed drafting
+
+- Implemented the reviewed-fact provider path on feat/ale-80-reviewed-evidence under REVIEWED_DRAFTS_ENABLED, disabled by default. The model selects and assembles a draft from the complete bounded evidence pool. The server validates the wording and checks the current approvals again before returning it.
+- Extension 1.0.37 preserves original question wording and order, accepts optional job context, and uses the existing skip, copy and warning contracts. A semantic gap compensates reservations and keeps the affected question positions.
+- Local Cal, Overjet, résumé outreach and revocation regression details and rollout requirements are in docs/operations/ale-80-reviewed-evidence.md. Hosted model quality, latency and metered accounting are pending.
+
+
+## 2026-11-24 — ALE-80 literal wording and project attribution
+
+- Removed generated shortening. Drafts use the exact approved statement, including literal glyphs. The Cal fixture uses an independently approved compact excerpt alongside the longer fact.
+- Check cited claims against complete known project names from the reviewed pool, including uncited and unselected projects. Preserve separate project paragraphs and check project titles again with current approval. The complete name catalog stays server-side.
+- Eight red regressions and their green rerun cover the two review findings and adjacent cases. Hosted acceptance remains open. See docs/operations/ale-80-reviewed-evidence.md.

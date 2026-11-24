@@ -1,3 +1,16 @@
+import { normalizeClaimText } from "@/modules/grounding/domain/atomic-claim";
+import {
+  parseReviewedDrafts,
+  reviewedDraftPrompt,
+  ReviewedContextTooLargeError,
+  ReviewedDraftGap,
+  REVIEWED_DRAFT_PROMPT_VERSION,
+  validateReviewedDraft,
+} from "@/modules/grounding/application/reviewed-draft";
+import {
+  countOutputUnits,
+  resolveOutputConstraint,
+} from "@/lib/ai/output-constraints";
 import { SelectedEvidenceUnavailableError } from "@/modules/candidate-context/application/selected-evidence";
 import { evidenceSelectionUnavailableResponse } from "@/modules/outreach/api/extension-generate.mapper";
 import {
@@ -82,6 +95,7 @@ import {
   YcApplicationOutputSanitizationError,
 } from "./sanitize-yc-application-output";
 import {
+  assertApplicationAnswerFraming,
   validateYcApplicationOutput,
   YcApplicationOutputValidationError,
 } from "./validate-yc-application-output";
@@ -339,6 +353,8 @@ export async function generateYcApplication(
       throw error;
     }
     completeGrounding("success", { ready: context.readiness.ready });
+    const reviewedEvidence = context.reviewedEvidence;
+    if (reviewedEvidence) timing?.config({ claimSelection: "reviewed_draft" });
     timing?.metrics({
       sourceChars: context.sources.reduce(
         (sum, source) => sum + source.content.length,
@@ -349,13 +365,15 @@ export async function generateYcApplication(
 
     if (isBatch) {
       missingReviewedQuestionNumbers =
-        context.questions?.flatMap((question, index) =>
-          question.reviewedFactIds?.length === 0 &&
-          (!input.request.selectedEvidenceIds ||
-            applicationRationaleRequest(questions[index]!))
-            ? [index + 1]
-            : [],
-        ) ?? [];
+        reviewedEvidence && !context.readiness.ready
+          ? questions.map((_, index) => index + 1)
+          : (context.questions?.flatMap((question, index) =>
+              question.reviewedFactIds?.length === 0 &&
+              (!input.request.selectedEvidenceIds ||
+                applicationRationaleRequest(questions[index]!))
+                ? [index + 1]
+                : [],
+            ) ?? []);
     }
     const missingRationaleNumbers = missingReviewedQuestionNumbers.filter(
       (number) => applicationRationaleRequest(questions[number - 1]!),
@@ -393,12 +411,14 @@ export async function generateYcApplication(
     }
 
     input.qualityHooks?.onPrepared?.(context.atomicSources ?? []);
-    const plannedOptions = rhetoricalPlans
-      ? buildYcPlannedOptions(context)
-      : undefined;
-    const feasible = rhetoricalPlans
-      ? undefined
-      : assertYcSelectionFeasible(context);
+    const plannedOptions =
+      rhetoricalPlans && !reviewedEvidence
+        ? buildYcPlannedOptions(context)
+        : undefined;
+    const feasible =
+      rhetoricalPlans || reviewedEvidence
+        ? undefined
+        : assertYcSelectionFeasible(context);
     const reviewedOptions =
       isBatch &&
       feasible &&
@@ -534,11 +554,26 @@ export async function generateYcApplication(
     if (billingEnabled && billingMode === "unlimited_developer")
       timing?.config({ billingMode: "unlimited" });
     timing?.enter("inputBuild");
-    const prompt = buildYcApplicationPrompt(
-      context,
-      rhetoricalPlans,
-      reviewedOptions,
-    );
+    const applicationConstraint = resolveOutputConstraint({
+      category: "yc_application",
+    });
+    const prompt = reviewedEvidence
+      ? {
+          ...reviewedDraftPrompt({
+            category: "yc_application",
+            jobDescription: input.request.jd,
+            questions: questions.map((question, index) => ({
+              id: `q${index + 1}`,
+              question,
+            })),
+            facts: reviewedEvidence.facts,
+            requiredRoots: reviewedEvidence.requiredRoots,
+            minimum: applicationConstraint.minimum,
+            maximum: applicationConstraint.maximum,
+          }),
+          injectionScan: { triggered: false },
+        }
+      : buildYcApplicationPrompt(context, rhetoricalPlans, reviewedOptions);
     timing?.metrics({
       inputChars: prompt.systemPrompt.length + prompt.userPrompt.length,
     });
@@ -604,6 +639,7 @@ export async function generateYcApplication(
       userPrompt: prompt.userPrompt,
       ...(isBatch ? { questionCount: questions.length } : {}),
       ...(reviewedOptions ? { reviewedOptions } : {}),
+      ...(reviewedEvidence ? { reviewedDraft: true } : {}),
       ...(plannedOptions ? { plannedOptions } : {}),
       logger: operationLog,
     });
@@ -637,7 +673,40 @@ export async function generateYcApplication(
         throw new YcApplicationStructuredOutputError("YC_TOOL_SCHEMA");
       }
     }
+    const draftedAnswers = reviewedEvidence
+      ? parseReviewedDrafts(message, questions.length).map((item) => {
+          assertApplicationAnswerFraming(item.body.trim());
+          const draft = validateReviewedDraft({
+            item,
+            facts: reviewedEvidence.facts,
+            excludedClaims: reviewedEvidence.excludedClaims,
+            requiredRoots: reviewedEvidence.requiredRoots,
+            projectTitles: reviewedEvidence.projectTitles,
+            constraint: applicationConstraint,
+          });
+          return {
+            usedSources: draft.usedSources,
+            questionId: item.id,
+            body: draft.body,
+            claims: draft.claims.map((claim) => ({
+              ...claim,
+              sourceIds: [claim.source_id],
+            })),
+            fingerprintPatternCount: draft.fingerprintPatternCount,
+          };
+        })
+      : undefined;
+    if (draftedAnswers && reviewedEvidence) {
+      validationStage = "grounding";
+      const usedSources = new Map(
+        draftedAnswers.flatMap(({ usedSources }) =>
+          usedSources.map((source) => [source.id, source] as const),
+        ),
+      );
+      await reviewedEvidence.recheck([...usedSources.values()]);
+    }
     const parsedAnswers =
+      draftedAnswers ??
       plannedAnswers ??
       (reviewedOptions
         ? getReviewedApplicationToolInput(message, reviewedOptions)
@@ -668,10 +737,47 @@ export async function generateYcApplication(
     });
     const validatedAnswers = [];
     const questionByClaims = new Map<string, number>();
+    const normalizedQuestions = questions.map(normalizeClaimText);
+    const checkDistinct = (
+      claims: Parameters<typeof ycClaimSignature>[0],
+      group: number | undefined,
+    ) => {
+      if (group === undefined) return;
+      const signature = ycClaimSignature(claims);
+      const previousQuestion = questionByClaims.get(signature);
+      if (previousQuestion !== undefined && previousQuestion !== group)
+        throw new YcApplicationOutputValidationError(
+          "Different questions reuse the same reviewed claims",
+          "YC_REPEATED_ANSWER",
+        );
+      questionByClaims.set(signature, group);
+    };
     for (const [index, question] of questions.entries()) {
       const questionId = `q${index + 1}`;
       const parsed = byId.get(questionId)!;
       validationItem = index + 1;
+      const draft = draftedAnswers?.[index];
+      if (draft) {
+        validationStage = "grounding";
+        checkDistinct(
+          draft.claims,
+          normalizedQuestions.indexOf(normalizedQuestions[index]!) + 1,
+        );
+        validatedAnswers.push({
+          questionId,
+          question,
+          body: draft.body,
+          wordCount: countOutputUnits(draft.body, "words"),
+          characterCount: draft.body.length,
+          claims: draft.claims.map((claim) => ({
+            text: claim.text,
+            sourceIds: [claim.source_id],
+          })),
+          selectedClaims: draft.claims,
+          fingerprintPatternCount: draft.fingerprintPatternCount,
+        });
+        continue;
+      }
       validationStage = "sanitize";
       const sanitized = await dependencies.sanitizeOutput({
         body: parsed.body,
@@ -687,20 +793,10 @@ export async function generateYcApplication(
         context: answerContext,
         output: sanitized.output,
       });
-      const questionGroup = context.questions?.[index]?.questionGroup;
-      if (questionGroup !== undefined) {
-        const signature = ycClaimSignature(sanitized.output.claims);
-        const previousQuestion = questionByClaims.get(signature);
-        if (
-          previousQuestion !== undefined &&
-          previousQuestion !== questionGroup
-        )
-          throw new YcApplicationOutputValidationError(
-            "Different questions reuse the same reviewed claims",
-            "YC_REPEATED_ANSWER",
-          );
-        questionByClaims.set(signature, questionGroup);
-      }
+      checkDistinct(
+        sanitized.output.claims,
+        context.questions?.[index]?.questionGroup,
+      );
       validatedAnswers.push({
         questionId,
         question,
@@ -753,11 +849,13 @@ export async function generateYcApplication(
         evalMetadata: {
           generationId,
           quality,
-          promptVersion: rhetoricalPlans
-            ? RHETORICAL_YC_PROMPT_VERSION
-            : reviewedOptions
-              ? YC_REVIEWED_BATCH_PROMPT_VERSION
-              : YC_APPLICATION_PROMPT_VERSION,
+          promptVersion: reviewedEvidence
+            ? REVIEWED_DRAFT_PROMPT_VERSION
+            : rhetoricalPlans
+              ? RHETORICAL_YC_PROMPT_VERSION
+              : reviewedOptions
+                ? YC_REVIEWED_BATCH_PROMPT_VERSION
+                : YC_APPLICATION_PROMPT_VERSION,
           model: dependencies.model,
           category: "yc_application",
           generationTimeMs: processingTime,
@@ -789,6 +887,46 @@ export async function generateYcApplication(
       },
     });
   } catch (error) {
+    if (error instanceof ReviewedContextTooLargeError) {
+      timing?.failure("INPUT_VALIDATION_FAILED");
+      return NextResponse.json(
+        {
+          success: false,
+          code: "REVIEWED_CONTEXT_TOO_LARGE",
+          error: error.message,
+          message: error.message,
+          billing: "none",
+        },
+        { status: 400, headers: input.corsHeaders },
+      );
+    }
+    if (error instanceof ReviewedDraftGap) {
+      timing?.failure("INSUFFICIENT_GROUNDING");
+      timing?.enter("refund");
+      const compensation = await releaseReservations({
+        dependencies,
+        caller: input.caller,
+        reservedCredit,
+        rateReservationId,
+        reason: "reviewed_evidence_gap",
+        logger: operationLog,
+      });
+      return NextResponse.json(
+        {
+          success: false,
+          code: "INSUFFICIENT_GROUNDING",
+          message: "Add or review a fact that answers the affected question.",
+          error: "More reviewed evidence needed",
+          evidenceGap: {
+            reason: "missing_reviewed_facts",
+            questionNumbers: error.questionNumbers,
+          },
+          applicationProfileUrl: profileUrl(input.applicationBaseUrl, true),
+          ...compensation,
+        },
+        { status: 422, headers: input.corsHeaders },
+      );
+    }
     if (error instanceof AtomicClaimValidationError)
       input.qualityHooks?.onRejected?.();
     if (

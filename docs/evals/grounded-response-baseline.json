@@ -3,14 +3,14 @@
   "mode": "offline",
   "fixtureFingerprint": "d5f62e0944578e5d2682a7c4df3f9ecbe978377ab6fb7c41a52f951edd2ef289",
   "configuration": {
-    "outreachPromptVersion": "6.1.0",
-    "applicationPromptVersion": "yc-2.3.0",
+    "outreachPromptVersion": "6.3.0",
+    "applicationPromptVersion": "yc-2.4.0",
     "model": "claude-sonnet-4-6",
     "temperatures": {
       "outreach": 0.8,
       "application": 0.3
     },
-    "promptFingerprint": "0365633e188a82cecfe0b4b9b672581c57208d1ace3a5e43ba5033ff0272a0f9",
+    "promptFingerprint": "f15dc8fbcc4d8be74aefc6f40324ce640fabfd4701e69c1d14b6508da1ef4f0f",
     "configuredOutputTokenCeilings": {
       "connection": 600,
       "prose": 2400,

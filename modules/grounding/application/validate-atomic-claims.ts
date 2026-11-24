@@ -1,6 +1,7 @@
 import {
   atomicClaimsSchema,
   normalizeClaimText,
+  normalizeVerbatimClaimText,
   allowedClaimTexts,
   MAX_SUPPORTING_EXCERPT,
   NEUTRAL_FRAMING,
@@ -31,6 +32,8 @@ export function validateAtomicOutput(input: {
   sources: readonly AtomicSource[];
   excludedClaims: readonly string[];
   fields: readonly { text: string; scope: ClaimScope | "either" }[];
+  neutralFraming?: readonly string[];
+  requireVerbatimClaims?: boolean;
 }): AtomicSource[] {
   const parsed = atomicClaimsSchema.safeParse(input.claims);
   if (!parsed.success) throw new AtomicClaimValidationError("CLAIM_SCHEMA");
@@ -50,26 +53,31 @@ export function validateAtomicOutput(input: {
     .map((value) => normalizeClaimText(value).replace(/\s+/gu, " "))
     .filter(Boolean);
   const isExcluded = (text: string) => {
-    const exclusionText = text.replace(/\s+/gu, " ");
+    const exclusionText = normalizeClaimText(text).replace(/\s+/gu, " ");
     return (
       containsExcludedClaim(text, input.excludedClaims) ||
       excluded.some((value) => exclusionText.includes(value))
     );
   };
+  const normalizeText = input.requireVerbatimClaims
+    ? normalizeVerbatimClaimText
+    : normalizeClaimText;
   const verified = claims.map((claim) => {
     const source = sources.get(claim.source_id);
     if (!source || source.kind !== claim.kind)
       throw new AtomicClaimValidationError("CLAIM_SOURCE");
-    const excerpt = normalizeClaimText(claim.supporting_excerpt);
+    const excerpt = normalizeText(claim.supporting_excerpt);
     // Equality with a complete source unit prevents substring cherry-picking.
     if (
       source.content.length > MAX_SUPPORTING_EXCERPT ||
-      excerpt !== normalizeClaimText(source.content)
+      excerpt !== normalizeText(source.content)
     )
       throw new AtomicClaimValidationError("CLAIM_SUPPORT");
-    const text = normalizeClaimText(claim.text);
-    if (!allowedClaimTexts(source).includes(text))
-      throw new AtomicClaimValidationError("CLAIM_REWRITE");
+    const text = normalizeText(claim.text);
+    const wordingAllowed = input.requireVerbatimClaims
+      ? text === normalizeText(source.content)
+      : allowedClaimTexts(source).includes(text);
+    if (!wordingAllowed) throw new AtomicClaimValidationError("CLAIM_REWRITE");
     if (isExcluded(text) || isExcluded(excerpt)) {
       throw new AtomicClaimValidationError("CLAIM_EXCLUDED");
     }
@@ -77,7 +85,7 @@ export function validateAtomicOutput(input: {
   });
   const used = new Set<number>();
   for (const field of input.fields) {
-    const text = normalizeClaimText(field.text);
+    const text = normalizeText(field.text);
     if (isExcluded(text))
       throw new AtomicClaimValidationError("CLAIM_EXCLUDED");
     const candidates = [
@@ -86,8 +94,8 @@ export function validateAtomicOutput(input: {
           ? [{ text: claim.text, index }]
           : [],
       ),
-      ...NEUTRAL_FRAMING.map((text) => ({
-        text: normalizeClaimText(text),
+      ...(input.neutralFraming ?? NEUTRAL_FRAMING).map((text) => ({
+        text: normalizeText(text),
         index: -1,
       })),
     ].sort((a, b) => b.text.length - a.text.length);
@@ -100,7 +108,11 @@ export function validateAtomicOutput(input: {
             /\s/u.test(remaining[candidate.text.length] ?? "")),
       );
       if (!match) throw new AtomicClaimValidationError("CLAIM_COVERAGE");
-      if (match.index >= 0) used.add(match.index);
+      if (match.index >= 0) {
+        if (input.requireVerbatimClaims && used.has(match.index))
+          throw new AtomicClaimValidationError("CLAIM_COVERAGE");
+        used.add(match.index);
+      }
       remaining = remaining.slice(match.text.length).trimStart();
     }
   }
