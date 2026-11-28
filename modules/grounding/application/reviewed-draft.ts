@@ -33,9 +33,12 @@ import {
   finalizeGroundedOutput,
   groundedSignature,
 } from "./finalize-grounded-output";
-import { AtomicClaimValidationError } from "./validate-atomic-claims";
+import {
+  AtomicClaimValidationError,
+  claimExclusionCheck,
+} from "./validate-atomic-claims";
 
-export const REVIEWED_DRAFT_PROMPT_VERSION = "reviewed-draft-3";
+export const REVIEWED_DRAFT_PROMPT_VERSION = "reviewed-draft-4";
 export const REVIEWED_CONTEXT_MESSAGE =
   "The reviewed evidence exceeds the input limit. Choose a smaller set of reviewed stories, then try again.";
 export const reviewedDraftsEnabled = () =>
@@ -161,13 +164,15 @@ export function recheckReviewedEvidence(
         ),
       });
       const byId = new Map(current.facts.map((fact) => [fact.id, fact]));
+      const isExcluded = claimExclusionCheck(current.excludedClaims);
       if (
         used.every((fact) => {
           const refreshed = byId.get(fact.id);
           return (
             refreshed?.content === fact.content &&
             refreshed.kind === fact.kind &&
-            refreshed.title === fact.title
+            refreshed.title === fact.title &&
+            !isExcluded(refreshed.content)
           );
         })
       )
@@ -291,6 +296,7 @@ function projectMentions(titles: ReadonlyMap<string, string>) {
       return (rootsByName.get(projectName(name!)) ?? []).map((rootId) => ({
         rootId,
         independent,
+        index,
       }));
     });
   };
@@ -306,6 +312,7 @@ const INVITATIONS = NEUTRAL_FRAMING.filter(
 );
 const OPTIONAL_THANK_YOU = /\s+Thank you\.$/u;
 const OPTIONAL_GREETING = /^(?:Hi there,|Hello,)\s+/u;
+const PURPOSE_PREFIX = "In order to ";
 
 function fitLinkedinFraming(
   body: string,
@@ -321,6 +328,33 @@ function fitLinkedinFraming(
   )
     return withoutThanks;
   return withoutThanks.replace(OPTIONAL_GREETING, "");
+}
+
+function fitApprovedLinkedinWording(
+  body: string,
+  original: ReviewedFact,
+  limit: number,
+  facts: readonly ReviewedFact[],
+) {
+  const { content } = original;
+  if (
+    body.length <= limit ||
+    !content.startsWith(PURPOSE_PREFIX) ||
+    !body.startsWith(content) ||
+    !/\s/u.test(body[content.length] ?? "")
+  )
+    return undefined;
+  const text = "To " + content.slice(PURPOSE_PREFIX.length);
+  const shortenedBody = text + body.slice(content.length);
+  if (shortenedBody.length > limit) return undefined;
+  // The exact alternate wording needs its own current approval on the same project.
+  const approved = facts.find(
+    (fact) =>
+      fact.rootId === original.rootId &&
+      fact.kind === original.kind &&
+      fact.content === text,
+  );
+  return approved ? { fact: approved, body: shortenedBody } : undefined;
 }
 
 export function reviewedDraftPrompt(input: {
@@ -347,7 +381,7 @@ export function reviewedDraftPrompt(input: {
       "Draft the body by choosing and ordering complete factual statements from the approved facts. Copy each approved statement as written. Select a separately reviewed shorter fact if the complete statement cannot fit. Return a claim with exact text and fact ID for each factual statement. Preserve actor, scope, dates, numbers, qualifiers and project identity. Never turn a prototype into a deployment or infer candidate experience from the opportunity.",
       ...(input.category === "linkedin_connection"
         ? [
-            "For a short LinkedIn note, fit the strongest relevant complete fact with an allowed invitation. Omit an optional greeting or thank-you before choosing a less relevant fact. Use the shortest suitable invitation when space is tight.",
+            "For a short LinkedIn note, fit the strongest relevant complete fact with an allowed invitation. Omit an optional greeting or thank-you before choosing a less relevant fact. Use the shortest suitable invitation when space is tight. Use shorter wording only when that complete wording is supplied as an approved fact.",
           ]
         : []),
       "Keep different projects in separate paragraphs. Lead each such paragraph with an approved fact that identifies its project by name. Only listed neutral phrases may appear outside claims. Keep source IDs and ledger formatting out of the body. Do not use em dashes. Use no greeting or outreach phrasing in an application answer. For outreach end with an invitation from the supplied list, optionally followed by Thank you. For email and InMail choose a supplied subject.",
@@ -405,25 +439,19 @@ export function validateReviewedDraft(input: {
     constraint.category === "cold_email" ||
     constraint.category === "linkedin_inmail";
   const proposedBody = normalizeVerbatimClaimText(item.body);
-  const draftBody =
+  let draftBody =
     constraint.category === "linkedin_connection"
       ? fitLinkedinFraming(proposedBody, constraint.maximum, item.claims)
       : proposedBody;
   const identity = input.trustedIdentity;
   const signature = identity ? groundedSignature(identity) : "";
-  const body = signature ? [draftBody, signature].join("\n\n") : draftBody;
   const subject = item.subject && normalizeClaimText(item.subject);
-  if (
-    isEmail !== Boolean(subject) ||
-    /—|\s--\s/u.test(body) ||
-    (subject !== undefined && !SUBJECTS.includes(subject)) ||
-    (constraint.category === "yc_application" && body.length > 3_000)
-  )
-    throw new AtomicClaimValidationError("CLAIM_COVERAGE");
 
   const byId = new Map(input.facts.map((fact) => [fact.id, fact]));
+  const isExcluded = claimExclusionCheck(input.excludedClaims);
   const used = new Set<string>();
   const sources: ReviewedFact[] = [];
+  let originalWordingSource: ReviewedFact | undefined;
   const mentions = projectMentions(
     input.projectTitles ??
       new Map(input.facts.map(({ rootId, title }) => [rootId, title])),
@@ -433,25 +461,54 @@ export function validateReviewedDraft(input: {
     const fact = byId.get(claim.id);
     if (!fact || used.has(claim.id))
       throw new AtomicClaimValidationError("CLAIM_SOURCE");
-    const text = normalizeVerbatimClaimText(claim.text);
-    if (text !== fact.content)
+    const original = normalizeVerbatimClaimText(claim.text);
+    if (original !== fact.content)
       throw new AtomicClaimValidationError("CLAIM_REWRITE");
-    const namedProjects = mentions(text);
+    const originalProjects = mentions(original);
+    const fitted =
+      constraint.category === "linkedin_connection" &&
+      item.claims.length === 1 &&
+      fact.kind === "action" &&
+      originalProjects.every(({ index }) => index >= PURPOSE_PREFIX.length)
+        ? fitApprovedLinkedinWording(
+            draftBody,
+            fact,
+            constraint.maximum,
+            input.facts,
+          )
+        : undefined;
+    const displayedFact = fitted?.fact ?? fact;
+    const text = displayedFact.content;
+    const namedProjects = fitted
+      ? [...originalProjects, ...mentions(text)]
+      : originalProjects;
     if (namedProjects.some(({ rootId }) => rootId !== fact.rootId))
       throw new AtomicClaimValidationError("CLAIM_COVERAGE");
     if (namedProjects.some(({ independent }) => independent))
-      explicitlyAttributed.add(fact.id);
-    if (containsExcludedClaim(fact.content, input.excludedClaims))
+      explicitlyAttributed.add(displayedFact.id);
+    if (isExcluded(fact.content))
       throw new AtomicClaimValidationError("CLAIM_EXCLUDED");
+    if (fitted) {
+      draftBody = fitted.body;
+      originalWordingSource = fact;
+    }
     used.add(fact.id);
-    sources.push({ ...fact, content: text });
+    sources.push(displayedFact);
     return {
       text,
       kind: fact.kind,
-      source_id: fact.id,
-      supporting_excerpt: fact.content,
+      source_id: displayedFact.id,
+      supporting_excerpt: displayedFact.content,
     };
   });
+  const body = signature ? [draftBody, signature].join("\n\n") : draftBody;
+  if (
+    isEmail !== Boolean(subject) ||
+    /—|\s--\s/u.test(body) ||
+    (subject !== undefined && !SUBJECTS.includes(subject)) ||
+    (constraint.category === "yc_application" && body.length > 3_000)
+  )
+    throw new AtomicClaimValidationError("CLAIM_COVERAGE");
   if (
     !includesSelectedEvidence(
       input.requiredRoots ?? [],
@@ -535,6 +592,7 @@ export function validateReviewedDraft(input: {
     subject,
     claims,
     fingerprintPatternCount: finalization.fingerprintPatternCount,
-    usedSources: sources.map(({ id }) => byId.get(id)!),
+    usedSources: sources,
+    originalWordingSource,
   };
 }

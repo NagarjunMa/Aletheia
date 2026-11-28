@@ -1242,7 +1242,11 @@ async function handlePost(
           ? { trustedIdentity: preparedGrounding.identity }
           : {}),
       });
-      await reviewedEvidence.recheck(draft.usedSources);
+      await reviewedEvidence.recheck(
+        draft.originalWordingSource
+          ? [...draft.usedSources, draft.originalWordingSource]
+          : draft.usedSources,
+      );
       const quality = buildQualityMetadata({
         claims: draft.claims,
         sources: reviewedEvidence.facts,
