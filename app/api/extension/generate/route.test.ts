@@ -243,7 +243,7 @@ describe("LinkedIn real target preparation through the HTTP boundary", () => {
         expect(output).toMatchObject({
           subject_line: "A brief introduction",
           evalMetadata: {
-            promptVersion: "reviewed-draft-2",
+            promptVersion: "reviewed-draft-3",
             resumeSource: "user_resumes",
             grounding: { provenanceValidated: true, selectedEvidenceCount: 1 },
           },
@@ -2434,20 +2434,20 @@ describe("LinkedIn real target preparation through the HTTP boundary", () => {
         { copied: false, limit: 300 },
         { copied: true, limit: 300 },
       ] as const)(
-        "drafts the Cal note from reviewed work ($limit chars, copied=$copied)",
+        "drafts the Cal note with only the long implementation fact approved ($limit chars, copied=$copied)",
         async ({ copied, limit }) => {
           vi.stubEnv("REVIEWED_DRAFTS_ENABLED", "true");
           try {
-            const concrete =
-              "I built a record of automated AI agent decisions to trace approvals, to identify recurring errors, and to document recommendations from a prototype.";
             const longFact =
               "I built a record of automated AI agent decisions in order to trace approvals, in order to identify recurring errors, and in order to document recommendations from a prototype.";
+            const framedNote =
+              "Hi there, " + longFact + " Open to connecting? Thank you.";
             const generic = "I used AI coding tools for everyday development.";
             await useRealPreparation(
               [],
               [
                 reviewed(generic, [generic], 0),
-                reviewed(longFact, [longFact, concrete], 1, concrete),
+                reviewed(longFact, [longFact], 1),
               ],
             );
             const input = copied
@@ -2459,16 +2459,24 @@ describe("LinkedIn real target preparation through the HTTP boundary", () => {
               .mockReset()
               .mockImplementationOnce(async (call) => {
                 const provider = JSON.parse(call.messages[0].content);
-                expect(provider.jobDescription).toContain(calPostBody);
+                expect(provider.jobDescription).toBe(
+                  copied
+                    ? "Cal Carlisle\nAI Search Partner | US, Europe & UK\n\n" +
+                        calPostBody
+                    : calPostBody,
+                );
                 expect(provider.postHashtags).toEqual(copied ? ["#ai"] : []);
                 expect(
                   provider.facts.map(
                     ({ content }: { content: string }) => content,
                   ),
-                ).toEqual([generic, longFact, concrete]);
+                ).toEqual([generic, longFact]);
                 expect(provider.limits.maximum).toBe(limit);
+                expect(call.system).toContain(
+                  "Omit an optional greeting or thank-you before choosing a less relevant fact",
+                );
                 const fact = provider.facts.find(
-                  ({ content }: { content: string }) => content === concrete,
+                  ({ content }: { content: string }) => content === longFact,
                 );
                 return {
                   stop_reason: "tool_use",
@@ -2481,11 +2489,8 @@ describe("LinkedIn real target preparation through the HTTP boundary", () => {
                         items: [
                           {
                             id: "q1",
-                            body:
-                              "Hi there, " +
-                              concrete +
-                              " Open to a brief chat? Thank you.",
-                            claims: [{ id: fact.id, text: concrete }],
+                            body: framedNote,
+                            claims: [{ id: fact.id, text: longFact }],
                           },
                         ],
                       },
@@ -2493,14 +2498,22 @@ describe("LinkedIn real target preparation through the HTTP boundary", () => {
                   ],
                 };
               });
-            const response = await generateSparse(input, sparseProfile, limit);
+            const response = await generateSparse(
+              copied ? input + "\n\n" + input : input,
+              sparseProfile,
+              limit,
+            );
             expect(response.status).toBe(200);
             const output = await response.json();
-            expect(output.body).toContain(concrete);
+            expect(output.body).toBe(
+              limit === 200 ? longFact + " Open to connecting?" : framedNote,
+            );
+            expect(framedNote.length).toBeGreaterThan(200);
             expect(output.body).not.toMatch(/—|red team|everyday development/u);
+            expect(output.character_count).toBe(output.body.length);
             expect(output.character_count).toBeLessThanOrEqual(limit);
             expect(output.evalMetadata).toMatchObject({
-              promptVersion: "reviewed-draft-2",
+              promptVersion: "reviewed-draft-3",
               grounding: {
                 provenanceValidated: true,
                 selectedEvidenceCount: 1,

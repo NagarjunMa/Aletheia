@@ -10,6 +10,7 @@ import {
   candidateProfileInputSchema,
 } from "@/lib/candidate-profile/schema";
 import { prepareFactReview } from "@/lib/candidate-profile/fact-review";
+import { GroundedOutputLimitError } from "./finalize-grounded-output";
 
 const reviewed = {
   id: "fact",
@@ -77,6 +78,50 @@ describe("ALE-80 reviewed drafts", () => {
         constraint,
       }),
     ).toThrow();
+  });
+
+  it("drops only the optional thank-you when that is enough to fit", () => {
+    const content = "I built a prototype review queue.";
+    const complete = "Hello, " + content + " Open to connecting?";
+    const result = validateReviewedDraft({
+      item: {
+        id: "q1",
+        body: complete + " Thank you.",
+        claims: [{ id: reviewed.id, text: content }],
+      },
+      facts: [{ ...reviewed, content }],
+      excludedClaims: [],
+      constraint: {
+        category: "linkedin_connection",
+        minimum: 1,
+        maximum: complete.length,
+        unit: "characters",
+      },
+    });
+    expect(result.body).toBe(complete);
+  });
+
+  it("does not trim an approved statement that starts with a greeting", () => {
+    const content =
+      "Hello, World is the prototype I built for developer onboarding.";
+    const body = content + " Open to connecting?";
+    expect(() =>
+      validateReviewedDraft({
+        item: {
+          id: "q1",
+          body,
+          claims: [{ id: reviewed.id, text: content }],
+        },
+        facts: [{ ...reviewed, content }],
+        excludedClaims: [],
+        constraint: {
+          category: "linkedin_connection",
+          minimum: 1,
+          maximum: body.length - 1,
+          unit: "characters",
+        },
+      }),
+    ).toThrow(GroundedOutputLimitError);
   });
 
   it.each([
