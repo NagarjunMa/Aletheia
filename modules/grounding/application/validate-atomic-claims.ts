@@ -27,6 +27,20 @@ export class AtomicClaimValidationError extends Error {
 
 export { normalizeClaimText, allowedClaimTexts } from "../domain/atomic-claim";
 
+export function claimExclusionCheck(excludedClaims: readonly string[]) {
+  // Deny-only matching retains legacy whitespace folding.
+  const excluded = excludedClaims
+    .map((value) => normalizeClaimText(value).replace(/\s+/gu, " "))
+    .filter(Boolean);
+  return (text: string) => {
+    const exclusionText = normalizeClaimText(text).replace(/\s+/gu, " ");
+    return (
+      containsExcludedClaim(text, excludedClaims) ||
+      excluded.some((value) => exclusionText.includes(value))
+    );
+  };
+}
+
 export function validateAtomicOutput(input: {
   claims: unknown;
   sources: readonly AtomicSource[];
@@ -48,17 +62,7 @@ export function validateAtomicOutput(input: {
   const sources = new Map(input.sources.map((source) => [source.id, source]));
   if (sources.size !== input.sources.length)
     throw new AtomicClaimValidationError("CLAIM_SOURCE");
-  // Deny-only matching retains legacy whitespace folding; factual support stays exact.
-  const excluded = input.excludedClaims
-    .map((value) => normalizeClaimText(value).replace(/\s+/gu, " "))
-    .filter(Boolean);
-  const isExcluded = (text: string) => {
-    const exclusionText = normalizeClaimText(text).replace(/\s+/gu, " ");
-    return (
-      containsExcludedClaim(text, input.excludedClaims) ||
-      excluded.some((value) => exclusionText.includes(value))
-    );
-  };
+  const isExcluded = claimExclusionCheck(input.excludedClaims);
   const normalizeText = input.requireVerbatimClaims
     ? normalizeVerbatimClaimText
     : normalizeClaimText;

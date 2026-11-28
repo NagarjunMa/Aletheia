@@ -2863,3 +2863,10 @@ VoiceOver/actual zoom and ALE-75's deployment gates remain pending. Keep open.
 - Synchronized main to merged PR #169 at `3407818` and started `fix/ale-80-context-and-note-fit`. The issue remains In Progress.
 - Exact repeated paste fixtures failed before the context cleanup. Both Cal variants at 200 characters returned 502 when optional framing pushed an intact fact over the cap. The server now fits that draft by trimming only optional framing and validating the result. The 300-character drafts preserve their framing. The original approved text and invitation are retained.
 - The first independent review identified repeated approval-step and code-block regressions. The cleaner now removes only a complete exact double paste of a recognizable LinkedIn post. Live acceptance and fact paraphrasing remain open. See the feature record in docs/operations/ale-80-reviewed-evidence.md.
+
+## 2026-11-27 — ALE-80 concise approved LinkedIn wording
+
+- Synchronized main to merged PR #170 at `6d9635c`. The follow-up is `fix/ale-80-reviewed-note-wording`.
+- After optional framing is exhausted, the server can use a specifically related, separately approved shorter implementation statement from the same project. The final validator still enforces grounding, invitation, qualifications and the selected cap. Both approvals are rechecked under the caller's account.
+- The red run reproduced both Cal HTTP 502s and the unit output-limit error. Hosted acceptance is still open. See docs/operations/ale-80-reviewed-evidence.md.
+- Independent review showed why inferred wording changes are unreliable for literal claims. The final implementation requires exact current approvals for both versions and applies the existing exclusion predicate to the original and displayed text. A fresh review of this design remains pending after the three earlier review rounds.

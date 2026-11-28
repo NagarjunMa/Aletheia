@@ -11,6 +11,7 @@ import {
 } from "@/lib/candidate-profile/schema";
 import { prepareFactReview } from "@/lib/candidate-profile/fact-review";
 import { GroundedOutputLimitError } from "./finalize-grounded-output";
+import { AtomicClaimValidationError } from "./validate-atomic-claims";
 
 const reviewed = {
   id: "fact",
@@ -122,6 +123,182 @@ describe("ALE-80 reviewed drafts", () => {
         },
       }),
     ).toThrow(GroundedOutputLimitError);
+  });
+
+  it.each([
+    "trace approvals",
+    "review audit logs",
+    "document prototype outcomes",
+  ])(
+    "fits the purpose clause %s while keeping the original approval and its qualifiers",
+    (purpose) => {
+      const content = `In order to ${purpose}, I built a prototype for internal testing only. I did not deploy it.`;
+      const shorter = `To ${purpose}, I built a prototype for internal testing only. I did not deploy it.`;
+      const body = shorter + " Open to connecting?";
+      const compact = { ...reviewed, id: "compact", content: shorter };
+      const input = {
+        item: {
+          id: "q1",
+          body: content + " Open to connecting?",
+          claims: [{ id: reviewed.id, text: content }],
+        },
+        facts: [{ ...reviewed, content }, compact],
+        excludedClaims: [],
+        constraint: {
+          category: "linkedin_connection" as const,
+          minimum: 1,
+          maximum: body.length,
+          unit: "characters" as const,
+        },
+      };
+      const result = validateReviewedDraft(input);
+      expect(result.body).toBe(body);
+      expect(result.usedSources).toEqual([compact]);
+      expect(result.claims[0]?.supporting_excerpt).toBe(shorter);
+      expect(result.originalWordingSource?.content).toBe(content);
+      expect(
+        validateReviewedDraft({
+          ...input,
+          constraint: { ...input.constraint, maximum: input.item.body.length },
+        }).body,
+      ).toBe(input.item.body);
+      expect(() =>
+        validateReviewedDraft({
+          ...input,
+          constraint: { ...input.constraint, maximum: body.length - 1 },
+        }),
+      ).toThrow(GroundedOutputLimitError);
+      expect(() =>
+        validateReviewedDraft({
+          ...input,
+          facts: [input.facts[0]!, { ...compact, rootId: "evidence:other" }],
+        }),
+      ).toThrow(GroundedOutputLimitError);
+    },
+  );
+
+  it.each([
+    [
+      "I replaced Process in order to review with a different scheduler value.",
+      "Agent review",
+    ],
+    [
+      "In order to trace approvals, I built a prototype for internal testing only.",
+      "In order to trace approvals",
+    ],
+    [
+      "In order to trace approvals, I was able to discuss a possible prototype.",
+      "Agent review",
+    ],
+    [
+      "In order to retry (the exact button caption), I built a user-interface fixture that verifies the approved wording.",
+      "Agent review",
+    ],
+    [
+      "In order to retry [exact button caption], I built a user-interface fixture that verifies the approved wording.",
+      "Agent review",
+    ],
+    [
+      "In order to retry is the exact button caption, I built a user-interface fixture that verifies the approved wording.",
+      "Agent review",
+    ],
+    [
+      "In order to retry appears on the warning screen, I built a user-interface fixture that verifies its exact spelling, capitalization, and spacing.",
+      "Agent review",
+    ],
+    [
+      "In order to trace approvals, I built a prototype that displayed those five words verbatim as the only banner text on the internal approval screen, with emphasis on spacing and casing.",
+      "Agent review",
+    ],
+    [
+      "In order to trace approvals, I built a prototype that displayed the opening five tokens in its logs, then confirmed the internal scanner accepted them in their original order on every run.",
+      "Agent review",
+    ],
+  ])(
+    "keeps a named or unsupported purpose prefix verbatim in %s",
+    (content, title) => {
+      const body = content + " Open to connecting?";
+      expect(() =>
+        validateReviewedDraft({
+          item: {
+            id: "q1",
+            body,
+            claims: [{ id: reviewed.id, text: content }],
+          },
+          facts: [{ ...reviewed, content, title }],
+          excludedClaims: [],
+          constraint: {
+            category: "linkedin_connection",
+            minimum: 1,
+            maximum: body.length - 1,
+            unit: "characters",
+          },
+        }),
+      ).toThrow(GroundedOutputLimitError);
+    },
+  );
+
+  it.each([
+    "To trace approvals, I built a prototype for internal testing only.",
+    "To trace approvals, I built a prototype for internal testing.",
+  ])("rejects provider-authored shortening in %s", (text) => {
+    const content =
+      "In order to trace approvals, I built a prototype for internal testing only.";
+    expect(() =>
+      validateReviewedDraft({
+        item: {
+          id: "q1",
+          body: text + " Open to connecting?",
+          claims: [{ id: reviewed.id, text }],
+        },
+        facts: [{ ...reviewed, content }],
+        excludedClaims: [],
+        constraint: {
+          category: "linkedin_connection",
+          minimum: 1,
+          maximum: 200,
+          unit: "characters",
+        },
+      }),
+    ).toThrow(
+      expect.objectContaining<Partial<AtomicClaimValidationError>>({
+        code: "CLAIM_REWRITE",
+      }),
+    );
+  });
+
+  it("applies the final exclusion rules to the complete original fact", () => {
+    const content =
+      "In order to trace approval decisions across AI agent workflows, I built an audit trail that flags recurring errors and records recommendations for a prototype used only in internal testing.";
+    const text = content + " Open to connecting?";
+    expect(() =>
+      validateReviewedDraft({
+        item: {
+          id: "q1",
+          body: text,
+          claims: [{ id: reviewed.id, text: content }],
+        },
+        facts: [
+          { ...reviewed, content },
+          {
+            ...reviewed,
+            id: "compact",
+            content: content.replace(/^In order to /u, "To "),
+          },
+        ],
+        excludedClaims: ["In order   to trace approv"],
+        constraint: {
+          category: "linkedin_connection",
+          minimum: 1,
+          maximum: 200,
+          unit: "characters",
+        },
+      }),
+    ).toThrow(
+      expect.objectContaining<Partial<AtomicClaimValidationError>>({
+        code: "CLAIM_EXCLUDED",
+      }),
+    );
   });
 
   it.each([

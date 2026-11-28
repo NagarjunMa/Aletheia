@@ -243,7 +243,7 @@ describe("LinkedIn real target preparation through the HTTP boundary", () => {
         expect(output).toMatchObject({
           subject_line: "A brief introduction",
           evalMetadata: {
-            promptVersion: "reviewed-draft-3",
+            promptVersion: "reviewed-draft-4",
             resumeSource: "user_resumes",
             grounding: { provenanceValidated: true, selectedEvidenceCount: 1 },
           },
@@ -2433,23 +2433,42 @@ describe("LinkedIn real target preparation through the HTTP boundary", () => {
         { copied: true, limit: 200 },
         { copied: false, limit: 300 },
         { copied: true, limit: 300 },
+        { copied: false, limit: 200, compact: true },
+        { copied: true, limit: 300, compact: true },
+        { copied: false, limit: 200, compact: true, revoke: true },
+        { copied: false, limit: 200, compact: true, exclude: true },
       ] as const)(
-        "drafts the Cal note with only the long implementation fact approved ($limit chars, copied=$copied)",
-        async ({ copied, limit }) => {
+        "fits the reviewed Cal note ($limit chars, copied=$copied, compact=$compact, revoke=$revoke, exclude=$exclude)",
+        async (scenario) => {
+          const { copied, limit } = scenario;
+          const compact = "compact" in scenario;
+          const revoke = "revoke" in scenario;
+          const exclude = "exclude" in scenario;
           vi.stubEnv("REVIEWED_DRAFTS_ENABLED", "true");
           try {
-            const longFact =
+            const baselineFact =
               "I built a record of automated AI agent decisions in order to trace approvals, in order to identify recurring errors, and in order to document recommendations from a prototype.";
+            const purpose =
+              "trace approval decisions across AI agent workflows, I built an audit trail that flags recurring errors and records recommendations for a prototype used only in internal testing.";
+            const continuation =
+              limit === 300
+                ? " I documented how the prototype handled invalid approvals without claiming production deployment."
+                : "";
+            const longFact = compact
+              ? "In order to " + purpose + continuation
+              : baselineFact;
+            const shorter = "To " + purpose + continuation;
             const framedNote =
               "Hi there, " + longFact + " Open to connecting? Thank you.";
             const generic = "I used AI coding tools for everyday development.";
-            await useRealPreparation(
-              [],
-              [
-                reviewed(generic, [generic], 0),
-                reviewed(longFact, [longFact], 1),
-              ],
-            );
+            const evidence = [
+              reviewed(generic, [generic], 0),
+              compact
+                ? reviewed(longFact, [longFact, shorter], 1, shorter)
+                : reviewed(longFact, [longFact], 1),
+            ];
+            const exclusions: string[] = [];
+            await useRealPreparation(exclusions, evidence);
             const input = copied
               ? "Cal Carlisle\n • 2nd\nAI Search Partner | US, Europe & UK\nVisit my website\n4d •\nFollow\n\n" +
                 calPostBody +
@@ -2470,7 +2489,9 @@ describe("LinkedIn real target preparation through the HTTP boundary", () => {
                   provider.facts.map(
                     ({ content }: { content: string }) => content,
                   ),
-                ).toEqual([generic, longFact]);
+                ).toEqual(
+                  compact ? [generic, longFact, shorter] : [generic, longFact],
+                );
                 expect(provider.limits.maximum).toBe(limit);
                 expect(call.system).toContain(
                   "Omit an optional greeting or thank-you before choosing a less relevant fact",
@@ -2478,6 +2499,9 @@ describe("LinkedIn real target preparation through the HTTP boundary", () => {
                 const fact = provider.facts.find(
                   ({ content }: { content: string }) => content === longFact,
                 );
+                if (revoke) evidence[1] = reviewed(longFact, [longFact], 1);
+                if (exclude)
+                  exclusions.push("In order   to trace approval decision");
                 return {
                   stop_reason: "tool_use",
                   usage: { input_tokens: 215, output_tokens: 70 },
@@ -2503,23 +2527,36 @@ describe("LinkedIn real target preparation through the HTTP boundary", () => {
               sparseProfile,
               limit,
             );
+            expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
+            if (revoke || exclude) {
+              expect(response.status).toBe(502);
+              expect(
+                mockRpc.mock.calls.filter(
+                  ([name]) => name === "release_generation_daily_slot",
+                ),
+              ).toHaveLength(1);
+              return;
+            }
             expect(response.status).toBe(200);
             const output = await response.json();
             expect(output.body).toBe(
-              limit === 200 ? longFact + " Open to connecting?" : framedNote,
+              compact
+                ? shorter + " Open to connecting?"
+                : limit === 200
+                  ? longFact + " Open to connecting?"
+                  : framedNote,
             );
             expect(framedNote.length).toBeGreaterThan(200);
             expect(output.body).not.toMatch(/—|red team|everyday development/u);
             expect(output.character_count).toBe(output.body.length);
             expect(output.character_count).toBeLessThanOrEqual(limit);
             expect(output.evalMetadata).toMatchObject({
-              promptVersion: "reviewed-draft-3",
+              promptVersion: "reviewed-draft-4",
               grounding: {
                 provenanceValidated: true,
                 selectedEvidenceCount: 1,
               },
             });
-            expect(mockAnthropicCreate).toHaveBeenCalledTimes(1);
           } finally {
             vi.unstubAllEnvs();
           }
