@@ -49,3 +49,43 @@ it("separates trailing hashtags across blank lines without reordering them", () 
     hashtags: ["#AI", "#security"],
   });
 });
+
+it("keeps one copy of an exactly repeated LinkedIn post with a fenced example and hashtags", () => {
+  const description = [
+    "# Requirements\nBuild prototype tools. Production access is optional.",
+    "```text\nrepeat\n\nrepeat\n```",
+  ].join("\n\n");
+  const post = [
+    "Cal Carlisle\n• 2nd\nAI Search Partner\n4d •\nFollow",
+    description,
+    "#AI",
+  ].join("\n\n");
+
+  expect(separateJobContext(post + "\n\n" + post)).toEqual({
+    body: "Cal Carlisle\nAI Search Partner\n\n" + description,
+    hashtags: ["#AI"],
+  });
+});
+
+it("preserves repeated wording within and across sections", () => {
+  const requirement = "Only deploy after a human review.";
+  const description = [
+    "## Production",
+    requirement,
+    requirement,
+    "## Training",
+    requirement,
+    "Only deploy after a human review unless the exercise is offline.",
+  ];
+
+  expect(separateJobContext(description.join("\n\n")).body).toBe(
+    description.join("\n\n"),
+  );
+});
+
+it.each([
+  "Release protocol:\n\n1. Obtain an independent approval.\n\n1. Obtain an independent approval.\n\n1. Ship after both approvals.",
+  "Production requires both authorizers:\n\n    approve();\n\n    approve();\n\nBoth approvals are required.",
+])("keeps the repeated steps in %s", (description) => {
+  expect(separateJobContext(description).body).toBe(description);
+});

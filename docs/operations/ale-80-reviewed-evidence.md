@@ -62,3 +62,44 @@ The first independent return found that a hyphenated modifier could conceal a kn
 ### Overjet question coverage
 
 The application-answer service suite runs the exact Overjet impact question and a plain-language rephrasing with and without job context. Three- and five-question batches add fictional examples of auditing an automated decision, improving device setup, making a volunteer integration reliable, and giving users control over a draft. Each batch checks the exact original question and its expected approved answer in order, even if the provider returns the items in reverse order. The unsupported slot-4 case still tests compensation and retry. All 193 service tests passed locally. The provider is mocked in CI, so live relevance and writing quality remain Preview checks.
+
+### November 26 follow-up on merged baseline
+
+PR #169 merged at `3407818` with CI green. The follow-up branch
+`fix/ale-80-context-and-note-fit` starts from that commit. Risk remains
+Critical because this modifies final validation behavior for drafts that contain
+private reviewed evidence.
+
+- `separateJobContext` removes an exact double paste of a recognizable
+  LinkedIn post before projecting the job description and hashtags. Text
+  repeated inside a post or a plain job description stays intact, including
+  requirements, ordered steps and code examples.
+- Reviewed LinkedIn notes above the selected limit can drop an optional
+  thank-you and then an optional greeting. The existing final validator
+  verifies the intact approved claims, invitation and selected limit against
+  the text returned to the extension. The reviewed prompt is now
+  `reviewed-draft-3` and prioritizes the complete fact over optional framing.
+- Cal regressions use the one original 175-character implementation fact and
+  an unrelated distractor. With and without copied controls and hashtags, the
+  216-character proposed draft fits the 200-character limit at 195 characters
+  and remains intact at 300. The mocked requests make one provider call. The
+  source retains its prototype qualification. The pre-change 200-character
+  route returned 502 for both post variants. Separate checks preserve greeting
+  text when it belongs to an approved fact and reject notes still over budget.
+- The long-fact case is resolved through framing. The Linear paraphrase
+  criterion for facts that still cannot fit, live Preview quality, latency,
+  meter evidence and the installed extension checks remain open. Keep
+  `REVIEWED_DRAFTS_ENABLED` off pending acceptance. No schema, API or extension
+  release changes are required for this follow-up.
+
+The first independent review reproduced a loss of repeated approval steps
+and code statements in the wider deduplication attempt. The current rule
+recognizes only two complete identical LinkedIn pastes. The corresponding
+tests preserve ordered and indented repetitions and the literal content of
+fenced examples.
+
+The corrected behavior passed 1,420 focused tests, 3,462 coverage tests,
+15 guardrails and the offline gate with zero provider calls. Lint, policy and
+the high-severity dependency audit passed. The audit reported 12 existing
+moderate advisories. The independent return review verified the narrower
+duplicate handling and found no other material issues.

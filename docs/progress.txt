@@ -2857,3 +2857,9 @@ VoiceOver/actual zoom and ALE-75's deployment gates remain pending. Keep open.
 
 - Added an impact paraphrase and four multi-project sibling questions to the existing service regression suite. The three- and five-question batches assert the approved answer for every question in display order. The full service file passed 193 tests. Live selection quality remains open.
 - The PR's hosted smoke job stalled while downloading Chromium dependency packages from the runner's EC2 Ubuntu mirror. The smoke install now uses the runner's official Ubuntu HTTPS fallbacks when available and times out after five minutes. The browser, dependencies and smoke assertions stay the same.
+
+## 2026-11-26 — ALE-80 pasted context and short LinkedIn notes
+
+- Synchronized main to merged PR #169 at `3407818` and started `fix/ale-80-context-and-note-fit`. The issue remains In Progress.
+- Exact repeated paste fixtures failed before the context cleanup. Both Cal variants at 200 characters returned 502 when optional framing pushed an intact fact over the cap. The server now fits that draft by trimming only optional framing and validating the result. The 300-character drafts preserve their framing. The original approved text and invitation are retained.
+- The first independent review identified repeated approval-step and code-block regressions. The cleaner now removes only a complete exact double paste of a recognizable LinkedIn post. Live acceptance and fact paraphrasing remain open. See the feature record in docs/operations/ale-80-reviewed-evidence.md.
